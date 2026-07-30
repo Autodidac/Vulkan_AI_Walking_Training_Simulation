@@ -44,12 +44,8 @@ namespace epochrunner::rl
             parameters_[layout_.actor_w + index] = random_normal() * 0.01f;
         for (std::size_t index = 0; index < hidden_size; ++index)
             parameters_[layout_.value_w + index] = random_normal() * 0.01f;
-        // The old fresh-policy deviation was exp(-0.35) ~= 0.70, which slammed
-        // most joints into their limits before the network learned anything.
-        // The uploaded working policy converged near 0.05; 0.18 keeps useful
-        // exploration without making every new rig thrash.
         for (std::size_t index = 0; index < output_size; ++index)
-            parameters_[layout_.log_std + index] = std::log(0.18f);
+            parameters_[layout_.log_std + index] = std::log(0.14f);
     }
 
     float PolicyNetwork::random_normal() noexcept
@@ -119,7 +115,7 @@ namespace epochrunner::rl
 
     void PolicyNetwork::set_exploration(float standard_deviation) noexcept
     {
-        const float value = std::log(clamp(standard_deviation, 0.02f, 1.0f));
+        const float value = std::log(clamp(standard_deviation, 0.02f, 0.80f));
         for (std::size_t index = 0; index < output_size; ++index)
             parameters_[layout_.log_std + index] = value;
     }

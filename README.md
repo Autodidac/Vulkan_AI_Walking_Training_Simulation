@@ -1,187 +1,68 @@
 # EpochRunner
 
-EpochRunner is a standalone C++23 Vulkan 1.3 locomotion laboratory built on
-[EpochGui](https://github.com/Autodidac/EpochGui). It recreates the complete
-workflow demonstrated in Pezzza's Work's **AI Chicken learns to RUN** video:
-an articulated creature editor, motorized 2D simulation, parallel PPO training,
-live metrics, policy persistence, and a focused run view.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.4 replaces manual train/run switching with a continuously operating autonomous curriculum.
 
-The implementation and chicken artwork are original. It does not copy the
-creator's private Patreon source code or assets.
+## Default workflow
 
-## Implemented
+The application starts in **Live Autopilot**. The foreground renders one current best verified controller while background CPU workers train 64 non-rendered environments. Vulkan remains dedicated to presentation instead of drawing every training agent.
 
-- Vulkan 1.3 dynamic rendering with SDL3 window/surface integration
-- Two persistently mapped vertex buffers, one per in-flight frame
-- EpochGui split layouts, input tracking, rounded geometry, bitmap font, and PPM image layout
-- Interactive articulated-rig editor
-  - drag joints
-  - Shift-click to add a node
-  - Ctrl-click another node to connect a bone
-  - Delete removes any selected node safely and disables affected motors
-  - built-in chicken, biped, humanoid, quadruped, and monoped presets
-  - named motor channels with editable A/pivot/C endpoints
-  - wrap-safe limit offsets from the rest pose, neutral calibration, motor enable, and bounded power controls
-  - directed motors where A is the parent reference and C is the driven child
-  - assignable root, torso, head, and left/right contact roles for custom rigs
-  - Joint Lab overlays for limit arcs, live target rays, ghost poses, groups, and auto sweep
-  - save/load `.epochrig`
-- Deterministic position-based 2D physics
-  - Verlet integration
-  - distance constraints
-  - angle motors
-  - friction, ground contact, fall/reset detection
-- Real PPO trainer, not scripted playback
-  - shared 64x64 actor-critic MLP
-  - Gaussian four-motor action policy
-  - generalized advantage estimation
-  - clipped PPO objective
-  - Adam optimizer
-  - 32 parallel environments and 128 rollout steps per update
-- Live reward/speed graphs and multi-agent training viewport
-- Save/load `.eppo` policies
-- Deterministic single-agent run view with speed and distance display
-- Core tests for simulation stability, PPO updates, and policy serialization
-- Packaged SDL3/Vulkan runtime diagnostic
+The trainer automatically:
 
-## Requirements
+- starts by learning to stand and balance;
+- advances to flat walking only after three deterministic mastery checks;
+- introduces ramps, uneven terrain, hurdles, overhead bars, and moving hazards in order;
+- saves full checkpoints and the current evolved rig whenever a new verified best is found;
+- restores the best verified controller after repeated degradation;
+- tests tiny symmetric rig changes and keeps only changes that improve deterministic valid-walking score;
+- resumes its curriculum, optimizer, metrics, controller, and evolved rig on restart.
 
-- CMake 3.28+
-- C++23 compiler with CMake module support
-  - MSVC 19.38+
-  - GCC 14+
-  - Clang 18+
-- vcpkg checkout with `vcpkg.exe`/`vcpkg` bootstrapped
-- Vulkan-capable graphics driver
-- Ninja 1.11+ for non-Visual-Studio presets
+The **Rig Lab** remains available for inspecting joints, testing individual motors or groups, selecting A/Pivot/C, changing safe travel limits, and manually correcting geometry.
 
-EpochGui is pinned to commit `347ad52e8fc27deb08dea97e56a9b6d8c0db3af2`.
-The vcpkg manifest explicitly enables the `sdl3[vulkan]` feature and installs
-SDL3, Vulkan Loader/Headers, and shaderc locally. No Vulkan SDK or external
-`glslc.exe` is required.
+## Walking validity gates
 
-## Windows build
+A controller or rig candidate cannot become the published best when any deterministic evaluation run:
 
-```bat
-set VCPKG_ROOT=C:\path\to\vcpkg
-build_windows.bat
-```
+- flips upside down;
+- exceeds 50 km/h;
+- leaves the bounded course;
+- remains airborne long enough to exploit flying;
+- produces repeated high-energy micro-movement without meaningful displacement;
+- fails to produce alternating foot contacts after the balance lesson.
 
-`build_windows.bat` automatically uses `%USERPROFILE%\source\repos\vcpkg`
-when `VCPKG_ROOT` is not already set. Dependencies are installed into the
-project-local `vcpkg_installed` directory.
+Invalid episodes terminate immediately and receive a large penalty. These are hard gates, not merely weak reward preferences.
 
-Or manually:
+## Human-calibrated defaults
 
-```bat
-cmake --preset windows-release --fresh
-cmake --build --preset windows-release
-ctest --preset windows-release
-```
+The humanoid proportions and asymmetric hip/knee ranges are based on a user-trained six-node rig that was physically closer to a human body. Its motor powers were reduced by roughly ten percent, a separate head node was restored, and the learned flip/fly policy itself was deliberately not imported.
 
-## Vulkan runtime diagnostic
+## Performance model
 
-The packaged executable can validate SDL3's Vulkan integration without opening
-the simulation window:
-
-```powershell
-./EpochRunner.exe --diagnose-vulkan
-```
-
-A valid package prints the active SDL video driver and the number of required
-Vulkan instance extensions. Release automation runs this diagnostic against the
-final packaged DLLs before publishing.
-
-## Linux build
-
-```bash
-export VCPKG_ROOT="$HOME/vcpkg"
-./build_linux.sh
-```
-
-## Dependency-free core validation
-
-The physics and PPO core can be configured without SDL3, Vulkan, or EpochGui:
-
-```bash
-cmake --preset core-tests
-cmake --build --preset core-tests
-ctest --preset core-tests
-```
+- 64 training environments by default.
+- Rollouts are divided across up to 16 CPU workers while reserving CPU capacity for the application and Vulkan presentation.
+- A coroutine-driven background supervisor handles training cycles, deterministic evaluation, curriculum transitions, autosaves, rollback, and bounded rig evolution.
+- Only the live best controller is rendered.
+- The policy contains only a few thousand parameters; keeping its optimizer on CPU avoids the synchronization and transfer overhead of dispatching this tiny network to the GPU. Vulkan is used where it is efficient: smooth real-time presentation.
 
 ## Controls
 
-| Input | Action |
-|---|---|
-| `1`, `2`, `3` | Editor, training, run mode |
-| Left drag | Move an editor joint |
-| Shift + left click | Add a node |
-| Ctrl + left click | Connect selected node to clicked node |
-| Delete | Remove the selected node; affected motors are disabled safely |
-| `S`, `L` | Save/load rig in editor mode |
-| Space | Start/pause training or pause run preview |
-| `R` | Reset run preview |
-| Escape | Exit |
+- `1`: Live Autopilot
+- `2` or `3`: Rig Lab
+- `Space`: Pause or resume background training
+- `R`: Reset the live preview
+- `S`: Save rig in Rig Lab
+- `L`: Load rig in Rig Lab
+- `Delete`: Remove the selected node in Rig Lab
+- `Shift + click`: Add a node
+- `Ctrl + click`: Connect the selected node to another node
 
-## Architecture
+## Build
 
-```text
-src/math.hpp              allocation-free math primitives
-src/simulation.*          deterministic articulated PBD environment
-src/ppo_network.cpp       actor-critic network
-src/ppo_trainer.cpp       parallel PPO trainer
-src/canvas.cpp            triangle canvas
-src/renderer.*            SDL3/Vulkan 1.3 renderer
-src/app.*                 EpochGui-driven editor/training/run application
-tools/shader_compiler.cpp vcpkg shaderc GLSL-to-SPIR-V build tool
-shaders/                  minimal vertex-color Vulkan shaders
-assets/chicken.ppm        original bounded PPM UI asset
-tests/core_tests.cpp      deterministic headless validation
+Windows:
+
+```powershell
+cmake --preset windows-release --fresh
+cmake --build --preset windows-release
+ctest --preset windows-release --output-on-failure
 ```
 
-EpochGui remains renderer-neutral. EpochRunner consumes its reusable layout,
-input, font, image, and rounded-geometry modules while owning Vulkan, SDL3,
-shaders, application state, physics, and reinforcement learning.
-
-
-## Joint Lab
-
-The editor starts with Joint Lab visible. Select motor channel 1-4 to see its
-three defining nodes: **A**, **pivot**, and **C**. Red rays show the hard limits,
-the white ray shows the rest target used for PPO output zero, the yellow ray is
-the current test target, and the blue ghost rig shows the resulting kinematic
-pose.
-
-Use **Selected**, **Pair 1+2**, **Pair 3+4**, or **All Four** to test one motor or
-a coordinated group. **Min Limit**, **Rest / Zero**, **Max Limit**, and **Auto
-Sweep** make the range immediately visible before training. Angle values are
-shown in degrees.
-
-The PPO actor still exposes four bounded action channels for all presets. Each
-preset maps those channels to useful joints. Custom rigs can disable a channel
-or reassign its A/pivot/C nodes without changing the policy tensor dimensions.
-
-
-## Controller communication and checkpoints
-
-EpochRunner now treats a body change as a controller-compatibility event instead of
-silently continuing. **Reset brain** is the safe default. **Transfer brain** keeps
-network weights intentionally, but resets Adam optimizer moments, progress metrics,
-history, and best-policy tracking so stale optimizer state cannot corrupt the new rig.
-
-`SAVE CHECKPOINT` writes the exact rig signature, policy parameters, Adam moments,
-optimizer step, update/step counters, deterministic evaluation metrics, graph history,
-and best evaluated policy. `RESUME AI` requires an exact rig match. `TRANSFER AI`
-loads weights only and clearly reports that progress was reset. Legacy `EPPO23` files
-contain only neural-network floats and can therefore be transferred, but never exactly
-resumed.
-
-Training now runs a deterministic four-seed evaluation every five PPO updates. The UI
-shows current evaluation distance, best distance and update, exploration noise, brain
-state, and a short rig signature. `RESTORE BEST EVALUATED BRAIN` provides an explicit
-rollback when later stochastic PPO updates degrade performance.
-
-Fresh exploration was reduced from approximately 0.70 action units to 0.18. Built-in
-motor powers now start near 0.06 and are calibrated from each preset's actual rest pose,
-matching the controllable range found in user-tuned rigs instead of immediately slamming
-joints into broad limits.
+Dependencies are resolved through `vcpkg.json`, including `sdl3[vulkan]`, shaderc, and the Vulkan loader.

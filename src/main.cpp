@@ -99,9 +99,9 @@ int main(int argc, char** argv)
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "EpochRunner - Vulkan AI Locomotion Lab",
-        1600,
-        960,
+        "EpochRunner - Autonomous Vulkan Locomotion Lab",
+        1760,
+        1040,
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (window == nullptr)
     {
@@ -110,7 +110,7 @@ int main(int argc, char** argv)
         SDL_Quit();
         return 1;
     }
-    SDL_SetWindowMinimumSize(window, 960, 640);
+    SDL_SetWindowMinimumSize(window, 1100, 720);
 
     epochrunner::render::VulkanRenderer renderer{};
     std::string error{};
@@ -195,7 +195,8 @@ int main(int argc, char** argv)
         input.alt = (modifiers & SDL_KMOD_ALT) != 0;
 
         const std::uint64_t current_ticks = SDL_GetTicksNS();
-        const float dt = std::clamp(static_cast<float>(current_ticks - previous_ticks) / 1'000'000'000.0f, 1.0f / 240.0f, 1.0f / 15.0f);
+        const float dt = std::clamp(static_cast<float>(current_ticks - previous_ticks) / 1'000'000'000.0f,
+            1.0f / 240.0f, 1.0f / 15.0f);
         previous_ticks = current_ticks;
 
         int drawable_width{};

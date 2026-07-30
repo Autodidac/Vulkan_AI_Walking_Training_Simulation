@@ -45,7 +45,6 @@ namespace epochrunner::rl
         [[nodiscard]] bool background_enabled() const noexcept { return enabled_.load(); }
         void set_updates_per_cycle(int updates) noexcept;
         [[nodiscard]] int updates_per_cycle() const noexcept { return updates_per_cycle_.load(); }
-
         void set_autosave_paths(std::filesystem::path checkpoint, std::filesystem::path rig,
             std::filesystem::path state);
         [[nodiscard]] bool load_autosave(std::string& message);
@@ -56,7 +55,6 @@ namespace epochrunner::rl
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
-
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
@@ -86,7 +84,7 @@ namespace epochrunner::rl
             std::vector<float> speed_history{};
             ControllerState controller_state{ ControllerState::fresh };
             AutonomyStatus status{};
-            float exploration{ 0.18f };
+            float exploration{ 0.14f };
             std::uint64_t optimizer_step{};
             bool has_best{};
             std::uint64_t serial{};
@@ -109,7 +107,6 @@ namespace epochrunner::rl
             TrainingRoutine(TrainingRoutine&& other) noexcept;
             TrainingRoutine& operator=(TrainingRoutine&& other) noexcept;
             ~TrainingRoutine();
-
             [[nodiscard]] bool resume();
 
         private:
@@ -142,14 +139,13 @@ namespace epochrunner::rl
         std::vector<float> cached_speed_history_{};
         ControllerState cached_controller_state_{ ControllerState::fresh };
         AutonomyStatus cached_status_{};
-        float cached_exploration_{ 0.18f };
+        float cached_exploration_{ 0.14f };
         std::uint64_t cached_optimizer_step_{};
         bool cached_has_best_{};
 
         std::filesystem::path autosave_checkpoint_{ "epochrunner-autosave.eppo" };
         std::filesystem::path autosave_rig_{ "epochrunner-evolved.epochrig" };
         std::filesystem::path autosave_state_{ "epochrunner-autonomy.state" };
-
         sim::CourseStage stage_{ sim::CourseStage::balance };
         float difficulty_{ 0.25f };
         std::uint64_t rig_generation_{};
@@ -161,9 +157,8 @@ namespace epochrunner::rl
         int degradation_streak_{};
         int rollback_count_{};
         std::string worker_message_{ "LEARNING TO BALANCE" };
-
         std::atomic_bool enabled_{ true };
-        std::atomic_int updates_per_cycle_{ 2 };
+        std::atomic_int updates_per_cycle_{ 1 };
         std::atomic_uint32_t requested_updates_{};
         std::jthread worker_thread_{};
     };

@@ -2,22 +2,26 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochRunner VERSION 0.3.0 LANGUAGES CXX)
+project(EpochRunner VERSION 0.4.0 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
+
+find_package(Threads REQUIRED)
 
 add_library(EpochRunnerCore STATIC
     src/simulation.cpp
     src/ppo_network.cpp
     src/ppo_trainer.cpp
     src/training_checkpoint.cpp
+    src/autonomy.cpp
 )
 add_library(EpochRunner::Core ALIAS EpochRunnerCore)
 
 target_include_directories(EpochRunnerCore PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
+target_link_libraries(EpochRunnerCore PUBLIC Threads::Threads)
 target_compile_features(EpochRunnerCore PUBLIC cxx_std_23)
 set_target_properties(EpochRunnerCore PROPERTIES
     CXX_STANDARD 23
@@ -66,9 +70,6 @@ if(EPOCHRUNNER_BUILD_APP)
         set(BUILD_TESTING "${EPOCHRUNNER_BUILD_TESTS}" CACHE BOOL "" FORCE)
     endif()
 
-    # MSVC module BMIs must be compiled with the same language-environment
-    # switches as every importer. EpochRunner uses /utf-8 under /WX, so apply
-    # the same switch to the fetched EpochGui module target.
     if(MSVC AND TARGET EpochGui)
         target_compile_options(EpochGui PRIVATE /utf-8)
     endif()

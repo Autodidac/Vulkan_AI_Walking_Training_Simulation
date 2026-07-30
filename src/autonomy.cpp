@@ -52,18 +52,13 @@ namespace epochrunner::rl
     }
 
     AutonomousTrainer::AutonomousTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count)
-        : worker_(blueprint, environment_count),
-          live_(blueprint, 4),
-          live_blueprint_(blueprint)
+        : worker_(blueprint, environment_count), live_(blueprint, 8), live_blueprint_(blueprint)
     {
         worker_.set_course(stage_, difficulty_, false);
         live_.set_course(stage_, difficulty_, false);
         publish_locked();
         synchronize();
-        worker_thread_ = std::jthread([this](std::stop_token stop_token)
-        {
-            worker_main(stop_token);
-        });
+        worker_thread_ = std::jthread([this](std::stop_token stop_token) { worker_main(stop_token); });
     }
 
     AutonomousTrainer::~AutonomousTrainer() = default;
@@ -124,7 +119,6 @@ namespace epochrunner::rl
         std::scoped_lock lock(worker_mutex_);
         bool loaded_anything = false;
         read_state_locked();
-
         if (std::filesystem::exists(autosave_rig_))
         {
             std::string rig_error{};
@@ -140,31 +134,26 @@ namespace epochrunner::rl
             }
         }
         worker_.set_course(stage_, difficulty_, false);
-
         if (std::filesystem::exists(autosave_checkpoint_))
         {
             std::string checkpoint_error{};
             if (worker_.load_checkpoint(autosave_checkpoint_, checkpoint_error, false))
             {
+                stage_ = worker_.course_stage();
+                difficulty_ = worker_.course_difficulty();
                 loaded_anything = true;
                 worker_message_ = "AUTOSAVE RESUMED - TRAINING CONTINUES IN BACKGROUND";
-            }
-            else if (worker_.load_checkpoint(autosave_checkpoint_, checkpoint_error, true))
-            {
-                loaded_anything = true;
-                worker_message_ = "AUTOSAVE WEIGHTS TRANSFERRED - PROGRESS RECALIBRATED";
             }
             else
             {
                 message = checkpoint_error;
             }
         }
-
         publish_locked();
         if (loaded_anything)
             message = worker_message_;
         else if (message.empty())
-            message = "NO AUTOSAVE FOUND - STARTING WITH BALANCE TRAINING";
+            message = "NO V0.4 AUTOSAVE FOUND - STARTING WITH BALANCE TRAINING";
         return loaded_anything;
     }
 
@@ -176,7 +165,7 @@ namespace epochrunner::rl
         mastery_streak_ = 0;
         degradation_streak_ = 0;
         worker_message_ = preserve_policy
-            ? "RIG UPDATED - CONTROLLER TRANSFERRED AND OPTIMIZER RECALIBRATED"
+            ? "RIG UPDATED - CONTROLLER TRANSFERRED AND RECALIBRATING"
             : "RIG UPDATED - FRESH CONTROLLER STARTED AUTOMATICALLY";
         publish_locked();
     }
@@ -227,7 +216,8 @@ namespace epochrunner::rl
         const bool loaded = worker_.load_checkpoint(path, error, transfer_only);
         if (loaded)
         {
-            worker_.set_course(stage_, difficulty_, false);
+            stage_ = worker_.course_stage();
+            difficulty_ = worker_.course_difficulty();
             worker_message_ = transfer_only
                 ? "CONTROLLER TRANSFERRED - AUTOPILOT RECALIBRATING"
                 : "CHECKPOINT RESUMED - AUTOPILOT CONTINUING";
@@ -289,12 +279,12 @@ namespace epochrunner::rl
     void AutonomousTrainer::run_training_cycle()
     {
         std::scoped_lock lock(worker_mutex_);
-        const bool background = enabled_.load();
-        int update_count = background ? updates_per_cycle_.load() : 1;
-        if (requested_updates_.load() > 0)
-            requested_updates_.fetch_sub(1);
-        update_count = std::clamp(update_count, 1, 4);
-
+        int update_count = enabled_.load() ? updates_per_cycle_.load() : 0;
+        const std::uint32_t requested = requested_updates_.exchange(0);
+        update_count += static_cast<int>(requested);
+        update_count = std::clamp(update_count, 0, 4);
+        if (update_count == 0)
+            return;
         for (int update = 0; update < update_count; ++update)
         {
             worker_.train_one_update();
@@ -306,16 +296,18 @@ namespace epochrunner::rl
     bool AutonomousTrainer::stage_mastered_locked() const noexcept
     {
         const TrainingMetrics& metrics = worker_.metrics();
+        if (!metrics.evaluation_valid)
+            return false;
         switch (stage_)
         {
         case sim::CourseStage::balance:
-            return metrics.evaluation_survival >= 8.0f && metrics.evaluation_score >= 0.35f;
+            return metrics.evaluation_survival >= 10.0f && metrics.evaluation_score >= 0.55f;
         case sim::CourseStage::walk:
-            return metrics.evaluation_distance >= 3.0f && metrics.evaluation_survival >= 7.0f;
+            return metrics.evaluation_distance >= 3.0f && metrics.evaluation_stride_events >= 3.0f;
         case sim::CourseStage::ramps:
             return metrics.evaluation_distance >= 3.5f && metrics.evaluation_survival >= 7.0f;
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_collisions <= 1.5f;
+            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_collisions <= 1.0f;
         case sim::CourseStage::hurdles:
             return metrics.evaluation_distance >= 5.0f && metrics.evaluation_collisions <= 3.0f;
         case sim::CourseStage::duck_bars:
@@ -339,32 +331,37 @@ namespace epochrunner::rl
             autosave_locked();
         }
 
-        if (stage_mastered_locked())
-            ++mastery_streak_;
-        else
-            mastery_streak_ = 0;
-
-        if (worker_.has_best_policy())
+        mastery_streak_ = stage_mastered_locked() ? mastery_streak_ + 1 : 0;
+        if (worker_.has_best_policy() && metrics.evaluation_valid)
         {
-            const float tolerance = std::max(0.35f, std::abs(metrics.best_evaluation_score) * 0.40f);
-            if (metrics.evaluation_score + tolerance < metrics.best_evaluation_score)
-                ++degradation_streak_;
-            else
-                degradation_streak_ = 0;
+            const float tolerance = std::max(0.35f, std::abs(metrics.best_evaluation_score) * 0.35f);
+            degradation_streak_ = metrics.evaluation_score + tolerance < metrics.best_evaluation_score
+                ? degradation_streak_ + 1 : 0;
             if (degradation_streak_ >= 2 && worker_.restore_best_policy())
             {
                 ++rollback_count_;
                 degradation_streak_ = 0;
-                worker_message_ = "PERFORMANCE DROPPED - AUTOMATICALLY RESTORED BEST CONTROLLER";
+                worker_message_ = "PERFORMANCE DROPPED - RESTORED BEST VALID WALKER";
             }
         }
 
-        if (mastery_streak_ >= 3)
+        if (!metrics.evaluation_valid)
+        {
+            worker_message_ = std::format("INVALID RUN REJECTED - {} OF 6 FAILED WALKING GATES",
+                metrics.evaluation_invalid_runs);
+        }
+        else if (mastery_streak_ >= 3)
+        {
             advance_stage_locked();
+        }
         else if (stage_ != sim::CourseStage::balance && metrics.evaluation_count % 4 == 0)
+        {
             attempt_rig_evolution_locked();
+        }
         else
+        {
             worker_message_ = std::format("{} - MASTERY {}/3", sim::course_stage_name(stage_), mastery_streak_);
+        }
     }
 
     void AutonomousTrainer::advance_stage_locked()
@@ -373,8 +370,7 @@ namespace epochrunner::rl
         degradation_streak_ = 0;
         if (stage_ != sim::CourseStage::moving_hazards)
         {
-            const auto next = static_cast<std::uint8_t>(stage_) + 1u;
-            stage_ = static_cast<sim::CourseStage>(next);
+            stage_ = static_cast<sim::CourseStage>(static_cast<std::uint8_t>(stage_) + 1u);
             difficulty_ = 0.30f;
             worker_message_ = std::format("LESSON COMPLETE - ADVANCING TO {}", sim::course_stage_name(stage_));
         }
@@ -383,14 +379,16 @@ namespace epochrunner::rl
             difficulty_ = std::min(1.0f, difficulty_ + 0.10f);
             worker_message_ = std::format("FULL COURSE MASTERED - DIFFICULTY {:.0f}%", difficulty_ * 100.0f);
         }
-        worker_.set_course(stage_, difficulty_, true);
+        worker_.set_course(stage_, difficulty_, false);
         autosave_locked();
     }
 
     float AutonomousTrainer::evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const
     {
+        if (!candidate.valid())
+            return -std::numeric_limits<float>::infinity();
         constexpr std::size_t agents = 4;
-        constexpr int maximum_steps = 480;
+        constexpr int maximum_steps = 600;
         float total = 0.0f;
         for (std::size_t agent = 0; agent < agents; ++agent)
         {
@@ -405,10 +403,14 @@ namespace epochrunner::rl
                 if (result.terminated)
                     break;
             }
-            total += reward
-                + environment.distance_travelled() * 0.60f
+            const bool gait_valid = stage_ == sim::CourseStage::balance || environment.alternating_steps() >= 2;
+            if (!environment.valid_motion() || !gait_valid)
+                return -std::numeric_limits<float>::infinity();
+            total += reward + environment.distance_travelled() * 0.60f
                 + environment.elapsed_seconds() * 0.04f
-                - environment.collision_count() * 0.18f;
+                + static_cast<float>(environment.alternating_steps()) * 0.02f
+                - environment.collision_count() * 0.18f
+                - environment.airborne_ratio() * 0.70f;
         }
         return total / static_cast<float>(agents);
     }
@@ -418,19 +420,19 @@ namespace epochrunner::rl
         sim::CreatureBlueprint candidate = worker_.blueprint();
         const float direction = (rig_generation_ & 1u) == 0u ? 1.0f : -1.0f;
         const std::uint64_t mutation = rig_generation_ % 5u;
-
         if (mutation == 0u)
         {
             const std::size_t pair = static_cast<std::size_t>((rig_generation_ / 2u) % 2u);
             for (std::size_t index : { pair, pair + 2u })
             {
                 if (index < candidate.motors.size())
-                    candidate.motors[index].strength = clamp(candidate.motors[index].strength + direction * 0.0025f, 0.025f, 0.12f);
+                    candidate.motors[index].strength = clamp(candidate.motors[index].strength
+                        + direction * 0.0020f, 0.025f, 0.10f);
             }
         }
         else if (mutation == 1u)
         {
-            const float delta = direction * 1.5f * pi / 180.0f;
+            const float delta = direction * 1.25f * pi / 180.0f;
             const std::size_t pair = static_cast<std::size_t>((rig_generation_ / 2u) % 2u);
             for (std::size_t index : { pair, pair + 2u })
             {
@@ -439,15 +441,13 @@ namespace epochrunner::rl
                 sim::MotorConstraint& motor = candidate.motors[index];
                 motor.minimum_angle -= delta;
                 motor.maximum_angle += delta;
-                if (motor.minimum_angle > motor.neutral_angle - 2.0f * pi / 180.0f)
-                    motor.minimum_angle = motor.neutral_angle - 2.0f * pi / 180.0f;
-                if (motor.maximum_angle < motor.neutral_angle + 2.0f * pi / 180.0f)
-                    motor.maximum_angle = motor.neutral_angle + 2.0f * pi / 180.0f;
+                motor.minimum_angle = std::min(motor.minimum_angle, motor.neutral_angle - 2.0f * pi / 180.0f);
+                motor.maximum_angle = std::max(motor.maximum_angle, motor.neutral_angle + 2.0f * pi / 180.0f);
             }
         }
         else if (mutation == 2u)
         {
-            const float delta = direction * 0.018f;
+            const float delta = direction * 0.015f;
             if (candidate.left_contact_node < candidate.nodes.size())
                 candidate.nodes[candidate.left_contact_node].x -= delta;
             if (candidate.right_contact_node < candidate.nodes.size())
@@ -455,7 +455,7 @@ namespace epochrunner::rl
         }
         else if (mutation == 3u)
         {
-            const float delta = direction * 0.018f;
+            const float delta = direction * 0.015f;
             if (candidate.torso_node < candidate.nodes.size())
                 candidate.nodes[candidate.torso_node].y = clamp(candidate.nodes[candidate.torso_node].y + delta, 0.40f, 6.0f);
             if (candidate.head_node < candidate.nodes.size())
@@ -463,7 +463,7 @@ namespace epochrunner::rl
         }
         else
         {
-            const float delta = direction * 0.014f;
+            const float delta = direction * 0.012f;
             for (const sim::MotorConstraint& motor : candidate.motors)
             {
                 if (motor.pivot < candidate.nodes.size() && motor.pivot != candidate.root_node)
@@ -501,21 +501,21 @@ namespace epochrunner::rl
         const float candidate_score = evaluate_rig_locked(candidate);
         const float required_gain = std::max(0.025f, std::abs(baseline) * 0.01f);
         ++rig_generation_;
-
-        if (candidate_score > baseline + required_gain)
+        if (std::isfinite(candidate_score) && candidate_score > baseline + required_gain)
         {
             worker_.set_blueprint(candidate, true);
             worker_.set_course(stage_, difficulty_, false);
             ++accepted_rig_changes_;
             mastery_streak_ = 0;
             degradation_streak_ = 0;
-            worker_message_ = std::format("RIG GENERATION {} ACCEPTED  {:+.3f} SCORE", rig_generation_, candidate_score - baseline);
+            worker_message_ = std::format("RIG GENERATION {} ACCEPTED  {:+.3f} VALID SCORE",
+                rig_generation_, candidate_score - baseline);
             autosave_locked();
         }
         else
         {
             ++rejected_rig_changes_;
-            worker_message_ = std::format("RIG GENERATION {} REJECTED  {:+.3f} SCORE", rig_generation_, candidate_score - baseline);
+            worker_message_ = std::format("RIG GENERATION {} REJECTED - NO VALID IMPROVEMENT", rig_generation_);
         }
     }
 
@@ -523,7 +523,7 @@ namespace epochrunner::rl
     {
         PublishedSnapshot snapshot{};
         snapshot.blueprint = worker_.blueprint();
-        snapshot.parameters = worker_.policy().parameters();
+        snapshot.parameters = worker_.has_best_policy() ? worker_.best_policy_parameters() : worker_.policy().parameters();
         snapshot.metrics = worker_.metrics();
         snapshot.reward_history = worker_.reward_history();
         snapshot.speed_history = worker_.speed_history();
@@ -542,7 +542,6 @@ namespace epochrunner::rl
         snapshot.status.rollout_threads = worker_.rollout_worker_count();
         snapshot.status.environment_count = worker_.environment_count();
         snapshot.status.message = worker_message_;
-
         std::scoped_lock lock(snapshot_mutex_);
         snapshot.serial = published_.serial + 1u;
         published_ = std::move(snapshot);

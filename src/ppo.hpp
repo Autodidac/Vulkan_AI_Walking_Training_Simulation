@@ -25,10 +25,20 @@ namespace epochrunner::rl
         float value_loss{};
         float entropy{};
         float learning_rate{ 3.0e-4f };
+
         float evaluation_reward{};
         float evaluation_distance{};
         float evaluation_speed{};
+        float evaluation_score{ -std::numeric_limits<float>::infinity() };
+        float evaluation_survival{};
+        float evaluation_collisions{};
+        float evaluation_airborne_ratio{};
+        float evaluation_stride_events{};
+        std::uint32_t evaluation_invalid_runs{};
+        bool evaluation_valid{};
+
         float best_evaluation_distance{ -std::numeric_limits<float>::infinity() };
+        float best_evaluation_score{ -std::numeric_limits<float>::infinity() };
         std::uint64_t best_update{};
         std::uint64_t evaluation_count{};
     };
@@ -129,9 +139,10 @@ namespace epochrunner::rl
     class PpoTrainer
     {
     public:
-        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 32);
+        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 64);
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
+        void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
@@ -145,6 +156,7 @@ namespace epochrunner::rl
         [[nodiscard]] const PolicyNetwork& policy() const noexcept { return policy_; }
         [[nodiscard]] PolicyNetwork& policy() noexcept { return policy_; }
         [[nodiscard]] const sim::Environment& preview() const noexcept { return preview_; }
+        [[nodiscard]] const sim::CreatureBlueprint& blueprint() const noexcept { return blueprint_; }
         [[nodiscard]] const TrainingMetrics& metrics() const noexcept { return metrics_; }
         [[nodiscard]] const std::vector<float>& reward_history() const noexcept { return reward_history_; }
         [[nodiscard]] const std::vector<float>& speed_history() const noexcept { return speed_history_; }
@@ -154,8 +166,12 @@ namespace epochrunner::rl
         [[nodiscard]] std::string_view controller_state_name() const noexcept;
         [[nodiscard]] std::uint64_t rig_signature() const noexcept { return blueprint_.signature(); }
         [[nodiscard]] bool has_best_policy() const noexcept { return !best_parameters_.empty(); }
+        [[nodiscard]] const std::vector<float>& best_policy_parameters() const noexcept { return best_parameters_; }
         [[nodiscard]] std::uint64_t optimizer_step() const noexcept { return adam_.step; }
         [[nodiscard]] float exploration() const noexcept { return policy_.mean_exploration(); }
+        [[nodiscard]] std::size_t rollout_worker_count() const noexcept { return rollout_worker_count_; }
+        [[nodiscard]] sim::CourseStage course_stage() const noexcept { return course_stage_; }
+        [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
 
     private:
         struct Transition
@@ -177,11 +193,20 @@ namespace epochrunner::rl
             std::uint64_t step{};
         };
 
+        struct RolloutTotals
+        {
+            float accumulated_speed{};
+            float completed_reward{};
+            float completed_distance{};
+            std::size_t completed_episodes{};
+        };
+
         [[nodiscard]] float random_uniform() noexcept;
         [[nodiscard]] float random_normal() noexcept;
         [[nodiscard]] std::array<float, sim::action_count> sample_action(
             const PolicyNetwork::Evaluation& evaluation,
-            float& log_probability) noexcept;
+            std::uint64_t& random_state,
+            float& log_probability) const noexcept;
         void update_policy();
         void evaluate_policy();
         void reset_training_state(bool clear_best = true) noexcept;
@@ -201,6 +226,9 @@ namespace epochrunner::rl
         std::vector<float> best_parameters_{};
         TrainingMetrics metrics_{};
         ControllerState controller_state_{ ControllerState::fresh };
+        sim::CourseStage course_stage_{ sim::CourseStage::balance };
+        float course_difficulty_{ 0.25f };
+        std::size_t rollout_worker_count_{ 1 };
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
     };
 }
