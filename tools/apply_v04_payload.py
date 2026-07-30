@@ -1,10 +1,9 @@
 from pathlib import Path
 import base64, io, tarfile, zlib
 
-# This payload is the exact source archive validated by Windows run 30560147500.
 root=Path(__file__).resolve().parents[1]
 parts=sorted((root/'tools').glob('v04-payload-*.part'))
-payload=''.join(p.read_text(encoding='ascii').split() for p in parts)
+payload=''.join(''.join(p.read_text(encoding='ascii').split()) for p in parts)
 data=zlib.decompress(base64.b85decode(payload.encode('ascii')))
 with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
     for member in archive.getmembers():
