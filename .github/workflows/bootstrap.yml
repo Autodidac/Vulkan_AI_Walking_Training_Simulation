@@ -1,7 +1,7 @@
 name: Bootstrap source and release
 
 on:
-  push:
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -17,8 +17,11 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      - name: Checkout bootstrap commit
+      - name: Checkout bootstrap branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Expand validated source tree
         shell: pwsh
