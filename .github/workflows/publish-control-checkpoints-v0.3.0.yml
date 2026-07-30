@@ -1,0 +1,135 @@
+name: Publish Control Checkpoints v0.3.0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-control-checkpoints-v0.3.0.yml"
+      - "tools/apply_control_checkpoint_upgrade.py"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: epochrunner-control-checkpoints-v0.3.0
+  cancel-in-progress: true
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  build-test-package-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout staged upgrade
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Apply source upgrade and capture clean patch
+        shell: pwsh
+        run: |
+          python tools/apply_control_checkpoint_upgrade.py
+          git add CMakeLists.txt vcpkg.json README.md src tests
+          git diff --cached --check
+          git diff --cached --binary | Out-File -FilePath "$env:RUNNER_TEMP\epochrunner-v0.3.0.patch" -Encoding utf8
+          git reset
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-vulkan-d015e31-
+            vcpkg-windows-x64-d015e31-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure MSVC manifest build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build Release
+        run: cmake --build --preset windows-release
+
+      - name: Run control, checkpoint, preset, and PPO tests
+        run: ctest --preset windows-release --output-on-failure
+
+      - name: Package runtime
+        shell: pwsh
+        run: |
+          $package = Join-Path $PWD "package/EpochRunner-windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --config Release --prefix $package
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+          Copy-Item README.md, LICENSE -Destination $package -Force
+          Compress-Archive -Path "$package/*" -DestinationPath "$env:RUNNER_TEMP\EpochRunner-windows-x64.zip" -Force
+
+      - name: Validate packaged SDL3 Vulkan support
+        shell: pwsh
+        run: |
+          Push-Location package/EpochRunner-windows-x64
+          & .\EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Vulkan diagnostic failed with exit code $LASTEXITCODE"
+          }
+          Pop-Location
+
+      - name: Publish validated source to main without scaffolding ancestry
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+          git clean -fdx
+          git apply --whitespace=fix "$env:RUNNER_TEMP\epochrunner-v0.3.0.patch"
+          git add CMakeLists.txt vcpkg.json README.md src tests
+          git diff --cached --check
+          git commit -m "Add rig communication and resumable training checkpoints"
+          git push origin HEAD:main
+          "SOURCE_SHA=$(git rev-parse HEAD)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publish v0.3.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $notes = @"
+          Adds wrap-safe rest-relative joint limits, A-reference/C-child directed motors, sane calibrated motor defaults, lower fresh exploration, semantic-node assignment, explicit reset-versus-transfer behavior for rig changes, rig-signed full training checkpoints, legacy policy transfer, deterministic evaluation, best-policy retention, and rollback controls.
+          "@
+          if (gh release view v0.3.0 2>$null) {
+            gh release upload v0.3.0 "$env:RUNNER_TEMP\EpochRunner-windows-x64.zip" --clobber
+            gh release edit v0.3.0 --target $env:SOURCE_SHA --title "EpochRunner v0.3.0 - Rig Communication and Checkpoints" --notes $notes
+          }
+          else {
+            gh release create v0.3.0 "$env:RUNNER_TEMP\EpochRunner-windows-x64.zip" --target $env:SOURCE_SHA --title "EpochRunner v0.3.0 - Rig Communication and Checkpoints" --notes $notes
+          }
+
+      - name: Remove temporary branch and close staging PR
+        if: always() && env.SOURCE_SHA != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = [Uri]::EscapeDataString("${{ github.event.pull_request.head.ref }}")
+          gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch"
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" -f state=closed
