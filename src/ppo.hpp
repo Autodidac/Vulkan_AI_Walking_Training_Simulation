@@ -1,0 +1,173 @@
+#pragma once
+
+#include "simulation.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <span>
+#include <string>
+#include <vector>
+
+namespace epochrunner::rl
+{
+    struct TrainingMetrics
+    {
+        std::uint64_t update{};
+        std::uint64_t environment_steps{};
+        float mean_reward{};
+        float mean_episode_distance{};
+        float mean_speed{};
+        float policy_loss{};
+        float value_loss{};
+        float entropy{};
+        float learning_rate{ 3.0e-4f };
+    };
+
+    class PolicyNetwork
+    {
+    public:
+        static constexpr std::size_t hidden_size = 64;
+        static constexpr std::size_t input_size = sim::observation_count;
+        static constexpr std::size_t output_size = sim::action_count;
+
+        struct Evaluation
+        {
+            std::array<float, output_size> mean{};
+            float value{};
+        };
+
+        PolicyNetwork();
+        explicit PolicyNetwork(std::uint64_t seed);
+
+        [[nodiscard]] Evaluation evaluate(std::span<const float, input_size> observation) const noexcept;
+        [[nodiscard]] std::array<float, output_size> deterministic_action(std::span<const float, input_size> observation) const noexcept;
+        [[nodiscard]] std::size_t parameter_count() const noexcept { return parameters_.size(); }
+        [[nodiscard]] const std::vector<float>& parameters() const noexcept { return parameters_; }
+        [[nodiscard]] std::vector<float>& parameters() noexcept { return parameters_; }
+
+        void zero_gradients() noexcept;
+        void accumulate_gradient(
+            std::span<const float, input_size> observation,
+            std::span<const float, output_size> action,
+            float old_log_probability,
+            float advantage,
+            float target_value,
+            float clip_range,
+            float value_coefficient,
+            float entropy_coefficient,
+            float& policy_loss,
+            float& value_loss,
+            float& entropy) noexcept;
+
+        [[nodiscard]] const std::vector<float>& gradients() const noexcept { return gradients_; }
+        [[nodiscard]] std::array<float, output_size> standard_deviation() const noexcept;
+        [[nodiscard]] float log_probability(
+            std::span<const float, output_size> action,
+            const Evaluation& evaluation) const noexcept;
+
+        [[nodiscard]] bool save(const std::filesystem::path& path, std::string& error) const;
+        [[nodiscard]] bool load(const std::filesystem::path& path, std::string& error);
+
+    private:
+        struct Layout
+        {
+            std::size_t w1{};
+            std::size_t b1{};
+            std::size_t w2{};
+            std::size_t b2{};
+            std::size_t actor_w{};
+            std::size_t actor_b{};
+            std::size_t value_w{};
+            std::size_t value_b{};
+            std::size_t log_std{};
+            std::size_t total{};
+        };
+
+        [[nodiscard]] static consteval Layout make_layout() noexcept
+        {
+            Layout result{};
+            result.w1 = 0;
+            result.b1 = result.w1 + hidden_size * input_size;
+            result.w2 = result.b1 + hidden_size;
+            result.b2 = result.w2 + hidden_size * hidden_size;
+            result.actor_w = result.b2 + hidden_size;
+            result.actor_b = result.actor_w + output_size * hidden_size;
+            result.value_w = result.actor_b + output_size;
+            result.value_b = result.value_w + hidden_size;
+            result.log_std = result.value_b + 1;
+            result.total = result.log_std + output_size;
+            return result;
+        }
+        [[nodiscard]] float random_normal() noexcept;
+
+        static const Layout layout_;
+        std::vector<float> parameters_{};
+        std::vector<float> gradients_{};
+        std::uint64_t random_state_{ 1 };
+    };
+
+    class PpoTrainer
+    {
+    public:
+        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 32);
+
+        void set_blueprint(const sim::CreatureBlueprint& blueprint);
+        void reset_policy(std::uint64_t seed = 0xC0FFEEu);
+        void train_one_update();
+        void step_preview(float dt = 1.0f / 60.0f);
+        void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+
+        [[nodiscard]] const PolicyNetwork& policy() const noexcept { return policy_; }
+        [[nodiscard]] PolicyNetwork& policy() noexcept { return policy_; }
+        [[nodiscard]] const sim::Environment& preview() const noexcept { return preview_; }
+        [[nodiscard]] const TrainingMetrics& metrics() const noexcept { return metrics_; }
+        [[nodiscard]] const std::vector<float>& reward_history() const noexcept { return reward_history_; }
+        [[nodiscard]] const std::vector<float>& speed_history() const noexcept { return speed_history_; }
+        [[nodiscard]] std::size_t environment_count() const noexcept { return environments_.size(); }
+        [[nodiscard]] std::span<const sim::Environment> environments() const noexcept { return environments_; }
+
+    private:
+        struct Transition
+        {
+            std::array<float, sim::observation_count> observation{};
+            std::array<float, sim::action_count> action{};
+            float log_probability{};
+            float value{};
+            float reward{};
+            float advantage{};
+            float return_value{};
+            bool terminal{};
+        };
+
+        struct AdamState
+        {
+            std::vector<float> first_moment{};
+            std::vector<float> second_moment{};
+            std::uint64_t step{};
+        };
+
+        [[nodiscard]] float random_uniform() noexcept;
+        [[nodiscard]] float random_normal() noexcept;
+        [[nodiscard]] std::array<float, sim::action_count> sample_action(
+            const PolicyNetwork::Evaluation& evaluation,
+            float& log_probability) noexcept;
+        void update_policy();
+        void apply_adam(float learning_rate, float gradient_scale);
+        void append_history(std::vector<float>& history, float value);
+
+        sim::CreatureBlueprint blueprint_{};
+        std::vector<sim::Environment> environments_{};
+        sim::Environment preview_{};
+        PolicyNetwork policy_{};
+        AdamState adam_{};
+        std::vector<Transition> rollout_{};
+        std::vector<float> episode_rewards_{};
+        std::vector<float> episode_distances_{};
+        std::vector<float> reward_history_{};
+        std::vector<float> speed_history_{};
+        TrainingMetrics metrics_{};
+        std::uint64_t random_state_{ 0x12345678ABCDEFu };
+    };
+}

@@ -1,0 +1,67 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_EXTENSIONS": "OFF"
+      }
+    },
+    {
+      "name": "core-tests",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "EPOCHRUNNER_BUILD_APP": "OFF",
+        "EPOCHRUNNER_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "windows-release",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_MODE": "ON",
+        "VCPKG_MANIFEST_INSTALL": "ON",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed"
+      }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_MANIFEST_MODE": "ON",
+        "VCPKG_MANIFEST_INSTALL": "ON",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "core-tests", "configurePreset": "core-tests" },
+    { "name": "windows-release", "configurePreset": "windows-release" },
+    { "name": "linux-release", "configurePreset": "linux-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "core-tests",
+      "configurePreset": "core-tests",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

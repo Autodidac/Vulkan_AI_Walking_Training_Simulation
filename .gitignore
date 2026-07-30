@@ -1,0 +1,9 @@
+/build/
+/.vs/
+/out/
+*.epochrig
+*.eppo
+*.user
+*.suo
+*.VC.db
+/vcpkg_installed/
