@@ -23,12 +23,28 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Expand validated source tree
+      - name: Checkout validated EpochRunner snapshot
+        uses: actions/checkout@v4
+        with:
+          repository: Autodidac/EpochGui
+          ref: 36b8e924730cc24e9cc1e4208b3146046e10ca4f
+          path: _epochgui_source
+
+      - name: Promote EpochRunner to repository root
         shell: pwsh
         run: |
-          tar -xf source_bundle.zip
-          if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
-          Remove-Item source_bundle.zip -Force
+          $source = Join-Path $PWD "_epochgui_source/examples/EpochRunner"
+          if (-not (Test-Path (Join-Path $source "CMakeLists.txt"))) {
+            throw "Validated EpochRunner source snapshot was not found."
+          }
+
+          Get-ChildItem $source -Force | ForEach-Object {
+            Copy-Item $_.FullName -Destination $PWD -Recurse -Force
+          }
+
+          Remove-Item _epochgui_source -Recurse -Force
+          Remove-Item source_bundle.zip -Force -ErrorAction SilentlyContinue
+          Get-ChildItem "source_bundle.b64.*" -ErrorAction SilentlyContinue | Remove-Item -Force
           Remove-Item .github/workflows/bootstrap.yml -Force
 
       - name: Publish source to main
