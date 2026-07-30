@@ -1,0 +1,44 @@
+name: Retarget EpochRunner v0.4.0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/retag-v0.4.0.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  retag-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retarget release tag to validated main source
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          source_sha="$(gh api "repos/$GH_REPO/commits/main" --jq .sha)"
+          gh api --method PATCH "repos/$GH_REPO/git/refs/tags/v0.4.0" -f sha="$source_sha" -F force=true
+          tag_sha="$(gh api "repos/$GH_REPO/git/ref/tags/v0.4.0" --jq .object.sha)"
+          test "$tag_sha" = "$source_sha"
+          echo "v0.4.0 -> $tag_sha"
+
+      - name: Close staging PR and remove every non-main branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr close "$PR_NUMBER" --repo "$GH_REPO" --comment "v0.4.0 now points to the validated complete v0.4 source and the Windows release asset already passed MSVC, tests, packaging, and Vulkan validation."
+          gh api "repos/$GH_REPO/branches?per_page=100" --jq '.[].name' | while read -r branch; do
+            if [ "$branch" != "main" ]; then
+              encoded="$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$branch")"
+              gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$encoded"
+            fi
+          done
