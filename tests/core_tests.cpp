@@ -25,11 +25,44 @@ int main()
 {
     using namespace epochrunner;
 
-    sim::CreatureBlueprint blueprint = sim::CreatureBlueprint::chicken();
-    require(blueprint.nodes.size() == 8, "unexpected default node count");
-    require(blueprint.radii.size() == blueprint.nodes.size(), "node/radius count mismatch");
-    require(!blueprint.bones.empty(), "default blueprint has no bones");
+    const std::array<sim::CreatureBlueprint, 5> presets{
+        sim::CreatureBlueprint::chicken(),
+        sim::CreatureBlueprint::biped(),
+        sim::CreatureBlueprint::humanoid(),
+        sim::CreatureBlueprint::quadruped(),
+        sim::CreatureBlueprint::monoped()
+    };
+    for (const sim::CreatureBlueprint& preset : presets)
+    {
+        require(preset.nodes.size() >= 3, "preset has too few nodes");
+        require(preset.radii.size() == preset.nodes.size(), "node/radius count mismatch");
+        require(!preset.bones.empty(), "preset has no bones");
+        require(preset.root_node < preset.nodes.size(), "root semantic index is invalid");
+        require(preset.torso_node < preset.nodes.size(), "torso semantic index is invalid");
+        require(preset.head_node < preset.nodes.size(), "head semantic index is invalid");
+        require(preset.left_contact_node < preset.nodes.size(), "left contact semantic index is invalid");
+        require(preset.right_contact_node < preset.nodes.size(), "right contact semantic index is invalid");
+        for (const sim::MotorConstraint& motor : preset.motors)
+        {
+            require(motor.a < preset.nodes.size() && motor.pivot < preset.nodes.size() && motor.c < preset.nodes.size(),
+                "preset motor endpoint is invalid");
+            require(motor.minimum_angle <= motor.neutral_angle && motor.neutral_angle <= motor.maximum_angle,
+                "preset motor rest angle is outside its limits");
+        }
 
+        sim::Environment preset_environment{ preset, 19 };
+        const std::array<float, sim::action_count> preset_actions{};
+        for (int frame = 0; frame < 120; ++frame)
+        {
+            const sim::StepResult result = preset_environment.step(preset_actions);
+            require(std::isfinite(result.reward), "preset reward is not finite");
+            require(std::isfinite(result.forward_speed), "preset speed is not finite");
+            if (result.terminated)
+                preset_environment.reset(19u + static_cast<unsigned>(frame));
+        }
+    }
+
+    sim::CreatureBlueprint blueprint = sim::CreatureBlueprint::chicken();
     sim::Environment environment{ blueprint, 42 };
     const std::array<float, sim::action_count> zero_actions{};
     for (int frame = 0; frame < 600; ++frame)

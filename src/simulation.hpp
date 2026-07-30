@@ -40,8 +40,20 @@ namespace epochrunner::sim
         float minimum_angle{ -1.2f };
         float maximum_angle{ 1.2f };
         float neutral_angle{};
-        float strength{ 0.55f };
+        float strength{ 0.35f };
+        bool enabled{ true };
     };
+
+    [[nodiscard]] inline float motor_target_angle(const MotorConstraint& motor, float action) noexcept
+    {
+        action = clamp(action, -1.0f, 1.0f);
+        const float negative_span = std::max(0.0f, motor.neutral_angle - motor.minimum_angle);
+        const float positive_span = std::max(0.0f, motor.maximum_angle - motor.neutral_angle);
+        const float target = action < 0.0f
+            ? motor.neutral_angle + action * negative_span
+            : motor.neutral_angle + action * positive_span;
+        return clamp(target, motor.minimum_angle, motor.maximum_angle);
+    }
 
     struct CreatureBlueprint
     {
@@ -50,7 +62,17 @@ namespace epochrunner::sim
         std::vector<DistanceConstraint> bones{};
         std::array<MotorConstraint, action_count> motors{};
 
+        std::uint16_t root_node{};
+        std::uint16_t torso_node{ 1 };
+        std::uint16_t head_node{ 2 };
+        std::uint16_t left_contact_node{ 4 };
+        std::uint16_t right_contact_node{ 6 };
+
         [[nodiscard]] static CreatureBlueprint chicken();
+        [[nodiscard]] static CreatureBlueprint biped();
+        [[nodiscard]] static CreatureBlueprint humanoid();
+        [[nodiscard]] static CreatureBlueprint quadruped();
+        [[nodiscard]] static CreatureBlueprint monoped();
         void rebuild_rest_lengths() noexcept;
         [[nodiscard]] bool save(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] static CreatureBlueprint load(const std::filesystem::path& path, std::string& error);
@@ -89,6 +111,7 @@ namespace epochrunner::sim
         [[nodiscard]] float joint_angle(const MotorConstraint& motor) const noexcept;
         [[nodiscard]] float torso_uprightness() const noexcept;
         [[nodiscard]] float random_unit() noexcept;
+        [[nodiscard]] bool valid_node(std::uint16_t index) const noexcept;
 
         CreatureBlueprint blueprint_{};
         std::vector<Particle> particles_{};

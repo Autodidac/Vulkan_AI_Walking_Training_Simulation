@@ -18,8 +18,11 @@ creator's private Patreon source code or assets.
   - drag joints
   - Shift-click to add a node
   - Ctrl-click another node to connect a bone
-  - Delete removes user-added nodes
-  - edit node radius and four motor limits/strengths
+  - Delete removes any selected node safely and disables affected motors
+  - built-in chicken, biped, humanoid, quadruped, and monoped presets
+  - named motor channels with editable A/pivot/C endpoints
+  - degree-based limits, neutral/rest angle, motor enable, and power controls
+  - Joint Lab overlays for limit arcs, live target rays, ghost poses, groups, and auto sweep
   - save/load `.epochrig`
 - Deterministic position-based 2D physics
   - Verlet integration
@@ -112,7 +115,7 @@ ctest --preset core-tests
 | Left drag | Move an editor joint |
 | Shift + left click | Add a node |
 | Ctrl + left click | Connect selected node to clicked node |
-| Delete | Remove a user-added node |
+| Delete | Remove the selected node; affected motors are disabled safely |
 | `S`, `L` | Save/load rig in editor mode |
 | Space | Start/pause training or pause run preview |
 | `R` | Reset run preview |
@@ -137,3 +140,21 @@ tests/core_tests.cpp      deterministic headless validation
 EpochGui remains renderer-neutral. EpochRunner consumes its reusable layout,
 input, font, image, and rounded-geometry modules while owning Vulkan, SDL3,
 shaders, application state, physics, and reinforcement learning.
+
+
+## Joint Lab
+
+The editor starts with Joint Lab visible. Select motor channel 1-4 to see its
+three defining nodes: **A**, **pivot**, and **C**. Red rays show the hard limits,
+the white ray shows the rest target used for PPO output zero, the yellow ray is
+the current test target, and the blue ghost rig shows the resulting kinematic
+pose.
+
+Use **Selected**, **Pair 1+2**, **Pair 3+4**, or **All Four** to test one motor or
+a coordinated group. **Min Limit**, **Rest / Zero**, **Max Limit**, and **Auto
+Sweep** make the range immediately visible before training. Angle values are
+shown in degrees.
+
+The PPO actor still exposes four bounded action channels for all presets. Each
+preset maps those channels to useful joints. Custom rigs can disable a channel
+or reassign its A/pivot/C nodes without changing the policy tensor dimensions.
