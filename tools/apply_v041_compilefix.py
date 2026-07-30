@@ -114,7 +114,7 @@ sim = replace_between(
 )
 write(sim_path, sim)
 
-# A generated v0.4.1 atomic-save patch accidentally embedded literal newlines
+# A generated v0.4.1 staged-save patch accidentally embedded literal newlines
 # inside a few normal C++ string/character literals. Repair any remaining
 # instances without touching valid adjacent strings or raw strings.
 for source_path in Path("src").glob("*.cpp"):
@@ -130,4 +130,17 @@ for source_path in Path("src").glob("*.cpp"):
         source = source.replace("'\n'", r"'\n'")
     write(str(source_path), source)
 
-print("Repaired v0.4.1 atomic save source generation")
+# The pre-feet test still expected the old seven-node humanoid. The new body
+# retains the original seven articulated nodes and adds two heel/toe nodes per
+# foot, for eleven total.
+test_path = "tests/core_tests.cpp"
+tests = read(test_path)
+old_test = '    require(humanoid.nodes.size() == 7, "human-calibrated rig should have pelvis, torso, head, knees, and feet");\n'
+new_test = '    require(humanoid.nodes.size() == 11, "human-calibrated rig should include passive heel/toe feet");\n'
+if old_test in tests:
+    tests = tests.replace(old_test, new_test, 1)
+elif new_test not in tests:
+    raise SystemExit("humanoid node-count assertion was not found")
+write(test_path, tests)
+
+print("Repaired v0.4.1 generated source and stale feet assertion")
