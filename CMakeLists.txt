@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochRunner VERSION 0.1.2 LANGUAGES CXX)
+project(EpochRunner VERSION 0.1.3 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -108,10 +108,6 @@ if(EPOCHRUNNER_BUILD_APP)
     endforeach()
     add_custom_target(EpochRunnerShaders DEPENDS ${EPOCHRUNNER_SHADER_OUTPUTS})
 
-    # Keep development and packaged layouts identical. Runtime paths are
-    # relative to the directory from which EpochRunner is launched.
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-
     add_executable(EpochRunner
         src/main.cpp
         src/app.cpp
@@ -140,6 +136,16 @@ if(EPOCHRUNNER_BUILD_APP)
         VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     )
     epochrunner_enable_warnings(EpochRunner)
+
+    add_custom_command(TARGET EpochRunner POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "$<TARGET_FILE_DIR:EpochRunner>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${EPOCHRUNNER_SHADER_OUTPUT_DIR}"
+            "$<TARGET_FILE_DIR:EpochRunner>/shaders"
+        VERBATIM
+    )
 
     install(TARGETS EpochRunner RUNTIME DESTINATION .)
     install(DIRECTORY "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
