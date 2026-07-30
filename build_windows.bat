@@ -23,9 +23,23 @@ if not exist "%VCPKG_ROOT%\vcpkg.exe" (
   call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics || exit /b 1
 )
 
-echo Configuring Visual Studio 2022 x64 with vcpkg manifest mode...
-cmake --preset windows-release --fresh || exit /b 1
-cmake --build --preset windows-release || exit /b 1
-ctest --preset windows-release || exit /b 1
+set "EPOCHRUNNER_PRESET=windows-release"
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
-echo Built: build\windows-release\Release\EpochRunner.exe
+if exist "%VSWHERE%" (
+  set "VS2026_PATH="
+  set "VS2022_PATH="
+
+  for /f "usebackq tokens=*" %%I in (`"%VSWHERE%" -latest -products * -version "[18.0,19.0)" -property installationPath`) do set "VS2026_PATH=%%I"
+  if not defined VS2026_PATH (
+    for /f "usebackq tokens=*" %%I in (`"%VSWHERE%" -latest -products * -version "[17.0,18.0)" -property installationPath`) do set "VS2022_PATH=%%I"
+    if defined VS2022_PATH set "EPOCHRUNNER_PRESET=windows-vs2022-release"
+  )
+)
+
+echo Configuring %EPOCHRUNNER_PRESET% with vcpkg manifest mode...
+cmake --preset %EPOCHRUNNER_PRESET% --fresh || exit /b 1
+cmake --build --preset %EPOCHRUNNER_PRESET% || exit /b 1
+ctest --preset %EPOCHRUNNER_PRESET% || exit /b 1
+
+echo Built: build\%EPOCHRUNNER_PRESET%\Release\EpochRunner.exe
