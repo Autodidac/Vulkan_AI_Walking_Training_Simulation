@@ -3,12 +3,14 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #ifndef EPOCHRUNNER_SHADER_DIRECTORY
 #define EPOCHRUNNER_SHADER_DIRECTORY "shaders"
@@ -24,14 +26,55 @@ namespace
     {
         return (buttons & button) != 0;
     }
+
+    [[nodiscard]] bool wants_vulkan_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-vulkan";
+    }
 }
 
-int main(int, char**)
+int main(int argc, char** argv)
 {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
+    }
+
+    if (!SDL_Vulkan_LoadLibrary(nullptr))
+    {
+        std::fprintf(
+            stderr,
+            "SDL3 Vulkan support unavailable: %s\n"
+            "This build requires the vcpkg sdl3[vulkan] feature and a Vulkan-capable display driver.\n",
+            SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
+    Uint32 instance_extension_count{};
+    const char* const* instance_extensions = SDL_Vulkan_GetInstanceExtensions(&instance_extension_count);
+    if (instance_extensions == nullptr || instance_extension_count == 0)
+    {
+        std::fprintf(stderr, "SDL_Vulkan_GetInstanceExtensions failed: %s\n", SDL_GetError());
+        SDL_Vulkan_UnloadLibrary();
+        SDL_Quit();
+        return 1;
+    }
+
+    if (wants_vulkan_diagnostic(argc, argv))
+    {
+        const char* video_driver = SDL_GetCurrentVideoDriver();
+        std::printf(
+            "SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
+            video_driver != nullptr ? video_driver : "unknown",
+            static_cast<unsigned int>(instance_extension_count));
+        SDL_Vulkan_UnloadLibrary();
+        SDL_Quit();
+        return 0;
     }
 
     SDL_Window* window = SDL_CreateWindow(
@@ -42,6 +85,7 @@ int main(int, char**)
     if (window == nullptr)
     {
         std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
+        SDL_Vulkan_UnloadLibrary();
         SDL_Quit();
         return 1;
     }
@@ -53,6 +97,7 @@ int main(int, char**)
     {
         std::fprintf(stderr, "Vulkan initialization failed: %s\n", error.c_str());
         SDL_DestroyWindow(window);
+        SDL_Vulkan_UnloadLibrary();
         SDL_Quit();
         return 1;
     }
@@ -63,6 +108,7 @@ int main(int, char**)
         std::fprintf(stderr, "Application initialization failed: %s\n", error.c_str());
         renderer.shutdown();
         SDL_DestroyWindow(window);
+        SDL_Vulkan_UnloadLibrary();
         SDL_Quit();
         return 1;
     }
@@ -145,6 +191,7 @@ int main(int, char**)
     renderer.wait_idle();
     renderer.shutdown();
     SDL_DestroyWindow(window);
+    SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
     return 0;
 }
