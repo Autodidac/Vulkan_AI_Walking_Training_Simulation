@@ -1,15 +1,11 @@
-name: Validate MSVC build and publish v0.1.1
+name: Publish validated v0.1.1
 
 on:
-  pull_request:
+  push:
     branches: [main]
 
 permissions:
   contents: write
-
-concurrency:
-  group: epochrunner-msvc-release-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
 
 env:
   VCPKG_ROOT: ${{ github.workspace }}\vcpkg
@@ -20,10 +16,9 @@ jobs:
     runs-on: windows-2025
 
     steps:
-      - name: Checkout proposed source
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Checkout pinned vcpkg
@@ -68,15 +63,6 @@ jobs:
           Copy-Item README.md, LICENSE -Destination $package -Force
           Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-windows-x64.zip" -Force
 
-      - name: Remove one-time workflow and publish source
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/fix-release.yml
-          git commit -m "Remove one-time MSVC release validation"
-          git push origin HEAD:main
-
       - name: Create or replace GitHub release
         shell: pwsh
         env:
@@ -93,6 +79,15 @@ jobs:
               --title "EpochRunner v0.1.1" `
               --notes "C++23 Vulkan walking-training simulation using EpochGui, SDL3, manifest-mode vcpkg, deterministic articulated physics, and PPO training."
           }
+
+      - name: Remove validator from main
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-release.yml
+          git commit -m "Remove one-time release validator"
+          git push origin HEAD:main
 
       - name: Delete every non-main branch
         shell: pwsh
