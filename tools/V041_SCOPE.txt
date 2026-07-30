@@ -1,0 +1,1 @@
+Scope is fixed: visible versioning, new autosaves/checkpoint generation, persistent workers, gait and micro-motion fixes, runtime/preview motor parity, live-best refresh, atomic saves, and paged automation-first UI.
