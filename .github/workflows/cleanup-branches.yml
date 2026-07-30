@@ -1,0 +1,41 @@
+name: Remove temporary branches
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove this workflow and delete every non-main branch
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git rm .github/workflows/cleanup-branches.yml
+          git commit -m "Remove branch cleanup workflow"
+          git push origin HEAD:main
+
+          $branches = git ls-remote --heads origin | ForEach-Object {
+            if ($_ -match 'refs/heads/(.+)$') {
+              $Matches[1]
+            }
+          }
+
+          foreach ($branch in $branches) {
+            if ($branch -and $branch -ne 'main') {
+              Write-Host "Deleting branch: $branch"
+              git push origin --delete $branch
+            }
+          }
