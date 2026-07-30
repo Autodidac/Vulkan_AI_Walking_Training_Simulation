@@ -31,26 +31,26 @@ jobs:
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure manifest build
+      - name: Configure MSVC manifest build
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
 
-      - name: Build
+      - name: Build Release
         run: cmake --build --preset windows-release
 
-      - name: Test
-        run: ctest --test-dir build/windows-release --output-on-failure
+      - name: Test Release
+        run: ctest --preset windows-release
 
       - name: Package
         shell: pwsh
         run: |
           $package = Join-Path $PWD "package/EpochRunner-windows-x64"
           New-Item -ItemType Directory -Force $package | Out-Null
-          cmake --install build/windows-release --prefix $package
+          cmake --install build/windows-release --config Release --prefix $package
 
-          Get-ChildItem build/windows-release -Filter *.dll -File -ErrorAction SilentlyContinue |
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
             Copy-Item -Destination $package -Force
 
           Copy-Item README.md, LICENSE -Destination $package -Force
