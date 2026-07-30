@@ -65,6 +65,13 @@ if(EPOCHRUNNER_BUILD_APP)
         set(BUILD_TESTING "${EPOCHRUNNER_BUILD_TESTS}" CACHE BOOL "" FORCE)
     endif()
 
+    # MSVC module BMIs must be compiled with the same language-environment
+    # switches as every importer. EpochRunner uses /utf-8 under /WX, so apply
+    # the same switch to the fetched EpochGui module target.
+    if(MSVC AND TARGET EpochGui)
+        target_compile_options(EpochGui PRIVATE /utf-8)
+    endif()
+
     find_package(SDL3 CONFIG REQUIRED)
     find_package(Vulkan 1.3 REQUIRED)
     find_package(unofficial-shaderc CONFIG REQUIRED)
