@@ -1,0 +1,3 @@
+EpochRunner v0.4.1 staged review marker.
+
+The workflow reconstructs the reviewed patch, builds and tests it on Windows, verifies the visible executable version, packages a uniquely named archive, validates Vulkan startup, publishes clean source to main, and removes this marker with the temporary branch.
