@@ -6,7 +6,7 @@ on:
     paths:
       - ".github/workflows/publish-v0.4.1.yml"
       - "tools/apply_v041.py.gz.b64"
-      - "tools/apply_v041_quad.py.gz.b64"
+      - "tools/apply_v041_quad.py"
 
 permissions:
   contents: write
@@ -41,20 +41,19 @@ jobs:
           [IO.File]::WriteAllBytes("tools/apply_v041.py.gz", [Convert]::FromBase64String($encoded))
           python -c "import gzip; open(r'tools/apply_v041.py','wb').write(gzip.open(r'tools/apply_v041.py.gz','rb').read())"
           python tools/apply_v041.py
-
-          $quadEncoded = (Get-Content tools/apply_v041_quad.py.gz.b64 -Raw) -replace '\s', ''
-          [IO.File]::WriteAllBytes("tools/apply_v041_quad.py.gz", [Convert]::FromBase64String($quadEncoded))
-          python -c "import gzip; open(r'tools/apply_v041_quad.py','wb').write(gzip.open(r'tools/apply_v041_quad.py.gz','rb').read())"
           python tools/apply_v041_quad.py
 
           Copy-Item tools/apply_v041.py "$env:RUNNER_TEMP\apply_v041.py" -Force
           Copy-Item tools/apply_v041_quad.py "$env:RUNNER_TEMP\apply_v041_quad.py" -Force
-          Remove-Item tools/apply_v041.py, tools/apply_v041.py.gz, tools/apply_v041_quad.py, tools/apply_v041_quad.py.gz -Force
+          Remove-Item tools/apply_v041.py, tools/apply_v041.py.gz -Force
           git diff --check
           Select-String -Path CMakeLists.txt -Pattern 'VERSION 0.4.1' | Out-Null
           Select-String -Path src/main.cpp -Pattern 'EpochRunner 0.4.1' | Out-Null
           Select-String -Path src/app.cpp -Pattern 'epochrunner-v041-autosave.eppo' | Out-Null
+          Select-String -Path src/app.cpp -Pattern 'REAL FEET / SOFT START' | Out-Null
           Select-String -Path src/simulation.cpp -Pattern 'calibrate_quadruped_stable_defaults' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'add_passive_feet' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'control_ramp' | Out-Null
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -90,7 +89,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           cmake --build --preset windows-release
 
-      - name: Run gait, autonomy, checkpoint, and rig tests
+      - name: Run gait, autonomy, checkpoint, feet, and rig tests
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -120,9 +119,11 @@ jobs:
           Copy-Item README.md, LICENSE -Destination $package -Force
           @"
           EpochRunner 0.4.1
-          Source: ${{ github.event.pull_request.base.sha }} plus validated v0.4.1 fixes
           Build: Windows x64 Release
-          This build displays v0.4.1 and uses quadruped-stable, limb-length-normalized motor defaults on every preset.
+          Visible version: v0.4.1
+          Stable defaults: quadruped-derived, limb-length-normalized motors
+          Feet: passive heel/toe support on every non-quadruped preset
+          Startup: passive settle plus smooth motor ramp
           "@ | Set-Content (Join-Path $package "BUILD.txt") -Encoding utf8
           Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-v0.4.1-windows-x64.zip" -Force
 
@@ -152,7 +153,7 @@ jobs:
           python "$env:RUNNER_TEMP\apply_v041_quad.py"
           git diff --check
           git add CMakeLists.txt vcpkg.json README.md src tests
-          git commit -m "Fix visible autonomy, gait validation, and stable preset defaults"
+          git commit -m "Fix autonomy, gait validation, stable defaults, and feet"
           git push origin HEAD:main
 
       - name: Publish v0.4.1
@@ -167,16 +168,16 @@ jobs:
           $notes = @"
           EpochRunner v0.4.1 makes the autonomous training changes unmistakable and closes the remaining locomotion exploits. The window and application header display v0.4.1, the Windows archive has a unique filename, and corrected training starts with new autosave/checkpoint files instead of silently loading an older hopping or flip/fly controller.
 
-          Fixes include persistent rollout workers, live-preview refresh when a new verified best is published, true alternating-foot gait validation, whole-window micro-motion detection, full driven-subtree motor physics matching the Rig Lab preview, direct motor-bone validation, atomic checkpoint/rig/state saves, standing-first curriculum reset on a fresh body, paged Rig Lab controls, deferred slider commits, and removal of manual brain-management controls from the normal live workflow.
+          The update adds persistent rollout workers, live-preview refresh when a verified best is published, true alternating-foot gait validation, whole-window micro-motion detection, full driven-subtree motor physics matching the Rig Lab preview, direct motor-bone validation, atomic saves, standing-first curriculum reset, paged Rig Lab controls, and deferred slider commits.
 
-          Every built-in preset now derives motor travel and effective endpoint correction from the stable quadruped profile. Longer humanoid and biped limbs receive proportionally lower raw motor strength so they do not launch themselves while preserving the quadruped's useful joint response.
+          Every preset now derives motor travel and effective endpoint correction from the stable quadruped profile. Longer limbs receive proportionally lower raw motor strength. Bipeds, humanoids, chickens, and monopeds gain passive heel/toe foot triangles, a no-control settling period, a smooth motor ramp, and calmer fresh policy output so they do not spawn-launch, jump-spin, or learn from an unstable initial impulse.
           "@
           if (gh release view v0.4.1 --repo $env:GH_REPO 2>$null) {
             gh release upload v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --clobber
-            gh release edit v0.4.1 --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Visible Autonomous Training" --notes $notes
+            gh release edit v0.4.1 --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
           }
           else {
-            gh release create v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Visible Autonomous Training" --notes $notes
+            gh release create v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
           }
 
       - name: Close staging PR and remove every non-main branch
@@ -187,7 +188,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           $ErrorActionPreference = "Stop"
-          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "v0.4.1 passed the Windows build, gait/autonomy and quadruped-stable preset tests, visible version check, package check, and Vulkan diagnostic. The uniquely named release is published from clean main source." 2>$null
+          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "v0.4.1 passed the Windows build, autonomy/gait/feet/stable-preset tests, visible version check, package check, and Vulkan diagnostic. The uniquely named release is published from clean main source." 2>$null
           $branches = gh api "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" | ConvertFrom-Json
           foreach ($branch in $branches) {
             if ($branch.name -ne "main") {
