@@ -1,3 +1,3 @@
 # Vulkan AI Walking Training Simulation
 
-Source import and release build are running through GitHub Actions.
+Import the validated standalone source snapshot and build release v0.1.1.
