@@ -27,28 +27,66 @@ namespace epochrunner::rl
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
     }
 
-    void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint)
+    void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
+        const bool changed = blueprint.signature() != blueprint_.signature();
         blueprint_ = blueprint;
         for (sim::Environment& environment : environments_)
             environment.set_blueprint(blueprint_);
         preview_.set_blueprint(blueprint_);
+        if (!changed)
+            return;
+
+        if (preserve_policy)
+        {
+            reset_training_state();
+            controller_state_ = ControllerState::transferred;
+        }
+        else
+        {
+            reset_policy();
+        }
     }
 
-    void PpoTrainer::reset_policy(std::uint64_t seed)
+    void PpoTrainer::reset_training_state(bool clear_best) noexcept
     {
-        policy_ = PolicyNetwork(seed);
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
         metrics_ = {};
         reward_history_.clear();
         speed_history_.clear();
+        if (clear_best)
+            best_parameters_.clear();
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
         for (std::size_t index = 0; index < environments_.size(); ++index)
             environments_[index].reset(0x1000u + index * 7919u);
         preview_.reset(0xDEADBEEFu);
+    }
+
+    void PpoTrainer::reset_policy(std::uint64_t seed)
+    {
+        policy_ = PolicyNetwork(seed);
+        reset_training_state();
+        controller_state_ = ControllerState::fresh;
+    }
+
+    void PpoTrainer::set_exploration(float standard_deviation) noexcept
+    {
+        policy_.set_exploration(standard_deviation);
+    }
+
+    std::string_view PpoTrainer::controller_state_name() const noexcept
+    {
+        switch (controller_state_)
+        {
+        case ControllerState::fresh: return "FRESH";
+        case ControllerState::training: return "TRAINING";
+        case ControllerState::resumed: return "RESUMED";
+        case ControllerState::transferred: return "TRANSFERRED";
+        }
+        return "UNKNOWN";
     }
 
     float PpoTrainer::random_uniform() noexcept
@@ -170,6 +208,59 @@ namespace epochrunner::rl
         }
         append_history(reward_history_, metrics_.mean_reward);
         append_history(speed_history_, metrics_.mean_speed * 3.6f);
+        controller_state_ = ControllerState::training;
+        if (metrics_.update == 1 || metrics_.update % 5 == 0)
+            evaluate_policy();
+    }
+
+    void PpoTrainer::evaluate_policy()
+    {
+        constexpr std::size_t evaluation_agents = 4;
+        constexpr int maximum_steps = 600;
+        float reward_total = 0.0f;
+        float distance_total = 0.0f;
+        float speed_total = 0.0f;
+        std::size_t speed_samples = 0;
+        for (std::size_t agent = 0; agent < evaluation_agents; ++agent)
+        {
+            sim::Environment environment{ blueprint_, 0xE000u + agent * 4099u };
+            float episode_reward = 0.0f;
+            for (int step = 0; step < maximum_steps; ++step)
+            {
+                const auto action = policy_.deterministic_action(environment.observation());
+                const sim::StepResult result = environment.step(action);
+                episode_reward += result.reward;
+                speed_total += result.forward_speed;
+                ++speed_samples;
+                if (result.terminated)
+                    break;
+            }
+            reward_total += episode_reward;
+            distance_total += environment.distance_travelled();
+        }
+        metrics_.evaluation_reward = reward_total / static_cast<float>(evaluation_agents);
+        metrics_.evaluation_distance = distance_total / static_cast<float>(evaluation_agents);
+        metrics_.evaluation_speed = speed_samples > 0 ? speed_total / static_cast<float>(speed_samples) : 0.0f;
+        ++metrics_.evaluation_count;
+        if (best_parameters_.empty() || metrics_.evaluation_distance > metrics_.best_evaluation_distance)
+        {
+            best_parameters_ = policy_.parameters();
+            metrics_.best_evaluation_distance = metrics_.evaluation_distance;
+            metrics_.best_update = metrics_.update;
+        }
+    }
+
+    bool PpoTrainer::restore_best_policy() noexcept
+    {
+        if (best_parameters_.size() != policy_.parameter_count())
+            return false;
+        policy_.parameters() = best_parameters_;
+        adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
+        adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
+        adam_.step = 0;
+        preview_.reset(0xDEADBEEFu + metrics_.update);
+        controller_state_ = ControllerState::resumed;
+        return true;
     }
 
     void PpoTrainer::update_policy()

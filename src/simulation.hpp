@@ -74,6 +74,11 @@ namespace epochrunner::sim
         [[nodiscard]] static CreatureBlueprint quadruped();
         [[nodiscard]] static CreatureBlueprint monoped();
         void rebuild_rest_lengths() noexcept;
+        void calibrate_motor(std::size_t motor_index, float negative_degrees = 30.0f,
+            float positive_degrees = 30.0f, float power = 0.06f) noexcept;
+        void calibrate_all_motors(float degrees = 30.0f, float power = 0.06f) noexcept;
+        [[nodiscard]] float rest_joint_angle(std::size_t motor_index) const noexcept;
+        [[nodiscard]] std::uint64_t signature() const noexcept;
         [[nodiscard]] bool save(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] static CreatureBlueprint load(const std::filesystem::path& path, std::string& error);
     };

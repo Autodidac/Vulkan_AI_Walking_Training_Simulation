@@ -204,6 +204,7 @@ namespace epochrunner
         bool run_paused{};
         bool joint_lab{ true };
         bool joint_auto_sweep{};
+        bool transfer_brain_on_rig_change{};
         int updates_per_frame{ 1 };
         int selected_node{ -1 };
         int selected_motor{};
@@ -251,6 +252,14 @@ namespace epochrunner
             return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4" };
         }
 
+        void apply_blueprint_change(std::string_view reason)
+        {
+            training = false;
+            trainer.set_blueprint(blueprint, transfer_brain_on_rig_change);
+            set_status(std::format("{} - BRAIN {}", reason,
+                transfer_brain_on_rig_change ? "TRANSFERRED; OPTIMIZER RESET" : "RESET FOR THIS RIG"));
+        }
+
         void use_preset(RigPreset preset)
         {
             rig_preset = preset;
@@ -268,8 +277,7 @@ namespace epochrunner
             dragging_node = false;
             joint_test_input = 0.0f;
             joint_auto_sweep = false;
-            trainer.set_blueprint(blueprint);
-            set_status(std::format("{} LOADED - RESET POLICY BEFORE FRESH TRAINING", preset_name()));
+            apply_blueprint_change(std::format("{} LOADED", preset_name()));
         }
 
         [[nodiscard]] bool test_motor_active(int index) const noexcept
@@ -344,7 +352,7 @@ namespace epochrunner
             }
 
             blueprint.rebuild_rest_lengths();
-            trainer.set_blueprint(blueprint);
+            apply_blueprint_change("RIG CHANGED");
             rig_preset = RigPreset::custom;
             selected_node = -1;
             dragging_node = false;
@@ -724,7 +732,7 @@ namespace epochrunner
                     if (!exists)
                     {
                         blueprint.bones.push_back({ a, b, length(blueprint.nodes[b] - blueprint.nodes[a]), 1.0f });
-                        trainer.set_blueprint(blueprint);
+                        apply_blueprint_change("RIG CHANGED");
                         rig_preset = RigPreset::custom;
                         set_status("BONE CONNECTED");
                     }
@@ -742,7 +750,7 @@ namespace epochrunner
             {
                 dragging_node = false;
                 blueprint.rebuild_rest_lengths();
-                trainer.set_blueprint(blueprint);
+                apply_blueprint_change("RIG CHANGED");
                 rig_preset = RigPreset::custom;
                 set_status("RIG UPDATED");
             }
@@ -796,12 +804,22 @@ namespace epochrunner
             {
                 std::string error{};
                 blueprint = sim::CreatureBlueprint::load(rig_path, error);
-                trainer.set_blueprint(blueprint);
+                apply_blueprint_change("RIG CHANGED");
                 rig_preset = RigPreset::custom;
                 selected_node = -1;
                 set_status(error.empty() ? "RIG LOADED" : error);
             }
             cursor.y += 41.0f;
+            if (button({ cursor, { panel_rect.size.x - 32.0f, 29.0f } },
+                transfer_brain_on_rig_change ? "RIG CHANGE: TRANSFER BRAIN" : "RIG CHANGE: RESET BRAIN",
+                input, transfer_brain_on_rig_change))
+            {
+                transfer_brain_on_rig_change = !transfer_brain_on_rig_change;
+                set_status(transfer_brain_on_rig_change
+                    ? "RIG EDITS KEEP WEIGHTS BUT RESET OPTIMIZER/METRICS"
+                    : "RIG EDITS START A FRESH CONTROLLER");
+            }
+            cursor.y += 37.0f;
 
             bool blueprint_changed = false;
             add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.35f, muted);
@@ -817,6 +835,28 @@ namespace epochrunner
                 blueprint_changed = blueprint_changed || updated_radius != radius;
                 radius = updated_radius;
                 cursor.y += 43.0f;
+            }
+
+            if (selected_node >= 0)
+            {
+                add_text(canvas, cursor, "SELECTED NODE ROLE", 1.15f, muted);
+                cursor.y += 18.0f;
+                const float role_width = (panel_rect.size.x - 48.0f) * 0.20f;
+                auto role_button = [&](int slot, std::string_view label, std::uint16_t& role)
+                {
+                    if (button({ cursor + Vec2{ role_width * static_cast<float>(slot), 0.0f },
+                        { role_width - 4.0f, 27.0f } }, label, input, role == selected_node))
+                    {
+                        role = static_cast<std::uint16_t>(selected_node);
+                        blueprint_changed = true;
+                    }
+                };
+                role_button(0, "ROOT", blueprint.root_node);
+                role_button(1, "TORSO", blueprint.torso_node);
+                role_button(2, "HEAD", blueprint.head_node);
+                role_button(3, "CONTACT L", blueprint.left_contact_node);
+                role_button(4, "CONTACT R", blueprint.right_contact_node);
+                cursor.y += 34.0f;
             }
 
             add_text(canvas, cursor, "MOTOR CHANNELS (PPO OUTPUTS)", 1.25f, muted);
@@ -857,9 +897,35 @@ namespace epochrunner
             set_endpoint({ cursor + Vec2{ endpoint_width + 6.0f, 0.0f }, { endpoint_width, 28.0f } }, "SET PIVOT", motor.pivot);
             set_endpoint({ cursor + Vec2{ (endpoint_width + 6.0f) * 2.0f, 0.0f }, { endpoint_width, 28.0f } }, "SET C", motor.c);
             cursor.y += 34.0f;
-
             const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
                 && motor.c < blueprint.nodes.size() && motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
+            add_text(canvas, cursor, "A = REFERENCE/PARENT   C = DRIVEN/CHILD", 1.05f, muted);
+            cursor.y += 18.0f;
+            const float calibration_width = (panel_rect.size.x - 44.0f) / 3.0f;
+            if (button({ cursor, { calibration_width, 28.0f } }, "SET REST", input, false, endpoints_valid))
+            {
+                const float negative = std::max(1.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
+                const float positive = std::max(1.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
+                motor.neutral_angle = blueprint.rest_joint_angle(static_cast<std::size_t>(selected_motor));
+                motor.minimum_angle = motor.neutral_angle - negative * pi / 180.0f;
+                motor.maximum_angle = motor.neutral_angle + positive * pi / 180.0f;
+                blueprint_changed = true;
+            }
+            if (button({ cursor + Vec2{ calibration_width + 6.0f, 0.0f }, { calibration_width, 28.0f } },
+                "AUTO +/-30", input, false, endpoints_valid))
+            {
+                blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 30.0f, 30.0f, 0.06f);
+                blueprint_changed = true;
+            }
+            if (button({ cursor + Vec2{ (calibration_width + 6.0f) * 2.0f, 0.0f }, { calibration_width, 28.0f } },
+                "SWAP A/C", input, false, endpoints_valid))
+            {
+                std::swap(motor.a, motor.c);
+                blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 30.0f, 30.0f, motor.strength);
+                blueprint_changed = true;
+            }
+            cursor.y += 36.0f;
+
             if (button({ cursor, { (panel_rect.size.x - 38.0f) * 0.5f, 28.0f } },
                 motor.enabled ? "DISABLE MOTOR" : "ENABLE MOTOR", input, motor.enabled, endpoints_valid))
             {
@@ -872,34 +938,54 @@ namespace epochrunner
                 joint_lab = !joint_lab;
             cursor.y += 38.0f;
 
-            auto update_angle = [&](float& value, std::string_view label)
-            {
-                const float updated = angle_slider({ cursor, { panel_rect.size.x - 32.0f, 34.0f } }, label, value, input);
-                blueprint_changed = blueprint_changed || updated != value;
-                value = updated;
-                cursor.y += 42.0f;
-            };
-            update_angle(motor.minimum_angle, "MINIMUM LIMIT");
-            update_angle(motor.maximum_angle, "MAXIMUM LIMIT");
-            update_angle(motor.neutral_angle, "REST / ACTION ZERO");
+            float minimum_offset = motor.minimum_angle - motor.neutral_angle;
+            float maximum_offset = motor.maximum_angle - motor.neutral_angle;
+            const float updated_minimum_offset = std::min(0.0f,
+                angle_slider({ cursor, { panel_rect.size.x - 32.0f, 34.0f } }, "MIN OFFSET FROM REST", minimum_offset, input));
+            blueprint_changed = blueprint_changed || updated_minimum_offset != minimum_offset;
+            minimum_offset = updated_minimum_offset;
+            cursor.y += 42.0f;
+            const float updated_maximum_offset = std::max(0.0f,
+                angle_slider({ cursor, { panel_rect.size.x - 32.0f, 34.0f } }, "MAX OFFSET FROM REST", maximum_offset, input));
+            blueprint_changed = blueprint_changed || updated_maximum_offset != maximum_offset;
+            maximum_offset = updated_maximum_offset;
+            cursor.y += 42.0f;
+            const float old_neutral = motor.neutral_angle;
+            motor.neutral_angle = angle_slider(
+                { cursor, { panel_rect.size.x - 32.0f, 34.0f } }, "REST / ACTION ZERO", motor.neutral_angle, input);
+            blueprint_changed = blueprint_changed || motor.neutral_angle != old_neutral;
+            cursor.y += 42.0f;
+            motor.minimum_angle = motor.neutral_angle + minimum_offset;
+            motor.maximum_angle = motor.neutral_angle + maximum_offset;
             const float updated_strength = slider(
-                { cursor, { panel_rect.size.x - 32.0f, 34.0f } }, "MOTOR POWER", motor.strength, 0.0f, 0.80f, input);
+                { cursor, { panel_rect.size.x - 32.0f, 34.0f } }, "MOTOR POWER", motor.strength, 0.0f, 0.25f, input);
             blueprint_changed = blueprint_changed || updated_strength != motor.strength;
             motor.strength = updated_strength;
             cursor.y += 42.0f;
 
-            if (motor.minimum_angle > motor.maximum_angle)
-                std::swap(motor.minimum_angle, motor.maximum_angle);
-            motor.neutral_angle = clamp(motor.neutral_angle, motor.minimum_angle, motor.maximum_angle);
-
-            add_text(canvas, cursor, "MIN/MAX = HARD MOTION ARC", 1.1f, muted); cursor.y += 16.0f;
-            add_text(canvas, cursor, "REST = TARGET WHEN PPO OUTPUT IS ZERO", 1.1f, muted); cursor.y += 16.0f;
-            add_text(canvas, cursor, "POWER = HOW HARD THE SOLVER CORRECTS", 1.1f, muted);
+            const float current_angle = blueprint.rest_joint_angle(static_cast<std::size_t>(selected_motor));
+            const bool connected_a = std::ranges::any_of(blueprint.bones, [&](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == motor.a && bone.b == motor.pivot) || (bone.b == motor.a && bone.a == motor.pivot);
+            });
+            const bool connected_c = std::ranges::any_of(blueprint.bones, [&](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == motor.c && bone.b == motor.pivot) || (bone.b == motor.c && bone.a == motor.pivot);
+            });
+            add_text(canvas, cursor,
+                std::format("POSE {:+.0f} DEG   RANGE -{:.0f}/+{:.0f}", current_angle * 180.0f / pi,
+                    -minimum_offset * 180.0f / pi, maximum_offset * 180.0f / pi), 1.1f, white);
+            cursor.y += 16.0f;
+            add_text(canvas, cursor, connected_a && connected_c ? "MOTOR VALID - DIRECT BONE ON BOTH SIDES"
+                : "WARNING - PIVOT SHOULD CONNECT DIRECTLY TO A AND C", 1.05f,
+                connected_a && connected_c ? accent : danger);
+            cursor.y += 16.0f;
+            add_text(canvas, cursor, "OFFSETS AVOID THE +/-180 DEGREE WRAP PROBLEM", 1.05f, muted);
 
             if (blueprint_changed)
             {
                 rig_preset = RigPreset::custom;
-                trainer.set_blueprint(blueprint);
+                apply_blueprint_change("RIG CHANGED");
             }
         }
 
@@ -926,27 +1012,51 @@ namespace epochrunner
                 set_status("POLICY RESET");
             }
             cursor.y += 46.0f;
-            const float half = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { half, 34.0f } }, "SAVE AI", input))
+            const float third_file = (rect.size.x - 44.0f) / 3.0f;
+            if (button({ cursor, { third_file, 34.0f } }, "SAVE CHECKPOINT", input))
             {
                 std::string error{};
-                set_status(trainer.policy().save(policy_path, error) ? "POLICY SAVED" : error);
+                set_status(trainer.save_checkpoint(policy_path, error) ? "FULL CHECKPOINT SAVED" : error);
             }
-            if (button({ cursor + Vec2{ half + 10.0f, 0.0f }, { half, 34.0f } }, "LOAD AI", input))
+            if (button({ cursor + Vec2{ third_file + 6.0f, 0.0f }, { third_file, 34.0f } }, "RESUME AI", input))
             {
                 std::string error{};
-                set_status(trainer.policy().load(policy_path, error) ? "POLICY LOADED" : error);
+                const bool loaded = trainer.load_checkpoint(policy_path, error, false);
+                set_status(loaded ? "CHECKPOINT RESUMED WITH OPTIMIZER AND PROGRESS" : error);
+            }
+            if (button({ cursor + Vec2{ (third_file + 6.0f) * 2.0f, 0.0f }, { third_file, 34.0f } }, "TRANSFER AI", input))
+            {
+                std::string error{};
+                const bool loaded = trainer.load_checkpoint(policy_path, error, true);
+                set_status(loaded ? (error.empty() ? "WEIGHTS TRANSFERRED" : error) : error);
             }
 
             const rl::TrainingMetrics& metrics = trainer.metrics();
-            cursor.y += 54.0f;
+            cursor.y += 47.0f;
+            add_text(canvas, cursor,
+                std::format("BRAIN {}   RIG {:08X}", trainer.controller_state_name(),
+                    static_cast<std::uint32_t>(trainer.rig_signature() & 0xffffffffULL)), 1.25f, accent);
+            cursor.y += 21.0f;
+            float exploration = trainer.exploration();
+            const float updated_exploration = slider(
+                { cursor, { rect.size.x - 32.0f, 34.0f } }, "EXPLORATION / ACTION NOISE", exploration, 0.02f, 0.60f, input);
+            if (updated_exploration != exploration)
+                trainer.set_exploration(updated_exploration);
+            cursor.y += 43.0f;
             add_text(canvas, cursor, std::format("UPDATE       {}", metrics.update), 1.35f, white); cursor.y += 22.0f;
             add_text(canvas, cursor, std::format("STEPS        {}", metrics.environment_steps), 1.35f, white); cursor.y += 22.0f;
             add_text(canvas, cursor, std::format("MEAN REWARD  {:.2f}", metrics.mean_reward), 1.35f, white); cursor.y += 22.0f;
             add_text(canvas, cursor, std::format("MEAN SPEED   {:.2f} KM/H", metrics.mean_speed * 3.6f), 1.35f, white); cursor.y += 22.0f;
             add_text(canvas, cursor, std::format("DISTANCE     {:.2f} M", metrics.mean_episode_distance), 1.35f, white); cursor.y += 22.0f;
             add_text(canvas, cursor, std::format("POLICY LOSS  {:.4f}", metrics.policy_loss), 1.35f, muted); cursor.y += 22.0f;
-            add_text(canvas, cursor, std::format("VALUE LOSS   {:.4f}", metrics.value_loss), 1.35f, muted); cursor.y += 30.0f;
+            add_text(canvas, cursor, std::format("VALUE LOSS   {:.4f}", metrics.value_loss), 1.35f, muted); cursor.y += 22.0f;
+            add_text(canvas, cursor, std::format("EVAL DIST    {:.2f} M", metrics.evaluation_distance), 1.35f, white); cursor.y += 22.0f;
+            add_text(canvas, cursor, std::format("BEST DIST    {:.2f} M @ {}", metrics.best_evaluation_distance,
+                metrics.best_update), 1.35f, accent); cursor.y += 26.0f;
+            if (button({ cursor, { rect.size.x - 32.0f, 30.0f } }, "RESTORE BEST EVALUATED BRAIN", input,
+                false, trainer.has_best_policy()))
+                set_status(trainer.restore_best_policy() ? "BEST EVALUATED POLICY RESTORED; OPTIMIZER RESET" : "NO BEST POLICY YET");
+            cursor.y += 40.0f;
 
             const float available = rect.position.y + rect.size.y - cursor.y - 12.0f;
             if (available > 170.0f)

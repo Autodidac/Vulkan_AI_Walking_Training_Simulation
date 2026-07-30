@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace epochrunner::rl
@@ -23,6 +25,20 @@ namespace epochrunner::rl
         float value_loss{};
         float entropy{};
         float learning_rate{ 3.0e-4f };
+        float evaluation_reward{};
+        float evaluation_distance{};
+        float evaluation_speed{};
+        float best_evaluation_distance{ -std::numeric_limits<float>::infinity() };
+        std::uint64_t best_update{};
+        std::uint64_t evaluation_count{};
+    };
+
+    enum class ControllerState : std::uint8_t
+    {
+        fresh,
+        training,
+        resumed,
+        transferred
     };
 
     class PolicyNetwork
@@ -63,6 +79,8 @@ namespace epochrunner::rl
 
         [[nodiscard]] const std::vector<float>& gradients() const noexcept { return gradients_; }
         [[nodiscard]] std::array<float, output_size> standard_deviation() const noexcept;
+        void set_exploration(float standard_deviation) noexcept;
+        [[nodiscard]] float mean_exploration() const noexcept;
         [[nodiscard]] float log_probability(
             std::span<const float, output_size> action,
             const Evaluation& evaluation) const noexcept;
@@ -113,8 +131,13 @@ namespace epochrunner::rl
     public:
         explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 32);
 
-        void set_blueprint(const sim::CreatureBlueprint& blueprint);
+        void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
+        void set_exploration(float standard_deviation) noexcept;
+        [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
+        [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
+            bool transfer_only = false);
+        [[nodiscard]] bool restore_best_policy() noexcept;
         void train_one_update();
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
@@ -127,6 +150,12 @@ namespace epochrunner::rl
         [[nodiscard]] const std::vector<float>& speed_history() const noexcept { return speed_history_; }
         [[nodiscard]] std::size_t environment_count() const noexcept { return environments_.size(); }
         [[nodiscard]] std::span<const sim::Environment> environments() const noexcept { return environments_; }
+        [[nodiscard]] ControllerState controller_state() const noexcept { return controller_state_; }
+        [[nodiscard]] std::string_view controller_state_name() const noexcept;
+        [[nodiscard]] std::uint64_t rig_signature() const noexcept { return blueprint_.signature(); }
+        [[nodiscard]] bool has_best_policy() const noexcept { return !best_parameters_.empty(); }
+        [[nodiscard]] std::uint64_t optimizer_step() const noexcept { return adam_.step; }
+        [[nodiscard]] float exploration() const noexcept { return policy_.mean_exploration(); }
 
     private:
         struct Transition
@@ -154,6 +183,8 @@ namespace epochrunner::rl
             const PolicyNetwork::Evaluation& evaluation,
             float& log_probability) noexcept;
         void update_policy();
+        void evaluate_policy();
+        void reset_training_state(bool clear_best = true) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
         void append_history(std::vector<float>& history, float value);
 
@@ -167,7 +198,9 @@ namespace epochrunner::rl
         std::vector<float> episode_distances_{};
         std::vector<float> reward_history_{};
         std::vector<float> speed_history_{};
+        std::vector<float> best_parameters_{};
         TrainingMetrics metrics_{};
+        ControllerState controller_state_{ ControllerState::fresh };
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
     };
 }

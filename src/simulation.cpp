@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cmath>
 #include <fstream>
@@ -56,6 +57,10 @@ namespace epochrunner::sim
             MotorConstraint{ pelvis, right_knee, right_foot, -2.35f, -0.15f, -1.10f, 0.38f, true }
         };
         result.rebuild_rest_lengths();
+        result.calibrate_motor(0, 22.0f, 22.0f, 0.060f);
+        result.calibrate_motor(1, 30.0f, 30.0f, 0.065f);
+        result.calibrate_motor(2, 22.0f, 22.0f, 0.060f);
+        result.calibrate_motor(3, 30.0f, 30.0f, 0.065f);
         return result;
     }
 
@@ -80,6 +85,10 @@ namespace epochrunner::sim
             MotorConstraint{ 0, 5, 6, -2.25f, -0.20f, -1.12f, 0.36f, true }
         };
         result.rebuild_rest_lengths();
+        result.calibrate_motor(0, 24.0f, 24.0f, 0.060f);
+        result.calibrate_motor(1, 32.0f, 32.0f, 0.065f);
+        result.calibrate_motor(2, 24.0f, 24.0f, 0.060f);
+        result.calibrate_motor(3, 32.0f, 32.0f, 0.065f);
         return result;
     }
 
@@ -100,6 +109,10 @@ namespace epochrunner::sim
         result.motors[2].strength = 0.28f;
         result.motors[3].strength = 0.34f;
         result.rebuild_rest_lengths();
+        result.calibrate_motor(0, 24.0f, 24.0f, 0.055f);
+        result.calibrate_motor(1, 32.0f, 32.0f, 0.060f);
+        result.calibrate_motor(2, 24.0f, 24.0f, 0.055f);
+        result.calibrate_motor(3, 32.0f, 32.0f, 0.060f);
         return result;
     }
 
@@ -124,6 +137,10 @@ namespace epochrunner::sim
             MotorConstraint{ 1, 5, 6, -2.20f, -0.05f, -1.05f, 0.35f, true }
         };
         result.rebuild_rest_lengths();
+        result.calibrate_motor(0, 24.0f, 24.0f, 0.060f);
+        result.calibrate_motor(1, 34.0f, 34.0f, 0.065f);
+        result.calibrate_motor(2, 24.0f, 24.0f, 0.060f);
+        result.calibrate_motor(3, 34.0f, 34.0f, 0.065f);
         return result;
     }
 
@@ -148,6 +165,10 @@ namespace epochrunner::sim
             MotorConstraint{ 4, 5, 6, -1.10f, 1.10f, 0.0f, 0.18f, true }
         };
         result.rebuild_rest_lengths();
+        result.calibrate_motor(0, 26.0f, 26.0f, 0.060f);
+        result.calibrate_motor(1, 34.0f, 34.0f, 0.065f);
+        result.calibrate_motor(2, 24.0f, 24.0f, 0.055f);
+        result.calibrate_motor(3, 28.0f, 28.0f, 0.055f);
         return result;
     }
 
@@ -158,6 +179,81 @@ namespace epochrunner::sim
             if (bone.a < nodes.size() && bone.b < nodes.size())
                 bone.rest_length = std::max(0.05f, length(nodes[bone.b] - nodes[bone.a]));
         }
+    }
+
+    float CreatureBlueprint::rest_joint_angle(std::size_t motor_index) const noexcept
+    {
+        if (motor_index >= motors.size())
+            return 0.0f;
+        const MotorConstraint& motor = motors[motor_index];
+        if (motor.a >= nodes.size() || motor.pivot >= nodes.size() || motor.c >= nodes.size()
+            || motor.a == motor.pivot || motor.pivot == motor.c || motor.a == motor.c)
+            return 0.0f;
+        return signed_angle(nodes[motor.a] - nodes[motor.pivot], nodes[motor.c] - nodes[motor.pivot]);
+    }
+
+    void CreatureBlueprint::calibrate_motor(std::size_t motor_index, float negative_degrees,
+        float positive_degrees, float power) noexcept
+    {
+        if (motor_index >= motors.size())
+            return;
+        MotorConstraint& motor = motors[motor_index];
+        const bool valid = motor.a < nodes.size() && motor.pivot < nodes.size() && motor.c < nodes.size()
+            && motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
+        motor.enabled = valid;
+        if (!valid)
+            return;
+        motor.neutral_angle = rest_joint_angle(motor_index);
+        const float negative = clamp(std::abs(negative_degrees), 1.0f, 170.0f) * pi / 180.0f;
+        const float positive = clamp(std::abs(positive_degrees), 1.0f, 170.0f) * pi / 180.0f;
+        // Limits are deliberately allowed outside [-pi, pi]. That keeps a normal
+        // range continuous when the rest pose is near the signed-angle wrap seam.
+        motor.minimum_angle = motor.neutral_angle - negative;
+        motor.maximum_angle = motor.neutral_angle + positive;
+        motor.strength = clamp(power, 0.0f, 1.0f);
+    }
+
+    void CreatureBlueprint::calibrate_all_motors(float degrees, float power) noexcept
+    {
+        for (std::size_t index = 0; index < motors.size(); ++index)
+            calibrate_motor(index, degrees, degrees, power);
+    }
+
+    std::uint64_t CreatureBlueprint::signature() const noexcept
+    {
+        std::uint64_t hash = 1469598103934665603ULL;
+        auto add_u64 = [&](std::uint64_t value)
+        {
+            for (int byte = 0; byte < 8; ++byte)
+            {
+                hash ^= (value >> (byte * 8)) & 0xffULL;
+                hash *= 1099511628211ULL;
+            }
+        };
+        auto add_float = [&](float value)
+        {
+            add_u64(std::bit_cast<std::uint32_t>(value));
+        };
+
+        add_u64(nodes.size()); add_u64(bones.size()); add_u64(motors.size());
+        add_u64(root_node); add_u64(torso_node); add_u64(head_node);
+        add_u64(left_contact_node); add_u64(right_contact_node);
+        for (std::size_t index = 0; index < nodes.size(); ++index)
+        {
+            add_float(nodes[index].x); add_float(nodes[index].y);
+            add_float(index < radii.size() ? radii[index] : 0.15f);
+        }
+        for (const DistanceConstraint& bone : bones)
+        {
+            add_u64(bone.a); add_u64(bone.b); add_float(bone.rest_length); add_float(bone.stiffness);
+        }
+        for (const MotorConstraint& motor : motors)
+        {
+            add_u64(motor.a); add_u64(motor.pivot); add_u64(motor.c); add_u64(motor.enabled ? 1 : 0);
+            add_float(motor.minimum_angle); add_float(motor.maximum_angle);
+            add_float(motor.neutral_angle); add_float(motor.strength);
+        }
+        return hash;
     }
 
     bool CreatureBlueprint::save(const std::filesystem::path& path, std::string& error) const
@@ -402,22 +498,13 @@ namespace epochrunner::sim
         const float target = motor_target_angle(motor, action);
         const float current = signed_angle(first_arm, third_arm);
         const float error = wrap_angle(current - target);
-        const float correction = clamp(error, -0.35f, 0.35f) * motor.strength;
+        const float correction = clamp(error, -0.28f, 0.28f) * motor.strength;
 
-        const float endpoint_weight = first.inverse_mass + third.inverse_mass;
-        if (endpoint_weight <= 1.0e-6f)
-            return;
-
-        const float first_share = first.inverse_mass / endpoint_weight;
-        const float third_share = third.inverse_mass / endpoint_weight;
-        const Vec2 corrected_first = rotate(first_arm, correction * first_share);
-        const Vec2 corrected_third = rotate(third_arm, -correction * third_share);
-        first.position = pivot_particle.position + corrected_first;
+        // A is the reference/parent side. C is the driven/child side. The old
+        // solver rotated both arms and shifted the pivot, so a hip command also
+        // moved the torso and made the editor preview disagree with physics.
+        const Vec2 corrected_third = rotate(third_arm, -correction);
         third.position = pivot_particle.position + corrected_third;
-
-        const Vec2 center_shift = ((corrected_first - first_arm) * first.inverse_mass
-            + (corrected_third - third_arm) * third.inverse_mass) * -0.18f;
-        pivot_particle.position += center_shift;
     }
 
     void Environment::solve_ground(float dt) noexcept
@@ -560,8 +647,11 @@ namespace epochrunner::sim
             const MotorConstraint& motor = blueprint_.motors[index];
             if (!motor.enabled)
                 continue;
-            const float range = std::max(0.001f, motor.maximum_angle - motor.minimum_angle);
-            result[4 + index] = clamp((joint_angle(motor) - motor.neutral_angle) / range * 2.0f, -2.0f, 2.0f);
+            const float delta = wrap_angle(joint_angle(motor) - motor.neutral_angle);
+            const float span = delta < 0.0f
+                ? std::max(0.001f, motor.neutral_angle - motor.minimum_angle)
+                : std::max(0.001f, motor.maximum_angle - motor.neutral_angle);
+            result[4 + index] = clamp(delta / span, -2.0f, 2.0f);
             result[8 + index] = clamp(angular_velocities_[index] / 20.0f, -3.0f, 3.0f);
         }
 

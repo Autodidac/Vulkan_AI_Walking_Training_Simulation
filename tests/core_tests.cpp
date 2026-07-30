@@ -42,13 +42,18 @@ int main()
         require(preset.head_node < preset.nodes.size(), "head semantic index is invalid");
         require(preset.left_contact_node < preset.nodes.size(), "left contact semantic index is invalid");
         require(preset.right_contact_node < preset.nodes.size(), "right contact semantic index is invalid");
-        for (const sim::MotorConstraint& motor : preset.motors)
+        for (std::size_t motor_index = 0; motor_index < preset.motors.size(); ++motor_index)
         {
+            const sim::MotorConstraint& motor = preset.motors[motor_index];
             require(motor.a < preset.nodes.size() && motor.pivot < preset.nodes.size() && motor.c < preset.nodes.size(),
                 "preset motor endpoint is invalid");
             require(motor.minimum_angle <= motor.neutral_angle && motor.neutral_angle <= motor.maximum_angle,
                 "preset motor rest angle is outside its limits");
+            require(std::abs(epochrunner::wrap_angle(preset.rest_joint_angle(motor_index) - motor.neutral_angle)) < 0.001f,
+                "preset motor was not calibrated to its rest pose");
+            require(motor.strength <= 0.07f, "preset motor power is too aggressive");
         }
+        require(preset.signature() != 0, "preset signature is empty");
 
         sim::Environment preset_environment{ preset, 19 };
         const std::array<float, sim::action_count> preset_actions{};
@@ -80,6 +85,7 @@ int main()
     }
 
     rl::PpoTrainer trainer{ blueprint, 8 };
+    require(trainer.exploration() < 0.25f, "fresh controller exploration is still too aggressive");
     for (int update = 0; update < 3; ++update)
     {
         trainer.train_one_update();
@@ -94,11 +100,19 @@ int main()
     const std::filesystem::path temporary =
         std::filesystem::temp_directory_path() / "epochrunner-core-test.eppo";
     std::string error{};
-    require(trainer.policy().save(temporary, error), "failed to save policy: " + error);
+    require(trainer.save_checkpoint(temporary, error), "failed to save checkpoint: " + error);
 
-    rl::PolicyNetwork loaded{ 7 };
-    require(loaded.load(temporary, error), "failed to load policy: " + error);
-    require(loaded.parameters() == trainer.policy().parameters(), "policy serialization mismatch");
+    rl::PpoTrainer resumed{ blueprint, 8 };
+    require(resumed.load_checkpoint(temporary, error, false), "failed to resume checkpoint: " + error);
+    require(resumed.policy().parameters() == trainer.policy().parameters(), "checkpoint policy mismatch");
+    require(resumed.metrics().update == trainer.metrics().update, "checkpoint update count was not restored");
+    require(resumed.optimizer_step() == trainer.optimizer_step(), "checkpoint optimizer state was not restored");
+
+    rl::PpoTrainer wrong_rig{ sim::CreatureBlueprint::quadruped(), 8 };
+    require(!wrong_rig.load_checkpoint(temporary, error, false), "mismatched rig checkpoint resumed silently");
+    require(wrong_rig.load_checkpoint(temporary, error, true), "intentional transfer failed: " + error);
+    require(wrong_rig.metrics().update == 0, "transfer retained incompatible progress metrics");
+    require(wrong_rig.optimizer_step() == 0, "transfer retained incompatible optimizer state");
     std::filesystem::remove(temporary);
 
     trainer.reset_preview(1234);

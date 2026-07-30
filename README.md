@@ -21,7 +21,9 @@ creator's private Patreon source code or assets.
   - Delete removes any selected node safely and disables affected motors
   - built-in chicken, biped, humanoid, quadruped, and monoped presets
   - named motor channels with editable A/pivot/C endpoints
-  - degree-based limits, neutral/rest angle, motor enable, and power controls
+  - wrap-safe limit offsets from the rest pose, neutral calibration, motor enable, and bounded power controls
+  - directed motors where A is the parent reference and C is the driven child
+  - assignable root, torso, head, and left/right contact roles for custom rigs
   - Joint Lab overlays for limit arcs, live target rays, ghost poses, groups, and auto sweep
   - save/load `.epochrig`
 - Deterministic position-based 2D physics
@@ -158,3 +160,28 @@ shown in degrees.
 The PPO actor still exposes four bounded action channels for all presets. Each
 preset maps those channels to useful joints. Custom rigs can disable a channel
 or reassign its A/pivot/C nodes without changing the policy tensor dimensions.
+
+
+## Controller communication and checkpoints
+
+EpochRunner now treats a body change as a controller-compatibility event instead of
+silently continuing. **Reset brain** is the safe default. **Transfer brain** keeps
+network weights intentionally, but resets Adam optimizer moments, progress metrics,
+history, and best-policy tracking so stale optimizer state cannot corrupt the new rig.
+
+`SAVE CHECKPOINT` writes the exact rig signature, policy parameters, Adam moments,
+optimizer step, update/step counters, deterministic evaluation metrics, graph history,
+and best evaluated policy. `RESUME AI` requires an exact rig match. `TRANSFER AI`
+loads weights only and clearly reports that progress was reset. Legacy `EPPO23` files
+contain only neural-network floats and can therefore be transferred, but never exactly
+resumed.
+
+Training now runs a deterministic four-seed evaluation every five PPO updates. The UI
+shows current evaluation distance, best distance and update, exploration noise, brain
+state, and a short rig signature. `RESTORE BEST EVALUATED BRAIN` provides an explicit
+rollback when later stochastic PPO updates degrade performance.
+
+Fresh exploration was reduced from approximately 0.70 action units to 0.18. Built-in
+motor powers now start near 0.06 and are calibrated from each preset's actual rest pose,
+matching the controllable range found in user-tuned rigs instead of immediately slamming
+joints into broad limits.

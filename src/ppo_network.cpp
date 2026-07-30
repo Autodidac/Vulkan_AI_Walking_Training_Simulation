@@ -44,8 +44,12 @@ namespace epochrunner::rl
             parameters_[layout_.actor_w + index] = random_normal() * 0.01f;
         for (std::size_t index = 0; index < hidden_size; ++index)
             parameters_[layout_.value_w + index] = random_normal() * 0.01f;
+        // The old fresh-policy deviation was exp(-0.35) ~= 0.70, which slammed
+        // most joints into their limits before the network learned anything.
+        // The uploaded working policy converged near 0.05; 0.18 keeps useful
+        // exploration without making every new rig thrash.
         for (std::size_t index = 0; index < output_size; ++index)
-            parameters_[layout_.log_std + index] = -0.35f;
+            parameters_[layout_.log_std + index] = std::log(0.18f);
     }
 
     float PolicyNetwork::random_normal() noexcept
@@ -109,8 +113,24 @@ namespace epochrunner::rl
     {
         std::array<float, output_size> result{};
         for (std::size_t index = 0; index < output_size; ++index)
-            result[index] = std::exp(std::clamp(parameters_[layout_.log_std + index], -3.0f, 1.0f));
+            result[index] = std::exp(std::clamp(parameters_[layout_.log_std + index], -4.0f, 0.0f));
         return result;
+    }
+
+    void PolicyNetwork::set_exploration(float standard_deviation) noexcept
+    {
+        const float value = std::log(clamp(standard_deviation, 0.02f, 1.0f));
+        for (std::size_t index = 0; index < output_size; ++index)
+            parameters_[layout_.log_std + index] = value;
+    }
+
+    float PolicyNetwork::mean_exploration() const noexcept
+    {
+        const auto values = standard_deviation();
+        float total = 0.0f;
+        for (const float value : values)
+            total += value;
+        return total / static_cast<float>(values.size());
     }
 
     float PolicyNetwork::log_probability(
@@ -120,7 +140,7 @@ namespace epochrunner::rl
         float result = 0.0f;
         for (std::size_t index = 0; index < output_size; ++index)
         {
-            const float log_std = std::clamp(parameters_[layout_.log_std + index], -3.0f, 1.0f);
+            const float log_std = std::clamp(parameters_[layout_.log_std + index], -4.0f, 0.0f);
             const float stddev = std::exp(log_std);
             const float normalized_delta = (action[index] - evaluation.mean[index]) / stddev;
             result += -0.5f * (normalized_delta * normalized_delta + 2.0f * log_std + log_two_pi);
@@ -198,7 +218,7 @@ namespace epochrunner::rl
         std::array<float, output_size> d_actor_pre{};
         for (std::size_t output = 0; output < output_size; ++output)
         {
-            const float log_std = std::clamp(parameters_[layout_.log_std + output], -3.0f, 1.0f);
+            const float log_std = std::clamp(parameters_[layout_.log_std + output], -4.0f, 0.0f);
             const float variance = std::exp(2.0f * log_std);
             const float delta = action[output] - evaluation.mean[output];
             const float d_logp_d_mean = delta / variance;
