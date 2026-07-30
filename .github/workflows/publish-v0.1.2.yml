@@ -45,6 +45,9 @@ jobs:
         with:
           path: vcpkg-bincache
           key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-d015e31-
+            vcpkg-windows-x64-
 
       - name: Bootstrap vcpkg
         shell: cmd
