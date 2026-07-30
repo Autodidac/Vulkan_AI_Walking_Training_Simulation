@@ -12,7 +12,12 @@ layout(push_constant) uniform PushConstants
 void main()
 {
     vec2 normalized = in_position / push_constants.viewport;
-    vec2 clip = vec2(normalized.x * 2.0 - 1.0, 1.0 - normalized.y * 2.0);
+
+    // EpochRunner emits top-left-origin, Y-down screen coordinates. With a
+    // positive-height Vulkan viewport, NDC -1 maps to the framebuffer top and
+    // NDC +1 maps to the bottom, so no OpenGL-style Y inversion is needed.
+    vec2 clip = vec2(normalized.x * 2.0 - 1.0, normalized.y * 2.0 - 1.0);
+
     gl_Position = vec4(clip, 0.0, 1.0);
     out_color = in_color;
 }
