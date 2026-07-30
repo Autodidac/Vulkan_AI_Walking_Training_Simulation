@@ -1,0 +1,97 @@
+name: Bootstrap source and release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  bootstrap-build-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout bootstrap commit
+        uses: actions/checkout@v4
+
+      - name: Expand validated source tree
+        shell: pwsh
+        run: |
+          Expand-Archive -Path source_bundle.zip -DestinationPath . -Force
+          Remove-Item source_bundle.zip -Force
+          Remove-Item .github/workflows/bootstrap.yml -Force
+
+      - name: Publish source to main
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add Vulkan AI walking training simulation"
+          git push origin HEAD:main
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure manifest build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build
+        run: cmake --build --preset windows-release
+
+      - name: Test
+        run: ctest --test-dir build/windows-release --output-on-failure
+
+      - name: Package release
+        shell: pwsh
+        run: |
+          $package = Join-Path $PWD "package/EpochRunner-windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --prefix $package
+
+          Get-ChildItem build/windows-release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+
+          Copy-Item README.md, LICENSE -Destination $package -Force
+          Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-windows-x64.zip" -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpochRunner-windows-x64
+          path: EpochRunner-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $sourceSha = git rev-parse HEAD
+          if (gh release view v0.1.1 2>$null) {
+            gh release upload v0.1.1 EpochRunner-windows-x64.zip --clobber
+          }
+          else {
+            gh release create v0.1.1 EpochRunner-windows-x64.zip `
+              --target $sourceSha `
+              --title "EpochRunner v0.1.1" `
+              --notes "C++23 Vulkan walking-training simulation using EpochGui, SDL3, manifest-mode vcpkg, deterministic articulated physics, and PPO training."
+          }

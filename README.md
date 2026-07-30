@@ -1,14 +1,3 @@
-# Cpp_Repo_Template
+# Vulkan AI Walking Training Simulation
 
-## Header Size 2
-
-### Header Size 3
-
-
-
----
-
-#### Template Repo
-
-
-- A Public Template Repo To Clone From
+Source import and release build are being completed by GitHub Actions.
