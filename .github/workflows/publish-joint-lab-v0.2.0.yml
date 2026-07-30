@@ -96,7 +96,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm tools/apply_joint_lab_upgrade.py tools/fix_joint_lab_patcher.py .github/workflows/publish-joint-lab-v0.2.0.yml
-          git add -A
+          git add CMakeLists.txt vcpkg.json README.md src tests
+          git diff --cached --check
           git commit -m "Add guided rig presets and Joint Lab"
           git push origin HEAD:main
 
