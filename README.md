@@ -37,6 +37,7 @@ creator's private Patreon source code or assets.
 - Save/load `.eppo` policies
 - Deterministic single-agent run view with speed and distance display
 - Core tests for simulation stability, PPO updates, and policy serialization
+- Packaged SDL3/Vulkan runtime diagnostic
 
 ## Requirements
 
@@ -47,11 +48,12 @@ creator's private Patreon source code or assets.
   - Clang 18+
 - vcpkg checkout with `vcpkg.exe`/`vcpkg` bootstrapped
 - Vulkan-capable graphics driver
-- Ninja 1.11+
+- Ninja 1.11+ for non-Visual-Studio presets
 
-EpochGui is pinned to commit `347ad52e8fc27deb08dea97e56a9b6d8c0db3af2`
-when this directory is built outside the EpochGui source tree. When built from
-`EpochGui/examples/EpochRunner`, the parent EpochGui target is used directly.
+EpochGui is pinned to commit `347ad52e8fc27deb08dea97e56a9b6d8c0db3af2`.
+The vcpkg manifest explicitly enables the `sdl3[vulkan]` feature and installs
+SDL3, Vulkan Loader/Headers, and shaderc locally. No Vulkan SDK or external
+`glslc.exe` is required.
 
 ## Windows build
 
@@ -61,17 +63,29 @@ build_windows.bat
 ```
 
 `build_windows.bat` automatically uses `%USERPROFILE%\source\repos\vcpkg`
-when `VCPKG_ROOT` is not already set. CMake manifest mode installs SDL3,
-Vulkan Loader/Headers, and shaderc into the project-local `vcpkg_installed`
-directory. No Vulkan SDK or external `glslc.exe` is required.
+when `VCPKG_ROOT` is not already set. Dependencies are installed into the
+project-local `vcpkg_installed` directory.
 
 Or manually:
 
 ```bat
-cmake --preset windows-release
+cmake --preset windows-release --fresh
 cmake --build --preset windows-release
-ctest --test-dir build/windows-release --output-on-failure
+ctest --preset windows-release
 ```
+
+## Vulkan runtime diagnostic
+
+The packaged executable can validate SDL3's Vulkan integration without opening
+the simulation window:
+
+```powershell
+./EpochRunner.exe --diagnose-vulkan
+```
+
+A valid package prints the active SDL video driver and the number of required
+Vulkan instance extensions. Release automation runs this diagnostic against the
+final packaged DLLs before publishing.
 
 ## Linux build
 
@@ -107,17 +121,17 @@ ctest --preset core-tests
 ## Architecture
 
 ```text
-src/math.hpp             allocation-free math primitives
-src/simulation.*         deterministic articulated PBD environment
-src/ppo_network.cpp      actor-critic network
-src/ppo_trainer.cpp      parallel PPO trainer
-src/canvas.cpp           triangle canvas
-src/renderer.*           SDL3/Vulkan 1.3 renderer
-src/app.*                EpochGui-driven editor/training/run application
+src/math.hpp              allocation-free math primitives
+src/simulation.*          deterministic articulated PBD environment
+src/ppo_network.cpp       actor-critic network
+src/ppo_trainer.cpp       parallel PPO trainer
+src/canvas.cpp            triangle canvas
+src/renderer.*            SDL3/Vulkan 1.3 renderer
+src/app.*                 EpochGui-driven editor/training/run application
 tools/shader_compiler.cpp vcpkg shaderc GLSL-to-SPIR-V build tool
-shaders/                 minimal vertex-color Vulkan shaders
-assets/chicken.ppm       original bounded PPM UI asset
-tests/core_tests.cpp     deterministic headless validation
+shaders/                  minimal vertex-color Vulkan shaders
+assets/chicken.ppm        original bounded PPM UI asset
+tests/core_tests.cpp      deterministic headless validation
 ```
 
 EpochGui remains renderer-neutral. EpochRunner consumes its reusable layout,
