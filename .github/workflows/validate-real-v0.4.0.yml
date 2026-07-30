@@ -34,28 +34,33 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
-          $expected = @{
-            "CMakeLists.txt" = "560457ed1ca394aca589fb642b81713045347cee12734197118624e9edc733da"
-            "vcpkg.json" = "617e52c00a47904698cc9f6724478d01a2be45e08cd4c01cf3463d7b56807609"
-            "README.md" = "f792436551b0d688baee004b6d06cec5a4fc988edccfe5f72968571f9729fd6b"
-            "src/main.cpp" = "1e8b44bd6ec49f798b55aaf6c1f03535ac6b39f38ec74af08431656526d9f12e"
-            "src/app.cpp" = "a78a4c0262d23fe1096893c6e744b8f0bb974792401ca19aae2fc6329966430f"
-            "src/simulation.hpp" = "09d7d2f96b3710b17b17842a8be7707cf4829d97b82fbae051884e3809c68399"
-            "src/simulation.cpp" = "a5110e625396260ba1952aa0401da8512489d29c23d84270766afadd54391461"
-            "src/ppo.hpp" = "f10beff1d7012fdebe86802c90e72e01e70d6ba9b1658e2bec2d4cd116dd475d"
-            "src/ppo_network.cpp" = "4ad91c25c48faf25f2531fb76a1103f3cd02ae6b846f50ba648c91065bd547ba"
-            "src/ppo_trainer.cpp" = "a5e7793288791d0ef58f4b9d9365a47be10710e3c3e4dead4fb5631b30d910f5"
-            "src/training_checkpoint.cpp" = "addd3ad33e98d91d483977958663374ce048f828507391fa62636d60f07ab6b7"
-            "src/autonomy.hpp" = "256d74805e655a875aacf19c717660cdc860a898a4d661ceb6b8558489a31eaa"
-            "src/autonomy.cpp" = "dbbad69e99ec95e03f9b43c00e34ff9aaddba526c26e139c8d9e018eb2dc86b2"
-            "tests/core_tests.cpp" = "b0823f77cc3f03ec460bc4c38e7ae4918fce0bd201f56a4fc9d040d58b158ac1"
+          @'
+          import hashlib
+          import subprocess
+
+          expected = {
+              "CMakeLists.txt": "560457ed1ca394aca589fb642b81713045347cee12734197118624e9edc733da",
+              "vcpkg.json": "617e52c00a47904698cc9f6724478d01a2be45e08cd4c01cf3463d7b56807609",
+              "README.md": "f792436551b0d688baee004b6d06cec5a4fc988edccfe5f72968571f9729fd6b",
+              "src/main.cpp": "1e8b44bd6ec49f798b55aaf6c1f03535ac6b39f38ec74af08431656526d9f12e",
+              "src/app.cpp": "a78a4c0262d23fe1096893c6e744b8f0bb974792401ca19aae2fc6329966430f",
+              "src/simulation.hpp": "09d7d2f96b3710b17b17842a8be7707cf4829d97b82fbae051884e3809c68399",
+              "src/simulation.cpp": "a5110e625396260ba1952aa0401da8512489d29c23d84270766afadd54391461",
+              "src/ppo.hpp": "f10beff1d7012fdebe86802c90e72e01e70d6ba9b1658e2bec2d4cd116dd475d",
+              "src/ppo_network.cpp": "4ad91c25c48faf25f2531fb76a1103f3cd02ae6b846f50ba648c91065bd547ba",
+              "src/ppo_trainer.cpp": "a5e7793288791d0ef58f4b9d9365a47be10710e3c3e4dead4fb5631b30d910f5",
+              "src/training_checkpoint.cpp": "addd3ad33e98d91d483977958663374ce048f828507391fa62636d60f07ab6b7",
+              "src/autonomy.hpp": "256d74805e655a875aacf19c717660cdc860a898a4d661ceb6b8558489a31eaa",
+              "src/autonomy.cpp": "dbbad69e99ec95e03f9b43c00e34ff9aaddba526c26e139c8d9e018eb2dc86b2",
+              "tests/core_tests.cpp": "b0823f77cc3f03ec460bc4c38e7ae4918fce0bd201f56a4fc9d040d58b158ac1",
           }
-          foreach ($entry in $expected.GetEnumerator()) {
-            $actual = (Get-FileHash $entry.Key -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $entry.Value) {
-              throw "Corrected v0.4 source hash mismatch for $($entry.Key): $actual"
-            }
-          }
+          for path, digest in expected.items():
+              data = subprocess.check_output(["git", "show", f"HEAD:{path}"])
+              actual = hashlib.sha256(data).hexdigest()
+              if actual != digest:
+                  raise SystemExit(f"Corrected v0.4 Git blob mismatch for {path}: {actual}")
+          print(f"Verified {len(expected)} corrected v0.4 Git blobs")
+          '@ | python -
           git diff --check
 
       - name: Checkout pinned vcpkg
