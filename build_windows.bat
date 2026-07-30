@@ -23,9 +23,9 @@ if not exist "%VCPKG_ROOT%\vcpkg.exe" (
   call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics || exit /b 1
 )
 
-echo Configuring with vcpkg manifest mode...
+echo Configuring Visual Studio 2022 x64 with vcpkg manifest mode...
 cmake --preset windows-release --fresh || exit /b 1
 cmake --build --preset windows-release || exit /b 1
-ctest --test-dir build/windows-release --output-on-failure || exit /b 1
+ctest --preset windows-release || exit /b 1
 
-echo Built: build\windows-release\EpochRunner.exe
+echo Built: build\windows-release\Release\EpochRunner.exe
