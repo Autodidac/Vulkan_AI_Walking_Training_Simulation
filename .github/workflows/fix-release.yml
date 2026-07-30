@@ -93,3 +93,19 @@ jobs:
               --title "EpochRunner v0.1.1" `
               --notes "C++23 Vulkan walking-training simulation using EpochGui, SDL3, manifest-mode vcpkg, deterministic articulated physics, and PPO training."
           }
+
+      - name: Delete every non-main branch
+        shell: pwsh
+        run: |
+          $branches = git ls-remote --heads origin | ForEach-Object {
+            if ($_ -match 'refs/heads/(.+)$') {
+              $Matches[1]
+            }
+          }
+
+          foreach ($branch in $branches) {
+            if ($branch -and $branch -ne 'main') {
+              Write-Host "Deleting branch: $branch"
+              git push origin --delete $branch
+            }
+          }
