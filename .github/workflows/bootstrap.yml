@@ -26,7 +26,8 @@ jobs:
       - name: Expand validated source tree
         shell: pwsh
         run: |
-          Expand-Archive -Path source_bundle.zip -DestinationPath . -Force
+          tar -xf source_bundle.zip
+          if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
           Remove-Item source_bundle.zip -Force
           Remove-Item .github/workflows/bootstrap.yml -Force
 
