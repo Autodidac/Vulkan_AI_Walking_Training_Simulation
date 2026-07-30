@@ -1,0 +1,156 @@
+name: Publish Autonomous Curriculum v0.4.0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-autonomous-curriculum-v0.4.0.yml"
+      - "tools/v04-payload-*.part"
+      - "tools/apply_v04_payload.py"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: epochrunner-autonomous-curriculum-v0.4.0
+  cancel-in-progress: true
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  build-test-package-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout staged upgrade
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Reconstruct validated v0.4 source
+        shell: pwsh
+        run: |
+          python tools/apply_v04_payload.py
+          git diff --check
+
+          $source = Join-Path $env:RUNNER_TEMP "epochrunner-v04-source"
+          Remove-Item $source -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $source | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $source "src") | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $source "tests") | Out-Null
+          Copy-Item CMakeLists.txt,vcpkg.json,README.md -Destination $source -Force
+          Copy-Item src/main.cpp,src/app.cpp,src/simulation.hpp,src/simulation.cpp,src/ppo.hpp,src/ppo_network.cpp,src/ppo_trainer.cpp,src/training_checkpoint.cpp,src/autonomy.hpp,src/autonomy.cpp -Destination (Join-Path $source "src") -Force
+          Copy-Item tests/core_tests.cpp -Destination (Join-Path $source "tests") -Force
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-vulkan-d015e31-
+            vcpkg-windows-x64-d015e31-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure MSVC manifest build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build Release
+        run: cmake --build --preset windows-release
+
+      - name: Run autonomous curriculum tests
+        run: ctest --preset windows-release --output-on-failure
+
+      - name: Package runtime
+        shell: pwsh
+        run: |
+          $package = Join-Path $PWD "package/EpochRunner-windows-x64"
+          Remove-Item package -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --config Release --prefix $package
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+          Copy-Item README.md,LICENSE -Destination $package -Force
+          Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-windows-x64.zip" -Force
+
+      - name: Validate packaged SDL3 Vulkan support
+        shell: pwsh
+        run: |
+          Push-Location package/EpochRunner-windows-x64
+          & .\EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged Vulkan diagnostic failed with exit code $LASTEXITCODE"
+          }
+          Pop-Location
+
+      - name: Publish clean validated source to main
+        id: publish
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "epochrunner-v04-source"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B validated-v0.4-source origin/main
+
+          Copy-Item (Join-Path $source "CMakeLists.txt"),(Join-Path $source "vcpkg.json"),(Join-Path $source "README.md") -Destination . -Force
+          Copy-Item (Join-Path $source "src/*") -Destination src -Force
+          Copy-Item (Join-Path $source "tests/core_tests.cpp") -Destination tests -Force
+
+          git add CMakeLists.txt vcpkg.json README.md src/main.cpp src/app.cpp src/simulation.hpp src/simulation.cpp src/ppo.hpp src/ppo_network.cpp src/ppo_trainer.cpp src/training_checkpoint.cpp src/autonomy.hpp src/autonomy.cpp tests/core_tests.cpp
+          git diff --cached --check
+          git commit -m "Add autonomous curriculum and live background training"
+          git push origin HEAD:main
+          $sourceSha = git rev-parse HEAD
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Publish v0.4.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.publish.outputs.source_sha }}
+        run: |
+          $notes = @"
+          EpochRunner v0.4.0 replaces separate training/run workflows with a live autonomous trainer. A coroutine-driven background supervisor uses multithreaded CPU rollouts while Vulkan presents only the current best verified controller. The curriculum advances from balance to flat walking, ramps, uneven terrain, hurdles, overhead bars, and moving hazards. Checkpoints, rollback, autosave, difficulty progression, and bounded rig evolution are automatic. Hard validity gates reject flipping, speeds above 50 km/h, course escape, sustained flight, and micro-movement exploits. The humanoid defaults use the uploaded human-like rig proportions with slightly reduced motor power and larger, clearer UI text.
+          "@
+          if (gh release view v0.4.0 2>$null) {
+            gh release upload v0.4.0 EpochRunner-windows-x64.zip --clobber
+            gh release edit v0.4.0 --target $env:SOURCE_SHA --title "EpochRunner v0.4.0 - Autonomous Curriculum" --notes $notes
+          }
+          else {
+            gh release create v0.4.0 EpochRunner-windows-x64.zip --target $env:SOURCE_SHA --title "EpochRunner v0.4.0 - Autonomous Curriculum" --notes $notes
+          }
+
+      - name: Remove temporary branch and close staging PR
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "Validated v0.4.0 was published directly to main and released." 2>$null
+          $branches = gh api "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" | ConvertFrom-Json
+          foreach ($branch in $branches) {
+            if ($branch.name -ne "main") {
+              $encoded = [Uri]::EscapeDataString($branch.name)
+              gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$encoded"
+            }
+          }
