@@ -7,6 +7,7 @@ on:
       - ".github/workflows/publish-v0.4.1.yml"
       - "tools/apply_v041.py.gz.b64"
       - "tools/apply_v041_quad.py"
+      - "tools/apply_v041_compilefix.py"
 
 permissions:
   contents: write
@@ -42,9 +43,11 @@ jobs:
           python -c "import gzip; open(r'tools/apply_v041.py','wb').write(gzip.open(r'tools/apply_v041.py.gz','rb').read())"
           python tools/apply_v041.py
           python tools/apply_v041_quad.py
+          python tools/apply_v041_compilefix.py
 
           Copy-Item tools/apply_v041.py "$env:RUNNER_TEMP\apply_v041.py" -Force
           Copy-Item tools/apply_v041_quad.py "$env:RUNNER_TEMP\apply_v041_quad.py" -Force
+          Copy-Item tools/apply_v041_compilefix.py "$env:RUNNER_TEMP\apply_v041_compilefix.py" -Force
           Remove-Item tools/apply_v041.py, tools/apply_v041.py.gz -Force
           git diff --check
           Select-String -Path CMakeLists.txt -Pattern 'VERSION 0.4.1' | Out-Null
@@ -54,6 +57,7 @@ jobs:
           Select-String -Path src/simulation.cpp -Pattern 'calibrate_quadruped_stable_defaults' | Out-Null
           Select-String -Path src/simulation.cpp -Pattern 'add_passive_feet' | Out-Null
           Select-String -Path src/simulation.cpp -Pattern 'control_ramp' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'temporary rig file' | Out-Null
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -151,6 +155,7 @@ jobs:
           git checkout --detach origin/main
           python "$env:RUNNER_TEMP\apply_v041.py"
           python "$env:RUNNER_TEMP\apply_v041_quad.py"
+          python "$env:RUNNER_TEMP\apply_v041_compilefix.py"
           git diff --check
           git add CMakeLists.txt vcpkg.json README.md src tests
           git commit -m "Fix autonomy, gait validation, stable defaults, and feet"
@@ -168,7 +173,7 @@ jobs:
           $notes = @"
           EpochRunner v0.4.1 makes the autonomous training changes unmistakable and closes the remaining locomotion exploits. The window and application header display v0.4.1, the Windows archive has a unique filename, and corrected training starts with new autosave/checkpoint files instead of silently loading an older hopping or flip/fly controller.
 
-          The update adds persistent rollout workers, live-preview refresh when a verified best is published, true alternating-foot gait validation, whole-window micro-motion detection, full driven-subtree motor physics matching the Rig Lab preview, direct motor-bone validation, atomic saves, standing-first curriculum reset, paged Rig Lab controls, and deferred slider commits.
+          The update adds persistent rollout workers, live-preview refresh when a verified best is published, true alternating-foot gait validation, whole-window micro-motion detection, full driven-subtree motor physics matching the Rig Lab preview, direct motor-bone validation, crash-resistant staged saves, standing-first curriculum reset, paged Rig Lab controls, and deferred slider commits.
 
           Every preset now derives motor travel and effective endpoint correction from the stable quadruped profile. Longer limbs receive proportionally lower raw motor strength. Bipeds, humanoids, chickens, and monopeds gain passive heel/toe foot triangles, a no-control settling period, a smooth motor ramp, and calmer fresh policy output so they do not spawn-launch, jump-spin, or learn from an unstable initial impulse.
           "@
