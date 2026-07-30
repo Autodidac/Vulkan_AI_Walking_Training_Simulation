@@ -20,7 +20,8 @@
     },
     {
       "name": "windows-release",
-      "generator": "Visual Studio 17 2022",
+      "displayName": "Windows Release (Visual Studio 2026)",
+      "generator": "Visual Studio 18 2026",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
@@ -32,6 +33,23 @@
         "VCPKG_MANIFEST_INSTALL": "ON",
         "VCPKG_MANIFEST_DIR": "${sourceDir}",
         "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed"
+      }
+    },
+    {
+      "name": "windows-vs2022-release",
+      "displayName": "Windows Release (Visual Studio 2022 fallback)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_MODE": "ON",
+        "VCPKG_MANIFEST_INSTALL": "ON",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed-vs2022"
       }
     },
     {
@@ -62,6 +80,11 @@
       "configuration": "Release"
     },
     {
+      "name": "windows-vs2022-release",
+      "configurePreset": "windows-vs2022-release",
+      "configuration": "Release"
+    },
+    {
       "name": "linux-release",
       "configurePreset": "linux-release"
     }
@@ -77,6 +100,14 @@
     {
       "name": "windows-release",
       "configurePreset": "windows-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-vs2022-release",
+      "configurePreset": "windows-vs2022-release",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
