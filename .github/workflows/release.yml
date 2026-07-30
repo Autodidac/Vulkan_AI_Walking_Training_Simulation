@@ -1,0 +1,68 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  build-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure manifest build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build
+        run: cmake --build --preset windows-release
+
+      - name: Test
+        run: ctest --test-dir build/windows-release --output-on-failure
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $package = Join-Path $PWD "package/EpochRunner-windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --prefix $package
+
+          Get-ChildItem build/windows-release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+
+          Copy-Item README.md, LICENSE -Destination $package -Force
+          Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-windows-x64.zip" -Force
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME EpochRunner-windows-x64.zip `
+            --target $env:GITHUB_SHA `
+            --title "EpochRunner $env:GITHUB_REF_NAME" `
+            --generate-notes
