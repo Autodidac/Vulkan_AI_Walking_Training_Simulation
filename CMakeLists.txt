@@ -108,6 +108,10 @@ if(EPOCHRUNNER_BUILD_APP)
     endforeach()
     add_custom_target(EpochRunnerShaders DEPENDS ${EPOCHRUNNER_SHADER_OUTPUTS})
 
+    # Keep development and packaged layouts identical. Runtime paths are
+    # relative to the directory from which EpochRunner is launched.
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+
     add_executable(EpochRunner
         src/main.cpp
         src/app.cpp
@@ -126,8 +130,8 @@ if(EPOCHRUNNER_BUILD_APP)
     )
     target_compile_features(EpochRunner PRIVATE cxx_std_23)
     target_compile_definitions(EpochRunner PRIVATE
-        EPOCHRUNNER_SHADER_DIRECTORY="${EPOCHRUNNER_SHADER_OUTPUT_DIR}"
-        EPOCHRUNNER_ASSET_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        EPOCHRUNNER_SHADER_DIRECTORY="shaders"
+        EPOCHRUNNER_ASSET_DIRECTORY="assets"
     )
     set_target_properties(EpochRunner PROPERTIES
         CXX_STANDARD 23
