@@ -1,0 +1,164 @@
+name: Integrate EpochRunner v0.6.0 procedural course
+
+on:
+  push:
+    paths:
+      - "tools/integrate_v060.py"
+      - ".github/workflows/v060-integrate-release.yml"
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  integrate-build-test-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout current source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply procedural course, obstacle, marker, and recovery integration
+        shell: pwsh
+        run: |
+          python tools/integrate_v060.py
+          @'
+          from pathlib import Path
+
+          path = Path("MISSIONS.md")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("## WALK-COURSE-001")
+          end = text.index("## Current warning", start)
+          section = text[start:end].replace("**Status:** VERIFIED", "**Status:** ACTIVE", 1)
+          text = text[:start] + section + text[end:]
+          path.write_text(text, encoding="utf-8")
+          '@ | python -
+          git diff --check
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure full Visual Studio 2026 release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build the complete Vulkan application
+        run: cmake --build --preset windows-release
+
+      - name: Run all deterministic and concurrency tests
+        run: ctest --preset windows-release --output-on-failure -V
+
+      - name: Verify executable version
+        shell: pwsh
+        run: build/windows-release/Release/EpochRunner.exe --version
+
+      - name: Verify SDL3 and Vulkan path
+        shell: pwsh
+        run: build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+
+      - name: Finalize verified mission and source commit
+        id: source
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          path = Path("MISSIONS.md")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("## WALK-COURSE-001")
+          end = text.index("## Current warning", start)
+          section = text[start:end].replace("**Status:** ACTIVE", "**Status:** VERIFIED", 1)
+          text = text[:start] + section + text[end:]
+          old = "EpochRunner v0.6.0 adds the verified procedural obstacle/recovery treadmill. EpochRunner v0.5.0 passed its Windows build"
+          new = "EpochRunner v0.6.0 passed its full Windows build, course/recovery tests, concurrency tests, Vulkan diagnostic, and packaging gate. EpochRunner v0.5.0 passed its Windows build"
+          text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          '@ | python -
+
+          Remove-Item tools/integrate_v060.py
+          Remove-Item .github/workflows/v060-integrate-release.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release EpochRunner v0.6.0 procedural obstacle recovery course"
+          git push origin HEAD:main
+          $sourceSha = (git rev-parse HEAD).Trim()
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Package the exact tested source
+        id: package
+        shell: pwsh
+        run: |
+          $tag = "v0.6.0"
+          $package = Join-Path $PWD "package/EpochRunner-$tag-windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --config Release --prefix $package
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+          Copy-Item README.md, LICENSE, MISSIONS.md -Destination $package -Force
+          $archive = "EpochRunner-$tag-windows-x64.zip"
+          Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Publish EpochRunner v0.6.0
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          gh release view v0.6.0 *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "v0.6.0 already exists; refusing to replace an existing release"
+          }
+          gh release create v0.6.0 $env:ARCHIVE "$env:ARCHIVE.sha256" `
+            --target $env:SOURCE_SHA `
+            --title "EpochRunner v0.6.0" `
+            --notes "Procedural obstacle and recovery treadmill: visible road dashes and metre/mile markers; continuous inclines, plateaus, declines, hills, and uneven terrain; rocks, hurdles, low bars, moving hazards, and thrown projectiles; timed recovery reward after impacts and balance loss; full concurrency stack retained."
+
+      - name: Record immutable release evidence
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner v0.6.0 release evidence
+
+          - Source commit: `$env:SOURCE_SHA`
+          - Windows runner: `windows-2025`
+          - Generator: `Visual Studio 18 2026`
+          - Full Vulkan application build: passed
+          - Deterministic/core tests: passed
+          - Concurrency/throughput tests: passed
+          - Procedural terrain and obstacle diversity tests: passed
+          - Stationary-course advancement test: passed
+          - Recovery reward/state integration: passed
+          - SDL3/Vulkan diagnostic: passed
+          - Package: `$env:ARCHIVE`
+          - SHA-256: `$env:CHECKSUM`
+          "@ | Set-Content -Encoding UTF8 validation/v0.6.0.md
+          git add validation/v0.6.0.md
+          git commit -m "Record v0.6.0 release evidence"
+          git push origin HEAD:main
