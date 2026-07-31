@@ -1,6 +1,6 @@
 # EpochRunner v0.5 core diagnostic
 
-Source: 707cee9a2b43a38631b4bda2438e5181f56ed4e5
+Source: d0da06a846dee8ddd771caeb7392ab7b8db10f0c
 
 Configure: success
 Build: success
@@ -21,7 +21,7 @@ Test: success
 -- Looking for pthread_create in pthread
 -- Looking for pthread_create in pthread - not found
 -- Found Threads: TRUE
--- Configuring done (13.3s)
+-- Configuring done (14.3s)
 -- Generating done (0.1s)
 -- Build files have been written to: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/core-diagnostic
 
@@ -35,22 +35,24 @@ MSBuild version 18.7.8+1ac568fee for .NET Framework
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   ppo_trainer.cpp
+  ppo_parallel.cpp
   ppo_network.cpp
-  training_checkpoint.cpp
   simulation.cpp
-  autonomy_persistence.cpp
-  autonomy_commands.cpp
+  training_checkpoint.cpp
   autonomy_runtime.cpp
   autonomy_curriculum.cpp
+  autonomy_commands.cpp
+  autonomy_persistence.cpp
   Compiling...
-  ppo_trainer.cpp
-  training_checkpoint.cpp
-  ppo_network.cpp
+  ppo_parallel.cpp
   simulation.cpp
-  autonomy_curriculum.cpp
+  ppo_trainer.cpp
+  ppo_network.cpp
   autonomy_commands.cpp
-  autonomy_persistence.cpp
+  training_checkpoint.cpp
   autonomy_runtime.cpp
+  autonomy_curriculum.cpp
+  autonomy_persistence.cpp
   EpochRunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\core-diagnostic\Release\EpochRunnerCore.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
@@ -66,10 +68,10 @@ MSBuild version 18.7.8+1ac568fee for .NET Framework
 `	ext
 Test project D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/core-diagnostic
     Start 1: EpochRunner.Core
-1/1 Test #1: EpochRunner.Core .................   Passed    0.51 sec
+1/1 Test #1: EpochRunner.Core .................   Passed    0.53 sec
 
 100% tests passed out of 1
 
-Total Test time (real) =   0.55 sec
+Total Test time (real) =   0.58 sec
 
 `
