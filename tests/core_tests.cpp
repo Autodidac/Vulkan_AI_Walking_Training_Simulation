@@ -37,6 +37,15 @@ int main()
         == sim::InvalidMotion::sustained_flight, "flight hard gate missing");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 3.0f, false)
         == sim::InvalidMotion::micro_motion, "micro-motion gate missing");
+    require(!sim::recovery_should_start(true, 0.95f, false, false),
+        "harmless upright obstacle contact created a rewardable recovery event");
+    require(sim::recovery_should_start(true, 0.80f, false, false),
+        "destabilizing collision did not start recovery");
+    require(sim::recovery_should_start(false, 0.68f, false, false),
+        "major balance loss did not start recovery without a collision");
+    require(!sim::recovery_should_start(true, 0.40f, true, true),
+        "hard ground impact incorrectly opened a recovery window");
+
     require(!sim::recovery_terminal_fall(true, false, true),
         "recoverable near-fall terminated during its recovery window");
     require(sim::recovery_terminal_fall(true, false, false),
@@ -52,6 +61,22 @@ int main()
         "in-place foot twitch counted as walking");
     require(sim::qualifies_alternating_step(-1, 1, 0.30f, 0.08f),
         "real spaced alternating step was rejected");
+
+    const sim::CourseFeature rock_feature{
+        sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
+    };
+    const sim::CourseFeature projectile_feature{
+        sim::CourseFeatureKind::projectile, {}, {}, 0.19f, { -4.0f, 1.0f }
+    };
+    const sim::CourseFeature hurdle_feature{
+        sim::CourseFeatureKind::hurdle, {}, { 0.14f, 0.42f }, 0.0f, {}
+    };
+    require(std::abs(sim::course_feature_observation_size(rock_feature) - 0.27f) < 0.0001f,
+        "rock radius is absent from policy observations");
+    require(std::abs(sim::course_feature_observation_size(projectile_feature) - 0.19f) < 0.0001f,
+        "projectile radius is absent from policy observations");
+    require(std::abs(sim::course_feature_observation_size(hurdle_feature) - 0.42f) < 0.0001f,
+        "rectangular obstacle extent is incorrect in policy observations");
 
     const std::array<sim::CreatureBlueprint, 5> presets{
         sim::CreatureBlueprint::chicken(),

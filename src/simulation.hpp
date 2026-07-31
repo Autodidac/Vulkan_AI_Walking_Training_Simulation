@@ -75,6 +75,22 @@ namespace epochrunner::sim
         Vec2 velocity{};
     };
 
+    [[nodiscard]] inline float course_feature_observation_size(
+        const CourseFeature& feature) noexcept
+    {
+        switch (feature.kind)
+        {
+        case CourseFeatureKind::moving_hazard:
+        case CourseFeatureKind::rock:
+        case CourseFeatureKind::projectile:
+            return feature.radius;
+        case CourseFeatureKind::hurdle:
+        case CourseFeatureKind::overhead_bar:
+            return std::max(feature.half_extent.x, feature.half_extent.y);
+        }
+        return 0.0f;
+    }
+
     enum class InvalidMotion : std::uint8_t
     {
         none,
@@ -118,6 +134,17 @@ namespace epochrunner::sim
         if (fallen)
             return InvalidMotion::fallen;
         return InvalidMotion::none;
+    }
+
+    [[nodiscard]] inline bool recovery_should_start(bool collided,
+        float uprightness, bool geometric_fall, bool hard_fall) noexcept
+    {
+        constexpr float destabilized_collision_uprightness = 0.88f;
+        constexpr float independent_recovery_uprightness = 0.72f;
+        return !hard_fall && (
+            (collided && uprightness < destabilized_collision_uprightness)
+            || uprightness < independent_recovery_uprightness
+            || geometric_fall);
     }
 
     [[nodiscard]] inline bool recovery_terminal_fall(bool geometric_fall,
