@@ -31,45 +31,50 @@ namespace epochrunner::rl
     }
 
     PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count,
-        bool enable_rollout_workers)
-        : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu)
-    {
-        environment_count = std::clamp<std::size_t>(environment_count, 8, 256);
-        const std::size_t hardware = std::max<std::size_t>(1, std::thread::hardware_concurrency());
-        const std::size_t available = hardware > 2 ? hardware - 2 : hardware;
-        rollout_worker_count_ = enable_rollout_workers
-            ? std::clamp<std::size_t>(available, 1, std::min<std::size_t>(16, environment_count))
-            : 0;
+            bool enable_rollout_workers)
+            : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu)
+        {
+            environment_count = std::clamp<std::size_t>(environment_count, 8, 256);
+            const std::size_t hardware = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+            const std::size_t available = hardware > 2 ? hardware - 2 : hardware;
+            rollout_worker_count_ = enable_rollout_workers
+                ? std::clamp<std::size_t>(available, 1, std::min<std::size_t>(16, environment_count))
+                : 0;
 
-        environments_.reserve(environment_count);
-        for (std::size_t index = 0; index < environment_count; ++index)
-        {
-            environments_.emplace_back(blueprint_, 0x1000u + index * 7919u);
-            environments_.back().set_course(course_stage_, course_difficulty_);
-        }
-        preview_.set_course(course_stage_, course_difficulty_);
-        episode_rewards_.assign(environment_count, 0.0f);
-        episode_distances_.assign(environment_count, 0.0f);
-        adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
-        adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
-        rollout_worker_totals_.resize(rollout_worker_count_);
-        rollout_workers_.reserve(rollout_worker_count_);
-        for (std::size_t worker = 0; worker < rollout_worker_count_; ++worker)
-        {
-            rollout_workers_.emplace_back([this, worker](std::stop_token stop_token)
+            environments_.reserve(environment_count);
+            for (std::size_t index = 0; index < environment_count; ++index)
             {
-                rollout_worker_main(worker, stop_token);
-            });
+                environments_.emplace_back(blueprint_, 0x1000u + index * 7919u);
+                environments_.back().set_course(course_stage_, course_difficulty_);
+            }
+            preview_.set_course(course_stage_, course_difficulty_);
+            episode_rewards_.assign(environment_count, 0.0f);
+            episode_distances_.assign(environment_count, 0.0f);
+            adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
+            adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
+            rollout_worker_totals_.resize(rollout_worker_count_);
+            rollout_workers_.reserve(rollout_worker_count_);
+            for (std::size_t worker = 0; worker < rollout_worker_count_; ++worker)
+            {
+                rollout_workers_.emplace_back([this, worker](std::stop_token stop_token)
+                {
+                    rollout_worker_main(worker, stop_token);
+                });
+            }
+            set_cpu_mode(4);
+            initialize_parallel_workers();
         }
-    }
+
 
     PpoTrainer::~PpoTrainer()
-    {
-        for (std::jthread& worker : rollout_workers_)
-            worker.request_stop();
-        rollout_start_cv_.notify_all();
-        rollout_workers_.clear();
-    }
+        {
+            shutdown_parallel_workers();
+            for (std::jthread& worker : rollout_workers_)
+                worker.request_stop();
+            rollout_start_cv_.notify_all();
+            rollout_workers_.clear();
+        }
+
 
     PpoTrainer::RolloutTotals PpoTrainer::collect_rollout_partition(std::size_t worker_index,
         std::size_t worker_count, std::uint64_t update_seed)
@@ -110,31 +115,37 @@ namespace epochrunner::rl
     }
 
     void PpoTrainer::rollout_worker_main(std::size_t worker_index, std::stop_token stop_token)
-    {
-        std::uint64_t observed_generation = 0;
-        while (!stop_token.stop_requested())
         {
-            std::uint64_t update_seed = 0;
+            std::uint64_t observed_generation = 0;
+            while (!stop_token.stop_requested())
             {
-                std::unique_lock lock(rollout_mutex_);
-                rollout_start_cv_.wait(lock, stop_token, [this, observed_generation]
+                std::uint64_t update_seed = 0;
+                std::size_t active_workers = 1;
                 {
-                    return rollout_generation_ != observed_generation;
-                });
-                if (stop_token.stop_requested())
-                    return;
-                observed_generation = rollout_generation_;
-                update_seed = rollout_update_seed_;
+                    std::unique_lock lock(rollout_mutex_);
+                    rollout_start_cv_.wait(lock, stop_token, [this, observed_generation]
+                    {
+                        return rollout_generation_ != observed_generation;
+                    });
+                    if (stop_token.stop_requested())
+                        return;
+                    observed_generation = rollout_generation_;
+                    update_seed = rollout_update_seed_;
+                    active_workers = rollout_active_worker_count_;
+                }
+
+                RolloutTotals totals{};
+                if (worker_index < active_workers)
+                    totals = collect_rollout_partition(worker_index, active_workers, update_seed);
+                {
+                    std::scoped_lock lock(rollout_mutex_);
+                    rollout_worker_totals_[worker_index] = totals;
+                    ++rollout_completed_;
+                }
+                rollout_done_cv_.notify_one();
             }
-            RolloutTotals totals = collect_rollout_partition(worker_index, rollout_worker_count_, update_seed);
-            {
-                std::scoped_lock lock(rollout_mutex_);
-                rollout_worker_totals_[worker_index] = totals;
-                ++rollout_completed_;
-            }
-            rollout_done_cv_.notify_one();
         }
-    }
+
 
     void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
@@ -281,6 +292,7 @@ namespace epochrunner::rl
                 std::scoped_lock lock(rollout_mutex_);
                 rollout_completed_ = 0;
                 rollout_update_seed_ = update_seed;
+                rollout_active_worker_count_ = std::min(active_worker_count_, rollout_worker_count_);
                 ++rollout_generation_;
             }
             rollout_start_cv_.notify_all();
@@ -357,84 +369,10 @@ namespace epochrunner::rl
     }
 
     void PpoTrainer::evaluate_policy()
-    {
-        constexpr std::size_t evaluation_agents = 6;
-        constexpr int maximum_steps = 900;
-        float reward_total = 0.0f;
-        float distance_total = 0.0f;
-        float speed_total = 0.0f;
-        float survival_total = 0.0f;
-        float collision_total = 0.0f;
-        float airborne_total = 0.0f;
-        float stride_total = 0.0f;
-        std::size_t speed_samples = 0;
-        std::uint32_t invalid_runs = 0;
-
-        for (std::size_t agent = 0; agent < evaluation_agents; ++agent)
         {
-            sim::Environment environment{ blueprint_, 0xE000u + agent * 4099u };
-            environment.set_course(course_stage_, course_difficulty_);
-            float episode_reward = 0.0f;
-            for (int step = 0; step < maximum_steps; ++step)
-            {
-                const auto action = policy_.deterministic_action(environment.observation());
-                const sim::StepResult result = environment.step(action);
-                episode_reward += result.reward;
-                speed_total += result.forward_speed;
-                ++speed_samples;
-                if (result.terminated)
-                    break;
-            }
-            const bool gait_valid = course_stage_ == sim::CourseStage::balance
-                || environment.alternating_steps() >= 2;
-            if (!environment.valid_motion() || !gait_valid)
-                ++invalid_runs;
-            reward_total += episode_reward;
-            distance_total += environment.distance_travelled();
-            survival_total += environment.elapsed_seconds();
-            collision_total += environment.collision_count();
-            airborne_total += environment.airborne_ratio();
-            stride_total += static_cast<float>(environment.alternating_steps());
+            parallel_evaluate_policy();
         }
 
-        const float inverse_agents = 1.0f / static_cast<float>(evaluation_agents);
-        metrics_.evaluation_reward = reward_total * inverse_agents;
-        metrics_.evaluation_distance = distance_total * inverse_agents;
-        metrics_.evaluation_speed = speed_samples > 0 ? speed_total / static_cast<float>(speed_samples) : 0.0f;
-        metrics_.evaluation_survival = survival_total * inverse_agents;
-        metrics_.evaluation_collisions = collision_total * inverse_agents;
-        metrics_.evaluation_airborne_ratio = airborne_total * inverse_agents;
-        metrics_.evaluation_stride_events = stride_total * inverse_agents;
-        metrics_.evaluation_invalid_runs = invalid_runs;
-        metrics_.evaluation_valid = invalid_runs == 0;
-        if (course_stage_ == sim::CourseStage::balance)
-        {
-            metrics_.evaluation_score = metrics_.evaluation_valid
-                ? metrics_.evaluation_survival * 0.10f + metrics_.evaluation_reward
-                    - std::abs(metrics_.evaluation_distance) * 0.20f
-                : -1000.0f - static_cast<float>(invalid_runs) * 100.0f;
-        }
-        else
-        {
-            metrics_.evaluation_score = metrics_.evaluation_valid
-                ? metrics_.evaluation_reward + metrics_.evaluation_distance * 0.75f
-                    + metrics_.evaluation_survival * 0.025f
-                    + metrics_.evaluation_stride_events * 0.03f
-                    - metrics_.evaluation_collisions * 0.18f
-                    - metrics_.evaluation_airborne_ratio * 0.75f
-                : -1000.0f - static_cast<float>(invalid_runs) * 100.0f;
-        }
-        ++metrics_.evaluation_count;
-
-        if (metrics_.evaluation_valid
-            && (best_parameters_.empty() || metrics_.evaluation_score > metrics_.best_evaluation_score))
-        {
-            best_parameters_ = policy_.parameters();
-            metrics_.best_evaluation_distance = metrics_.evaluation_distance;
-            metrics_.best_evaluation_score = metrics_.evaluation_score;
-            metrics_.best_update = metrics_.update;
-        }
-    }
 
     bool PpoTrainer::restore_best_policy() noexcept
     {
@@ -450,67 +388,67 @@ namespace epochrunner::rl
     }
 
     void PpoTrainer::update_policy()
-    {
-        constexpr std::size_t epochs = 4;
-        constexpr std::size_t minibatch_size = 256;
-        constexpr float clip_range = 0.20f;
-        constexpr float value_coefficient = 0.50f;
-        constexpr float entropy_coefficient = 0.0020f;
-        constexpr float max_gradient_norm = 0.70f;
-
-        std::vector<std::size_t> indices(rollout_.size());
-        std::iota(indices.begin(), indices.end(), 0);
-        float total_policy_loss = 0.0f;
-        float total_value_loss = 0.0f;
-        float total_entropy = 0.0f;
-        std::size_t sample_count = 0;
-
-        for (std::size_t epoch = 0; epoch < epochs; ++epoch)
         {
-            for (std::size_t index = indices.size(); index > 1; --index)
+            constexpr std::size_t epochs = 4;
+            constexpr std::size_t minibatch_size = 256;
+            constexpr float clip_range = 0.20f;
+            constexpr float value_coefficient = 0.50f;
+            constexpr float entropy_coefficient = 0.0020f;
+            constexpr float max_gradient_norm = 0.70f;
+
+            std::vector<std::size_t> indices(rollout_.size());
+            std::iota(indices.begin(), indices.end(), 0);
+            float total_policy_loss = 0.0f;
+            float total_value_loss = 0.0f;
+            float total_entropy = 0.0f;
+            std::size_t sample_count = 0;
+
+            for (std::size_t epoch = 0; epoch < epochs; ++epoch)
             {
-                const std::size_t other = static_cast<std::size_t>(random_uniform() * static_cast<float>(index));
-                std::swap(indices[index - 1], indices[std::min(other, index - 1)]);
-            }
-            for (std::size_t begin = 0; begin < indices.size(); begin += minibatch_size)
-            {
-                const std::size_t end = std::min(indices.size(), begin + minibatch_size);
-                policy_.zero_gradients();
-                float batch_policy_loss = 0.0f;
-                float batch_value_loss = 0.0f;
-                float batch_entropy = 0.0f;
-                for (std::size_t cursor = begin; cursor < end; ++cursor)
+                for (std::size_t index = indices.size(); index > 1; --index)
                 {
-                    const Transition& transition = rollout_[indices[cursor]];
-                    policy_.accumulate_gradient(
-                        transition.observation, transition.action, transition.log_probability,
-                        transition.advantage, transition.return_value, clip_range,
-                        value_coefficient, entropy_coefficient,
+                    const std::size_t other = static_cast<std::size_t>(
+                        random_uniform() * static_cast<float>(index));
+                    std::swap(indices[index - 1], indices[std::min(other, index - 1)]);
+                }
+                for (std::size_t begin = 0; begin < indices.size(); begin += minibatch_size)
+                {
+                    const std::size_t end = std::min(indices.size(), begin + minibatch_size);
+                    float batch_policy_loss = 0.0f;
+                    float batch_value_loss = 0.0f;
+                    float batch_entropy = 0.0f;
+                    parallel_accumulate_batch(
+                        indices, begin, end, clip_range, value_coefficient, entropy_coefficient,
                         batch_policy_loss, batch_value_loss, batch_entropy);
+
+                    const float inverse_batch = 1.0f / static_cast<float>(end - begin);
+                    float norm_squared = 0.0f;
+                    for (const float gradient : policy_.gradients())
+                    {
+                        const float scaled = gradient * inverse_batch;
+                        norm_squared += scaled * scaled;
+                    }
+                    const float norm = std::sqrt(norm_squared);
+                    const float clip_scale = norm > max_gradient_norm
+                        ? max_gradient_norm / norm
+                        : 1.0f;
+                    const float learning_rate = metrics_.learning_rate
+                        * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 5000.0f);
+                    apply_adam(learning_rate, inverse_batch * clip_scale);
+                    total_policy_loss += batch_policy_loss;
+                    total_value_loss += batch_value_loss;
+                    total_entropy += batch_entropy;
+                    sample_count += end - begin;
                 }
-                const float inverse_batch = 1.0f / static_cast<float>(end - begin);
-                float norm_squared = 0.0f;
-                for (const float gradient : policy_.gradients())
-                {
-                    const float scaled = gradient * inverse_batch;
-                    norm_squared += scaled * scaled;
-                }
-                const float norm = std::sqrt(norm_squared);
-                const float clip_scale = norm > max_gradient_norm ? max_gradient_norm / norm : 1.0f;
-                const float learning_rate = metrics_.learning_rate
-                    * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 5000.0f);
-                apply_adam(learning_rate, inverse_batch * clip_scale);
-                total_policy_loss += batch_policy_loss;
-                total_value_loss += batch_value_loss;
-                total_entropy += batch_entropy;
-                sample_count += end - begin;
             }
+            const float inverse_samples = sample_count > 0
+                ? 1.0f / static_cast<float>(sample_count)
+                : 0.0f;
+            metrics_.policy_loss = total_policy_loss * inverse_samples;
+            metrics_.value_loss = total_value_loss * inverse_samples;
+            metrics_.entropy = total_entropy * inverse_samples;
         }
-        const float inverse_samples = sample_count > 0 ? 1.0f / static_cast<float>(sample_count) : 0.0f;
-        metrics_.policy_loss = total_policy_loss * inverse_samples;
-        metrics_.value_loss = total_value_loss * inverse_samples;
-        metrics_.entropy = total_entropy * inverse_samples;
-    }
+
 
     void PpoTrainer::apply_adam(float learning_rate, float gradient_scale)
     {

@@ -1,10 +1,10 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.4.1 replaces manual train/run switching with a continuously operating autonomous curriculum.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.5.0 replaces manual train/run switching with a continuously operating autonomous curriculum.
 
 ## Default workflow
 
-Version 0.4.1 visibly identifies itself in the title bar and UI, uses uniquely named release assets and clean autosaves, rejects synchronized hopping as walking, applies motors to the full driven subtree, and keeps persistent rollout workers instead of recreating threads every update.
+Version 0.5.0 visibly identifies itself in the title bar and UI, uses uniquely named release assets and clean autosaves, rejects synchronized hopping as walking, applies motors to the full driven subtree, and keeps persistent rollout workers instead of recreating threads every update.
 
 The application starts in **Live Autopilot**. The foreground renders one current best verified controller while background CPU workers train 64 non-rendered environments. Vulkan remains dedicated to presentation instead of drawing every training agent.
 
@@ -47,8 +47,10 @@ The humanoid proportions and asymmetric hip/knee ranges are based on a user-trai
 ## Performance model
 
 - 64 training environments by default.
-- Rollouts are divided across up to 16 CPU workers while reserving CPU capacity for the application and Vulkan presentation.
-- A coroutine-driven background supervisor handles training cycles, deterministic evaluation, curriculum transitions, autosaves, rollback, and bounded rig evolution.
+- NORMAL, FASTER, and MAX CPU select increasing persistent worker budgets and duty cycles while reserving capacity for Vulkan presentation.
+- A C++23 coroutine supervisor stages command application, parallel PPO work, curriculum handling, immutable publication, and speed throttling.
+- Persistent workers now handle rollout simulation, PPO minibatch gradients, and deterministic policy evaluation.
+- Rig edits are coalesced through a non-blocking command queue and never wait on a training update.
 - Only the live best controller is rendered.
 - The policy contains only a few thousand parameters; keeping its optimizer on CPU avoids the synchronization and transfer overhead of dispatching this tiny network to the GPU. Vulkan is used where it is efficient: smooth real-time presentation.
 

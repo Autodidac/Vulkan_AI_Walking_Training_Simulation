@@ -269,6 +269,7 @@ namespace epochrunner::rl
         const auto started = std::chrono::steady_clock::now();
         {
             std::scoped_lock lock(worker_mutex_);
+            worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
             worker_.train_one_update();
         }
         const auto finished = std::chrono::steady_clock::now();

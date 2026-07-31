@@ -191,9 +191,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v041-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v041-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v041-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v050-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v050-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v050-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -330,7 +330,7 @@ namespace epochrunner
             }
             rig_preset = RigPreset::custom;
             trainer.set_blueprint(blueprint, true);
-            set_status(std::format("{} - CONTROLLER TRANSFERRED AND RECALIBRATING", reason));
+            set_status(std::format("{} - QUEUED; TRAINER RECALIBRATES WITHOUT BLOCKING", reason));
         }
 
         [[nodiscard]] bool test_motor_active(int index) const noexcept
@@ -502,6 +502,12 @@ namespace epochrunner
 
             add_text(canvas, cursor, std::format("{} CPU ROLLOUT THREADS / {} ENVIRONMENTS",
                 autonomy.rollout_threads, autonomy.environment_count), 1.12f, muted);
+            cursor.y += 23.0f;
+            add_text(canvas, cursor, std::format("TRAIN {:.2f} UPDATES/S   MODE {}   QUEUED {}",
+                autonomy.updates_per_second, autonomy.speed_mode, autonomy.pending_commands), 1.10f, white);
+            cursor.y += 23.0f;
+            add_text(canvas, cursor, autonomy.worker_busy ? "TRAINER BUSY" : "TRAINER IDLE", 1.04f,
+                autonomy.worker_busy ? yellow : green);
             cursor.y += 23.0f;
             add_text(canvas, cursor, "QUADRUPED-STABLE MOTORS / REAL FEET / SOFT START", 1.04f, muted);
             cursor.y += 23.0f;
@@ -1034,12 +1040,6 @@ namespace epochrunner
         void frame(const InputState& input, float dt, int width, int height)
         {
             trainer.synchronize();
-            if (!dragging_node && !rig_edit_pending
-                && trainer.blueprint().signature() != blueprint.signature())
-            {
-                blueprint = trainer.blueprint();
-                rig_preset = RigPreset::custom;
-            }
             canvas.clear();
             canvas.reserve(120000);
             status_time = std::max(0.0f, status_time - dt);

@@ -115,6 +115,16 @@ int main()
 
     rl::PpoTrainer trainer{ humanoid, 16 };
     require(trainer.rollout_worker_count() >= 1, "parallel rollout worker count is invalid");
+    trainer.set_cpu_mode(1);
+    const std::size_t normal_workers = trainer.rollout_worker_count();
+    trainer.set_cpu_mode(2);
+    const std::size_t faster_workers = trainer.rollout_worker_count();
+    trainer.set_cpu_mode(4);
+    const std::size_t maximum_workers = trainer.rollout_worker_count();
+    require(normal_workers <= faster_workers && faster_workers <= maximum_workers,
+        "speed modes do not increase persistent worker budget");
+    require(maximum_workers == trainer.maximum_worker_count(),
+        "MAX CPU does not enable the full persistent worker pool");
     require(trainer.exploration() < 0.20f, "fresh exploration is too aggressive");
     require(trainer.exploration() <= 0.081f, "fresh policy still applies an aggressive spawn impulse");
     trainer.set_course(sim::CourseStage::balance, 0.25f, false);
@@ -130,7 +140,7 @@ int main()
     }
 
     const std::filesystem::path temporary =
-        std::filesystem::temp_directory_path() / "epochrunner-v041-core-test.eppo";
+        std::filesystem::temp_directory_path() / "epochrunner-v050-core-test.eppo";
     std::string error{};
     require(trainer.save_checkpoint(temporary, error), "failed to save checkpoint: " + error);
     rl::PpoTrainer resumed{ humanoid, 16 };
@@ -162,8 +172,32 @@ int main()
             autonomous.synchronize();
         }
         require(autonomous.metrics().update >= 1, "coroutine background worker did not process requested update");
+
+        autonomous.set_updates_per_cycle(4);
+        autonomous.set_background_enabled(true);
+        sim::CreatureBlueprint edited = humanoid;
+        edited.nodes[1].x += 0.01f;
+        edited.rebuild_rest_lengths();
+        const auto command_started = std::chrono::steady_clock::now();
+        autonomous.set_blueprint(edited, true);
+        const auto command_elapsed = std::chrono::steady_clock::now() - command_started;
+        require(command_elapsed < std::chrono::milliseconds(20),
+            "hip edit blocked the caller on active training work");
+        for (int attempt = 0; attempt < 1200 && autonomous.rig_signature() != edited.signature(); ++attempt)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            autonomous.synchronize();
+        }
+        require(autonomous.rig_signature() == edited.signature(),
+            "queued hip edit was not eventually published");
+        autonomous.set_updates_per_cycle(1);
+        require(autonomous.updates_per_cycle() == 1, "NORMAL speed mode did not latch");
+        autonomous.set_updates_per_cycle(2);
+        require(autonomous.updates_per_cycle() == 2, "FASTER speed mode did not latch");
+        autonomous.set_updates_per_cycle(4);
+        require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "EpochRunner v0.4.1 autonomous gait and curriculum tests passed\n";
+    std::cout << "EpochRunner v0.5.0 concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }
