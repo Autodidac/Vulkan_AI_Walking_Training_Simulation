@@ -13,7 +13,6 @@ permissions:
 env:
   VCPKG_ROOT: ${{ github.workspace }}\vcpkg
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
-  VCPKG_CACHE_KEY: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
 
 jobs:
   build-test-package-release:
@@ -51,7 +50,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: vcpkg-bincache
-          key: ${{ env.VCPKG_CACHE_KEY }}
+          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             vcpkg-windows-x64-vulkan-d015e31-
 
@@ -72,7 +71,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: vcpkg-bincache
-          key: ${{ env.VCPKG_CACHE_KEY }}
+          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
 
       - name: Build v0.4.1 Release
         shell: pwsh
