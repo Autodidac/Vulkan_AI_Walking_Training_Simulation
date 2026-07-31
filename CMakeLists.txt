@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochRunner VERSION 0.4.1 LANGUAGES CXX)
+project(EpochRunner VERSION 0.5.0 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -14,7 +14,10 @@ add_library(EpochRunnerCore STATIC
     src/ppo_network.cpp
     src/ppo_trainer.cpp
     src/training_checkpoint.cpp
-    src/autonomy.cpp
+    src/autonomy_runtime.cpp
+    src/autonomy_commands.cpp
+    src/autonomy_curriculum.cpp
+    src/autonomy_persistence.cpp
 )
 add_library(EpochRunner::Core ALIAS EpochRunnerCore)
 
