@@ -37,6 +37,13 @@ int main()
         == sim::InvalidMotion::sustained_flight, "flight hard gate missing");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 3.0f, false)
         == sim::InvalidMotion::micro_motion, "micro-motion gate missing");
+    require(!sim::recovery_terminal_fall(true, false, true),
+        "recoverable near-fall terminated during its recovery window");
+    require(sim::recovery_terminal_fall(true, false, false),
+        "unrecovered geometric fall was not terminal");
+    require(sim::recovery_terminal_fall(true, true, true),
+        "hard ground impact incorrectly received recovery grace");
+
     require(!sim::qualifies_alternating_step(-1, 0, 0.30f, 0.10f),
         "simultaneous two-foot landing counted as a step");
     require(!sim::qualifies_alternating_step(-1, 1, 0.05f, 0.10f),

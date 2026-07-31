@@ -120,6 +120,12 @@ namespace epochrunner::sim
         return InvalidMotion::none;
     }
 
+    [[nodiscard]] inline bool recovery_terminal_fall(bool geometric_fall,
+        bool hard_fall, bool recovery_active) noexcept
+    {
+        return hard_fall || (geometric_fall && !recovery_active);
+    }
+
     [[nodiscard]] inline bool qualifies_alternating_step(int previous_side, int strike_side,
         float seconds_since_previous, float root_displacement) noexcept
     {

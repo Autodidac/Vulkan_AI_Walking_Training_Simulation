@@ -1054,13 +1054,17 @@ namespace epochrunner::sim
         const float torso_floor = local_ground + std::max(0.38f,
             (blueprint_.nodes[blueprint_.torso_node].y - blueprint_.nodes[blueprint_.root_node].y) * 0.28f);
         const float head_floor = local_ground + 0.34f;
-        fallen_ = particles_[blueprint_.torso_node].position.y < torso_floor
-            || particles_[blueprint_.head_node].position.y < head_floor;
+        const float torso_y = particles_[blueprint_.torso_node].position.y;
+        const float head_y = particles_[blueprint_.head_node].position.y;
+        const bool geometric_fall = torso_y < torso_floor || head_y < head_floor;
+        const bool hard_fall = torso_y < local_ground + 0.18f || head_y < local_ground + 0.12f;
+        fallen_ = geometric_fall;
 
         float recovery_reward = 0.0f;
         const bool supported = particles_[blueprint_.left_contact_node].grounded
             || particles_[blueprint_.right_contact_node].grounded;
-        if (!recovery_active_ && !fallen_ && (collided_this_step_ || upright < 0.72f))
+        if (!recovery_active_ && !hard_fall
+            && (collided_this_step_ || upright < 0.72f || geometric_fall))
         {
             recovery_active_ = true;
             recovery_started_seconds_ = elapsed_seconds_;
@@ -1074,13 +1078,13 @@ namespace epochrunner::sim
                 recovery_reward += improvement * 0.10f;
             recovery_best_upright_ = std::max(recovery_best_upright_, upright);
             const float recovery_time = elapsed_seconds_ - recovery_started_seconds_;
-            if (upright >= 0.90f && supported && recovery_time >= 0.12f)
+            if (upright >= 0.90f && supported && !geometric_fall && recovery_time >= 0.12f)
             {
                 recovery_active_ = false;
                 ++recovery_successes_;
                 recovery_reward += 0.14f;
             }
-            else if (fallen_ || recovery_time > 3.0f)
+            else if (hard_fall || recovery_time > 3.0f)
             {
                 recovery_active_ = false;
                 recovery_reward -= 0.10f;
@@ -1091,8 +1095,10 @@ namespace epochrunner::sim
             : course_stage_ == CourseStage::moving_hazards ? 1.05f
             : course_stage_ >= CourseStage::ramps ? 0.90f : 0.72f;
         const float gated_upright = elapsed_seconds_ > 0.25f ? upright : 1.0f;
+        const bool terminal_fall = recovery_terminal_fall(
+            geometric_fall, hard_fall, recovery_active_);
         invalidate(classify_motion_gate(gated_upright, maximum_speed_kmh_, pelvis_position,
-            airborne_seconds_, allowed_airtime, micro_motion_seconds_, fallen_));
+            airborne_seconds_, allowed_airtime, micro_motion_seconds_, terminal_fall));
 
         const float left_contact = particles_[blueprint_.left_contact_node].grounded ? 1.0f : 0.0f;
         const float right_contact = particles_[blueprint_.right_contact_node].grounded ? 1.0f : 0.0f;
