@@ -19,17 +19,17 @@ namespace epochrunner::rl
         case sim::CourseStage::balance:
             return metrics.evaluation_survival >= 10.0f && metrics.evaluation_score >= 0.55f;
         case sim::CourseStage::walk:
-            return metrics.evaluation_distance >= 3.0f && metrics.evaluation_stride_events >= 3.0f;
+            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_stride_events >= 4.0f;
         case sim::CourseStage::ramps:
-            return metrics.evaluation_distance >= 3.5f && metrics.evaluation_survival >= 7.0f;
+            return metrics.evaluation_distance >= 5.0f && metrics.evaluation_survival >= 8.0f;
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_distance >= 6.0f && metrics.evaluation_collisions <= 1.0f;
         case sim::CourseStage::hurdles:
-            return metrics.evaluation_distance >= 5.0f && metrics.evaluation_collisions <= 3.0f;
+            return metrics.evaluation_distance >= 7.0f && metrics.evaluation_collisions <= 1.0f;
         case sim::CourseStage::duck_bars:
-            return metrics.evaluation_distance >= 5.0f && metrics.evaluation_collisions <= 3.0f;
+            return metrics.evaluation_distance >= 8.0f && metrics.evaluation_collisions <= 1.0f;
         case sim::CourseStage::moving_hazards:
-            return metrics.evaluation_distance >= 6.0f && metrics.evaluation_collisions <= 4.0f;
+            return metrics.evaluation_distance >= 9.0f && metrics.evaluation_collisions <= 2.0f;
         }
         return false;
     }
@@ -63,7 +63,7 @@ namespace epochrunner::rl
 
         if (!metrics.evaluation_valid)
         {
-            worker_message_ = std::format("INVALID RUN REJECTED - {} OF 6 FAILED WALKING GATES",
+            worker_message_ = std::format("INVALID RUN REJECTED - {} FAILED GROUNDED-ENEMY GATES",
                 metrics.evaluation_invalid_runs);
         }
         else if (mastery_streak_ >= 3)
@@ -105,15 +105,16 @@ namespace epochrunner::rl
             return -std::numeric_limits<float>::infinity();
 
         constexpr std::size_t agents = 4;
-        constexpr int maximum_steps = 600;
-        std::array<float, agents> scores{};
-        std::array<std::jthread, agents> evaluators{};
         const sim::CourseStage stage = stage_;
         const float difficulty = difficulty_;
+        const int maximum_steps = static_cast<std::uint8_t>(stage)
+            >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 1500 : 900;
+        std::array<float, agents> scores{};
+        std::array<std::jthread, agents> evaluators{};
 
         for (std::size_t agent = 0; agent < agents; ++agent)
         {
-            evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty, agent]
+            evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty, maximum_steps, agent]
             {
                 const std::uint64_t seed = 0xA100u + static_cast<std::uint64_t>(agent) * 3253u;
                 sim::Environment environment{ candidate, seed };
@@ -127,17 +128,18 @@ namespace epochrunner::rl
                     if (result.terminated)
                         break;
                 }
-                const bool gait_valid = stage == sim::CourseStage::balance || environment.alternating_steps() >= 2;
+                const bool gait_valid = stage == sim::CourseStage::balance || environment.alternating_steps() >= 3;
                 if (!environment.valid_motion() || !gait_valid)
                 {
                     scores[agent] = -std::numeric_limits<float>::infinity();
                     return;
                 }
-                scores[agent] = reward + environment.distance_travelled() * 0.60f
-                    + environment.elapsed_seconds() * 0.04f
-                    + static_cast<float>(environment.alternating_steps()) * 0.02f
-                    - environment.collision_count() * 0.18f
-                    - environment.airborne_ratio() * 0.70f;
+                scores[agent] = reward + environment.distance_travelled() * 0.75f
+                    + environment.elapsed_seconds() * 0.03f
+                    + static_cast<float>(environment.alternating_steps()) * 0.03f
+                    - environment.collision_count() * 0.30f
+                    - environment.airborne_ratio() * 1.00f
+                    - environment.body_rolling_seconds() * 2.00f;
             });
         }
         for (std::jthread& evaluator : evaluators)

@@ -33,13 +33,13 @@ namespace epochrunner::sim
     {
         switch (stage)
         {
-        case CourseStage::balance: return "BALANCE";
-        case CourseStage::walk: return "FLAT WALK";
-        case CourseStage::ramps: return "RAMPS";
-        case CourseStage::uneven: return "UNEVEN TERRAIN";
-        case CourseStage::hurdles: return "HURDLES";
-        case CourseStage::duck_bars: return "DUCK UNDER BARS";
-        case CourseStage::moving_hazards: return "MOVING HAZARDS";
+        case CourseStage::balance: return "SPAWN STANCE";
+        case CourseStage::walk: return "FLAT SAND PATROL";
+        case CourseStage::ramps: return "SAND MOUNDS";
+        case CourseStage::uneven: return "LOOSE / DEFORMED SAND";
+        case CourseStage::hurdles: return "FLAT DEBRIS";
+        case CourseStage::duck_bars: return "LOW-CLEARANCE DEBRIS";
+        case CourseStage::moving_hazards: return "COMBAT TRAVERSAL";
         }
         return "UNKNOWN";
     }
@@ -136,6 +136,30 @@ namespace epochrunner::sim
             && std::abs(root_speed) > 0.22f && stance_slip_speed > 0.18f;
     }
 
+    [[nodiscard]] inline bool rolling_body_motion(float root_speed, float torso_turn_speed,
+        float uprightness, bool feet_supported, bool non_foot_grounded) noexcept
+    {
+        return non_foot_grounded
+            && (std::abs(torso_turn_speed) > 0.45f || uprightness < 0.55f)
+            && (!feet_supported || std::abs(root_speed) > 0.08f);
+    }
+
+    inline constexpr float terrain_cycle_length_m = 56.0f;
+
+    [[nodiscard]] inline bool course_zone_is_flat(float course_distance) noexcept
+    {
+        float local = std::fmod(std::max(0.0f, course_distance), terrain_cycle_length_m);
+        if (local < 0.0f)
+            local += terrain_cycle_length_m;
+        return local < 28.0f || local >= 44.0f;
+    }
+
+    [[nodiscard]] inline bool obstacles_require_flat_zone(CourseStage stage,
+        float difficulty) noexcept
+    {
+        return stage != CourseStage::moving_hazards || difficulty < 0.70f;
+    }
+
     [[nodiscard]] inline float course_feature_observation_size(
         const CourseFeature& feature) noexcept
     {
@@ -161,7 +185,8 @@ namespace epochrunner::sim
         out_of_bounds,
         sustained_flight,
         micro_motion,
-        wheel_sliding
+        wheel_sliding,
+        body_rolling
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -176,6 +201,7 @@ namespace epochrunner::sim
         case InvalidMotion::sustained_flight: return "FLYING";
         case InvalidMotion::micro_motion: return "MICRO-MOTION EXPLOIT";
         case InvalidMotion::wheel_sliding: return "WHEEL-SLIDING EXPLOIT";
+        case InvalidMotion::body_rolling: return "HEAD / TAIL / BODY ROLLING";
         }
         return "INVALID";
     }
@@ -202,12 +228,10 @@ namespace epochrunner::sim
     [[nodiscard]] inline bool recovery_should_start(bool collided,
         float uprightness, bool geometric_fall, bool hard_fall) noexcept
     {
-        constexpr float destabilized_collision_uprightness = 0.88f;
+        static_cast<void>(collided);
         constexpr float independent_recovery_uprightness = 0.72f;
-        return !hard_fall && (
-            (collided && uprightness < destabilized_collision_uprightness)
-            || uprightness < independent_recovery_uprightness
-            || geometric_fall);
+        return !hard_fall
+            && (uprightness < independent_recovery_uprightness || geometric_fall);
     }
 
     [[nodiscard]] inline bool recovery_terminal_fall(bool geometric_fall,
@@ -227,7 +251,7 @@ namespace epochrunner::sim
         float vertical_speed) noexcept
     {
         if (!traction_contact)
-            return 0.96f;
+            return 0.985f;
         return std::abs(vertical_speed) < 1.5f ? 0.42f : 0.72f;
     }
 
@@ -236,9 +260,10 @@ namespace epochrunner::sim
     inline constexpr int course_feature_cycle_length = 5;
 
     [[nodiscard]] inline int first_course_feature_sequence(float root_x, float course_progress,
-        float spacing = course_marker_spacing_m, float lead_distance = 4.5f) noexcept
+        float spacing = course_marker_spacing_m, float trailing_distance = 6.0f) noexcept
     {
-        return static_cast<int>(std::ceil((root_x + course_progress + lead_distance) / spacing));
+        return static_cast<int>(std::ceil(
+            (root_x + course_progress - trailing_distance) / spacing));
     }
 
     [[nodiscard]] inline float course_feature_world_x(int sequence, float course_progress,
@@ -383,7 +408,12 @@ namespace epochrunner::sim
         [[nodiscard]] float ground_height_at(float x) const noexcept;
         [[nodiscard]] float course_speed() const noexcept
         {
-            return course_stage_ == CourseStage::balance ? 0.0f : 0.70f + course_difficulty_ * 0.90f;
+            if (course_stage_ == CourseStage::balance)
+                return 0.0f;
+            if (static_cast<std::uint8_t>(course_stage_)
+                < static_cast<std::uint8_t>(CourseStage::hurdles))
+                return 0.68f + course_difficulty_ * 0.72f;
+            return 1.05f + course_difficulty_ * 0.82f;
         }
         [[nodiscard]] float course_progress() const noexcept { return elapsed_seconds_ * course_speed(); }
         [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
@@ -394,6 +424,8 @@ namespace epochrunner::sim
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
         [[nodiscard]] std::uint32_t knee_first_faults() const noexcept { return knee_first_faults_; }
         [[nodiscard]] float stance_slip_speed() const noexcept { return stance_slip_speed_; }
+        [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
+        [[nodiscard]] float body_rolling_seconds() const noexcept { return body_rolling_seconds_; }
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
@@ -421,6 +453,9 @@ namespace epochrunner::sim
         [[nodiscard]] bool contact_cluster_contains(std::uint16_t contact_node,
             std::size_t particle_index) const noexcept;
         [[nodiscard]] bool contact_supported(std::uint16_t contact_node) const noexcept;
+        [[nodiscard]] bool non_foot_ground_contact() const noexcept;
+        [[nodiscard]] bool head_ground_contact() const noexcept;
+        [[nodiscard]] float torso_roll_angle() const noexcept;
         [[nodiscard]] float contact_cluster_front_x(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] float contact_cluster_top_y(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] float contact_cluster_horizontal_speed(std::uint16_t contact_node,
@@ -457,7 +492,12 @@ namespace epochrunner::sim
         std::uint32_t alternating_steps_{};
         std::uint32_t knee_first_faults_{};
         float wheel_sliding_seconds_{};
+        float body_rolling_seconds_{};
+        float head_contact_seconds_{};
+        float previous_torso_angle_{};
+        float torso_turn_speed_{};
         float stance_slip_speed_{};
+        bool non_foot_grounded_{};
         bool knee_first_this_step_{};
         int last_contact_side_{};
         bool previous_left_grounded_{};

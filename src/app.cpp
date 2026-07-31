@@ -34,7 +34,7 @@ namespace epochrunner
 
     namespace
     {
-        constexpr float ui_font_scale = 1.55f;
+        constexpr float ui_font_scale = 2.05f;
 
         struct Rect
         {
@@ -142,7 +142,7 @@ namespace epochrunner
         }
 
         [[nodiscard]] float fit_text_scale(std::string_view text, float requested_scale,
-            float maximum_width, float minimum_scale = 0.92f) noexcept
+            float maximum_width, float minimum_scale = 1.05f) noexcept
         {
             float scale = requested_scale;
             while (scale > minimum_scale
@@ -152,7 +152,7 @@ namespace epochrunner
         }
 
         void add_text_fit(render::Canvas& canvas, Vec2 position, std::string_view text,
-            float scale, Color color, float maximum_width, float minimum_scale = 0.92f)
+            float scale, Color color, float maximum_width, float minimum_scale = 1.05f)
         {
             add_text(canvas, position, text,
                 fit_text_scale(text, scale, maximum_width, minimum_scale), color);
@@ -259,9 +259,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v062-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v062-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v062-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v063-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v063-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v063-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -328,7 +328,7 @@ namespace epochrunner
 
             float scale = 1.55f;
             gui::Vec2 measured = font::measure_text(label, scale * ui_font_scale);
-            while (measured.x > rect.size.x - 12.0f && scale > 0.95f)
+            while (measured.x > rect.size.x - 12.0f && scale > 1.05f)
             {
                 scale -= 0.08f;
                 measured = font::measure_text(label, scale * ui_font_scale);
@@ -419,7 +419,7 @@ namespace epochrunner
             canvas.quad({ 0.0f, 0.0f }, { static_cast<float>(width), bar_height }, rgb(0x0b1119));
             add_text(canvas, { 18.0f, 13.0f }, "EPOCH RUNNER v" EPOCHRUNNER_VERSION, 2.10f, white);
             if (width >= 1080)
-                add_text(canvas, { 20.0f, 50.0f }, "AUTONOMOUS LOCOMOTION LAB", 1.05f, muted);
+                add_text(canvas, { 20.0f, 50.0f }, "SAND-SIM ENEMY LOCOMOTION LAB", 1.05f, muted);
 
             const float tab_width = width >= 1080 ? 184.0f : 164.0f;
             const float start_x = static_cast<float>(width) - tab_width * 2.0f - 18.0f;
@@ -488,11 +488,11 @@ namespace epochrunner
                 const Vec2 base = world_to_screen({ x, ground }, viewport, camera, scale);
                 const Vec2 top = world_to_screen({ x, ground + 0.72f }, viewport, camera, scale);
                 canvas.line(base, top, 4.0f, accent_dim);
-                const Rect sign{ top + Vec2{ -43.0f, -22.0f }, { 86.0f, 21.0f } };
-                add_rounded_rect(canvas, sign, 4.0f, rgb(0x102431, 0.94f), accent, 1.0f);
-                add_text(canvas, sign.position + Vec2{ 5.0f, 5.0f },
+                const Rect sign{ top + Vec2{ -62.0f, -28.0f }, { 124.0f, 28.0f } };
+                add_rounded_rect(canvas, sign, 5.0f, rgb(0x102431, 0.96f), accent, 1.0f);
+                add_text(canvas, sign.position + Vec2{ 7.0f, 6.0f },
                     std::format("{:.0f} M / {:.3f} MI", distance, distance / 1609.344f),
-                    0.76f, white);
+                    1.02f, white);
             }
         }
 
@@ -531,9 +531,9 @@ namespace epochrunner
                         feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent, 1.0f);
                 }
 
-                add_text(canvas, feature_screen + Vec2{ -42.0f, -36.0f },
-                    sim::course_feature_name(feature.kind), 0.82f,
-                    feature.kind == sim::CourseFeatureKind::projectile ? yellow : muted);
+                add_text(canvas, feature_screen + Vec2{ -58.0f, -42.0f },
+                    std::format("HAZARD: {}", sim::course_feature_name(feature.kind)), 1.00f,
+                    feature.kind == sim::CourseFeatureKind::projectile ? yellow : danger);
             }
         }
 
@@ -581,7 +581,7 @@ namespace epochrunner
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
             const rl::TrainingMetrics& metrics = trainer.metrics();
 
-            add_text(canvas, cursor, "AUTONOMOUS TRAINER", 1.72f, white);
+            add_text(canvas, cursor, "SAND-SIM ENEMY TRAINER", 1.72f, white);
             cursor.y += 42.0f;
             if (button({ cursor, { usable_width, 48.0f } },
                 trainer.background_enabled() ? "AUTOPILOT ON - CLICK TO PAUSE" : "AUTOPILOT PAUSED - CLICK TO RUN",
@@ -661,12 +661,12 @@ namespace epochrunner
             cursor.y += 45.0f;
 
             cursor.y += add_wrapped_text(canvas, cursor,
-                "REAL FEET / SOFT START / AUTOMATIC CHECKPOINTS AND RIG EVOLUTION",
-                0.98f, muted, usable_width, 4.0f);
+                "GROUND-CONTACT ENEMY / SOFT START / CHECKPOINTED RIG EVOLUTION",
+                1.06f, muted, usable_width, 4.0f);
             cursor.y += 10.0f;
             add_wrapped_text(canvas, cursor,
-                "A NEW VERIFIED BEST IS APPLIED AT THE NEXT LIVE RUN",
-                0.98f, muted, usable_width, 4.0f);
+                "NO ROLLING / NO BODY-SURFING / HAZARDS NEVER PAY REWARD",
+                1.06f, muted, usable_width, 4.0f);
         }
 
         void draw_live_world(Rect viewport, float dt)
@@ -704,8 +704,8 @@ namespace epochrunner
                     environment.alternating_steps(), environment.knee_first_faults()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
-                "LIVE BEST CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
-                0.96f, muted, overlay_width, 0.82f);
+                "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
+                1.05f, muted, overlay_width, 1.00f);
         }
 
         void draw_joint_lab(Rect rect, const InputState& input)
@@ -1211,7 +1211,7 @@ namespace epochrunner
 
             const Rect content{ { 10.0f, 92.0f },
                 { static_cast<float>(width) - 20.0f, static_cast<float>(height) - 102.0f } };
-            if (content.size.x < 760.0f || content.size.y < 560.0f)
+            if (content.size.x < 1080.0f || content.size.y < 640.0f)
             {
                 add_text(canvas, { 24.0f, 100.0f }, "WINDOW TOO SMALL", 2.0f, danger);
                 return;
@@ -1219,7 +1219,7 @@ namespace epochrunner
 
             if (mode == Mode::live)
             {
-                const float panel_width = std::clamp(content.size.x * 0.40f, 500.0f, 590.0f);
+                const float panel_width = std::clamp(content.size.x * 0.42f, 650.0f, 720.0f);
                 const Rect world{ content.position, { content.size.x - panel_width - 10.0f, content.size.y } };
                 const Rect side{ { content.position.x + world.size.x + 10.0f, content.position.y },
                     { panel_width, content.size.y } };
@@ -1228,7 +1228,7 @@ namespace epochrunner
             }
             else
             {
-                const float panel_width = std::clamp(content.size.x * 0.40f, 540.0f, 640.0f);
+                const float panel_width = std::clamp(content.size.x * 0.42f, 680.0f, 760.0f);
                 const Rect side{ content.position, { panel_width, content.size.y } };
                 const Rect world{ { content.position.x + panel_width + 10.0f, content.position.y },
                     { content.size.x - panel_width - 10.0f, content.size.y } };

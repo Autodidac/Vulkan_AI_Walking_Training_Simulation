@@ -114,9 +114,9 @@ int main(int argc, char** argv)
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "EpochRunner v" EPOCHRUNNER_VERSION " - Autonomous Vulkan Locomotion Lab",
-        1760,
-        1040,
+        "EpochRunner v" EPOCHRUNNER_VERSION " - Sand-Sim Enemy Locomotion Trainer",
+        1900,
+        1180,
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (window == nullptr)
     {
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
         SDL_Quit();
         return 1;
     }
-    SDL_SetWindowMinimumSize(window, 1100, 760);
+    SDL_SetWindowMinimumSize(window, 1280, 820);
 
     epochrunner::render::VulkanRenderer renderer{};
     std::string error{};

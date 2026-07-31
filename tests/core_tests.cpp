@@ -39,8 +39,8 @@ int main()
         == sim::InvalidMotion::micro_motion, "micro-motion gate missing");
     require(!sim::recovery_should_start(true, 0.95f, false, false),
         "harmless upright obstacle contact created a rewardable recovery event");
-    require(sim::recovery_should_start(true, 0.80f, false, false),
-        "destabilizing collision did not start recovery");
+    require(!sim::recovery_should_start(true, 0.80f, false, false),
+        "ordinary obstacle contact still opens a rewardable recovery event");
     require(sim::recovery_should_start(false, 0.68f, false, false),
         "major balance loss did not start recovery without a collision");
     require(!sim::recovery_should_start(true, 0.40f, true, true),
@@ -120,6 +120,20 @@ int main()
         "double-supported wheel-like sliding is not detected");
     require(!sim::wheel_sliding_motion(0.45f, true, false, 0.50f),
         "single-support walking is incorrectly classified as wheel sliding");
+    require(sim::rolling_body_motion(0.20f, 0.70f, 0.35f, false, true),
+        "head, tail, or body rolling is not detected");
+    require(!sim::rolling_body_motion(0.20f, 0.70f, 0.95f, true, false),
+        "normal foot-supported walking is incorrectly classified as rolling");
+    require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
+        "long flat sand-sim patrol zones are missing");
+    require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),
+        "sand mounds are not separated from flat patrol zones");
+    require(sim::obstacles_require_flat_zone(sim::CourseStage::hurdles, 1.0f),
+        "early debris training can place obstacles on hills");
+    require(!sim::obstacles_require_flat_zone(sim::CourseStage::moving_hazards, 0.75f),
+        "advanced combat traversal never combines hazards with terrain");
+    require(sim::first_course_feature_sequence(0.0f, 29.9f) <= 3,
+        "a contacted obstacle is culled like a pickup before it passes behind the actor");
 
     const std::array<sim::CreatureBlueprint, 5> presets{
         sim::CreatureBlueprint::chicken(),
@@ -210,9 +224,9 @@ int main()
 
     {
         sim::Environment procedural{ humanoid, 0xC0A57u };
-        procedural.set_course(sim::CourseStage::moving_hazards, 0.65f);
+        procedural.set_course(sim::CourseStage::moving_hazards, 0.75f);
         const float initial_progress = procedural.course_progress();
-        const float initial_height = procedural.ground_height_at(7.5f);
+        const float initial_height = procedural.ground_height_at(29.0f);
         const std::array<float, sim::action_count> zero_actions{};
         for (int frame = 0; frame < 90; ++frame)
         {
@@ -222,7 +236,7 @@ int main()
         }
         require(procedural.course_progress() > initial_progress,
             "procedural course does not advance when the creature is stationary");
-        require(std::abs(procedural.ground_height_at(7.5f) - initial_height) > 0.001f,
+        require(std::abs(procedural.ground_height_at(29.0f) - initial_height) > 0.001f,
             "procedural inclines and hills do not move through the training lane");
 
         std::array<bool, 5> found{};
@@ -238,6 +252,18 @@ int main()
             "procedural course omitted rocks");
         require(found[static_cast<std::size_t>(sim::CourseFeatureKind::projectile)],
             "procedural course omitted thrown objects");
+    }
+
+    {
+        sim::Environment flat_obstacles{ humanoid, 0xF1A7u };
+        flat_obstacles.set_course(sim::CourseStage::hurdles, 0.45f);
+        require(!flat_obstacles.course_features().empty(),
+            "flat debris lesson has no obstacles");
+        for (const sim::CourseFeature& feature : flat_obstacles.course_features())
+        {
+            require(sim::course_zone_is_flat(sim::course_marker_distance_m(feature.marker_sequence)),
+                "early obstacle curriculum placed debris on a hill or slope");
+        }
     }
 
     rl::PpoTrainer trainer{ humanoid, 16 };

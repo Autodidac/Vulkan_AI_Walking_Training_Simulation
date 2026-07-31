@@ -191,7 +191,7 @@ Every physical obstacle class must expose its actual collision size to the polic
 
 ## WALK-PHYS-001 — Biped support, traction, and world-anchored debris
 
-**Status:** VERIFIED
+**Status:** ACTIVE
 
 Passive heel/toe geometry must participate in semantic left/right support. Designated feet require usable traction, while incidental head, tail, and body contacts must not pin the creature. Procedural rocks, hazards, and debris must remain in course/world coordinates and may not inherit actor translation.
 
@@ -206,7 +206,7 @@ Passive heel/toe geometry must participate in semantic left/right support. Desig
 
 ## WALK-UI-002 — Readable responsive telemetry
 
-**Status:** VERIFIED
+**Status:** ACTIVE
 
 The live and rig interfaces must remain readable at ordinary desktop sizes. Text may not overlap adjacent labels, buttons, cards, or the title bar. Long status messages must wrap or fit within their panel instead of being clipped into neighboring content.
 
@@ -237,7 +237,7 @@ All generated course elements must be anchored to shared course/mile-marker coor
 
 ## WALK-GAIT-002 — Real stepping instead of wheel sliding
 
-**Status:** VERIFIED
+**Status:** ACTIVE
 
 Forward reward must represent foot-led alternating walking, not a body sliding across planted contacts. A knee may not clear a rock or hurdle before its corresponding foot. Sustained double-supported sliding is an invalid gait exploit.
 
@@ -251,6 +251,49 @@ Forward reward must represent foot-led alternating walking, not a body sliding a
 - Foot-first traversal is not penalized.
 - Full Windows/Vulkan build, deterministic gait tests, diagnostics, package, and exact-source evidence pass.
 
+## WALK-SAND-001 — Sand-sim enemy locomotion curriculum
+
+**Status:** ACTIVE
+
+Retarget the curriculum from a generic treadmill demonstration to a grounded enemy controller suitable for later integration into a cellular sand simulation.
+
+**Acceptance:**
+
+- Spawn stance and flat patrol precede terrain and hazards.
+- Long flat sections separate sand mounds and loose/deformed patches.
+- Early debris and low-clearance hazards appear only on flat ground.
+- Terrain-plus-hazard combinations unlock only in later combat traversal at higher difficulty.
+- Deterministic evaluation actually runs long enough to encounter the first hazard.
+
+## WALK-ROLL-003 — Head, tail, and body rolling are invalid locomotion
+
+**Status:** ACTIVE
+
+Non-foot body contact may slide during a fall but may not become a movement strategy.
+
+**Acceptance:**
+
+- Head contact cannot remain grounded long enough to propel the rig.
+- Tail, torso, knee, and other non-foot ground contacts are detected semantically.
+- Sustained body-ground rotation terminates as `HEAD / TAIL / BODY ROLLING`.
+- Body-ground motion receives no gait progress multiplier and receives a strong penalty.
+- A new autosave namespace prevents the v0.6.2 rolling policy from resuming.
+
+## WALK-HAZARD-003 — Obstacles are hazards, never pickups or rewards
+
+**Status:** ACTIVE
+
+- Obstacles remain present through contact and are culled only after passing behind the actor.
+- Ordinary obstacle contact cannot open a positive recovery-reward loop.
+- Collision penalties exceed any incidental contact benefit.
+- Hazard labels communicate danger rather than collectible/reward semantics.
+
+## WALK-UI-003 — User-verified readable typography
+
+**Status:** ACTIVE
+
+The previous UI mission was incorrectly closed from compilation evidence without a visual acceptance pass. Increase all bitmap text substantially, enlarge minimum fitted text, marker signs, hazard labels, panels, and the default window. This mission remains active until the packaged application is visually confirmed readable by the user.
+
 ## Current warning
 
-EpochRunner v0.6.2 passed the full Windows/Vulkan build, biped support and traction tests, real-step gait and knee-before-foot tests, world-anchored mile-marker obstacle schedule tests, responsive UI compilation, concurrency benchmark, runtime diagnostics, and package gate. Remaining ACTIVE and OPEN missions carry forward unchanged.
+The user visually rejected the v0.6.2 typography and confirmed that rolling and pickup-like obstacle behavior remained. Those missions are reopened. v0.6.3 may record build and deterministic-test evidence, but visual readability remains `ACTIVE` until user confirmation. All other ACTIVE and OPEN missions carry forward unchanged.

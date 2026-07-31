@@ -1,6 +1,16 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.2 restores real biped foot support and traction, prevents head/tail/body contacts from pinning the actor, and keeps rocks and other course debris anchored to the moving course instead of the creature.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.3 retargets the curriculum toward a grounded sand-simulation enemy: large readable telemetry, long flat patrol zones, separated sand mounds, flat early obstacle pads, and hard rejection of head, tail, or body rolling.
+
+## Sand-sim enemy locomotion hotfix
+
+The trainer now starts with spawn stance and flat sand patrol, then introduces isolated sand mounds and loose/deformed terrain before debris. Early rocks, hurdles, and low bars are generated only on flat zones. Terrain-plus-hazard combinations remain locked to the later combat-traversal lesson at higher difficulty.
+
+Head, tail, torso, and other non-foot ground contacts no longer provide a locomotion path. Sustained body rolling is a hard invalid gate, body-ground motion receives no gait multiplier, head/body contact receives an immediate penalty, and new versioned autosaves prevent the old rolling controller from resuming.
+
+Course features remain physical hazards after contact and are retained until they pass behind the actor instead of disappearing at approach distance like collectible upgrades. Obstacle contact no longer opens a positive recovery-reward opportunity; collisions are strictly costly while recovery remains a survival state.
+
+The bitmap UI now uses a substantially larger global scale, larger minimum fitted text, larger marker signs and hazard labels, wider panels, a larger default window, and sand-sim-specific labels.
 
 ## Biped traction and world anchoring hotfix
 
@@ -19,7 +29,7 @@ Pausing background training now clears queued single-update backlog immediately,
 
 Version 0.6.0 continuously advances a bounded training course even when the creature does not translate. The course cycles through flat road, inclines, plateaus, declines, hills, uneven terrain, rocks, hurdles, low bars, moving hazards, and thrown projectiles. Road dashes and numbered metre/mile markers expose movement clearly in the live view.
 
-Obstacle impacts and large balance errors start a timed recovery objective. Policies receive extra reward for restoring upright supported balance and a penalty when recovery times out.
+Large balance errors start a timed recovery state. Obstacle impacts are penalized and never grant a recovery bonus; failed recovery still receives an additional penalty.
 
 ## Default workflow
 
@@ -48,7 +58,8 @@ A controller or rig candidate cannot become the published best when any determin
 - leaves the bounded course;
 - remains airborne long enough to exploit flying;
 - produces repeated high-energy micro-movement without meaningful displacement;
-- fails to produce alternating foot contacts after the balance lesson.
+- fails to produce alternating foot contacts after the balance lesson;
+- travels on its head, tail, torso, knees, or other non-foot body contacts.
 
 Invalid episodes terminate immediately and receive a large penalty. These are hard gates, not merely weak reward preferences.
 
