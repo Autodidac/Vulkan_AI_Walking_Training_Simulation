@@ -1063,8 +1063,8 @@ namespace epochrunner::sim
         float recovery_reward = 0.0f;
         const bool supported = particles_[blueprint_.left_contact_node].grounded
             || particles_[blueprint_.right_contact_node].grounded;
-        if (!recovery_active_ && !hard_fall
-            && (collided_this_step_ || upright < 0.72f || geometric_fall))
+        if (!recovery_active_ && recovery_should_start(
+            collided_this_step_, upright, geometric_fall, hard_fall))
         {
             recovery_active_ = true;
             recovery_started_seconds_ = elapsed_seconds_;
@@ -1196,8 +1196,7 @@ namespace epochrunner::sim
             case CourseFeatureKind::projectile: result[22] = 1.0f; break;
             }
             result[23] = clamp((nearest->center.y - root.y) / 4.0f, -2.0f, 2.0f);
-            result[24] = nearest->kind == CourseFeatureKind::moving_hazard
-                ? nearest->radius : std::max(nearest->half_extent.x, nearest->half_extent.y);
+            result[24] = course_feature_observation_size(*nearest);
             result[25] = clamp(nearest->velocity.x / 5.0f, -1.0f, 1.0f);
         }
         result[26] = airborne_ratio();

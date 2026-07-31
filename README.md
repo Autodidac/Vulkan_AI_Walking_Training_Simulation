@@ -1,6 +1,6 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.0 replaces manual train/run switching with a continuously operating autonomous curriculum.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.1 completes radial obstacle observations and closes the harmless-contact recovery reward exploit while retaining the autonomous curriculum introduced in v0.6.0.
 
 
 ## Procedural obstacle and recovery treadmill
