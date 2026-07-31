@@ -1,0 +1,56 @@
+name: Validate EpochRunner v0.7 coroutine pipeline
+
+on:
+  push:
+    branches:
+      - feature/v070-runtime-pipeline
+    paths:
+      - "tools/patch_v070_ppo_pipeline.py"
+      - "tools/patch_v070_coroutine_runtime.py"
+      - ".github/workflows/v070-pipeline-validation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v070-runtime-pipeline
+          fetch-depth: 0
+
+      - name: Apply staged PPO and coroutine runtime patches
+        shell: pwsh
+        run: |
+          python tools/patch_v070_ppo_pipeline.py
+          python tools/patch_v070_coroutine_runtime.py
+          git diff --check
+
+      - name: Configure Visual Studio 2026 core validation
+        run: >-
+          cmake -S . -B build/v070-pipeline
+          -G "Visual Studio 18 2026" -A x64
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build staged runtime
+        run: cmake --build build/v070-pipeline --config Release
+
+      - name: Run deterministic and concurrency tests
+        run: ctest --test-dir build/v070-pipeline -C Release --output-on-failure -V
+
+      - name: Integrate validated staged runtime
+        shell: pwsh
+        run: |
+          Remove-Item tools/patch_v070_ppo_pipeline.py
+          Remove-Item tools/patch_v070_coroutine_runtime.py
+          Remove-Item .github/workflows/v070-pipeline-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add staged asynchronous PPO coroutine pipeline"
+          git push origin HEAD:feature/v070-runtime-pipeline
