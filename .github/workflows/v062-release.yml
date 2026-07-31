@@ -8,6 +8,7 @@ on:
     paths:
       - tools/integrate_v062.py
       - tools/integrate_v062_ui.py
+      - tools/integrate_v062_ui_escape.py
       - tools/integrate_v062_course.py
       - tools/integrate_v062_gait.py
       - tools/integrate_v062_runtime.py
@@ -38,6 +39,7 @@ jobs:
           $scripts = @(
             "tools/integrate_v062.py",
             "tools/integrate_v062_ui.py",
+            "tools/integrate_v062_ui_escape.py",
             "tools/integrate_v062_course.py",
             "tools/integrate_v062_gait.py",
             "tools/integrate_v062_runtime.py"
@@ -117,6 +119,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Mission finalization failed" }
           Remove-Item tools/integrate_v062.py
           Remove-Item tools/integrate_v062_ui.py
+          Remove-Item tools/integrate_v062_ui_escape.py
           Remove-Item tools/integrate_v062_course.py
           Remove-Item tools/integrate_v062_gait.py
           Remove-Item tools/integrate_v062_runtime.py
@@ -131,6 +134,7 @@ jobs:
           git add -u -- .github/workflows/v050-core-diagnostic.yml
           git add -u -- .github/workflows/v062-release.yml
           git add -u -- tools/integrate_v062.py tools/integrate_v062_ui.py
+          git add -u -- tools/integrate_v062_ui_escape.py
           git add -u -- tools/integrate_v062_course.py tools/integrate_v062_gait.py
           git add -u -- tools/integrate_v062_runtime.py tools/finalize_v062.py
           git commit -m "Release EpochRunner v0.6.2 biped gait course and UI hotfix"
