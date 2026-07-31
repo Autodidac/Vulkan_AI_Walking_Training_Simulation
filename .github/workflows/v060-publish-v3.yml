@@ -1,0 +1,211 @@
+name: Publish EpochRunner v0.6.0 from verified source
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/v060-publish-v3.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  build-package-publish:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout exact remote source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Capture and verify remote source SHA
+        id: source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $local = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "Unable to resolve local source SHA" }
+          $remoteLine = (git ls-remote origin refs/heads/main | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remoteLine)) {
+            throw "Unable to resolve remote main SHA"
+          }
+          $remote = ($remoteLine -split "\s+")[0]
+          if ($local -ne $remote) {
+            throw "Checkout SHA $local does not match remote main $remote"
+          }
+          "source_sha=$local" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v060-publish-v3-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v060-publish-v2-${{ runner.os }}-
+            epochrunner-v060-final-${{ runner.os }}-
+            epochrunner-v060-release-${{ runner.os }}-
+          save-always: true
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure Visual Studio 2026 Release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build complete SDL3 Vulkan application
+        run: cmake --build --preset windows-release
+
+      - name: Run complete deterministic and concurrency tests
+        run: ctest --preset windows-release --output-on-failure -V
+
+      - name: Verify executable identity and Vulkan backend
+        shell: pwsh
+        run: |
+          $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.6.0") {
+            throw "Unexpected executable version: $version"
+          }
+          build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+
+      - name: Stage package
+        run: cmake --install build/windows-release --config Release --prefix package/EpochRunner-v0.6.0-windows-x64
+
+      - name: Build archive and checksum
+        id: package
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, MISSIONS.md -Destination package/EpochRunner-v0.6.0-windows-x64 -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination package/EpochRunner-v0.6.0-windows-x64 -Force
+          $archive = "EpochRunner-v0.6.0-windows-x64.zip"
+          Compress-Archive -Path "package/EpochRunner-v0.6.0-windows-x64/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Preserve validated package as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpochRunner-v0.6.0-windows-x64
+          path: |
+            EpochRunner-v0.6.0-windows-x64.zip
+            EpochRunner-v0.6.0-windows-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Replace draft reservation and publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $draft = gh release view v0.6.0 --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($draft.Trim() -ne "true") {
+              throw "A non-draft v0.6.0 release already exists; refusing to replace it"
+            }
+            gh release delete v0.6.0 --yes --cleanup-tag
+            if ($LASTEXITCODE -ne 0) { throw "Failed to remove draft reservation" }
+          }
+          gh release create v0.6.0 $env:ARCHIVE "$env:ARCHIVE.sha256" `
+            --target $env:SOURCE_SHA `
+            --title "EpochRunner v0.6.0" `
+            --notes "Procedural obstacle and recovery treadmill: moving road dashes and numbered metre/mile markers; continuous inclines, plateaus, declines, hills, and uneven terrain; rocks, hurdles, overhead bars, moving hazards, and thrown projectiles; bounded physical disturbance; recoverable near-falls; timed recovery reward; persistent concurrent PPO architecture retained."
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish v0.6.0" }
+
+      - name: Record evidence, close mission, and remove temporary machinery
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git fetch origin main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to fetch main before evidence commit" }
+          git switch -C main origin/main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to reset evidence commit to remote main" }
+
+          @'
+          from pathlib import Path
+
+          path = Path("MISSIONS.md")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("## WALK-COURSE-001")
+          end = text.index("## Current warning", start)
+          section = text[start:end].replace("**Status:** ACTIVE", "**Status:** VERIFIED", 1)
+          text = text[:start] + section + text[end:]
+          warning = (
+              "## Current warning\n\n"
+              "EpochRunner v0.6.0 passed the full Windows/Vulkan build, procedural course and recovery tests, "
+              "concurrency benchmark, executable diagnostics, packaging gate, and immutable release publication. "
+              "Remaining ACTIVE/OPEN missions carry forward unchanged.\n"
+          )
+          text = text[:text.index("## Current warning")] + warning
+          path.write_text(text, encoding="utf-8")
+          '@ | python -
+
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner v0.6.0 release evidence
+
+          - Exact tested source commit: `$env:SOURCE_SHA`
+          - Windows runner: `windows-2025`
+          - Generator: `Visual Studio 18 2026`
+          - Full SDL3/Vulkan/EpochGui application build: passed
+          - Procedural terrain and all obstacle-class tests: passed
+          - Stationary-course advancement and road-marker integration: passed
+          - Recovery objective and near-fall grace tests: passed
+          - Hip-edit, concurrency, optimizer, and speed-mode tests: passed
+          - Executable version check: passed
+          - SDL3/Vulkan diagnostic: passed
+          - Workflow artifact preserved before release publication: passed
+          - Package: `$env:ARCHIVE`
+          - SHA-256: `$env:CHECKSUM`
+          "@ | Set-Content -Encoding UTF8 validation/v0.6.0.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add MISSIONS.md validation/v0.6.0.md
+          git rm --ignore-unmatch .github/workflows/v060-publish-v3.yml
+          git rm --ignore-unmatch .github/workflows/v060-publish-v2.yml
+          git rm --ignore-unmatch .github/workflows/v060-final-release.yml
+          git rm --ignore-unmatch .github/workflows/v060-release-gate.yml
+          git rm --ignore-unmatch .github/workflows/v060-core-diagnostic.yml
+          git rm --ignore-unmatch .github/workflows/v060-full-diagnostic.yml
+          git rm --ignore-unmatch .github/workflows/v060-reserve-release.yml
+          git rm --ignore-unmatch .github/workflows/v060-integrate-release.yml
+          git rm --ignore-unmatch tools/integrate_v060.py
+          git rm --ignore-unmatch tools/patch_recovery_grace.py
+
+          git commit -m "Record verified EpochRunner v0.6.0 release"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to commit v0.6.0 evidence" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to push v0.6.0 evidence" }
