@@ -122,9 +122,6 @@ namespace epochrunner::rl
 
     void AutonomousTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
-        live_blueprint_ = blueprint;
-        live_.set_blueprint(live_blueprint_, preserve_policy);
-
         PendingCommand command{};
         command.type = CommandType::set_blueprint;
         command.blueprint = blueprint;
@@ -134,7 +131,6 @@ namespace epochrunner::rl
 
     void AutonomousTrainer::reset_policy(std::uint64_t seed)
     {
-        live_.reset_policy(seed);
         PendingCommand command{};
         command.type = CommandType::reset_policy;
         command.seed = seed;
@@ -143,7 +139,6 @@ namespace epochrunner::rl
 
     void AutonomousTrainer::set_exploration(float standard_deviation) noexcept
     {
-        live_.set_exploration(standard_deviation);
         PendingCommand command{};
         command.type = CommandType::set_exploration;
         command.scalar = standard_deviation;
