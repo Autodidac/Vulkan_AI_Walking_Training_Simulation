@@ -7,6 +7,7 @@ on:
     paths:
       - "tools/integrate_v062.py"
       - "tools/integrate_v062_ui.py"
+      - "tools/integrate_v062_course.py"
       - ".github/workflows/v062-release.yml"
 
 permissions:
@@ -15,7 +16,6 @@ permissions:
 env:
   VCPKG_ROOT: ${{ github.workspace }}\vcpkg
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
-  PACKAGE_ROOT: ${{ runner.temp }}\EpochRunnerPackage
 
 jobs:
   integrate-build-test-release:
@@ -28,13 +28,15 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Apply v0.6.2 physics and UI integration
+      - name: Apply v0.6.2 source integration
         shell: pwsh
         run: |
           python tools/integrate_v062.py
           if ($LASTEXITCODE -ne 0) { throw "v0.6.2 physics integration failed" }
           python tools/integrate_v062_ui.py
           if ($LASTEXITCODE -ne 0) { throw "v0.6.2 UI integration failed" }
+          python tools/integrate_v062_course.py
+          if ($LASTEXITCODE -ne 0) { throw "v0.6.2 course integration failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "v0.6.2 patch contains whitespace errors" }
 
@@ -69,7 +71,7 @@ jobs:
       - name: Build complete SDL3 Vulkan application
         run: cmake --build --preset windows-release
 
-      - name: Run physics, curriculum, rig, and concurrency tests
+      - name: Run physics course UI rig and concurrency tests
         run: ctest --preset windows-release --output-on-failure -V
 
       - name: Verify executable identity and Vulkan path
@@ -80,12 +82,8 @@ jobs:
           build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
           if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
 
-      - name: Stage package outside the source tree
-        shell: pwsh
-        run: |
-          Remove-Item $env:PACKAGE_ROOT -Recurse -Force -ErrorAction SilentlyContinue
-          cmake --install build/windows-release --config Release `
-            --prefix "$env:PACKAGE_ROOT/EpochRunner-v0.6.2-windows-x64"
+      - name: Stage package
+        run: cmake --install build/windows-release --config Release --prefix package/EpochRunner-v0.6.2-windows-x64
 
       - name: Commit exact tested source
         id: source
@@ -96,7 +94,7 @@ jobs:
 
           path = Path("MISSIONS.md")
           text = path.read_text(encoding="utf-8")
-          for mission in ("WALK-PHYS-001", "WALK-UI-002"):
+          for mission in ("WALK-PHYS-001", "WALK-UI-002", "WALK-COURSE-002"):
               start = text.index(f"## {mission}")
               end = text.find("\n## ", start + 4)
               if end < 0:
@@ -105,9 +103,10 @@ jobs:
               text = text[:start] + section + text[end:]
           warning = (
               "## Current warning\n\n"
-              "EpochRunner v0.6.2 passed the full Windows/Vulkan build, biped support/traction tests, "
-              "world-anchored course-feature tests, responsive typography/layout compilation, concurrency benchmark, "
-              "runtime diagnostics, and package gate. Remaining ACTIVE/OPEN missions carry forward unchanged.\n"
+              "EpochRunner v0.6.2 passed the full Windows/Vulkan build, biped support and traction tests, "
+              "world-anchored mile-marker obstacle schedule tests, readable responsive UI compilation, "
+              "concurrency benchmark, runtime diagnostics, and package gate. Remaining ACTIVE and OPEN missions "
+              "carry forward unchanged.\n"
           )
           text = text[:text.index("## Current warning")] + warning
           path.write_text(text, encoding="utf-8")
@@ -116,18 +115,16 @@ jobs:
 
           Remove-Item tools/integrate_v062.py
           Remove-Item tools/integrate_v062_ui.py
+          Remove-Item tools/integrate_v062_course.py
           Remove-Item .github/workflows/v062-release.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- CMakeLists.txt vcpkg.json README.md MISSIONS.md `
+          git add CMakeLists.txt vcpkg.json README.md MISSIONS.md `
             src/simulation.cpp src/simulation.hpp src/app.cpp tests/core_tests.cpp
-          git add -u -- .github/workflows/v050-core-diagnostic.yml `
-            .github/workflows/v062-release.yml tools/integrate_v062.py tools/integrate_v062_ui.py
-          $badPaths = git diff --cached --name-only | Where-Object {
-            $_ -match '^(build|package|vcpkg|vcpkg-bincache)/'
-          }
-          if ($badPaths) { throw "Generated paths entered release source commit: $($badPaths -join ', ')" }
-          git commit -m "Release EpochRunner v0.6.2 biped traction and readable UI hotfix"
+          git add -u .github/workflows/v050-core-diagnostic.yml `
+            .github/workflows/v062-release.yml tools/integrate_v062.py `
+            tools/integrate_v062_ui.py tools/integrate_v062_course.py
+          git commit -m "Release EpochRunner v0.6.2 biped course and UI hotfix"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.6.2 source" }
           git push origin HEAD:main
           if ($LASTEXITCODE -ne 0) { throw "Failed to push tested v0.6.2 source" }
@@ -138,12 +135,11 @@ jobs:
         id: package
         shell: pwsh
         run: |
-          $stage = "$env:PACKAGE_ROOT/EpochRunner-v0.6.2-windows-x64"
-          Copy-Item README.md, LICENSE, MISSIONS.md -Destination $stage -Force
+          Copy-Item README.md, LICENSE, MISSIONS.md -Destination package/EpochRunner-v0.6.2-windows-x64 -Force
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
-            Copy-Item -Destination $stage -Force
+            Copy-Item -Destination package/EpochRunner-v0.6.2-windows-x64 -Force
           $archive = "EpochRunner-v0.6.2-windows-x64.zip"
-          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          Compress-Archive -Path "package/EpochRunner-v0.6.2-windows-x64/*" -DestinationPath $archive -Force
           $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
           $checksum | Set-Content "$archive.sha256"
           "archive=$archive" >> $env:GITHUB_OUTPUT
@@ -172,7 +168,7 @@ jobs:
           gh release create v0.6.2 $env:ARCHIVE "$env:ARCHIVE.sha256" `
             --target $env:SOURCE_SHA `
             --title "EpochRunner v0.6.2" `
-            --notes "Biped locomotion and readability hotfix: passive heel/toe geometry supplies semantic support and strong foot traction; head, tail, and body contacts slide instead of pinning the actor; procedural debris remains anchored to course/world coordinates; incompatible v0.6.1 autosaves start fresh; the UI now uses larger typography, wider responsive panels, wrapped status text, grouped cards, and non-overlapping world/title telemetry."
+            --notes "Biped locomotion, course, and readability hotfix: passive heel and toe geometry supplies semantic support and strong foot traction; head, tail, and body contacts slide instead of pinning the actor; every obstacle class is anchored to shared mile-marker coordinates after a three-marker safe runway; incompatible v0.6.1 autosaves start fresh; typography, panels, wrapping, and telemetry no longer overlap."
           if ($LASTEXITCODE -ne 0) { throw "Failed to publish v0.6.2" }
 
       - name: Record immutable evidence and remove hotfix branch
@@ -197,14 +193,14 @@ jobs:
               f"- Exact tested source commit: `{os.environ['SOURCE_SHA']}`",
               "- Windows runner: `windows-2025`",
               "- Generator: `Visual Studio 18 2026`",
-              "- Full SDL3/Vulkan/EpochGui application build: passed",
-              "- Passive biped heel/toe support regression: passed",
-              "- Foot traction versus head/tail/body sliding regression: passed",
-              "- World-anchored procedural debris regression: passed",
-              "- Responsive typography, wrapped status, and panel-layout integration: compiled and packaged",
-              "- Core, curriculum, rig, optimizer, and concurrency tests: passed",
+              "- Full SDL3 Vulkan EpochGui application build: passed",
+              "- Passive biped heel and toe support regression: passed",
+              "- Foot traction versus head tail and body sliding regression: passed",
+              "- Shared mile-marker schedule and all obstacle classes regression: passed",
+              "- Responsive typography wrapped status and panel layout: compiled and packaged",
+              "- Core curriculum rig optimizer and concurrency tests: passed",
               "- Executable version check: passed",
-              "- SDL3/Vulkan diagnostic: passed",
+              "- SDL3 Vulkan diagnostic: passed",
               f"- Package: `{os.environ['ARCHIVE']}`",
               f"- Package SHA-256: `{os.environ['CHECKSUM']}`",
               "",
