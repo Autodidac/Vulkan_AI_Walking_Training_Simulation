@@ -1,0 +1,53 @@
+name: Validate EpochRunner v0.7 asynchronous persistence
+
+on:
+  push:
+    branches:
+      - feature/v070-runtime-pipeline
+    paths:
+      - "tools/patch_v070_async_persistence.py"
+      - ".github/workflows/v070-persistence-validation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  validate-integrate:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout staged runtime branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/v070-runtime-pipeline
+          fetch-depth: 0
+
+      - name: Apply asynchronous persistence patch
+        shell: pwsh
+        run: |
+          python tools/patch_v070_async_persistence.py
+          git diff --check
+
+      - name: Configure Visual Studio 2026 core validation
+        run: >-
+          cmake -S . -B build/v070-persistence
+          -G "Visual Studio 18 2026" -A x64
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build asynchronous persistence runtime
+        run: cmake --build build/v070-persistence --config Release
+
+      - name: Run deterministic, coroutine, and persistence tests
+        run: ctest --test-dir build/v070-persistence -C Release --output-on-failure -V
+
+      - name: Integrate validated persistence runtime
+        shell: pwsh
+        run: |
+          Remove-Item tools/patch_v070_async_persistence.py
+          Remove-Item .github/workflows/v070-persistence-validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add immutable asynchronous checkpoint persistence"
+          git push origin HEAD:feature/v070-runtime-pipeline
