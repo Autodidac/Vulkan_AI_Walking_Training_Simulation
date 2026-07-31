@@ -13,6 +13,7 @@ permissions:
 env:
   VCPKG_ROOT: ${{ github.workspace }}\vcpkg
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+  VCPKG_CACHE_KEY: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
 
 jobs:
   build-test-package-release:
@@ -46,10 +47,11 @@ jobs:
           path: vcpkg
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: vcpkg-bincache
-          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
+          key: ${{ env.VCPKG_CACHE_KEY }}
           restore-keys: |
             vcpkg-windows-x64-vulkan-d015e31-
 
@@ -64,6 +66,13 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-bincache
+          key: ${{ env.VCPKG_CACHE_KEY }}
 
       - name: Build v0.4.1 Release
         shell: pwsh
@@ -93,6 +102,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
+          $sourceSha = (git rev-parse HEAD).Trim()
           $package = Join-Path $PWD "package/EpochRunner-v0.4.1-windows-x64"
           New-Item -ItemType Directory -Force $package | Out-Null
           cmake --install build/windows-release --config Release --prefix $package
@@ -101,7 +111,7 @@ jobs:
           Copy-Item README.md, LICENSE -Destination $package -Force
           @"
           EpochRunner 0.4.1
-          Source: ${{ github.sha }}
+          Source: $sourceSha
           Build: Windows x64 Release
           Stable defaults: quadruped-derived, limb-length-normalized motors
           Feet: passive heel/toe support on every non-quadruped preset
@@ -122,6 +132,14 @@ jobs:
           & .\EpochRunner.exe --diagnose-vulkan
           Pop-Location
 
+      - name: Retain validated release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpochRunner-v0.4.1-windows-x64
+          path: EpochRunner-v0.4.1-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Publish v0.4.1
         shell: pwsh
         env:
@@ -138,13 +156,7 @@ jobs:
 
           Also included: true alternating-foot gait validation, whole-window micro-motion detection, persistent rollout workers, live-preview refresh for verified best controllers, direct motor-bone validation, crash-resistant staged saves, standing-first curriculum reset, paged Rig Lab controls, and deferred slider commits.
           "@
-          if (gh release view v0.4.1 --repo $env:GH_REPO 2>$null) {
-            gh release upload v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --clobber
-            gh release edit v0.4.1 --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
-          }
-          else {
-            gh release create v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
-          }
+          gh release create v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
 
       - name: Close staging PR and remove every non-main branch
         shell: pwsh
@@ -154,7 +166,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           $ErrorActionPreference = "Stop"
-          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "v0.4.1 passed the Windows build, gait/autonomy/feet tests, visible version check, package check, and Vulkan diagnostic. The release was published directly from validated main source." 2>$null
+          $PSNativeCommandUseErrorActionPreference = $true
+          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "v0.4.1 passed the Windows build, gait/autonomy/feet tests, visible version check, package check, and Vulkan diagnostic. The release was published directly from validated main source."
           $branches = gh api "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" | ConvertFrom-Json
           foreach ($branch in $branches) {
             if ($branch.name -ne "main") {
