@@ -24,7 +24,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
-          cmake -S . -B build/core-diagnostic -G "Visual Studio 17 2022" -A x64 `
+          cmake -S . -B build/core-diagnostic -G "Visual Studio 18 2026" -A x64 `
             -DEPOCHRUNNER_BUILD_APP=OFF -DEPOCHRUNNER_BUILD_TESTS=ON 2>&1 |
             Tee-Object -FilePath configure.log
           exit $LASTEXITCODE
