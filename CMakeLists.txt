@@ -6,6 +6,7 @@ project(EpochRunner VERSION 0.6.0 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
+option(EPOCHRUNNER_ENABLE_TSAN "Instrument CPU-only tests with ThreadSanitizer." OFF)
 
 find_package(Threads REQUIRED)
 
@@ -43,7 +44,24 @@ function(epochrunner_enable_warnings target)
     endif()
 endfunction()
 
+function(epochrunner_enable_tsan target)
+    if(NOT EPOCHRUNNER_ENABLE_TSAN)
+        return()
+    endif()
+    if(MSVC)
+        message(FATAL_ERROR "ThreadSanitizer validation requires Clang or GCC on Linux.")
+    endif()
+    target_compile_options(${target} PRIVATE
+        -fsanitize=thread
+        -fno-omit-frame-pointer
+        -O1
+        -g
+    )
+    target_link_options(${target} PRIVATE -fsanitize=thread)
+endfunction()
+
 epochrunner_enable_warnings(EpochRunnerCore)
+epochrunner_enable_tsan(EpochRunnerCore)
 
 if(EPOCHRUNNER_BUILD_APP)
     include(FetchContent)
@@ -172,6 +190,7 @@ if(EPOCHRUNNER_BUILD_TESTS)
         CXX_EXTENSIONS OFF
     )
     epochrunner_enable_warnings(EpochRunnerCoreTests)
+    epochrunner_enable_tsan(EpochRunnerCoreTests)
     add_test(NAME EpochRunner.Core COMMAND EpochRunnerCoreTests)
 
     add_executable(EpochRunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
@@ -183,6 +202,20 @@ if(EPOCHRUNNER_BUILD_TESTS)
         CXX_EXTENSIONS OFF
     )
     epochrunner_enable_warnings(EpochRunnerConcurrencyBenchmark)
+    epochrunner_enable_tsan(EpochRunnerConcurrencyBenchmark)
     add_test(NAME EpochRunner.ConcurrencyBenchmark COMMAND EpochRunnerConcurrencyBenchmark)
-    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 30)
+    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
+
+    add_executable(EpochRunnerRuntimeStress tests/runtime_stress.cpp)
+    target_link_libraries(EpochRunnerRuntimeStress PRIVATE EpochRunner::Core)
+    target_compile_features(EpochRunnerRuntimeStress PRIVATE cxx_std_23)
+    set_target_properties(EpochRunnerRuntimeStress PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    epochrunner_enable_warnings(EpochRunnerRuntimeStress)
+    epochrunner_enable_tsan(EpochRunnerRuntimeStress)
+    add_test(NAME EpochRunner.RuntimeStress COMMAND EpochRunnerRuntimeStress)
+    set_tests_properties(EpochRunner.RuntimeStress PROPERTIES TIMEOUT 60)
 endif()
