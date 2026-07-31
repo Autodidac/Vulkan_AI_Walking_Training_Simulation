@@ -3,9 +3,12 @@
 #include "ppo.hpp"
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <mutex>
 #include <span>
@@ -28,6 +31,10 @@ namespace epochrunner::rl
         int rollback_count{};
         std::size_t rollout_threads{ 1 };
         std::size_t environment_count{};
+        std::size_t pending_commands{};
+        double updates_per_second{};
+        int speed_mode{ 1 };
+        bool worker_busy{};
         std::string message{ "LEARNING TO BALANCE" };
     };
 
@@ -42,9 +49,9 @@ namespace epochrunner::rl
 
         void synchronize();
         void set_background_enabled(bool enabled) noexcept;
-        [[nodiscard]] bool background_enabled() const noexcept { return enabled_.load(); }
+        [[nodiscard]] bool background_enabled() const noexcept { return enabled_.load(std::memory_order_relaxed); }
         void set_updates_per_cycle(int updates) noexcept;
-        [[nodiscard]] int updates_per_cycle() const noexcept { return updates_per_cycle_.load(); }
+        [[nodiscard]] int updates_per_cycle() const noexcept { return updates_per_cycle_.load(std::memory_order_relaxed); }
         void set_autosave_paths(std::filesystem::path checkpoint, std::filesystem::path rig,
             std::filesystem::path state);
         [[nodiscard]] bool load_autosave(std::string& message);
@@ -75,6 +82,23 @@ namespace epochrunner::rl
         [[nodiscard]] const AutonomyStatus& autonomy_status() const noexcept { return cached_status_; }
 
     private:
+        enum class CommandType : std::uint8_t
+        {
+            set_blueprint,
+            reset_policy,
+            set_exploration,
+            restore_best
+        };
+
+        struct PendingCommand
+        {
+            CommandType type{ CommandType::set_blueprint };
+            sim::CreatureBlueprint blueprint{};
+            bool preserve_policy{};
+            std::uint64_t seed{};
+            float scalar{};
+        };
+
         struct PublishedSnapshot
         {
             sim::CreatureBlueprint blueprint{};
@@ -90,15 +114,29 @@ namespace epochrunner::rl
             std::uint64_t serial{};
         };
 
+        enum class RoutineStage : std::uint8_t
+        {
+            idle,
+            commands,
+            trained,
+            published
+        };
+
         class TrainingRoutine
         {
         public:
             struct promise_type
             {
+                RoutineStage stage{ RoutineStage::idle };
+
                 [[nodiscard]] TrainingRoutine get_return_object() noexcept;
                 [[nodiscard]] std::suspend_always initial_suspend() const noexcept { return {}; }
                 [[nodiscard]] std::suspend_always final_suspend() const noexcept { return {}; }
-                [[nodiscard]] std::suspend_always yield_value(int) const noexcept { return {}; }
+                [[nodiscard]] std::suspend_always yield_value(RoutineStage value) noexcept
+                {
+                    stage = value;
+                    return {};
+                }
                 void return_void() const noexcept {}
                 void unhandled_exception() const noexcept;
             };
@@ -107,15 +145,25 @@ namespace epochrunner::rl
             TrainingRoutine(TrainingRoutine&& other) noexcept;
             TrainingRoutine& operator=(TrainingRoutine&& other) noexcept;
             ~TrainingRoutine();
-            [[nodiscard]] bool resume();
+            [[nodiscard]] RoutineStage resume();
 
         private:
             std::coroutine_handle<promise_type> handle_{};
         };
 
+        void enqueue_command(PendingCommand command);
+        [[nodiscard]] bool has_pending_work() const;
+        [[nodiscard]] std::size_t pending_command_count() const;
+        [[nodiscard]] bool consume_update_request() noexcept;
+        void apply_pending_commands();
+        void apply_command_locked(PendingCommand&& command);
+
         [[nodiscard]] TrainingRoutine training_routine(std::stop_token stop_token);
         void worker_main(std::stop_token stop_token);
-        void run_training_cycle();
+        void perform_training_update();
+        void perform_post_update();
+        void throttle_after_update() const;
+
         void manage_curriculum_locked();
         void attempt_rig_evolution_locked();
         [[nodiscard]] float evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const;
@@ -129,6 +177,11 @@ namespace epochrunner::rl
 
         mutable std::mutex worker_mutex_{};
         mutable std::mutex snapshot_mutex_{};
+        mutable std::mutex command_mutex_{};
+        mutable std::mutex wake_mutex_{};
+        std::condition_variable_any wake_cv_{};
+        std::deque<PendingCommand> command_queue_{};
+
         PpoTrainer worker_;
         PpoTrainer live_;
         sim::CreatureBlueprint live_blueprint_{};
@@ -157,9 +210,16 @@ namespace epochrunner::rl
         int degradation_streak_{};
         int rollback_count_{};
         std::string worker_message_{ "LEARNING TO BALANCE" };
+
+        std::chrono::steady_clock::time_point rate_window_started_{ std::chrono::steady_clock::now() };
+        std::uint64_t rate_window_updates_{};
+        double worker_updates_per_second_{};
+
         std::atomic_bool enabled_{ false };
         std::atomic_int updates_per_cycle_{ 1 };
         std::atomic_uint32_t requested_updates_{};
+        std::atomic_bool worker_busy_{ false };
+        std::atomic_int64_t last_update_nanoseconds_{};
         std::jthread worker_thread_{};
     };
 }
