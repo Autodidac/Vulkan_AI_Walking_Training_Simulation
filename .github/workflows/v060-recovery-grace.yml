@@ -1,0 +1,48 @@
+name: Integrate recoverable near-fall grace
+
+on:
+  push:
+    paths:
+      - "tools/patch_recovery_grace.py"
+      - ".github/workflows/v060-recovery-grace.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-integrate:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout current source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply near-fall recovery grace
+        run: python tools/patch_recovery_grace.py
+
+      - name: Configure core MSVC validation
+        run: >-
+          cmake -S . -B build/v060-recovery-validation
+          -G "Visual Studio 18 2026" -A x64
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build recovery changes
+        run: cmake --build build/v060-recovery-validation --config Release
+
+      - name: Test recovery changes
+        run: ctest --test-dir build/v060-recovery-validation -C Release --output-on-failure -V
+
+      - name: Integrate validated recovery behavior
+        shell: pwsh
+        run: |
+          Remove-Item tools/patch_recovery_grace.py
+          Remove-Item .github/workflows/v060-recovery-grace.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Allow bounded recovery from near-falls"
+          git pull --rebase origin main
+          git push origin HEAD:main
