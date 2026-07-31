@@ -110,6 +110,8 @@ namespace epochrunner::rl
     void AutonomousTrainer::set_background_enabled(bool enabled) noexcept
     {
         enabled_.store(enabled, std::memory_order_relaxed);
+        if (!enabled)
+            requested_updates_.store(0u, std::memory_order_relaxed);
         wake_cv_.notify_all();
     }
 

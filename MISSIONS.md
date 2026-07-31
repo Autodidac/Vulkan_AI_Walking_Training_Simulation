@@ -189,6 +189,68 @@ Every physical obstacle class must expose its actual collision size to the polic
 - Hard falls remain terminal.
 - Full Windows/Vulkan build, deterministic tests, diagnostics, package, and checksum pass.
 
+## WALK-PHYS-001 — Biped support, traction, and world-anchored debris
+
+**Status:** VERIFIED
+
+Passive heel/toe geometry must participate in semantic left/right support. Designated feet require usable traction, while incidental head, tail, and body contacts must not pin the creature. Procedural rocks, hazards, and debris must remain in course/world coordinates and may not inherit actor translation.
+
+**Acceptance:**
+
+- Passive biped heel/toe contacts drive support observations, gait validation, airborne checks, rewards, and recovery.
+- Foot contact retains substantially less horizontal velocity than incidental body contact.
+- Head, tail, and torso ground contact slide rather than becoming unintended brakes.
+- A course feature's world position depends on its stable sequence and course progress, never root position.
+- Incompatible v0.6.1 autosaves are not resumed automatically.
+- Full Windows/Vulkan build, deterministic tests, Vulkan diagnostic, package, checksum, and exact-source evidence pass.
+
+## WALK-UI-002 — Readable responsive telemetry
+
+**Status:** VERIFIED
+
+The live and rig interfaces must remain readable at ordinary desktop sizes. Text may not overlap adjacent labels, buttons, cards, or the title bar. Long status messages must wrap or fit within their panel instead of being clipped into neighboring content.
+
+**Acceptance:**
+
+- Increase the default bitmap-font scale and minimum fitted scale.
+- Use a taller responsive title bar with non-overlapping tabs and subtitle.
+- Give live and rig side panels enough width for their controls.
+- Group live metrics into readable cards with larger vertical spacing.
+- Wrap long trainer/status lines and fit world telemetry to viewport width.
+- Full Windows/Vulkan build and executable diagnostics pass with the responsive layout.
+
+## WALK-COURSE-002 — Mile-marker obstacle schedule
+
+**Status:** VERIFIED
+
+All generated course elements must be anchored to shared course/mile-marker coordinates rather than actor position. Rocks, hurdles, overhead bars, moving hazards, and thrown projectiles must each appear in the advanced lesson. Every lesson receives a visible safe runway before its first obstacle, while bounded virtual course speed keeps the next marker from taking excessive real time to arrive.
+
+**Acceptance:**
+
+- Marker rendering and obstacle generation use the same spacing constant.
+- The first three markers form a 24-metre safe runway.
+- Advanced lessons cycle rock, hurdle, overhead bar, moving hazard, and projectile on consecutive markers.
+- Moving hazards oscillate around their marker; projectiles originate and arc around their marker.
+- No obstacle position includes actor/root translation.
+- Virtual course speed brings the first obstacle into view promptly without removing the safe runway.
+- Full Windows/Vulkan build, deterministic schedule tests, diagnostics, package, and exact-source evidence pass.
+
+## WALK-GAIT-002 — Real stepping instead of wheel sliding
+
+**Status:** VERIFIED
+
+Forward reward must represent foot-led alternating walking, not a body sliding across planted contacts. A knee may not clear a rock or hurdle before its corresponding foot. Sustained double-supported sliding is an invalid gait exploit.
+
+**Acceptance:**
+
+- Zero-step sliding receives no positive forward-progress multiplier.
+- Alternating contact plus visible swing-foot clearance earns the strongest gait multiplier.
+- Grounded foot-cluster slip is measured and penalized.
+- Sustained double-supported root motion with slipping feet terminates as wheel sliding.
+- Knee-before-foot traversal over rocks or hurdles receives a strong per-step penalty and increments telemetry.
+- Foot-first traversal is not penalized.
+- Full Windows/Vulkan build, deterministic gait tests, diagnostics, package, and exact-source evidence pass.
+
 ## Current warning
 
-EpochRunner v0.6.1 passed the full Windows/Vulkan build, complete obstacle observation tests, recovery reward-integrity tests, concurrency benchmark, runtime diagnostics, and package gate. Remaining ACTIVE/OPEN missions carry forward unchanged.
+EpochRunner v0.6.2 passed the full Windows/Vulkan build, biped support and traction tests, real-step gait and knee-before-foot tests, world-anchored mile-marker obstacle schedule tests, responsive UI compilation, concurrency benchmark, runtime diagnostics, and package gate. Remaining ACTIVE and OPEN missions carry forward unchanged.

@@ -78,6 +78,49 @@ int main()
     require(std::abs(sim::course_feature_observation_size(hurdle_feature) - 0.42f) < 0.0001f,
         "rectangular obstacle extent is incorrect in policy observations");
 
+    require(sim::ground_velocity_retention(true, 0.0f)
+        < sim::ground_velocity_retention(false, 0.0f),
+        "feet do not receive more ground traction than head, tail, or body nodes");
+    require(sim::ground_velocity_retention(false, 0.0f) >= 0.95f,
+        "non-foot body contact can still pin the creature to the ground");
+    const int anchored_sequence = sim::first_course_feature_sequence(1.0f, 3.0f);
+    const float anchored_x = sim::course_feature_world_x(anchored_sequence, 3.0f);
+    const float advanced_x = sim::course_feature_world_x(anchored_sequence, 4.0f);
+    require(std::abs((advanced_x - anchored_x) + 1.0f) < 0.0001f,
+        "course debris does not advance in world space solely from course progress");
+    require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
+        "course mile-marker spacing is not shared with obstacle scheduling");
+    require(sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 3)
+            == sim::CourseFeatureKind::rock
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 4)
+            == sim::CourseFeatureKind::hurdle
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 5)
+            == sim::CourseFeatureKind::overhead_bar
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 6)
+            == sim::CourseFeatureKind::moving_hazard
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 7)
+            == sim::CourseFeatureKind::projectile,
+        "moving-hazard lesson does not schedule every obstacle class on consecutive markers");
+    require(sim::course_marker_distance_m(sim::course_safe_runway_markers) >= 24.0f,
+        "course does not provide enough safe runway before the first obstacle marker");
+    sim::CourseFeature rock_order{};
+    rock_order.kind = sim::CourseFeatureKind::rock;
+    rock_order.center = { 1.0f, 0.25f };
+    rock_order.radius = 0.25f;
+    require(sim::knee_crosses_before_foot(1.12f, 0.92f, 0.34f, rock_order),
+        "knee-first rock traversal is not detected");
+    require(!sim::knee_crosses_before_foot(1.12f, 1.32f, 0.34f, rock_order),
+        "foot-first rock traversal is incorrectly penalized");
+    require(sim::gait_progress_multiplier(0, false, 0.0f) == 0.0f,
+        "sliding without a real step still receives walking progress credit");
+    require(sim::gait_progress_multiplier(2, true, 0.18f)
+            > sim::gait_progress_multiplier(0, true, 0.18f),
+        "alternating lifted-foot gait does not receive stronger progress credit");
+    require(sim::wheel_sliding_motion(0.45f, true, true, 0.50f),
+        "double-supported wheel-like sliding is not detected");
+    require(!sim::wheel_sliding_motion(0.45f, true, false, 0.50f),
+        "single-support walking is incorrectly classified as wheel sliding");
+
     const std::array<sim::CreatureBlueprint, 5> presets{
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
@@ -122,6 +165,25 @@ int main()
             "quadruped-stable backward travel was not applied");
         require(std::abs((motor.maximum_angle - motor.neutral_angle) * 180.0f / pi - expected_travel) < 0.05f,
             "quadruped-stable forward travel was not applied");
+    }
+
+    {
+        sim::Environment biped_support{ humanoid, 0xFEE7u };
+        biped_support.set_course(sim::CourseStage::balance, 0.25f);
+        const std::array<float, sim::action_count> zero_actions{};
+        bool support_observed = false;
+        for (int frame = 0; frame < 60; ++frame)
+        {
+            const sim::StepResult result = biped_support.step(zero_actions);
+            support_observed = support_observed
+                || biped_support.left_supported() || biped_support.right_supported();
+            if (result.terminated)
+                break;
+        }
+        require(support_observed,
+            "passive biped heel/toe nodes never became valid support contacts");
+        require(biped_support.invalid_reason() != sim::InvalidMotion::sustained_flight,
+            "grounded passive biped feet were still classified as flying");
     }
 
     for (std::size_t stage_index = 0; stage_index < sim::course_stage_count; ++stage_index)
@@ -263,6 +325,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "EpochRunner v0.6.1 obstacle observation, recovery, concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "EpochRunner v0.6.2 obstacle observation, recovery, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }

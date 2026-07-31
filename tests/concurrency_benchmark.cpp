@@ -95,6 +95,6 @@ int main()
     require(maximum.updates_per_second > normal.updates_per_second,
         "MAX CPU did not exceed NORMAL measured throughput");
 
-    std::cout << "EpochRunner v0.6.1 speed-mode throughput benchmark passed\n";
+    std::cout << "EpochRunner v0.6.2 speed-mode throughput benchmark passed\n";
     return EXIT_SUCCESS;
 }

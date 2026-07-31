@@ -1,6 +1,18 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.1 completes radial obstacle observations and closes the harmless-contact recovery reward exploit while retaining the autonomous curriculum introduced in v0.6.0.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.2 restores real biped foot support and traction, prevents head/tail/body contacts from pinning the actor, and keeps rocks and other course debris anchored to the moving course instead of the creature.
+
+## Biped traction and world anchoring hotfix
+
+Passive heel/toe triangles now count as the left or right support cluster used by observations, gait validation, airborne checks, rewards, and recovery. Only those designated foot clusters receive strong traction; incidental head, tail, or torso contact slides instead of acting like an unintended brake. Procedural rocks and hazards use stable sequence/world coordinates and no longer inherit root translation. Version-specific autosaves prevent incompatible v0.6.1 controllers from silently resuming under the corrected contact model.
+
+The v0.6.2 interface also uses larger typography, wider responsive side panels, wrapped trainer messages, grouped runtime/result cards, and split world telemetry so labels remain readable instead of overlapping.
+
+Course markers and obstacles now share one eight-metre schedule. Each lesson starts with three clear markers of safe runway, then advanced training cycles rocks, hurdles, overhead bars, moving hazards, and thrown projectiles at consecutive markers. The virtual course moves quickly enough to reach those events in practical training time while every feature remains anchored to course coordinates rather than following the actor.
+
+Walking reward now requires foot-led gait evidence. Sliding forward with both feet planted receives no startup progress credit, grounded foot slip is penalized, sustained wheel-like motion is a hard invalid gate, and a knee crossing a rock or hurdle before its corresponding foot receives an explicit penalty and visible fault count.
+
+Pausing background training now clears queued single-update backlog immediately, and the unused PPO constant that blocked strict Linux warning builds has been removed.
 
 
 ## Procedural obstacle and recovery treadmill
