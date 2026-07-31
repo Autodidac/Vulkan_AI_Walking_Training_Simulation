@@ -1,0 +1,62 @@
+name: Integrate validated EpochRunner v0.6.0 source
+
+on:
+  push:
+    paths:
+      - ".github/workflows/v060-source-integrate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-source:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply idempotent v0.6 source integration
+        shell: pwsh
+        run: |
+          python tools/integrate_v060.py
+          @'
+          from pathlib import Path
+
+          path = Path("MISSIONS.md")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("## WALK-COURSE-001")
+          end = text.index("## Current warning", start)
+          section = text[start:end].replace("**Status:** VERIFIED", "**Status:** ACTIVE", 1)
+          text = text[:start] + section + text[end:]
+          path.write_text(text, encoding="utf-8")
+          '@ | python -
+          git diff --check
+
+      - name: Configure core-only MSVC validation
+        run: >-
+          cmake -S . -B build/v060-source-validation
+          -G "Visual Studio 18 2026" -A x64
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build integrated source
+        run: cmake --build build/v060-source-validation --config Release
+
+      - name: Test integrated source
+        run: ctest --test-dir build/v060-source-validation -C Release --output-on-failure -V
+
+      - name: Commit validated source to main
+        shell: pwsh
+        run: |
+          Remove-Item tools/integrate_v060.py
+          Remove-Item .github/workflows/v060-source-integrate.yml
+          Remove-Item .github/workflows/v060-integrate-release.yml -ErrorAction SilentlyContinue
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Integrate EpochRunner v0.6.0 procedural obstacle recovery course"
+          git pull --rebase origin main
+          git push origin HEAD:main
