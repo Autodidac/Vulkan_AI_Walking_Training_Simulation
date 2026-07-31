@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochRunner VERSION 0.4.0 LANGUAGES CXX)
+project(EpochRunner VERSION 0.4.1 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -128,6 +128,7 @@ if(EPOCHRUNNER_BUILD_APP)
     )
     target_compile_features(EpochRunner PRIVATE cxx_std_23)
     target_compile_definitions(EpochRunner PRIVATE
+        EPOCHRUNNER_VERSION="${PROJECT_VERSION}"
         EPOCHRUNNER_SHADER_DIRECTORY="shaders"
         EPOCHRUNNER_ASSET_DIRECTORY="assets"
     )

@@ -18,7 +18,7 @@ namespace epochrunner::rl
 {
     struct AutonomyStatus
     {
-        bool enabled{ true };
+        bool enabled{ false };
         sim::CourseStage stage{ sim::CourseStage::balance };
         float difficulty{ 0.25f };
         std::uint64_t rig_generation{};
@@ -157,7 +157,7 @@ namespace epochrunner::rl
         int degradation_streak_{};
         int rollback_count_{};
         std::string worker_message_{ "LEARNING TO BALANCE" };
-        std::atomic_bool enabled_{ true };
+        std::atomic_bool enabled_{ false };
         std::atomic_int updates_per_cycle_{ 1 };
         std::atomic_uint32_t requested_updates_{};
         std::jthread worker_thread_{};

@@ -30,13 +30,16 @@ namespace epochrunner::rl
         }
     }
 
-    PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count)
+    PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count,
+        bool enable_rollout_workers)
         : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu)
     {
         environment_count = std::clamp<std::size_t>(environment_count, 8, 256);
         const std::size_t hardware = std::max<std::size_t>(1, std::thread::hardware_concurrency());
         const std::size_t available = hardware > 2 ? hardware - 2 : hardware;
-        rollout_worker_count_ = std::clamp<std::size_t>(available, 1, std::min<std::size_t>(16, environment_count));
+        rollout_worker_count_ = enable_rollout_workers
+            ? std::clamp<std::size_t>(available, 1, std::min<std::size_t>(16, environment_count))
+            : 0;
 
         environments_.reserve(environment_count);
         for (std::size_t index = 0; index < environment_count; ++index)
@@ -49,6 +52,88 @@ namespace epochrunner::rl
         episode_distances_.assign(environment_count, 0.0f);
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
+        rollout_worker_totals_.resize(rollout_worker_count_);
+        rollout_workers_.reserve(rollout_worker_count_);
+        for (std::size_t worker = 0; worker < rollout_worker_count_; ++worker)
+        {
+            rollout_workers_.emplace_back([this, worker](std::stop_token stop_token)
+            {
+                rollout_worker_main(worker, stop_token);
+            });
+        }
+    }
+
+    PpoTrainer::~PpoTrainer()
+    {
+        for (std::jthread& worker : rollout_workers_)
+            worker.request_stop();
+        rollout_start_cv_.notify_all();
+        rollout_workers_.clear();
+    }
+
+    PpoTrainer::RolloutTotals PpoTrainer::collect_rollout_partition(std::size_t worker_index,
+        std::size_t worker_count, std::uint64_t update_seed)
+    {
+        RolloutTotals totals{};
+        std::uint64_t local_random = update_seed ^ (worker_index + 1u) * 0xD1B54A32D192ED03ULL;
+        const std::size_t environment_count = environments_.size();
+        for (std::size_t environment_index = worker_index; environment_index < environment_count;
+            environment_index += worker_count)
+        {
+            sim::Environment& environment = environments_[environment_index];
+            for (std::size_t step = 0; step < rollout_horizon; ++step)
+            {
+                Transition& transition = rollout_[step * environment_count + environment_index];
+                transition.observation = environment.observation();
+                const PolicyNetwork::Evaluation evaluation = policy_.evaluate(transition.observation);
+                transition.value = evaluation.value;
+                transition.action = sample_action(evaluation, local_random, transition.log_probability);
+                const sim::StepResult result = environment.step(transition.action);
+                transition.reward = result.reward;
+                transition.terminal = result.terminated;
+                episode_rewards_[environment_index] += result.reward;
+                episode_distances_[environment_index] = environment.distance_travelled();
+                totals.accumulated_speed += result.forward_speed;
+                if (result.terminated)
+                {
+                    totals.completed_reward += episode_rewards_[environment_index];
+                    totals.completed_distance += episode_distances_[environment_index];
+                    ++totals.completed_episodes;
+                    episode_rewards_[environment_index] = 0.0f;
+                    episode_distances_[environment_index] = 0.0f;
+                    environment.reset(0x100000u + metrics_.environment_steps
+                        + environment_index * 17u + step + metrics_.update * 131u);
+                }
+            }
+        }
+        return totals;
+    }
+
+    void PpoTrainer::rollout_worker_main(std::size_t worker_index, std::stop_token stop_token)
+    {
+        std::uint64_t observed_generation = 0;
+        while (!stop_token.stop_requested())
+        {
+            std::uint64_t update_seed = 0;
+            {
+                std::unique_lock lock(rollout_mutex_);
+                rollout_start_cv_.wait(lock, stop_token, [this, observed_generation]
+                {
+                    return rollout_generation_ != observed_generation;
+                });
+                if (stop_token.stop_requested())
+                    return;
+                observed_generation = rollout_generation_;
+                update_seed = rollout_update_seed_;
+            }
+            RolloutTotals totals = collect_rollout_partition(worker_index, rollout_worker_count_, update_seed);
+            {
+                std::scoped_lock lock(rollout_mutex_);
+                rollout_worker_totals_[worker_index] = totals;
+                ++rollout_completed_;
+            }
+            rollout_done_cv_.notify_one();
+        }
     }
 
     void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
@@ -177,66 +262,44 @@ namespace epochrunner::rl
 
     void PpoTrainer::train_one_update()
     {
-        constexpr std::size_t horizon = 128;
+        constexpr std::size_t horizon = rollout_horizon;
         constexpr float gamma = 0.995f;
         constexpr float gae_lambda = 0.95f;
         const std::size_t environment_count = environments_.size();
         rollout_.clear();
         rollout_.resize(horizon * environment_count);
 
-        std::vector<RolloutTotals> worker_totals(rollout_worker_count_);
-        std::vector<std::jthread> workers{};
-        workers.reserve(rollout_worker_count_);
         const std::uint64_t update_seed = random_state_ ^ (metrics_.update + 1u) * 0x9E3779B97F4A7C15ULL;
-        for (std::size_t worker = 0; worker < rollout_worker_count_; ++worker)
-        {
-            workers.emplace_back([&, worker]
-            {
-                RolloutTotals totals{};
-                std::uint64_t local_random = update_seed ^ (worker + 1u) * 0xD1B54A32D192ED03ULL;
-                for (std::size_t environment_index = worker; environment_index < environment_count;
-                    environment_index += rollout_worker_count_)
-                {
-                    sim::Environment& environment = environments_[environment_index];
-                    for (std::size_t step = 0; step < horizon; ++step)
-                    {
-                        Transition& transition = rollout_[step * environment_count + environment_index];
-                        transition.observation = environment.observation();
-                        const PolicyNetwork::Evaluation evaluation = policy_.evaluate(transition.observation);
-                        transition.value = evaluation.value;
-                        transition.action = sample_action(evaluation, local_random, transition.log_probability);
-                        const sim::StepResult result = environment.step(transition.action);
-                        transition.reward = result.reward;
-                        transition.terminal = result.terminated;
-                        episode_rewards_[environment_index] += result.reward;
-                        episode_distances_[environment_index] = environment.distance_travelled();
-                        totals.accumulated_speed += result.forward_speed;
-                        if (result.terminated)
-                        {
-                            totals.completed_reward += episode_rewards_[environment_index];
-                            totals.completed_distance += episode_distances_[environment_index];
-                            ++totals.completed_episodes;
-                            episode_rewards_[environment_index] = 0.0f;
-                            episode_distances_[environment_index] = 0.0f;
-                            environment.reset(0x100000u + metrics_.environment_steps
-                                + environment_index * 17u + step + metrics_.update * 131u);
-                        }
-                    }
-                }
-                worker_totals[worker] = totals;
-            });
-        }
-        workers.clear();
-        random_state_ ^= update_seed + 0xA0761D6478BD642FULL;
-
         RolloutTotals totals{};
-        for (const RolloutTotals& worker : worker_totals)
+        if (rollout_workers_.empty())
         {
-            totals.accumulated_speed += worker.accumulated_speed;
-            totals.completed_reward += worker.completed_reward;
-            totals.completed_distance += worker.completed_distance;
-            totals.completed_episodes += worker.completed_episodes;
+            totals = collect_rollout_partition(0, 1, update_seed);
         }
+        else
+        {
+            {
+                std::scoped_lock lock(rollout_mutex_);
+                rollout_completed_ = 0;
+                rollout_update_seed_ = update_seed;
+                ++rollout_generation_;
+            }
+            rollout_start_cv_.notify_all();
+            {
+                std::unique_lock lock(rollout_mutex_);
+                rollout_done_cv_.wait(lock, [this]
+                {
+                    return rollout_completed_ == rollout_worker_count_;
+                });
+            }
+            for (const RolloutTotals& worker : rollout_worker_totals_)
+            {
+                totals.accumulated_speed += worker.accumulated_speed;
+                totals.completed_reward += worker.completed_reward;
+                totals.completed_distance += worker.completed_distance;
+                totals.completed_episodes += worker.completed_episodes;
+            }
+        }
+        random_state_ ^= update_seed + 0xA0761D6478BD642FULL;
 
         std::vector<float> next_values(environment_count, 0.0f);
         for (std::size_t environment_index = 0; environment_index < environment_count; ++environment_index)

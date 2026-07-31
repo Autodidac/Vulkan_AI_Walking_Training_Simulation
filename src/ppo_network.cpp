@@ -41,11 +41,11 @@ namespace epochrunner::rl
         for (std::size_t index = 0; index < hidden_size * hidden_size; ++index)
             parameters_[layout_.w2 + index] = random_normal() * scale2;
         for (std::size_t index = 0; index < output_size * hidden_size; ++index)
-            parameters_[layout_.actor_w + index] = random_normal() * 0.01f;
+            parameters_[layout_.actor_w + index] = random_normal() * 0.0035f;
         for (std::size_t index = 0; index < hidden_size; ++index)
             parameters_[layout_.value_w + index] = random_normal() * 0.01f;
         for (std::size_t index = 0; index < output_size; ++index)
-            parameters_[layout_.log_std + index] = std::log(0.14f);
+            parameters_[layout_.log_std + index] = std::log(0.08f);
     }
 
     float PolicyNetwork::random_normal() noexcept

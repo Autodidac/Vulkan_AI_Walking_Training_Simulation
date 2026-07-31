@@ -5,8 +5,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <condition_variable>
 #include <filesystem>
 #include <limits>
+#include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
@@ -139,7 +141,9 @@ namespace epochrunner::rl
     class PpoTrainer
     {
     public:
-        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 64);
+        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 64,
+            bool enable_rollout_workers = true);
+        ~PpoTrainer();
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
@@ -212,6 +216,10 @@ namespace epochrunner::rl
         void reset_training_state(bool clear_best = true) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
         void append_history(std::vector<float>& history, float value);
+        [[nodiscard]] RolloutTotals collect_rollout_partition(std::size_t worker_index,
+            std::size_t worker_count, std::uint64_t update_seed);
+        void rollout_worker_main(std::size_t worker_index, std::stop_token stop_token);
+        static constexpr std::size_t rollout_horizon = 128;
 
         sim::CreatureBlueprint blueprint_{};
         std::vector<sim::Environment> environments_{};
@@ -229,6 +237,14 @@ namespace epochrunner::rl
         sim::CourseStage course_stage_{ sim::CourseStage::balance };
         float course_difficulty_{ 0.25f };
         std::size_t rollout_worker_count_{ 1 };
+        std::vector<RolloutTotals> rollout_worker_totals_{};
+        std::mutex rollout_mutex_{};
+        std::condition_variable_any rollout_start_cv_{};
+        std::condition_variable rollout_done_cv_{};
+        std::uint64_t rollout_generation_{};
+        std::uint64_t rollout_update_seed_{};
+        std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
+        std::vector<std::jthread> rollout_workers_{};
     };
 }

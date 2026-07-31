@@ -1,8 +1,10 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.4 replaces manual train/run switching with a continuously operating autonomous curriculum.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.4.1 replaces manual train/run switching with a continuously operating autonomous curriculum.
 
 ## Default workflow
+
+Version 0.4.1 visibly identifies itself in the title bar and UI, uses uniquely named release assets and clean autosaves, rejects synchronized hopping as walking, applies motors to the full driven subtree, and keeps persistent rollout workers instead of recreating threads every update.
 
 The application starts in **Live Autopilot**. The foreground renders one current best verified controller while background CPU workers train 64 non-rendered environments. Vulkan remains dedicated to presentation instead of drawing every training agent.
 
@@ -30,6 +32,13 @@ A controller or rig candidate cannot become the published best when any determin
 - fails to produce alternating foot contacts after the balance lesson.
 
 Invalid episodes terminate immediately and receive a large penalty. These are hard gates, not merely weak reward preferences.
+
+
+### Quadruped-stable bodies and real feet
+
+Every built-in body now derives its motor defaults from the stable quadruped profile. Hips/shoulders use a symmetric 22-degree envelope and knees use 30 degrees. Power is normalized by driven-limb length, so a longer humanoid leg receives the same effective endpoint correction as the quadruped instead of being launched by the same raw strength.
+
+Bipeds, humanoids, chickens, and monopeds now have passive heel/toe triangles rather than balancing on one circular contact point. Every episode begins with a short no-control settling period and a smooth motor ramp, while fresh policies start with lower output weights and exploration. This preserves each body shape while copying the quadruped's stable startup behavior.
 
 ## Human-calibrated defaults
 

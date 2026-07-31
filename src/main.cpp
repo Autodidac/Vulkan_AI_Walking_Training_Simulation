@@ -20,11 +20,21 @@
 #define EPOCHRUNNER_ASSET_DIRECTORY "assets"
 #endif
 
+#ifndef EPOCHRUNNER_VERSION
+#define EPOCHRUNNER_VERSION "development"
+#endif
+
 namespace
 {
     [[nodiscard]] bool is_down(SDL_MouseButtonFlags buttons, SDL_MouseButtonFlags button) noexcept
     {
         return (buttons & button) != 0;
+    }
+
+    [[nodiscard]] bool wants_version(int argc, char** argv) noexcept
+    {
+        return argc > 1 && argv != nullptr && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--version";
     }
 
     [[nodiscard]] bool wants_vulkan_diagnostic(int argc, char** argv) noexcept
@@ -44,6 +54,11 @@ namespace
 
 int main(int argc, char** argv)
 {
+    if (wants_version(argc, argv))
+    {
+        std::printf("EpochRunner %s\n", EPOCHRUNNER_VERSION);
+        return 0;
+    }
     const bool diagnostic = wants_vulkan_diagnostic(argc, argv);
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
@@ -59,7 +74,7 @@ int main(int argc, char** argv)
         {
             const char* video_driver = SDL_GetCurrentVideoDriver();
             std::printf(
-                "SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; "
+                "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; "
                 "the CI runner has no Vulkan presentation surface (%s)\n",
                 video_driver != nullptr ? video_driver : "unknown",
                 vulkan_error.c_str());
@@ -90,7 +105,7 @@ int main(int argc, char** argv)
     {
         const char* video_driver = SDL_GetCurrentVideoDriver();
         std::printf(
-            "SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
+            "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
             video_driver != nullptr ? video_driver : "unknown",
             static_cast<unsigned int>(instance_extension_count));
         SDL_Vulkan_UnloadLibrary();
@@ -99,7 +114,7 @@ int main(int argc, char** argv)
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "EpochRunner - Autonomous Vulkan Locomotion Lab",
+        "EpochRunner v" EPOCHRUNNER_VERSION " - Autonomous Vulkan Locomotion Lab",
         1760,
         1040,
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -110,7 +125,7 @@ int main(int argc, char** argv)
         SDL_Quit();
         return 1;
     }
-    SDL_SetWindowMinimumSize(window, 1100, 720);
+    SDL_SetWindowMinimumSize(window, 1100, 760);
 
     epochrunner::render::VulkanRenderer renderer{};
     std::string error{};

@@ -52,7 +52,7 @@ namespace epochrunner::rl
     }
 
     AutonomousTrainer::AutonomousTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count)
-        : worker_(blueprint, environment_count), live_(blueprint, 8), live_blueprint_(blueprint)
+        : worker_(blueprint, environment_count), live_(blueprint, 8, false), live_blueprint_(blueprint)
     {
         worker_.set_course(stage_, difficulty_, false);
         live_.set_course(stage_, difficulty_, false);
@@ -74,6 +74,10 @@ namespace epochrunner::rl
         }
 
         const bool rig_changed = snapshot.blueprint.signature() != live_blueprint_.signature();
+        const bool best_changed = snapshot.has_best
+            && snapshot.metrics.best_update != cached_metrics_.best_update;
+        const bool course_changed = snapshot.status.stage != cached_status_.stage
+            || std::abs(snapshot.status.difficulty - cached_status_.difficulty) > 1.0e-5f;
         if (rig_changed)
         {
             live_blueprint_ = snapshot.blueprint;
@@ -81,8 +85,8 @@ namespace epochrunner::rl
         }
         live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
         live_.policy().parameters() = snapshot.parameters;
-        if (rig_changed)
-            live_.reset_preview(0xDEADBEEFu + snapshot.metrics.update);
+        if (rig_changed || best_changed || course_changed)
+            live_.reset_preview(0xDEADBEEFu + snapshot.metrics.update + snapshot.metrics.best_update);
 
         cached_metrics_ = snapshot.metrics;
         cached_reward_history_ = std::move(snapshot.reward_history);
@@ -160,6 +164,15 @@ namespace epochrunner::rl
     void AutonomousTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
         std::scoped_lock lock(worker_mutex_);
+        if (!preserve_policy)
+        {
+            stage_ = sim::CourseStage::balance;
+            difficulty_ = 0.25f;
+            rig_generation_ = 0;
+            accepted_rig_changes_ = 0;
+            rejected_rig_changes_ = 0;
+            rollback_count_ = 0;
+        }
         worker_.set_blueprint(blueprint, preserve_policy);
         worker_.set_course(stage_, difficulty_, false);
         mastery_streak_ = 0;
@@ -272,7 +285,10 @@ namespace epochrunner::rl
             }
             if (!routine.resume())
                 break;
-            std::this_thread::yield();
+            if (updates_per_cycle_.load() < 4)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            else
+                std::this_thread::yield();
         }
     }
 
@@ -567,12 +583,20 @@ namespace epochrunner::rl
     {
         if (autosave_state_.empty())
             return;
-        std::ofstream output(autosave_state_, std::ios::trunc);
+        const std::filesystem::path temporary = autosave_state_.string() + ".tmp";
+        std::ofstream output(temporary, std::ios::trunc);
         if (!output)
             return;
-        output << "EPOCHAUTONOMY 1\n";
+        output << "EPOCHAUTONOMY 2\n";
         output << static_cast<int>(stage_) << ' ' << difficulty_ << ' ' << rig_generation_ << ' '
             << accepted_rig_changes_ << ' ' << rejected_rig_changes_ << ' ' << rollback_count_ << '\n';
+        output.close();
+        if (!output)
+            return;
+        std::error_code filesystem_error{};
+        std::filesystem::remove(autosave_state_, filesystem_error);
+        filesystem_error.clear();
+        std::filesystem::rename(temporary, autosave_state_, filesystem_error);
     }
 
     void AutonomousTrainer::read_state_locked()
@@ -585,7 +609,7 @@ namespace epochrunner::rl
         int stage{};
         input >> magic >> version >> stage >> difficulty_ >> rig_generation_
             >> accepted_rig_changes_ >> rejected_rig_changes_ >> rollback_count_;
-        if (!input || magic != "EPOCHAUTONOMY" || version != 1 || stage < 0
+        if (!input || magic != "EPOCHAUTONOMY" || version != 2 || stage < 0
             || stage >= static_cast<int>(sim::course_stage_count))
         {
             stage_ = sim::CourseStage::balance;

@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <limits>
 #include <string>
+#include <system_error>
 
 namespace epochrunner::sim
 {
@@ -24,6 +25,49 @@ namespace epochrunner::sim
             {
                 return (bone.a == a && bone.b == b) || (bone.a == b && bone.b == a);
             });
+        }
+
+        void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
+            float toe_reach = 0.34f) noexcept
+        {
+            auto add_foot = [&](std::uint16_t ankle)
+            {
+                if (ankle >= rig.nodes.size() || rig.nodes.size() > 124)
+                    return;
+                const Vec2 center = rig.nodes[ankle];
+                const float radius = ankle < rig.radii.size()
+                    ? clamp(rig.radii[ankle] * 0.72f, 0.10f, 0.15f) : 0.12f;
+                const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
+                rig.nodes.push_back({ center.x - heel_reach, center.y - 0.01f });
+                rig.radii.push_back(radius);
+                const auto toe = static_cast<std::uint16_t>(rig.nodes.size());
+                rig.nodes.push_back({ center.x + toe_reach, center.y - 0.015f });
+                rig.radii.push_back(radius);
+                rig.bones.push_back({ ankle, heel, 0.0f, 0.96f });
+                rig.bones.push_back({ ankle, toe, 0.0f, 0.96f });
+                rig.bones.push_back({ heel, toe, 0.0f, 0.88f });
+            };
+            add_foot(rig.left_contact_node);
+            add_foot(rig.right_contact_node);
+        }
+
+        void calibrate_quadruped_stable_defaults(CreatureBlueprint& rig) noexcept
+        {
+            // The quadruped is the stable reference because its roughly one-metre
+            // driven arms, symmetric travel, and moderate correction speed do not
+            // launch the body. Preserve that effective endpoint displacement on
+            // every body instead of copying a raw strength onto longer limbs.
+            constexpr std::array<float, action_count> travel_degrees{ 22.0f, 30.0f, 22.0f, 30.0f };
+            constexpr std::array<float, action_count> reference_linear_gain{ 0.0525f, 0.0575f, 0.0525f, 0.0575f };
+            for (std::size_t index = 0; index < action_count; ++index)
+            {
+                const MotorConstraint& motor = rig.motors[index];
+                const float driven_arm = motor.pivot < rig.nodes.size() && motor.c < rig.nodes.size()
+                    ? length(rig.nodes[motor.c] - rig.nodes[motor.pivot]) : 1.0f;
+                const float normalized_strength = clamp(
+                    reference_linear_gain[index] / std::max(0.75f, driven_arm), 0.035f, 0.058f);
+                rig.calibrate_motor(index, travel_degrees[index], travel_degrees[index], normalized_strength);
+            }
         }
     }
 
@@ -45,11 +89,9 @@ namespace epochrunner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
         };
+        add_passive_feet(result);
         result.rebuild_rest_lengths();
-        result.calibrate_motor(0, 20.0f, 20.0f, 0.052f);
-        result.calibrate_motor(1, 28.0f, 28.0f, 0.057f);
-        result.calibrate_motor(2, 20.0f, 20.0f, 0.052f);
-        result.calibrate_motor(3, 28.0f, 28.0f, 0.057f);
+        calibrate_quadruped_stable_defaults(result);
         return result;
     }
 
@@ -71,11 +113,9 @@ namespace epochrunner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
         };
+        add_passive_feet(result);
         result.rebuild_rest_lengths();
-        result.calibrate_motor(0, 18.0f, 16.0f, 0.052f);
-        result.calibrate_motor(1, 22.0f, 24.0f, 0.047f);
-        result.calibrate_motor(2, 18.0f, 16.0f, 0.052f);
-        result.calibrate_motor(3, 22.0f, 24.0f, 0.047f);
+        calibrate_quadruped_stable_defaults(result);
         return result;
     }
 
@@ -100,11 +140,9 @@ namespace epochrunner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
         };
+        add_passive_feet(result);
         result.rebuild_rest_lengths();
-        result.calibrate_motor(0, 13.9f, 8.0f, 0.053f);
-        result.calibrate_motor(1, 12.4f, 15.8f, 0.043f);
-        result.calibrate_motor(2, 11.6f, 8.6f, 0.056f);
-        result.calibrate_motor(3, 8.0f, 30.6f, 0.052f);
+        calibrate_quadruped_stable_defaults(result);
         return result;
     }
 
@@ -132,10 +170,7 @@ namespace epochrunner::sim
             MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 5, 6 }
         };
         result.rebuild_rest_lengths();
-        result.calibrate_motor(0, 22.0f, 22.0f, 0.053f);
-        result.calibrate_motor(1, 30.0f, 30.0f, 0.058f);
-        result.calibrate_motor(2, 22.0f, 22.0f, 0.053f);
-        result.calibrate_motor(3, 30.0f, 30.0f, 0.058f);
+        calibrate_quadruped_stable_defaults(result);
         return result;
     }
 
@@ -159,11 +194,9 @@ namespace epochrunner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 5 },
             MotorConstraint{ 3, 5, 4 }, MotorConstraint{ 3, 5, 6 }
         };
+        add_passive_feet(result);
         result.rebuild_rest_lengths();
-        result.calibrate_motor(0, 22.0f, 22.0f, 0.052f);
-        result.calibrate_motor(1, 28.0f, 28.0f, 0.056f);
-        result.calibrate_motor(2, 20.0f, 20.0f, 0.047f);
-        result.calibrate_motor(3, 20.0f, 20.0f, 0.047f);
+        calibrate_quadruped_stable_defaults(result);
         return result;
     }
 
@@ -231,7 +264,9 @@ namespace epochrunner::sim
             if (motor.a >= nodes.size() || motor.pivot >= nodes.size() || motor.c >= nodes.size()
                 || motor.a == motor.pivot || motor.pivot == motor.c || motor.a == motor.c
                 || motor.minimum_angle > motor.neutral_angle || motor.neutral_angle > motor.maximum_angle
-                || motor.strength < 0.0f || motor.strength > 0.20f)
+                || motor.strength < 0.0f || motor.strength > 0.20f
+                || !direct_bone(*this, motor.a, motor.pivot)
+                || !direct_bone(*this, motor.pivot, motor.c))
                 return false;
         }
         return true;
@@ -273,31 +308,79 @@ namespace epochrunner::sim
 
     bool CreatureBlueprint::save(const std::filesystem::path& path, std::string& error) const
     {
-        std::ofstream output(path, std::ios::trunc);
-        if (!output)
+        std::filesystem::path temporary = path;
+        temporary += ".tmp";
+        std::filesystem::path backup = path;
+        backup += ".bak";
+
+        std::error_code filesystem_error{};
+        std::filesystem::remove(temporary, filesystem_error);
+        filesystem_error.clear();
         {
-            error = "Could not open rig file for writing: " + path.string();
+            std::ofstream output(temporary, std::ios::trunc);
+            if (!output)
+            {
+                error = "Could not open temporary rig file for writing: " + temporary.string();
+                return false;
+            }
+            output << "EPOCHRIG 2\n";
+            output << nodes.size() << ' ' << bones.size() << ' ' << motors.size() << '\n';
+            output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
+                << left_contact_node << ' ' << right_contact_node << '\n';
+            output << std::setprecision(9);
+            for (std::size_t index = 0; index < nodes.size(); ++index)
+                output << "N " << nodes[index].x << ' ' << nodes[index].y << ' ' << radii[index] << '\n';
+            for (const DistanceConstraint& bone : bones)
+                output << "B " << bone.a << ' ' << bone.b << ' ' << bone.rest_length << ' ' << bone.stiffness << '\n';
+            for (const MotorConstraint& motor : motors)
+            {
+                output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' ' << motor.pivot << ' ' << motor.c << ' '
+                    << motor.minimum_angle << ' ' << motor.maximum_angle << ' '
+                    << motor.neutral_angle << ' ' << motor.strength << '\n';
+            }
+            output.flush();
+            if (!output)
+            {
+                output.close();
+                std::filesystem::remove(temporary, filesystem_error);
+                error = "Failed while writing temporary rig file: " + temporary.string();
+                return false;
+            }
+        }
+
+        std::filesystem::remove(backup, filesystem_error);
+        filesystem_error.clear();
+        bool moved_original = false;
+        if (std::filesystem::exists(path, filesystem_error) && !filesystem_error)
+        {
+            std::filesystem::rename(path, backup, filesystem_error);
+            if (filesystem_error)
+            {
+                std::filesystem::remove(temporary, filesystem_error);
+                error = "Could not prepare existing rig for replacement: " + path.string();
+                return false;
+            }
+            moved_original = true;
+        }
+
+        filesystem_error.clear();
+        std::filesystem::rename(temporary, path, filesystem_error);
+        if (filesystem_error)
+        {
+            std::error_code cleanup_error{};
+            std::filesystem::remove(temporary, cleanup_error);
+            if (moved_original)
+            {
+                cleanup_error.clear();
+                std::filesystem::rename(backup, path, cleanup_error);
+            }
+            error = "Could not publish saved rig: " + filesystem_error.message();
             return false;
         }
-        output << "EPOCHRIG 2\n";
-        output << nodes.size() << ' ' << bones.size() << ' ' << motors.size() << '\n';
-        output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
-            << left_contact_node << ' ' << right_contact_node << '\n';
-        output << std::setprecision(9);
-        for (std::size_t index = 0; index < nodes.size(); ++index)
-            output << "N " << nodes[index].x << ' ' << nodes[index].y << ' ' << radii[index] << '\n';
-        for (const DistanceConstraint& bone : bones)
-            output << "B " << bone.a << ' ' << bone.b << ' ' << bone.rest_length << ' ' << bone.stiffness << '\n';
-        for (const MotorConstraint& motor : motors)
+        if (moved_original)
         {
-            output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' ' << motor.pivot << ' ' << motor.c << ' '
-                << motor.minimum_angle << ' ' << motor.maximum_angle << ' '
-                << motor.neutral_angle << ' ' << motor.strength << '\n';
-        }
-        if (!output)
-        {
-            error = "Failed while writing rig file: " + path.string();
-            return false;
+            filesystem_error.clear();
+            std::filesystem::remove(backup, filesystem_error);
         }
         error.clear();
         return true;
@@ -547,6 +630,11 @@ namespace epochrunner::sim
         progress_window_seconds_ = 0.0f;
         progress_window_start_x_ = previous_pelvis_.x;
         micro_motion_seconds_ = 0.0f;
+        action_energy_window_ = 0.0f;
+        root_path_window_ = 0.0f;
+        previous_root_for_path_ = previous_pelvis_;
+        last_step_time_ = -100.0f;
+        last_step_x_ = previous_pelvis_.x;
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
         last_contact_side_ = 0;
@@ -577,20 +665,48 @@ namespace epochrunner::sim
 
     void Environment::solve_motor(const MotorConstraint& motor, float action) noexcept
     {
-        if (!motor.enabled || motor.a >= particles_.size() || motor.pivot >= particles_.size() || motor.c >= particles_.size())
+        if (!motor.enabled || motor.a >= particles_.size() || motor.pivot >= particles_.size()
+            || motor.c >= particles_.size() || particles_.size() > 128)
             return;
-        Particle& reference = particles_[motor.a];
-        Particle& pivot_particle = particles_[motor.pivot];
-        Particle& driven = particles_[motor.c];
-        const Vec2 reference_arm = reference.position - pivot_particle.position;
-        const Vec2 driven_arm = driven.position - pivot_particle.position;
+        const Vec2 pivot = particles_[motor.pivot].position;
+        const Vec2 reference_arm = particles_[motor.a].position - pivot;
+        const Vec2 driven_arm = particles_[motor.c].position - pivot;
         if (length(reference_arm) <= 1.0e-5f || length(driven_arm) <= 1.0e-5f)
             return;
         const float target = motor_target_angle(motor, action);
         const float current = signed_angle(reference_arm, driven_arm);
         const float error = wrap_angle(current - target);
         const float correction = clamp(error, -0.24f, 0.24f) * motor.strength;
-        driven.position = pivot_particle.position + rotate(driven_arm, -correction);
+
+        std::array<bool, 128> visited{};
+        std::array<std::uint16_t, 128> stack{};
+        std::size_t stack_size = 0;
+        visited[motor.pivot] = true;
+        visited[motor.a] = true;
+        visited[motor.c] = true;
+        stack[stack_size++] = motor.c;
+        while (stack_size > 0)
+        {
+            const std::uint16_t node = stack[--stack_size];
+            for (const DistanceConstraint& bone : blueprint_.bones)
+            {
+                std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                if (bone.a == node)
+                    next = bone.b;
+                else if (bone.b == node)
+                    next = bone.a;
+                if (next < particles_.size() && !visited[next])
+                {
+                    visited[next] = true;
+                    stack[stack_size++] = next;
+                }
+            }
+        }
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (visited[index] && index != motor.a && index != motor.pivot)
+                particles_[index].position = pivot + rotate(particles_[index].position - pivot, -correction);
+        }
     }
 
     void Environment::solve_ground(float dt) noexcept
@@ -709,15 +825,24 @@ namespace epochrunner::sim
         const bool right = valid_node(blueprint_.right_contact_node) && particles_[blueprint_.right_contact_node].grounded;
         const bool new_left = left && !previous_left_grounded_;
         const bool new_right = right && !previous_right_grounded_;
-        if (new_left && last_contact_side_ != -1)
+        const int strike_side = new_left == new_right ? 0 : (new_left ? -1 : 1);
+        const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
+        if (strike_side != 0)
         {
-            ++alternating_steps_;
-            last_contact_side_ = -1;
-        }
-        if (new_right && last_contact_side_ != 1)
-        {
-            ++alternating_steps_;
-            last_contact_side_ = 1;
+            if (last_contact_side_ == 0)
+            {
+                last_contact_side_ = strike_side;
+                last_step_time_ = elapsed_seconds_;
+                last_step_x_ = root_x;
+            }
+            else if (qualifies_alternating_step(last_contact_side_, strike_side,
+                elapsed_seconds_ - last_step_time_, root_x - last_step_x_))
+            {
+                ++alternating_steps_;
+                last_contact_side_ = strike_side;
+                last_step_time_ = elapsed_seconds_;
+                last_step_x_ = root_x;
+            }
         }
         previous_left_grounded_ = left;
         previous_right_grounded_ = right;
@@ -732,16 +857,29 @@ namespace epochrunner::sim
             airborne_seconds_ = 0.0f;
         }
 
+        if (valid_node(blueprint_.root_node))
+        {
+            const Vec2 root = particles_[blueprint_.root_node].position;
+            root_path_window_ += length(root - previous_root_for_path_);
+            previous_root_for_path_ = root;
+        }
+        action_energy_window_ += action_energy * dt;
         progress_window_seconds_ += dt;
         if (progress_window_seconds_ >= 1.0f && valid_node(blueprint_.root_node))
         {
-            const float progress = std::abs(particles_[blueprint_.root_node].position.x - progress_window_start_x_);
-            if (course_stage_ != CourseStage::balance && action_energy > 0.12f && progress < 0.04f)
+            const float net_progress = std::abs(root_x - progress_window_start_x_);
+            const float average_energy = action_energy_window_ / progress_window_seconds_;
+            const bool high_energy_stall = average_energy > 0.10f && net_progress < 0.05f;
+            const bool inefficient_vibration = average_energy > 0.16f && net_progress < 0.12f
+                && root_path_window_ > std::max(0.08f, net_progress * 2.5f);
+            if (course_stage_ != CourseStage::balance && (high_energy_stall || inefficient_vibration))
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
-            progress_window_start_x_ = particles_[blueprint_.root_node].position.x;
+            progress_window_start_x_ = root_x;
             progress_window_seconds_ = 0.0f;
+            action_energy_window_ = 0.0f;
+            root_path_window_ = 0.0f;
         }
 
         const float allowed_airtime = course_stage_ == CourseStage::hurdles ? 1.30f
@@ -761,6 +899,13 @@ namespace epochrunner::sim
             return { -5.0f, 0.0f, true, false, InvalidMotion::out_of_bounds };
 
         dt = clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
+        // Let every body settle onto its feet before the policy can apply a
+        // meaningful impulse, then ease control in rather than launching it.
+        const float ramp_t = clamp((elapsed_seconds_ - 0.35f) / 1.25f, 0.0f, 1.0f);
+        const float control_ramp = ramp_t * ramp_t * (3.0f - 2.0f * ramp_t);
+        std::array<float, action_count> applied_actions{};
+        for (std::size_t index = 0; index < action_count; ++index)
+            applied_actions[index] = clamp(actions[index], -1.0f, 1.0f) * control_ramp;
         constexpr Vec2 gravity{ 0.0f, -22.0f };
         constexpr float damping = 0.996f;
         for (Particle& particle : particles_)
@@ -777,7 +922,7 @@ namespace epochrunner::sim
             for (const DistanceConstraint& bone : blueprint_.bones)
                 solve_distance(bone);
             for (std::size_t index = 0; index < action_count; ++index)
-                solve_motor(blueprint_.motors[index], actions[index]);
+                solve_motor(blueprint_.motors[index], applied_actions[index]);
             solve_ground(dt);
             solve_course();
         }
@@ -796,7 +941,7 @@ namespace epochrunner::sim
         float action_energy = 0.0f;
         for (std::size_t index = 0; index < action_count; ++index)
         {
-            const float effective = blueprint_.motors[index].enabled ? actions[index] : 0.0f;
+            const float effective = blueprint_.motors[index].enabled ? applied_actions[index] : 0.0f;
             action_energy += effective * effective;
             const float angle = joint_angle(blueprint_.motors[index]);
             angular_velocities_[index] = wrap_angle(angle - previous_angles_[index]) / dt;

@@ -22,6 +22,10 @@ import epoch.gui;
 import epoch.gui.font;
 import epoch.gui.rounded_rect;
 
+#ifndef EPOCHRUNNER_VERSION
+#define EPOCHRUNNER_VERSION "development"
+#endif
+
 namespace epochrunner
 {
     namespace gui = epochengine::gui_lib;
@@ -162,6 +166,7 @@ namespace epochrunner
     {
         enum class Mode : std::uint8_t { live, rig_lab };
         enum class RigPreset : std::uint8_t { humanoid, biped, chicken, quadruped, monoped, custom };
+        enum class RigPanelPage : std::uint8_t { body, motor };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
         render::Canvas canvas{};
@@ -170,11 +175,14 @@ namespace epochrunner
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
+        RigPanelPage rig_panel_page{ RigPanelPage::body };
         int selected_node{ -1 };
         int selected_motor{};
         bool dragging_node{};
         bool joint_auto_sweep{};
         bool run_paused{};
+        bool rig_edit_pending{};
+        std::string rig_edit_reason{};
         float joint_test_input{};
         float joint_test_phase{};
         float camera_x{};
@@ -183,9 +191,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v041-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v041-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v041-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -199,6 +207,20 @@ namespace epochrunner
             case RigPreset::custom: return "CUSTOM / EVOLVED";
             }
             return "CUSTOM / EVOLVED";
+        }
+
+        [[nodiscard]] bool has_direct_bone(std::uint16_t a, std::uint16_t b) const noexcept
+        {
+            return std::ranges::any_of(blueprint.bones, [a, b](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == a && bone.b == b) || (bone.a == b && bone.b == a);
+            });
+        }
+
+        void queue_rig_change(std::string_view reason)
+        {
+            rig_edit_pending = true;
+            rig_edit_reason = reason;
         }
 
         [[nodiscard]] std::array<std::string_view, 4> motor_names() const noexcept
@@ -301,6 +323,11 @@ namespace epochrunner
         void apply_small_rig_change(std::string_view reason)
         {
             blueprint.rebuild_rest_lengths();
+            if (!blueprint.valid())
+            {
+                set_status("RIG CHANGE REJECTED - CONNECT EACH ENABLED MOTOR THROUGH TWO REAL BONES");
+                return;
+            }
             rig_preset = RigPreset::custom;
             trainer.set_blueprint(blueprint, true);
             set_status(std::format("{} - CONTROLLER TRANSFERRED AND RECALIBRATING", reason));
@@ -321,8 +348,8 @@ namespace epochrunner
         void draw_top_bar(const InputState& input, int width)
         {
             canvas.quad({ 0.0f, 0.0f }, { static_cast<float>(width), 64.0f }, rgb(0x0b1119));
-            add_text(canvas, { 18.0f, 17.0f }, "EPOCH RUNNER", 2.25f, white);
-            add_text(canvas, { 208.0f, 23.0f }, "AUTONOMOUS LOCOMOTION LAB", 1.30f, muted);
+            add_text(canvas, { 18.0f, 17.0f }, "EPOCH RUNNER v" EPOCHRUNNER_VERSION, 2.25f, white);
+            add_text(canvas, { 286.0f, 23.0f }, "AUTONOMOUS LOCOMOTION LAB", 1.30f, muted);
 
             const float tab_width = 190.0f;
             const float start_x = static_cast<float>(width) - tab_width * 2.0f - 18.0f;
@@ -476,6 +503,8 @@ namespace epochrunner
             add_text(canvas, cursor, std::format("{} CPU ROLLOUT THREADS / {} ENVIRONMENTS",
                 autonomy.rollout_threads, autonomy.environment_count), 1.12f, muted);
             cursor.y += 23.0f;
+            add_text(canvas, cursor, "QUADRUPED-STABLE MOTORS / REAL FEET / SOFT START", 1.04f, muted);
+            cursor.y += 23.0f;
             add_text(canvas, cursor, "GPU: VULKAN PRESENTS ONLY THE LIVE BEST AGENT", 1.04f, muted);
             cursor.y += 23.0f;
             add_text(canvas, cursor, std::format("RIG GEN {}   ACCEPTED {}   REJECTED {}",
@@ -485,29 +514,9 @@ namespace epochrunner
                 autonomy.rollback_count), 1.08f, white);
             cursor.y += 34.0f;
 
-            float exploration = trainer.exploration();
-            const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                "EXPLORATION", exploration, 0.02f, 0.35f, input);
-            if (updated != exploration)
-                trainer.set_exploration(updated);
-            cursor.y += 50.0f;
-
-            const float half = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { half, 37.0f } }, "RESTORE BEST", input, false, trainer.has_best_policy()))
-                set_status(trainer.restore_best_policy() ? "BEST VALID CONTROLLER RESTORED" : "NO VALID BEST YET");
-            if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 37.0f } }, "SAVE NOW", input))
-            {
-                std::string error{};
-                const bool checkpoint = trainer.save_checkpoint(policy_path, error);
-                const bool rig = checkpoint && trainer.blueprint().save(rig_path, error);
-                set_status(rig ? "CHECKPOINT AND EVOLVED RIG SAVED" : error);
-            }
-            cursor.y += 48.0f;
-            if (button({ cursor, { rect.size.x - 36.0f, 37.0f } }, "RESET CURRENT LESSON CONTROLLER", input))
-            {
-                trainer.reset_policy();
-                set_status("FRESH CONTROLLER STARTED ON CURRENT LESSON");
-            }
+            add_text(canvas, cursor, "CHECKPOINTS / ROLLBACK / EXPLORATION / RIG EVOLUTION: AUTOMATIC", 1.02f, muted);
+            cursor.y += 25.0f;
+            add_text(canvas, cursor, "A NEW VERIFIED BEST IS APPLIED AT THE NEXT LIVE RUN", 1.02f, muted);
         }
 
         void draw_live_world(Rect viewport, float dt)
@@ -532,7 +541,7 @@ namespace epochrunner
                     environment.distance_travelled(), sim::invalid_motion_name(environment.invalid_reason())),
                 1.45f, environment.valid_motion() ? green : danger);
             add_text(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 36.0f },
-                "LIVE BEST CONTROLLER   BACKGROUND TRAINING NEVER RENDERS 64 AGENTS", 1.20f, muted);
+                "LIVE BEST CONTROLLER   v" EPOCHRUNNER_VERSION "   TRAINING STAYS IN THE BACKGROUND", 1.20f, muted);
         }
 
         void draw_joint_lab(Rect rect, const InputState& input)
@@ -794,158 +803,215 @@ namespace epochrunner
             add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
             add_text(canvas, cursor, "GUIDED RIG LAB", 1.80f, white);
-            cursor.y += 36.0f;
-            add_text(canvas, cursor, "AUTOPILOT HANDLES CHECKPOINTS, TRANSFER, AND ROLLBACK", 1.00f, muted);
-            cursor.y += 31.0f;
-
-            const float third = (rect.size.x - 48.0f) / 3.0f;
-            if (button({ cursor, { third, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
-                use_preset(RigPreset::humanoid);
-            if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "BIPED", input,
-                rig_preset == RigPreset::biped))
-                use_preset(RigPreset::biped);
-            if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "QUADRUPED", input,
-                rig_preset == RigPreset::quadruped))
-                use_preset(RigPreset::quadruped);
-            cursor.y += 43.0f;
-            const float half = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { half, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
-                use_preset(RigPreset::chicken);
-            if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } }, "MONOPED", input,
-                rig_preset == RigPreset::monoped))
-                use_preset(RigPreset::monoped);
-            cursor.y += 48.0f;
-
-            const float file_third = (rect.size.x - 48.0f) / 3.0f;
-            if (button({ cursor, { file_third, 35.0f } }, "SAVE RIG", input) || input.save_pressed)
-            {
-                std::string error{};
-                set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
-            }
-            if (button({ cursor + Vec2{ file_third + 6.0f, 0.0f }, { file_third, 35.0f } }, "LOAD RIG", input)
-                || input.load_pressed)
-            {
-                std::string error{};
-                blueprint = sim::CreatureBlueprint::load(rig_path, error);
-                rig_preset = RigPreset::custom;
-                trainer.set_blueprint(blueprint, false);
-                set_status(error.empty() ? "RIG LOADED - FRESH BALANCE LESSON STARTED" : error);
-            }
-            if (button({ cursor + Vec2{ (file_third + 6.0f) * 2.0f, 0.0f }, { file_third, 35.0f } },
-                "USE EVOLVED", input))
-            {
-                blueprint = trainer.blueprint();
-                rig_preset = RigPreset::custom;
-                set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
-            }
+            cursor.y += 38.0f;
+            const float page_width = (rect.size.x - 42.0f) * 0.5f;
+            if (button({ cursor, { page_width, 36.0f } }, "BODY / FILES", input,
+                rig_panel_page == RigPanelPage::body))
+                rig_panel_page = RigPanelPage::body;
+            if (button({ cursor + Vec2{ page_width + 6.0f, 0.0f }, { page_width, 36.0f } }, "JOINT / MOTOR", input,
+                rig_panel_page == RigPanelPage::motor))
+                rig_panel_page = RigPanelPage::motor;
             cursor.y += 49.0f;
 
-            add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
-            if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
-                "DELETE", input, false, selected_node >= 0))
-                delete_selected_node();
-            cursor.y += 30.0f;
-            if (selected_node >= 0 && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
+            if (rig_panel_page == RigPanelPage::body)
             {
-                float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
-                const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "NODE SIZE", radius, 0.08f, 0.60f, input);
-                if (updated != radius)
+                add_text(canvas, cursor, "CHOOSE A BODY; AUTOPILOT RESTARTS AT BALANCE", 1.02f, muted);
+                cursor.y += 27.0f;
+                const float third = (rect.size.x - 48.0f) / 3.0f;
+                if (button({ cursor, { third, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
+                    use_preset(RigPreset::humanoid);
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "BIPED", input,
+                    rig_preset == RigPreset::biped))
+                    use_preset(RigPreset::biped);
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "QUADRUPED", input,
+                    rig_preset == RigPreset::quadruped))
+                    use_preset(RigPreset::quadruped);
+                cursor.y += 43.0f;
+                const float half = (rect.size.x - 42.0f) * 0.5f;
+                if (button({ cursor, { half, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
+                    use_preset(RigPreset::chicken);
+                if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } }, "MONOPED", input,
+                    rig_preset == RigPreset::monoped))
+                    use_preset(RigPreset::monoped);
+                cursor.y += 48.0f;
+
+                const float file_third = (rect.size.x - 48.0f) / 3.0f;
+                if (button({ cursor, { file_third, 35.0f } }, "SAVE RIG", input) || input.save_pressed)
                 {
-                    radius = updated;
-                    apply_small_rig_change("NODE SIZE UPDATED");
+                    std::string error{};
+                    set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
+                }
+                if (button({ cursor + Vec2{ file_third + 6.0f, 0.0f }, { file_third, 35.0f } }, "LOAD RIG", input)
+                    || input.load_pressed)
+                {
+                    std::string error{};
+                    blueprint = sim::CreatureBlueprint::load(rig_path, error);
+                    rig_preset = RigPreset::custom;
+                    trainer.set_blueprint(blueprint, false);
+                    set_status(error.empty() ? "RIG LOADED - FRESH BALANCE LESSON STARTED" : error);
+                }
+                if (button({ cursor + Vec2{ (file_third + 6.0f) * 2.0f, 0.0f }, { file_third, 35.0f } },
+                    "USE EVOLVED", input))
+                {
+                    blueprint = trainer.blueprint();
+                    rig_preset = RigPreset::custom;
+                    set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
+                }
+                cursor.y += 50.0f;
+
+                add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
+                if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
+                    "DELETE", input, false, selected_node >= 0))
+                    delete_selected_node();
+                cursor.y += 33.0f;
+                if (selected_node >= 0 && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
+                {
+                    float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
+                    const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                        "NODE SIZE", radius, 0.08f, 0.60f, input);
+                    if (updated != radius)
+                    {
+                        radius = updated;
+                        queue_rig_change("NODE SIZE UPDATED");
+                    }
+                    cursor.y += 50.0f;
+
+                    add_text(canvas, cursor, "SELECTED NODE ROLE", 1.08f, muted);
+                    cursor.y += 23.0f;
+                    const float role_width = (rect.size.x - 52.0f) * 0.20f;
+                    auto role = [&](int slot, std::string_view label, std::uint16_t& target)
+                    {
+                        if (button({ cursor + Vec2{ role_width * static_cast<float>(slot), 0.0f },
+                            { role_width - 4.0f, 32.0f } }, label, input, target == selected_node))
+                        {
+                            target = static_cast<std::uint16_t>(selected_node);
+                            apply_small_rig_change("NODE ROLE UPDATED");
+                        }
+                    };
+                    role(0, "ROOT", blueprint.root_node);
+                    role(1, "TORSO", blueprint.torso_node);
+                    role(2, "HEAD", blueprint.head_node);
+                    role(3, "FOOT L", blueprint.left_contact_node);
+                    role(4, "FOOT R", blueprint.right_contact_node);
+                    cursor.y += 44.0f;
+                }
+                add_text(canvas, cursor, "SELECT OR DRAG NODES IN THE VIEW. SHIFT ADDS; CTRL CONNECTS.", 1.00f, muted);
+            }
+            else
+            {
+                add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
+                cursor.y += 29.0f;
+                const float motor_width = (rect.size.x - 48.0f) * 0.25f;
+                for (int index = 0; index < 4; ++index)
+                {
+                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(index), 0.0f },
+                        { motor_width - 4.0f, 35.0f } }, std::to_string(index + 1), input, selected_motor == index))
+                    {
+                        selected_motor = index;
+                        joint_test_group = JointTestGroup::selected;
+                    }
+                }
+                cursor.y += 46.0f;
+                const auto names = motor_names();
+                add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
+                cursor.y += 30.0f;
+
+                sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
+                const float endpoint = (rect.size.x - 48.0f) / 3.0f;
+                auto set_endpoint = [&](Vec2 position, std::string_view label, std::uint16_t& value)
+                {
+                    if (!button({ position, { endpoint, 34.0f } }, label, input, false, selected_node >= 0))
+                        return;
+                    value = static_cast<std::uint16_t>(selected_node);
+                    const bool distinct = motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
+                    const bool connected = distinct && has_direct_bone(motor.a, motor.pivot)
+                        && has_direct_bone(motor.pivot, motor.c);
+                    motor.enabled = connected;
+                    if (connected)
+                    {
+                        const float negative = std::max(2.0f,
+                            (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
+                        const float positive = std::max(2.0f,
+                            (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
+                        blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                        apply_small_rig_change("MOTOR ENDPOINT UPDATED");
+                    }
+                    else
+                    {
+                        set_status("MOTOR DISABLED - A-PIVOT AND PIVOT-C MUST EACH BE REAL BONES");
+                    }
+                };
+                set_endpoint(cursor, "SET A / PARENT", motor.a);
+                set_endpoint(cursor + Vec2{ endpoint + 6.0f, 0.0f }, "SET PIVOT", motor.pivot);
+                set_endpoint(cursor + Vec2{ (endpoint + 6.0f) * 2.0f, 0.0f }, "SET C / DRIVEN", motor.c);
+                cursor.y += 44.0f;
+
+                const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
+                    && motor.c < blueprint.nodes.size() && motor.a != motor.pivot
+                    && motor.pivot != motor.c && motor.a != motor.c;
+                const bool connected = endpoints_valid && has_direct_bone(motor.a, motor.pivot)
+                    && has_direct_bone(motor.pivot, motor.c);
+                add_text(canvas, cursor, std::format("A {}  PIVOT {}  C {}  {}", motor.a, motor.pivot, motor.c,
+                    connected ? (motor.enabled ? "READY" : "DISABLED") : "NOT CONNECTED"), 1.12f,
+                    connected ? accent : danger);
+                cursor.y += 30.0f;
+
+                const float third = (rect.size.x - 48.0f) / 3.0f;
+                if (button({ cursor, { third, 34.0f } }, "SET REST", input, false, connected))
+                {
+                    const float negative = std::max(2.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
+                    const float positive = std::max(2.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                    apply_small_rig_change("REST POSE RECALIBRATED");
+                }
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } }, "SAFE RANGE", input,
+                    false, connected))
+                {
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, 0.050f);
+                    apply_small_rig_change("SAFE JOINT DEFAULT APPLIED");
+                }
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 34.0f } }, "SWAP A/C", input,
+                    false, connected))
+                {
+                    std::swap(motor.a, motor.c);
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, motor.strength);
+                    apply_small_rig_change("MOTOR DIRECTION SWAPPED");
+                }
+                cursor.y += 46.0f;
+
+                if (button({ cursor, { rect.size.x - 36.0f, 34.0f } },
+                    motor.enabled ? "DISABLE THIS MOTOR" : "ENABLE THIS MOTOR", input, motor.enabled, connected))
+                {
+                    motor.enabled = !motor.enabled;
+                    apply_small_rig_change(motor.enabled ? "MOTOR ENABLED" : "MOTOR DISABLED");
+                }
+                cursor.y += 47.0f;
+
+                float negative = (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi;
+                float positive = (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi;
+                const float updated_negative = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                    "BACKWARD TRAVEL", negative, 2.0f, 60.0f, input, " DEG");
+                if (updated_negative != negative)
+                {
+                    motor.minimum_angle = motor.neutral_angle - updated_negative * pi / 180.0f;
+                    queue_rig_change("BACKWARD TRAVEL UPDATED");
                 }
                 cursor.y += 49.0f;
-            }
-
-            add_text(canvas, cursor, "MOTOR CHANNEL", 1.10f, muted);
-            cursor.y += 22.0f;
-            const float motor_width = (rect.size.x - 48.0f) * 0.25f;
-            for (int index = 0; index < 4; ++index)
-            {
-                if (button({ cursor + Vec2{ motor_width * static_cast<float>(index), 0.0f },
-                    { motor_width - 4.0f, 35.0f } }, std::to_string(index + 1), input, selected_motor == index))
+                const float updated_positive = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                    "FORWARD TRAVEL", positive, 2.0f, 60.0f, input, " DEG");
+                if (updated_positive != positive)
                 {
-                    selected_motor = index;
-                    joint_test_group = JointTestGroup::selected;
+                    motor.maximum_angle = motor.neutral_angle + updated_positive * pi / 180.0f;
+                    queue_rig_change("FORWARD TRAVEL UPDATED");
                 }
-            }
-            cursor.y += 44.0f;
-            const auto names = motor_names();
-            add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
-            cursor.y += 29.0f;
-
-            sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
-            add_text(canvas, cursor, std::format("A {}  PIVOT {}  C {}  {}",
-                motor.a, motor.pivot, motor.c, motor.enabled ? "ENABLED" : "DISABLED"), 1.13f,
-                motor.enabled ? accent : danger);
-            cursor.y += 28.0f;
-            const float endpoint = (rect.size.x - 48.0f) / 3.0f;
-            auto set_endpoint = [&](Vec2 position, std::string_view label, std::uint16_t& value)
-            {
-                if (button({ position, { endpoint, 34.0f } }, label, input, false, selected_node >= 0))
+                cursor.y += 49.0f;
+                const float updated_power = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                    "JOINT SPEED / POWER", motor.strength, 0.02f, 0.10f, input);
+                if (updated_power != motor.strength)
                 {
-                    value = static_cast<std::uint16_t>(selected_node);
-                    motor.enabled = motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
-                    apply_small_rig_change("MOTOR ENDPOINT UPDATED");
+                    motor.strength = updated_power;
+                    queue_rig_change("JOINT POWER UPDATED");
                 }
-            };
-            set_endpoint(cursor, "SET A / PARENT", motor.a);
-            set_endpoint(cursor + Vec2{ endpoint + 6.0f, 0.0f }, "SET PIVOT", motor.pivot);
-            set_endpoint(cursor + Vec2{ (endpoint + 6.0f) * 2.0f, 0.0f }, "SET C / DRIVEN", motor.c);
-            cursor.y += 44.0f;
-
-            const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
-                && motor.c < blueprint.nodes.size() && motor.a != motor.pivot
-                && motor.pivot != motor.c && motor.a != motor.c;
-            if (button({ cursor, { third, 34.0f } }, "SET REST", input, false, endpoints_valid))
-            {
-                const float negative = std::max(2.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                const float positive = std::max(2.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                motor.neutral_angle = blueprint.rest_joint_angle(static_cast<std::size_t>(selected_motor));
-                motor.minimum_angle = motor.neutral_angle - negative * pi / 180.0f;
-                motor.maximum_angle = motor.neutral_angle + positive * pi / 180.0f;
-                apply_small_rig_change("REST POSE RECALIBRATED");
-            }
-            if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } }, "SAFE RANGE", input,
-                false, endpoints_valid))
-            {
-                blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, 0.050f);
-                apply_small_rig_change("SAFE JOINT DEFAULT APPLIED");
-            }
-            if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 34.0f } }, "SWAP A/C", input,
-                false, endpoints_valid))
-            {
-                std::swap(motor.a, motor.c);
-                blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, motor.strength);
-                apply_small_rig_change("MOTOR DIRECTION SWAPPED");
-            }
-            cursor.y += 47.0f;
-
-            float negative = (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi;
-            float positive = (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi;
-            const float updated_negative = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                "BACKWARD TRAVEL", negative, 2.0f, 60.0f, input, " DEG");
-            if (updated_negative != negative)
-            {
-                motor.minimum_angle = motor.neutral_angle - updated_negative * pi / 180.0f;
-                apply_small_rig_change("BACKWARD TRAVEL UPDATED");
-            }
-            cursor.y += 49.0f;
-            const float updated_positive = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                "FORWARD TRAVEL", positive, 2.0f, 60.0f, input, " DEG");
-            if (updated_positive != positive)
-            {
-                motor.maximum_angle = motor.neutral_angle + updated_positive * pi / 180.0f;
-                apply_small_rig_change("FORWARD TRAVEL UPDATED");
-            }
-            cursor.y += 49.0f;
-            const float updated_power = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                "JOINT SPEED / POWER", motor.strength, 0.02f, 0.10f, input);
-            if (updated_power != motor.strength)
-            {
-                motor.strength = updated_power;
-                apply_small_rig_change("JOINT POWER UPDATED");
             }
         }
 
@@ -968,7 +1034,8 @@ namespace epochrunner
         void frame(const InputState& input, float dt, int width, int height)
         {
             trainer.synchronize();
-            if (!dragging_node && trainer.blueprint().signature() != blueprint.signature())
+            if (!dragging_node && !rig_edit_pending
+                && trainer.blueprint().signature() != blueprint.signature())
             {
                 blueprint = trainer.blueprint();
                 rig_preset = RigPreset::custom;
@@ -1014,6 +1081,14 @@ namespace epochrunner
                     "CLICK SELECT / DRAG MOVE / SHIFT ADD / CTRL CONNECT / DELETE REMOVE", 1.12f, muted);
             }
 
+            if (input.left_released && rig_edit_pending)
+            {
+                const std::string reason = rig_edit_reason;
+                rig_edit_pending = false;
+                rig_edit_reason.clear();
+                apply_small_rig_change(reason);
+            }
+
             if (status_time > 0.0f)
             {
                 const float scale = 1.30f * ui_font_scale;
@@ -1042,10 +1117,10 @@ namespace epochrunner
             impl_->autosave_rig_path, impl_->autosave_state_path);
         std::string message{};
         const bool resumed = impl_->trainer.load_autosave(message);
-        (void)resumed;
         impl_->trainer.synchronize();
         impl_->blueprint = impl_->trainer.blueprint();
-        impl_->rig_preset = Impl::RigPreset::custom;
+        impl_->rig_preset = resumed ? Impl::RigPreset::custom : Impl::RigPreset::humanoid;
+        impl_->trainer.set_background_enabled(true);
         impl_->status = message;
         impl_->status_time = 6.0f;
         error.clear();

@@ -92,7 +92,7 @@ namespace epochrunner::sim
     {
         if (uprightness < -0.15f)
             return InvalidMotion::flipped;
-        if (speed_kmh > 50.0f)
+        if (speed_kmh >= 50.0f)
             return InvalidMotion::overspeed;
         if (root_position.x < -8.0f || root_position.x > 300.0f || root_position.y > 14.0f)
             return InvalidMotion::out_of_bounds;
@@ -103,6 +103,13 @@ namespace epochrunner::sim
         if (fallen)
             return InvalidMotion::fallen;
         return InvalidMotion::none;
+    }
+
+    [[nodiscard]] inline bool qualifies_alternating_step(int previous_side, int strike_side,
+        float seconds_since_previous, float root_displacement) noexcept
+    {
+        return previous_side != 0 && strike_side != 0 && strike_side != previous_side
+            && seconds_since_previous >= 0.12f && std::abs(root_displacement) >= 0.025f;
     }
 
     struct Particle
@@ -247,6 +254,11 @@ namespace epochrunner::sim
         float progress_window_seconds_{};
         float progress_window_start_x_{};
         float micro_motion_seconds_{};
+        float action_energy_window_{};
+        float root_path_window_{};
+        Vec2 previous_root_for_path_{};
+        float last_step_time_{ -100.0f };
+        float last_step_x_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
         int last_contact_side_{};

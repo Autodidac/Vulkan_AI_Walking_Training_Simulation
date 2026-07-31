@@ -9,8 +9,9 @@ namespace epochrunner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '5', '\0', '\1' };
-        constexpr std::array<char, 8> previous_magic{ 'E', 'P', 'P', 'O', '2', '4', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '6', '\0', '\1' };
+        constexpr std::array<char, 8> previous_magic{ 'E', 'P', 'P', 'O', '2', '5', '\0', '\1' };
+        constexpr std::array<char, 8> previous_v24_magic{ 'E', 'P', 'P', 'O', '2', '4', '\0', '\1' };
         constexpr std::array<char, 8> legacy_magic{ 'E', 'P', 'P', 'O', '2', '3', '\0', '\1' };
 
         template <typename T>
@@ -51,10 +52,11 @@ namespace epochrunner::rl
 
     bool PpoTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
     {
-        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        const std::filesystem::path temporary = path.string() + ".tmp";
+        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
         if (!output)
         {
-            error = "Could not open checkpoint for writing: " + path.string();
+            error = "Could not open checkpoint for writing: " + temporary.string();
             return false;
         }
 
@@ -93,6 +95,21 @@ namespace epochrunner::rl
             error = "Failed while writing checkpoint: " + path.string();
             return false;
         }
+        output.close();
+        if (!output)
+        {
+            error = "Failed while finalizing checkpoint: " + temporary.string();
+            return false;
+        }
+        std::error_code filesystem_error{};
+        std::filesystem::remove(path, filesystem_error);
+        filesystem_error.clear();
+        std::filesystem::rename(temporary, path, filesystem_error);
+        if (filesystem_error)
+        {
+            error = "Could not replace checkpoint atomically: " + filesystem_error.message();
+            return false;
+        }
         error.clear();
         return true;
     }
@@ -112,11 +129,11 @@ namespace epochrunner::rl
             error = "Truncated checkpoint header.";
             return false;
         }
-        if (magic == legacy_magic || magic == previous_magic)
+        if (magic == legacy_magic || magic == previous_magic || magic == previous_v24_magic)
         {
             error = transfer_only
-                ? "OLDER CONTROLLER USES THE PRE-CURRICULUM 18-SENSOR NETWORK. ITS RIG DEFAULTS WERE IMPORTED, BUT THE FLIP/FLY WEIGHTS CANNOT BE SAFELY TRANSFERRED."
-                : "OLDER EPPO23/24 CHECKPOINT CANNOT RESUME: V0.4 ADDS COURSE SENSORS AND HARD WALKING VALIDITY GATES.";
+                ? "OLDER CONTROLLER/CHECKPOINT IS QUARANTINED. V0.4.1 REQUIRES CLEAN GAIT VALIDATION AND WILL NOT IMPORT HOP/FLY BEST STATE."
+                : "OLDER EPPO23/24/25 CHECKPOINT CANNOT RESUME: V0.4.1 FIXES THE GAIT AND MICRO-MOTION GATES.";
             return false;
         }
         if (magic != checkpoint_magic)
