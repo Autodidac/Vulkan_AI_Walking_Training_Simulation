@@ -6,6 +6,7 @@ on:
       - feature/v070-runtime-pipeline
     paths:
       - "tools/patch_v070_async_persistence.py"
+      - "tools/fix_v070_persistence_telemetry.py"
       - ".github/workflows/v070-persistence-validation.yml"
 
 permissions:
@@ -26,6 +27,7 @@ jobs:
         shell: pwsh
         run: |
           python tools/patch_v070_async_persistence.py
+          python tools/fix_v070_persistence_telemetry.py
           git diff --check
 
       - name: Configure Visual Studio 2026 core validation
@@ -45,6 +47,7 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item tools/patch_v070_async_persistence.py
+          Remove-Item tools/fix_v070_persistence_telemetry.py
           Remove-Item .github/workflows/v070-persistence-validation.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
