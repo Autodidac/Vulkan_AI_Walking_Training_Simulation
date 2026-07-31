@@ -48,8 +48,23 @@ namespace epochrunner::sim
     {
         hurdle,
         overhead_bar,
-        moving_hazard
+        moving_hazard,
+        rock,
+        projectile
     };
+
+    [[nodiscard]] inline std::string_view course_feature_name(CourseFeatureKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case CourseFeatureKind::hurdle: return "HURDLE";
+        case CourseFeatureKind::overhead_bar: return "LOW BAR";
+        case CourseFeatureKind::moving_hazard: return "MOVING HAZARD";
+        case CourseFeatureKind::rock: return "ROCK";
+        case CourseFeatureKind::projectile: return "THROWN OBJECT";
+        }
+        return "OBSTACLE";
+    }
 
     struct CourseFeature
     {
@@ -213,6 +228,14 @@ namespace epochrunner::sim
         [[nodiscard]] bool fallen() const noexcept { return fallen_; }
         [[nodiscard]] float ground_height() const noexcept { return 0.0f; }
         [[nodiscard]] float ground_height_at(float x) const noexcept;
+        [[nodiscard]] float course_speed() const noexcept
+        {
+            return course_stage_ == CourseStage::balance ? 0.0f : 0.45f + course_difficulty_ * 0.75f;
+        }
+        [[nodiscard]] float course_progress() const noexcept { return elapsed_seconds_ * course_speed(); }
+        [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
+        [[nodiscard]] std::uint32_t recovery_events() const noexcept { return recovery_events_; }
+        [[nodiscard]] std::uint32_t recovery_successes() const noexcept { return recovery_successes_; }
         [[nodiscard]] float collision_count() const noexcept { return collision_count_; }
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
@@ -265,6 +288,11 @@ namespace epochrunner::sim
         bool previous_left_grounded_{};
         bool previous_right_grounded_{};
         bool collided_this_step_{};
+        bool recovery_active_{};
+        float recovery_started_seconds_{};
+        float recovery_best_upright_{ 1.0f };
+        std::uint32_t recovery_events_{};
+        std::uint32_t recovery_successes_{};
         InvalidMotion invalid_reason_{ InvalidMotion::none };
     };
 }

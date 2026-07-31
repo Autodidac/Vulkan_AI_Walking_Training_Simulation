@@ -540,57 +540,146 @@ namespace epochrunner::sim
     {
         if (course_stage_ == CourseStage::balance || course_stage_ == CourseStage::walk)
             return 0.0f;
-        const float positive_x = std::max(0.0f, x);
-        const float phase = std::fmod(positive_x, 8.0f) / 8.0f;
-        const float triangle = phase < 0.5f ? phase * 2.0f : (1.0f - phase) * 2.0f;
-        float height = triangle * (0.22f + course_difficulty_ * 0.28f);
+
+        constexpr float segment_length = 7.0f;
+        const float course_x = std::max(0.0f, x + course_progress());
+        const int segment = static_cast<int>(std::floor(course_x / segment_length)) % 5;
+        const float local = std::fmod(course_x, segment_length) / segment_length;
+        const float smooth = local * local * (3.0f - 2.0f * local);
+        const float amplitude = 0.18f + course_difficulty_ * 0.42f;
+
+        float height = 0.0f;
+        switch (segment)
+        {
+        case 0:
+            height = 0.0f;
+            break;
+        case 1:
+            height = amplitude * smooth;
+            break;
+        case 2:
+            height = amplitude;
+            break;
+        case 3:
+            height = amplitude * (1.0f - smooth);
+            break;
+        default:
+            height = std::sin(local * pi) * amplitude * 0.78f;
+            break;
+        }
+
         if (course_stage_ >= CourseStage::uneven)
         {
-            height += std::sin(x * 1.15f) * 0.09f * course_difficulty_;
-            height += std::sin(x * 2.75f + 0.7f) * 0.045f * course_difficulty_;
+            const float roughness = course_difficulty_ * 0.065f;
+            height += std::sin(course_x * 0.83f) * roughness;
+            height += std::sin(course_x * 2.17f + 0.7f) * roughness * 0.42f;
         }
-        return std::max(-0.04f, height);
+        return std::max(-0.06f, height);
     }
 
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
-        const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
-        if (course_stage_ >= CourseStage::hurdles)
+        if (course_stage_ == CourseStage::balance || course_stage_ == CourseStage::walk)
+            return;
+
+        const float root_x = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.x : 0.0f;
+        constexpr float spacing = 5.5f;
+        const float progress = course_progress();
+        const int first_sequence = static_cast<int>(std::floor(progress / spacing));
+        const float phase = std::fmod(progress, spacing);
+        const float treadmill_velocity = -course_speed();
+
+        auto variation_for = [](int sequence) noexcept
         {
-            const int first = std::max(0, static_cast<int>(std::floor((root_x - 6.0f) / 6.0f)));
-            for (int index = first; index < first + 7; ++index)
+            std::uint32_t value = static_cast<std::uint32_t>(sequence) * 747796405u + 2891336453u;
+            value ^= value >> 16u;
+            value *= 2246822519u;
+            value ^= value >> 13u;
+            return static_cast<float>(value & 0xffffu) / 65535.0f;
+        };
+
+        for (int offset = 0; offset < 10; ++offset)
+        {
+            const int sequence = first_sequence + offset;
+            const int selector = ((sequence % 5) + 5) % 5;
+            const float variation = variation_for(sequence);
+            const float x = root_x + 4.5f + static_cast<float>(offset) * spacing - phase;
+            const float ground = ground_height_at(x);
+
+            CourseFeatureKind kind = CourseFeatureKind::rock;
+            if (selector == 1 && course_stage_ >= CourseStage::hurdles)
+                kind = CourseFeatureKind::hurdle;
+            else if (selector == 2 && course_stage_ >= CourseStage::duck_bars)
+                kind = CourseFeatureKind::overhead_bar;
+            else if (selector == 3 && course_stage_ >= CourseStage::moving_hazards)
+                kind = CourseFeatureKind::moving_hazard;
+            else if (selector == 4 && course_stage_ >= CourseStage::moving_hazards)
+                kind = CourseFeatureKind::projectile;
+            else if (selector >= 3 && course_stage_ >= CourseStage::hurdles)
+                kind = CourseFeatureKind::hurdle;
+
+            switch (kind)
             {
-                const float x = 5.0f + static_cast<float>(index) * 6.0f;
-                const float height = 0.24f + course_difficulty_ * 0.30f;
-                course_features_.push_back({ CourseFeatureKind::hurdle,
-                    { x, ground_height_at(x) + height * 0.5f }, { 0.15f, height * 0.5f }, 0.0f, {} });
+            case CourseFeatureKind::rock:
+            {
+                const float radius = 0.16f + variation * (0.15f + course_difficulty_ * 0.08f);
+                course_features_.push_back({
+                    kind, { x, ground + radius }, {}, radius, { treadmill_velocity, 0.0f }
+                });
+                break;
             }
-        }
-        if (course_stage_ >= CourseStage::duck_bars)
-        {
-            const int first = std::max(0, static_cast<int>(std::floor((root_x - 7.0f) / 8.0f)));
-            for (int index = first; index < first + 6; ++index)
+            case CourseFeatureKind::hurdle:
             {
-                const float x = 7.0f + static_cast<float>(index) * 8.0f;
-                const float clearance = 3.55f - course_difficulty_ * 0.75f;
-                course_features_.push_back({ CourseFeatureKind::overhead_bar,
-                    { x, ground_height_at(x) + clearance + 0.12f }, { 1.05f, 0.12f }, 0.0f, {} });
+                const float height = 0.24f + course_difficulty_ * 0.34f + variation * 0.12f;
+                course_features_.push_back({
+                    kind, { x, ground + height * 0.5f }, { 0.14f, height * 0.5f }, 0.0f,
+                    { treadmill_velocity, 0.0f }
+                });
+                break;
             }
-        }
-        if (course_stage_ >= CourseStage::moving_hazards)
-        {
-            const int first = std::max(0, static_cast<int>(std::floor((root_x - 8.0f) / 8.0f)));
-            const float speed = 0.8f + course_difficulty_ * 1.0f;
-            for (int index = first; index < first + 7; ++index)
+            case CourseFeatureKind::overhead_bar:
             {
-                const float lane = 8.0f + static_cast<float>(index) * 8.0f;
-                const float travel = std::fmod(elapsed_seconds_ * speed + static_cast<float>(index) * 1.37f, 6.0f);
-                const float x = lane + 3.0f - travel;
-                const float y = ground_height_at(x) + 1.25f
-                    + std::sin(elapsed_seconds_ * 1.8f + static_cast<float>(index)) * 0.40f;
-                const float radius = 0.20f + course_difficulty_ * 0.09f;
-                course_features_.push_back({ CourseFeatureKind::moving_hazard, { x, y }, {}, radius, { -speed, 0.0f } });
+                const float clearance = 3.65f - course_difficulty_ * 0.82f - variation * 0.16f;
+                course_features_.push_back({
+                    kind, { x, ground + clearance + 0.12f }, { 1.05f, 0.12f }, 0.0f,
+                    { treadmill_velocity, 0.0f }
+                });
+                break;
+            }
+            case CourseFeatureKind::moving_hazard:
+            {
+                const float oscillation = std::sin(
+                    elapsed_seconds_ * (1.7f + course_difficulty_) + static_cast<float>(sequence));
+                const float radius = 0.19f + course_difficulty_ * 0.10f;
+                course_features_.push_back({
+                    kind,
+                    { x + oscillation * 0.85f, ground + 1.05f + oscillation * 0.38f },
+                    {},
+                    radius,
+                    { treadmill_velocity + oscillation * 0.35f, 0.0f }
+                });
+                break;
+            }
+            case CourseFeatureKind::projectile:
+            {
+                const float throw_phase = std::fmod(
+                    elapsed_seconds_ * (0.72f + course_difficulty_ * 0.28f)
+                        + static_cast<float>(sequence) * 0.37f,
+                    1.0f);
+                const float throw_speed = 2.8f + course_difficulty_ * 2.2f;
+                const float arc = 4.0f * throw_phase * (1.0f - throw_phase);
+                const float radius = 0.14f + variation * 0.08f;
+                course_features_.push_back({
+                    kind,
+                    { x + 2.2f - throw_phase * 4.4f, ground + 1.15f + arc * 1.55f },
+                    {},
+                    radius,
+                    { treadmill_velocity - throw_speed, (1.0f - throw_phase * 2.0f) * 2.4f }
+                });
+                break;
+            }
             }
         }
     }
@@ -641,6 +730,11 @@ namespace epochrunner::sim
         previous_left_grounded_ = false;
         previous_right_grounded_ = false;
         collided_this_step_ = false;
+        recovery_active_ = false;
+        recovery_started_seconds_ = 0.0f;
+        recovery_best_upright_ = 1.0f;
+        recovery_events_ = 0;
+        recovery_successes_ = 0;
         invalid_reason_ = InvalidMotion::none;
         rebuild_course_features();
     }
@@ -734,7 +828,9 @@ namespace epochrunner::sim
         {
             for (const CourseFeature& feature : course_features_)
             {
-                if (feature.kind == CourseFeatureKind::moving_hazard)
+                if (feature.kind == CourseFeatureKind::moving_hazard
+                    || feature.kind == CourseFeatureKind::rock
+                    || feature.kind == CourseFeatureKind::projectile)
                 {
                     const Vec2 delta = particle.position - feature.center;
                     const float distance = length(delta);
@@ -745,6 +841,10 @@ namespace epochrunner::sim
                     const Vec2 correction = normal * (minimum - distance);
                     particle.position += correction;
                     particle.previous += correction * 0.25f;
+                    if (feature.kind == CourseFeatureKind::projectile)
+                        particle.previous -= feature.velocity * (1.0f / 60.0f) * 0.34f;
+                    else if (feature.kind == CourseFeatureKind::moving_hazard)
+                        particle.previous -= feature.velocity * (1.0f / 60.0f) * 0.12f;
                     collided_this_step_ = true;
                     continue;
                 }
@@ -957,6 +1057,36 @@ namespace epochrunner::sim
         fallen_ = particles_[blueprint_.torso_node].position.y < torso_floor
             || particles_[blueprint_.head_node].position.y < head_floor;
 
+        float recovery_reward = 0.0f;
+        const bool supported = particles_[blueprint_.left_contact_node].grounded
+            || particles_[blueprint_.right_contact_node].grounded;
+        if (!recovery_active_ && !fallen_ && (collided_this_step_ || upright < 0.72f))
+        {
+            recovery_active_ = true;
+            recovery_started_seconds_ = elapsed_seconds_;
+            recovery_best_upright_ = upright;
+            ++recovery_events_;
+        }
+        if (recovery_active_)
+        {
+            const float improvement = upright - recovery_best_upright_;
+            if (improvement > 0.0f)
+                recovery_reward += improvement * 0.10f;
+            recovery_best_upright_ = std::max(recovery_best_upright_, upright);
+            const float recovery_time = elapsed_seconds_ - recovery_started_seconds_;
+            if (upright >= 0.90f && supported && recovery_time >= 0.12f)
+            {
+                recovery_active_ = false;
+                ++recovery_successes_;
+                recovery_reward += 0.14f;
+            }
+            else if (fallen_ || recovery_time > 3.0f)
+            {
+                recovery_active_ = false;
+                recovery_reward -= 0.10f;
+            }
+        }
+
         const float allowed_airtime = course_stage_ == CourseStage::hurdles ? 1.30f
             : course_stage_ == CourseStage::moving_hazards ? 1.05f
             : course_stage_ >= CourseStage::ramps ? 0.90f : 0.72f;
@@ -989,8 +1119,12 @@ namespace epochrunner::sim
                 - collision_penalty;
         }
 
+        last_reward_ += recovery_reward;
         if (invalid_reason_ != InvalidMotion::none)
+        {
+            recovery_active_ = false;
             last_reward_ -= 5.0f;
+        }
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f : 20.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
         return { last_reward_, forward_speed_, terminated,
@@ -1028,7 +1162,7 @@ namespace epochrunner::sim
         result[14] = clamp((particles_[blueprint_.left_contact_node].position.x - root.x) / 2.0f, -2.0f, 2.0f);
         result[15] = clamp((particles_[blueprint_.right_contact_node].position.x - root.x) / 2.0f, -2.0f, 2.0f);
         result[16] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
-        result[17] = 1.0f;
+        result[17] = recovery_active_ ? clamp(torso.y, -1.0f, 1.0f) : 1.0f;
         result[18] = clamp((ground_height_at(root.x + 0.65f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
         result[19] = clamp((ground_height_at(root.x + 1.50f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
         result[20] = clamp((ground_height_at(root.x + 3.00f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
@@ -1047,8 +1181,14 @@ namespace epochrunner::sim
         if (nearest != nullptr)
         {
             result[21] = clamp(nearest_dx / 6.0f, -1.0f, 2.0f);
-            result[22] = nearest->kind == CourseFeatureKind::hurdle ? -1.0f
-                : nearest->kind == CourseFeatureKind::overhead_bar ? 0.0f : 1.0f;
+            switch (nearest->kind)
+            {
+            case CourseFeatureKind::hurdle: result[22] = -1.0f; break;
+            case CourseFeatureKind::rock: result[22] = -0.5f; break;
+            case CourseFeatureKind::overhead_bar: result[22] = 0.0f; break;
+            case CourseFeatureKind::moving_hazard: result[22] = 0.5f; break;
+            case CourseFeatureKind::projectile: result[22] = 1.0f; break;
+            }
             result[23] = clamp((nearest->center.y - root.y) / 4.0f, -2.0f, 2.0f);
             result[24] = nearest->kind == CourseFeatureKind::moving_hazard
                 ? nearest->radius : std::max(nearest->half_extent.x, nearest->half_extent.y);

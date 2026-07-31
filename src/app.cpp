@@ -383,28 +383,87 @@ namespace epochrunner
             canvas.polyline(surface, 3.0f, rgb(0x475762));
         }
 
+        void draw_course_reference(const sim::Environment& environment, Rect viewport,
+            float camera, float scale)
+        {
+            const float progress = environment.course_progress();
+            const float half_view = viewport.size.x * 0.5f / scale;
+            const float left = camera - half_view - 2.0f;
+            const float right = camera + half_view + 2.0f;
+
+            constexpr float dash_spacing = 1.6f;
+            const int first_dash = static_cast<int>(std::floor((left + progress) / dash_spacing));
+            const int last_dash = static_cast<int>(std::ceil((right + progress) / dash_spacing));
+            for (int index = first_dash; index <= last_dash; ++index)
+            {
+                const float x0 = static_cast<float>(index) * dash_spacing - progress;
+                const float x1 = x0 + 0.72f;
+                const Vec2 start = world_to_screen(
+                    { x0, environment.ground_height_at(x0) + 0.035f }, viewport, camera, scale);
+                const Vec2 end = world_to_screen(
+                    { x1, environment.ground_height_at(x1) + 0.035f }, viewport, camera, scale);
+                canvas.line(start, end, 3.0f, rgb(0xd6d9c4, 0.82f));
+            }
+
+            constexpr float marker_spacing = 10.0f;
+            const int first_marker = static_cast<int>(std::floor((left + progress) / marker_spacing));
+            const int last_marker = static_cast<int>(std::ceil((right + progress) / marker_spacing));
+            for (int index = first_marker; index <= last_marker; ++index)
+            {
+                if (index < 0)
+                    continue;
+                const float distance = static_cast<float>(index) * marker_spacing;
+                const float x = distance - progress;
+                const float ground = environment.ground_height_at(x);
+                const Vec2 base = world_to_screen({ x, ground }, viewport, camera, scale);
+                const Vec2 top = world_to_screen({ x, ground + 0.72f }, viewport, camera, scale);
+                canvas.line(base, top, 4.0f, accent_dim);
+                const Rect sign{ top + Vec2{ -43.0f, -22.0f }, { 86.0f, 21.0f } };
+                add_rounded_rect(canvas, sign, 4.0f, rgb(0x102431, 0.94f), accent, 1.0f);
+                add_text(canvas, sign.position + Vec2{ 5.0f, 5.0f },
+                    std::format("{:.0f} M / {:.3f} MI", distance, distance / 1609.344f),
+                    0.76f, white);
+            }
+        }
+
         void draw_course_features(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
             for (const sim::CourseFeature& feature : environment.course_features())
             {
-                if (feature.kind == sim::CourseFeatureKind::moving_hazard)
+                const Vec2 feature_screen = world_to_screen(feature.center, viewport, camera, scale);
+                if (feature.kind == sim::CourseFeatureKind::moving_hazard
+                    || feature.kind == sim::CourseFeatureKind::rock
+                    || feature.kind == sim::CourseFeatureKind::projectile)
                 {
-                    canvas.circle(world_to_screen(feature.center, viewport, camera, scale),
-                        feature.radius * scale, danger, 24);
-                    continue;
+                    const Color fill = feature.kind == sim::CourseFeatureKind::rock
+                        ? rgb(0x6c747d)
+                        : feature.kind == sim::CourseFeatureKind::projectile ? rgb(0xf06a3e) : danger;
+                    canvas.circle(feature_screen, feature.radius * scale, fill, 24);
+                    if (feature.kind == sim::CourseFeatureKind::projectile)
+                    {
+                        const Vec2 trail = feature_screen - feature.velocity * (scale * 0.20f);
+                        canvas.line(trail, feature_screen, 3.0f, yellow);
+                    }
                 }
-                const Vec2 minimum = world_to_screen(feature.center - feature.half_extent,
-                    viewport, camera, scale);
-                const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
-                    viewport, camera, scale);
-                const Rect rect{
-                    { minimum.x, maximum.y },
-                    { maximum.x - minimum.x, minimum.y - maximum.y }
-                };
-                add_rounded_rect(canvas, rect, 4.0f,
-                    feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent_dim,
-                    feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent, 1.0f);
+                else
+                {
+                    const Vec2 minimum = world_to_screen(feature.center - feature.half_extent,
+                        viewport, camera, scale);
+                    const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
+                        viewport, camera, scale);
+                    const Rect rect{
+                        { minimum.x, maximum.y },
+                        { maximum.x - minimum.x, minimum.y - maximum.y }
+                    };
+                    add_rounded_rect(canvas, rect, 4.0f,
+                        feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent_dim,
+                        feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent, 1.0f);
+                }
+
+                add_text(canvas, feature_screen + Vec2{ -42.0f, -36.0f },
+                    sim::course_feature_name(feature.kind), 0.82f,
+                    feature.kind == sim::CourseFeatureKind::projectile ? yellow : muted);
             }
         }
 
@@ -535,6 +594,7 @@ namespace epochrunner
                     environment.particles()[environment.blueprint().root_node].position.x + 1.8f, 0.045f);
             add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
             draw_course_ground(environment, viewport, camera_x, 90.0f);
+            draw_course_reference(environment, viewport, camera_x, 90.0f);
             draw_course_features(environment, viewport, camera_x, 90.0f);
             draw_creature(environment, viewport, camera_x, 90.0f);
 
@@ -543,9 +603,15 @@ namespace epochrunner
                 std::format("{}  /  {:.0f}%", sim::course_stage_name(autonomy.stage), autonomy.difficulty * 100.0f),
                 2.20f, white);
             add_text(canvas, viewport.position + Vec2{ 24.0f, 61.0f },
-                std::format("{:.1f} KM/H   {:.1f} M   {}", environment.forward_speed() * 3.6f,
-                    environment.distance_travelled(), sim::invalid_motion_name(environment.invalid_reason())),
+                std::format("{:.1f} KM/H   ACTUAL {:.1f} M   COURSE {:.1f} M   {}",
+                    environment.forward_speed() * 3.6f, environment.distance_travelled(),
+                    environment.course_progress(), sim::invalid_motion_name(environment.invalid_reason())),
                 1.45f, environment.valid_motion() ? green : danger);
+            add_text(canvas, viewport.position + Vec2{ 24.0f, 88.0f },
+                std::format("RECOVERY {}   {}/{} SUCCESS",
+                    environment.recovering() ? "ACTIVE" : "READY",
+                    environment.recovery_successes(), environment.recovery_events()),
+                1.12f, environment.recovering() ? yellow : muted);
             add_text(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 36.0f },
                 "LIVE BEST CONTROLLER   v" EPOCHRUNNER_VERSION "   TRAINING STAYS IN THE BACKGROUND", 1.20f, muted);
         }

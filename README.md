@@ -1,10 +1,17 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.5.0 replaces manual train/run switching with a continuously operating autonomous curriculum.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.0 replaces manual train/run switching with a continuously operating autonomous curriculum.
+
+
+## Procedural obstacle and recovery treadmill
+
+Version 0.6.0 continuously advances a bounded training course even when the creature does not translate. The course cycles through flat road, inclines, plateaus, declines, hills, uneven terrain, rocks, hurdles, low bars, moving hazards, and thrown projectiles. Road dashes and numbered metre/mile markers expose movement clearly in the live view.
+
+Obstacle impacts and large balance errors start a timed recovery objective. Policies receive extra reward for restoring upright supported balance and a penalty when recovery times out.
 
 ## Default workflow
 
-Version 0.5.0 visibly identifies itself in the title bar and UI, uses uniquely named release assets and clean autosaves, rejects synchronized hopping as walking, applies motors to the full driven subtree, and keeps persistent rollout workers instead of recreating threads every update.
+Version 0.6.0 visibly identifies itself in the title bar and UI, uses uniquely named release assets and clean autosaves, rejects synchronized hopping as walking, applies motors to the full driven subtree, and keeps persistent rollout workers instead of recreating threads every update.
 
 The application starts in **Live Autopilot**. The foreground renders one current best verified controller while background CPU workers train 64 non-rendered environments. Vulkan remains dedicated to presentation instead of drawing every training agent.
 

@@ -113,6 +113,39 @@ int main()
         }
     }
 
+
+    {
+        sim::Environment procedural{ humanoid, 0xC0A57u };
+        procedural.set_course(sim::CourseStage::moving_hazards, 0.65f);
+        const float initial_progress = procedural.course_progress();
+        const float initial_height = procedural.ground_height_at(7.5f);
+        const std::array<float, sim::action_count> zero_actions{};
+        for (int frame = 0; frame < 90; ++frame)
+        {
+            const sim::StepResult result = procedural.step(zero_actions);
+            require(std::isfinite(result.reward), "procedural obstacle reward is not finite");
+            (void)result.terminated;
+        }
+        require(procedural.course_progress() > initial_progress,
+            "procedural course does not advance when the creature is stationary");
+        require(std::abs(procedural.ground_height_at(7.5f) - initial_height) > 0.001f,
+            "procedural inclines and hills do not move through the training lane");
+
+        std::array<bool, 5> found{};
+        for (const sim::CourseFeature& feature : procedural.course_features())
+            found[static_cast<std::size_t>(feature.kind)] = true;
+        require(found[static_cast<std::size_t>(sim::CourseFeatureKind::hurdle)],
+            "procedural course omitted hurdles");
+        require(found[static_cast<std::size_t>(sim::CourseFeatureKind::overhead_bar)],
+            "procedural course omitted overhead bars");
+        require(found[static_cast<std::size_t>(sim::CourseFeatureKind::moving_hazard)],
+            "procedural course omitted moving hazards");
+        require(found[static_cast<std::size_t>(sim::CourseFeatureKind::rock)],
+            "procedural course omitted rocks");
+        require(found[static_cast<std::size_t>(sim::CourseFeatureKind::projectile)],
+            "procedural course omitted thrown objects");
+    }
+
     rl::PpoTrainer trainer{ humanoid, 16 };
     require(trainer.rollout_worker_count() >= 1, "parallel rollout worker count is invalid");
     trainer.set_cpu_mode(1);
@@ -140,7 +173,7 @@ int main()
     }
 
     const std::filesystem::path temporary =
-        std::filesystem::temp_directory_path() / "epochrunner-v050-core-test.eppo";
+        std::filesystem::temp_directory_path() / "epochrunner-v060-core-test.eppo";
     std::string error{};
     require(trainer.save_checkpoint(temporary, error), "failed to save checkpoint: " + error);
     rl::PpoTrainer resumed{ humanoid, 16 };
@@ -198,6 +231,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "EpochRunner v0.5.0 concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "EpochRunner v0.6.0 procedural course, recovery, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }
