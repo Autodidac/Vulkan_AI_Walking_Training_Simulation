@@ -1,0 +1,144 @@
+name: EpochRunner v0.6.0 core diagnostic
+
+on:
+  push:
+    paths:
+      - ".github/workflows/v060-core-diagnostic.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout current source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch, compile core, test, and preserve all output
+        id: diagnostic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force validation | Out-Null
+
+          python tools/integrate_v060.py *> validation/v060-patch.log
+          $patchExit = $LASTEXITCODE
+
+          $configureExit = -1
+          $buildExit = -1
+          $testExit = -1
+
+          if ($patchExit -eq 0) {
+            cmake -S . -B build/v060-core-diagnostic `
+              -G "Visual Studio 18 2026" -A x64 `
+              -DEPOCHRUNNER_BUILD_APP=OFF `
+              -DEPOCHRUNNER_BUILD_TESTS=ON `
+              *> validation/v060-configure.log
+            $configureExit = $LASTEXITCODE
+          } else {
+            "Configure skipped because source integration failed." | Set-Content validation/v060-configure.log
+          }
+
+          if ($configureExit -eq 0) {
+            cmake --build build/v060-core-diagnostic --config Release `
+              *> validation/v060-build.log
+            $buildExit = $LASTEXITCODE
+          } else {
+            "Build skipped because configuration failed." | Set-Content validation/v060-build.log
+          }
+
+          if ($buildExit -eq 0) {
+            ctest --test-dir build/v060-core-diagnostic -C Release `
+              --output-on-failure -V *> validation/v060-test.log
+            $testExit = $LASTEXITCODE
+          } else {
+            "Tests skipped because compilation failed." | Set-Content validation/v060-test.log
+          }
+
+          $env:PATCH_EXIT = "$patchExit"
+          $env:CONFIGURE_EXIT = "$configureExit"
+          $env:BUILD_EXIT = "$buildExit"
+          $env:TEST_EXIT = "$testExit"
+          $env:SOURCE_SHA = (git rev-parse HEAD).Trim()
+
+          @'
+          from pathlib import Path
+          import os
+
+          def result(name: str) -> str:
+              value = int(os.environ[name])
+              if value == 0:
+                  return "success"
+              if value == -1:
+                  return "skipped"
+              return f"failed ({value})"
+
+          def read(name: str) -> str:
+              path = Path("validation") / name
+              return path.read_text(encoding="utf-8", errors="replace") if path.exists() else "missing log"
+
+          report = f"""# EpochRunner v0.6.0 core diagnostic
+
+          Source before integration: `{os.environ['SOURCE_SHA']}`
+
+          - Patch integration: {result('PATCH_EXIT')}
+          - Configure: {result('CONFIGURE_EXIT')}
+          - Build: {result('BUILD_EXIT')}
+          - Tests: {result('TEST_EXIT')}
+
+          ## Patch log
+
+          ```text
+          {read('v060-patch.log')}
+          ```
+
+          ## Configure log
+
+          ```text
+          {read('v060-configure.log')}
+          ```
+
+          ## Build log
+
+          ```text
+          {read('v060-build.log')}
+          ```
+
+          ## Test log
+
+          ```text
+          {read('v060-test.log')}
+          ```
+          """
+          Path("validation/v060-core-diagnostic.md").write_text(report, encoding="utf-8")
+          '@ | python -
+
+          "patch_exit=$patchExit" >> $env:GITHUB_OUTPUT
+          "configure_exit=$configureExit" >> $env:GITHUB_OUTPUT
+          "build_exit=$buildExit" >> $env:GITHUB_OUTPUT
+          "test_exit=$testExit" >> $env:GITHUB_OUTPUT
+          exit 0
+
+      - name: Commit diagnostic evidence even when validation failed
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add validation/v060-core-diagnostic.md
+          git commit -m "Record v0.6 core diagnostic"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Fail workflow after evidence is preserved
+        shell: pwsh
+        run: |
+          if ("${{ steps.diagnostic.outputs.patch_exit }}" -ne "0" `
+            -or "${{ steps.diagnostic.outputs.configure_exit }}" -ne "0" `
+            -or "${{ steps.diagnostic.outputs.build_exit }}" -ne "0" `
+            -or "${{ steps.diagnostic.outputs.test_exit }}" -ne "0") {
+            throw "EpochRunner v0.6.0 core diagnostic failed; inspect validation/v060-core-diagnostic.md"
+          }
