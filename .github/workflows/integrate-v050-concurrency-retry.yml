@@ -1,0 +1,28 @@
+name: Integrate EpochRunner v0.5 concurrency retry
+
+on:
+  push:
+    paths:
+      - ".github/workflows/integrate-v050-concurrency-retry.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Integrate source
+        run: python3 tools/integrate_v050.py
+
+      - name: Commit integrated source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Integrate EpochRunner v0.5 persistent concurrency"
+          git push origin HEAD:main
