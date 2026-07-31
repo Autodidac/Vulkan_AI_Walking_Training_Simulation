@@ -162,6 +162,7 @@ endif()
 if(EPOCHRUNNER_BUILD_TESTS)
     include(CTest)
     enable_testing()
+
     add_executable(EpochRunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(EpochRunnerCoreTests PRIVATE EpochRunner::Core)
     target_compile_features(EpochRunnerCoreTests PRIVATE cxx_std_23)
@@ -172,4 +173,16 @@ if(EPOCHRUNNER_BUILD_TESTS)
     )
     epochrunner_enable_warnings(EpochRunnerCoreTests)
     add_test(NAME EpochRunner.Core COMMAND EpochRunnerCoreTests)
+
+    add_executable(EpochRunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
+    target_link_libraries(EpochRunnerConcurrencyBenchmark PRIVATE EpochRunner::Core)
+    target_compile_features(EpochRunnerConcurrencyBenchmark PRIVATE cxx_std_23)
+    set_target_properties(EpochRunnerConcurrencyBenchmark PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    epochrunner_enable_warnings(EpochRunnerConcurrencyBenchmark)
+    add_test(NAME EpochRunner.ConcurrencyBenchmark COMMAND EpochRunnerConcurrencyBenchmark)
+    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 30)
 endif()
