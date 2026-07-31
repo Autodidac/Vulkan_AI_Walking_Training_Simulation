@@ -36,66 +36,63 @@ jobs:
           text = text.replace(
               '            trainer.set_blueprint(blueprint, true);\n            set_status(std::format("{} - CONTROLLER TRANSFERRED AND RECALIBRATING", reason));',
               '            trainer.set_blueprint(blueprint, true);\n            set_status(std::format("{} - QUEUED WITHOUT BLOCKING; CONTROLLER RECALIBRATES IN BACKGROUND", reason));')
-          stale_sync = '''            if (!dragging_node && !rig_edit_pending
-              && trainer.blueprint().signature() != blueprint.signature())
-          {
-              blueprint = trainer.blueprint();
-              rig_preset = RigPreset::custom;
-          }
-'''
-          if stale_sync not in text:
+
+          sync_start = text.find("            if (!dragging_node && !rig_edit_pending")
+          if sync_start < 0:
               raise SystemExit("Expected blocking rig synchronization block was not found")
-          text = text.replace(stale_sync, "")
-          metrics_anchor = '''            add_text(canvas, cursor, std::format("{} CPU ROLLOUT THREADS / {} ENVIRONMENTS",
-              autonomy.rollout_threads, autonomy.environment_count), 1.12f, muted);
-          cursor.y += 23.0f;
-'''
-          metrics_replacement = metrics_anchor + '''            add_text(canvas, cursor, std::format("TRAIN {:.2f} UPDATES/S   MODE {}   QUEUED {}",
-              autonomy.updates_per_second, autonomy.speed_mode, autonomy.pending_commands), 1.10f, white);
-          cursor.y += 23.0f;
-'''
-          if metrics_anchor not in text:
+          sync_end = text.find("            canvas.clear();", sync_start)
+          if sync_end < 0:
+              raise SystemExit("Rig synchronization block did not terminate before canvas clear")
+          text = text[:sync_start] + text[sync_end:]
+
+          metric_anchor = '            add_text(canvas, cursor, std::format("{} CPU ROLLOUT THREADS / {} ENVIRONMENTS",'
+          metric_start = text.find(metric_anchor)
+          if metric_start < 0:
               raise SystemExit("Expected trainer metrics anchor was not found")
-          text = text.replace(metrics_anchor, metrics_replacement)
+          metric_end_marker = "            cursor.y += 23.0f;\n"
+          metric_end = text.find(metric_end_marker, metric_start)
+          if metric_end < 0:
+              raise SystemExit("Trainer metrics block did not terminate")
+          metric_end += len(metric_end_marker)
+          metric_insert = (
+              '            add_text(canvas, cursor, std::format("TRAIN {:.2f} UPDATES/S   MODE {}   QUEUED {}",\n'
+              '                autonomy.updates_per_second, autonomy.speed_mode, autonomy.pending_commands), 1.10f, white);\n'
+              '            cursor.y += 23.0f;\n'
+          )
+          text = text[:metric_end] + metric_insert + text[metric_end:]
           app.write_text(text, encoding="utf-8")
 
           tests = Path("tests/core_tests.cpp")
           text = tests.read_text(encoding="utf-8")
           text = text.replace("epochrunner-v041-core-test.eppo", "epochrunner-v050-core-test.eppo")
-          old = '''        autonomous.train_one_update();
-          for (int attempt = 0; attempt < 400 && autonomous.metrics().update == 0; ++attempt)
-          {
-              std::this_thread::sleep_for(std::chrono::milliseconds(5));
-              autonomous.synchronize();
-          }
-          require(autonomous.metrics().update >= 1, "coroutine background worker did not process requested update");
-'''
-          new = old + '''
-          sim::CreatureBlueprint edited = humanoid;
-          edited.nodes[1].x += 0.01f;
-          edited.rebuild_rest_lengths();
-          const auto command_started = std::chrono::steady_clock::now();
-          autonomous.set_blueprint(edited, true);
-          const auto command_elapsed = std::chrono::steady_clock::now() - command_started;
-          require(command_elapsed < std::chrono::milliseconds(20),
-              "hip edit blocked the caller on active training work");
-          for (int attempt = 0; attempt < 800 && autonomous.rig_signature() != edited.signature(); ++attempt)
-          {
-              std::this_thread::sleep_for(std::chrono::milliseconds(5));
-              autonomous.synchronize();
-          }
-          require(autonomous.rig_signature() == edited.signature(),
-              "queued hip edit was not eventually applied");
-          autonomous.set_updates_per_cycle(1);
-          require(autonomous.updates_per_cycle() == 1, "normal speed mode did not latch");
-          autonomous.set_updates_per_cycle(2);
-          require(autonomous.updates_per_cycle() == 2, "faster speed mode did not latch");
-          autonomous.set_updates_per_cycle(4);
-          require(autonomous.updates_per_cycle() == 4, "max CPU speed mode did not latch");
-'''
-          if old not in text:
+          test_anchor = '        require(autonomous.metrics().update >= 1, "coroutine background worker did not process requested update");\n'
+          if test_anchor not in text:
               raise SystemExit("Expected autonomous test anchor was not found")
-          text = text.replace(old, new)
+          regression = (
+              '\n'
+              '        sim::CreatureBlueprint edited = humanoid;\n'
+              '        edited.nodes[1].x += 0.01f;\n'
+              '        edited.rebuild_rest_lengths();\n'
+              '        const auto command_started = std::chrono::steady_clock::now();\n'
+              '        autonomous.set_blueprint(edited, true);\n'
+              '        const auto command_elapsed = std::chrono::steady_clock::now() - command_started;\n'
+              '        require(command_elapsed < std::chrono::milliseconds(20),\n'
+              '            "hip edit blocked the caller on active training work");\n'
+              '        for (int attempt = 0; attempt < 800 && autonomous.rig_signature() != edited.signature(); ++attempt)\n'
+              '        {\n'
+              '            std::this_thread::sleep_for(std::chrono::milliseconds(5));\n'
+              '            autonomous.synchronize();\n'
+              '        }\n'
+              '        require(autonomous.rig_signature() == edited.signature(),\n'
+              '            "queued hip edit was not eventually applied");\n'
+              '        autonomous.set_updates_per_cycle(1);\n'
+              '        require(autonomous.updates_per_cycle() == 1, "normal speed mode did not latch");\n'
+              '        autonomous.set_updates_per_cycle(2);\n'
+              '        require(autonomous.updates_per_cycle() == 2, "faster speed mode did not latch");\n'
+              '        autonomous.set_updates_per_cycle(4);\n'
+              '        require(autonomous.updates_per_cycle() == 4, "max CPU speed mode did not latch");\n'
+          )
+          text = text.replace(test_anchor, test_anchor + regression)
           text = text.replace(
               'std::cout << "EpochRunner v0.4.1 autonomous gait and curriculum tests passed\\n";',
               'std::cout << "EpochRunner v0.5.0 concurrent trainer, gait, and rig-edit tests passed\\n";')
