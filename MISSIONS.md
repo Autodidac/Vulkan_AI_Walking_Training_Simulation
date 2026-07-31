@@ -175,4 +175,4 @@ Required recovery behavior:
 
 ## Current warning
 
-EpochRunner v0.6.0 adds the verified procedural obstacle/recovery treadmill. EpochRunner v0.5.0 passed its Windows build, concurrency tests, speed-mode benchmark, Vulkan diagnostic, and packaging gate. WALK-COURSE-001 remains ACTIVE until the full v0.6.0 application and release gate pass. Remaining ACTIVE/OPEN missions carry forward unchanged.
+EpochRunner v0.6.0 course and recovery source is integrated and core-validated, but WALK-COURSE-001 remains ACTIVE until the full Windows/Vulkan application and release gate pass. EpochRunner v0.5.0 remains the latest verified release. All other ACTIVE/OPEN missions carry forward unchanged.
