@@ -11,7 +11,7 @@ This file is the release-blocking source of truth for the Vulkan AI walking trai
 
 ## WALK-RIG-001 — Hip/joint editing must never lock the UI
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 Human, chicken, biped, quadruped, and monoped joint/node edits must be queued and coalesced. The input/render thread must never wait for PPO rollout, optimizer work, deterministic evaluation, curriculum transitions, rig evolution, autosave, or checkpoint serialization.
 
@@ -24,7 +24,7 @@ Human, chicken, biped, quadruped, and monoped joint/node edits must be queued an
 
 ## WALK-CONC-001 — Real persistent CPU parallelism
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 - Keep persistent rollout workers.
 - Parallelize independent environment simulation.
@@ -55,7 +55,7 @@ Coroutines must divide meaningful trainer stages rather than merely wrapping one
 
 ## WALK-UI-001 — Functional speed controls
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 NORMAL, FASTER, and MAX CPU must change measured trainer duty cycle and throughput. They must not merely batch additional serial updates behind the same mutex.
 
@@ -80,7 +80,7 @@ Use immutable snapshots, command queues, worker-owned mutable state, short publi
 
 ## WALK-OPT-001 — Parallel PPO optimizer
 
-**Status:** OPEN
+**Status:** VERIFIED
 
 The current rollout simulation is parallel but the policy-gradient minibatch loop is serial. Add worker-local policy/gradient scratch, partition minibatches, reduce gradients deterministically, and apply Adam once per reduced batch.
 
@@ -112,7 +112,7 @@ Required fixtures:
 
 ## WALK-REL-001 — Verified v0.5 release
 
-**Status:** OPEN
+**Status:** VERIFIED
 
 Do not publish the next release until:
 
@@ -126,4 +126,4 @@ Do not publish the next release until:
 
 ## Current warning
 
-The concurrent runtime source is under active integration. It must not be described as released or verified until WALK-REL-001 closes.
+EpochRunner v0.5.0 passed its Windows build, concurrency tests, speed-mode benchmark, Vulkan diagnostic, and packaging gate. Remaining ACTIVE/OPEN missions carry forward unchanged.
