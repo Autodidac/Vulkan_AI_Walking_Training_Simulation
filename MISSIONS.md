@@ -124,6 +124,55 @@ Do not publish the next release until:
 - packaged executable reports the correct version,
 - release asset identifies the exact source commit.
 
+## WALK-COURSE-001 — Procedural obstacle and recovery treadmill
+
+**Status:** ACTIVE
+
+The live and training environments must continuously expose movement even when a controller produces no forward translation. A bounded virtual course advances independently of the walker and remains synchronized with physics, observations, rendering, rewards, and diagnostics.
+
+Required terrain classes:
+
+- flat road,
+- inclines,
+- elevated plateaus,
+- declines,
+- rolling hills,
+- rough and uneven ground.
+
+Required physical obstacle classes:
+
+- rocks and low ground clutter,
+- hurdles,
+- overhead and duck-under bars,
+- moving hazards,
+- thrown projectiles with visible trajectories and physical impulse.
+
+Required visual references:
+
+- moving road dashes,
+- numbered metre markers,
+- mile conversion on markers,
+- obstacle labels and approach visibility,
+- actual walker distance separated from virtual course distance.
+
+Required recovery behavior:
+
+- collisions or major balance loss open a bounded recovery window,
+- improving uprightness earns incremental reward,
+- regaining supported upright balance earns a recovery bonus,
+- falling or timing out applies a recovery penalty,
+- live telemetry shows recovery-active state, attempts, and successes.
+
+**Acceptance:**
+
+- Course progress advances while the creature remains stationary.
+- Terrain movement remains continuous across incline, plateau, decline, hill, and uneven sections.
+- Every requested obstacle class is generated procedurally and represented in observations.
+- Projectile and moving-hazard collisions apply bounded physical disturbance.
+- Road markers make virtual movement obvious without faking actual walker distance.
+- Recovery reward/state remains finite and deterministic.
+- Core tests, full Windows build, Vulkan diagnostic, packaging, and exact release checksum pass before this mission becomes `VERIFIED`.
+
 ## Current warning
 
-EpochRunner v0.5.0 passed its Windows build, concurrency tests, speed-mode benchmark, Vulkan diagnostic, and packaging gate. Remaining ACTIVE/OPEN missions carry forward unchanged.
+EpochRunner v0.5.0 passed its Windows build, concurrency tests, speed-mode benchmark, Vulkan diagnostic, and packaging gate. WALK-COURSE-001 remains ACTIVE until the full v0.6.0 application and release gate pass. Remaining ACTIVE/OPEN missions carry forward unchanged.
