@@ -33,29 +33,33 @@ jobs:
           from pathlib import Path
           path = Path("tools/integrate_v063_sandsim.py")
           text = path.read_text(encoding="utf-8")
-
-          old_ui = '''replace_once("src/app.cpp", "0.98f, muted, usable_width, 4.0f);",
+          old = '''replace_once("src/app.cpp", "0.98f, muted, usable_width, 4.0f);",
                        "1.06f, muted, usable_width, 4.0f);")
           replace_once("src/app.cpp", "0.98f, muted, usable_width, 4.0f);",
                        "1.06f, muted, usable_width, 4.0f);")'''
-          new_ui = '''replace_all("src/app.cpp", "0.98f, muted, usable_width, 4.0f);",
+          new = '''replace_all("src/app.cpp", "0.98f, muted, usable_width, 4.0f);",
                       "1.06f, muted, usable_width, 4.0f);", 2)'''
-          if text.count(old_ui) != 1:
+          if text.count(old) != 1:
               raise RuntimeError("could not repair duplicated 0.98 UI replacements")
-          text = text.replace(old_ui, new_ui, 1)
-
-          old_capture = '''evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty, agent]'''
-          new_capture = '''evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty,
-                      maximum_steps, agent]'''
-          if text.count(old_capture) != 1:
-              raise RuntimeError("could not add maximum_steps to evaluator capture")
-          text = text.replace(old_capture, new_capture, 1)
-
-          path.write_text(text, encoding="utf-8", newline="\n")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
           '@ | python -
           if ($LASTEXITCODE -ne 0) { throw "v0.6.3 driver repair failed" }
+
           python tools/integrate_v063_sandsim.py
           if ($LASTEXITCODE -ne 0) { throw "v0.6.3 integration failed" }
+
+          @'
+          from pathlib import Path
+          path = Path("src/autonomy_curriculum.cpp")
+          text = path.read_text(encoding="utf-8")
+          old = "evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty, agent]"
+          new = "evaluators[agent] = std::jthread([this, &candidate, &scores, stage, difficulty, maximum_steps, agent]"
+          if text.count(old) != 1:
+              raise RuntimeError("could not add maximum_steps to generated evaluator capture")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "generated evaluator capture repair failed" }
+
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Integrated source contains whitespace errors" }
 
