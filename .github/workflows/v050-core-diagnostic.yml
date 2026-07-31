@@ -44,14 +44,14 @@ jobs:
             Tee-Object -FilePath build.log
           exit $LASTEXITCODE
 
-      - name: Run core tests
+      - name: Run core and throughput tests
         id: test
         if: steps.build.outcome == 'success'
         continue-on-error: true
         shell: pwsh
         run: |
           $ErrorActionPreference = "Continue"
-          ctest --test-dir build/core-diagnostic -C Release --output-on-failure 2>&1 |
+          ctest --test-dir build/core-diagnostic -C Release -V 2>&1 |
             Tee-Object -FilePath test.log
           exit $LASTEXITCODE
 
