@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - ".github/workflows/v050-core-diagnostic.yml"
+      - "CMakeLists.txt"
+      - "src/**"
+      - "tests/**"
+      - "vcpkg.json"
 
 permissions:
   contents: write
