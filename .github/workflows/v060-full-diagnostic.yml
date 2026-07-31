@@ -1,0 +1,178 @@
+name: EpochRunner v0.6.0 full application diagnostic
+
+on:
+  push:
+    paths:
+      - ".github/workflows/v060-full-diagnostic.yml"
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  diagnose-full-application:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout current source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Cache vcpkg binary results
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v060-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Run full diagnostic and preserve every stage
+        id: diagnostic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force validation | Out-Null
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+          function Run-Stage([string]$Name, [scriptblock]$Command) {
+            $path = "validation/v060-full-$Name.log"
+            & $Command *> $path
+            return $LASTEXITCODE
+          }
+
+          $patchExit = Run-Stage "patch" { python tools/integrate_v060.py }
+          $bootstrapExit = -1
+          $configureExit = -1
+          $buildExit = -1
+          $testExit = -1
+          $versionExit = -1
+          $vulkanExit = -1
+          $installExit = -1
+
+          if ($patchExit -eq 0) {
+            $bootstrapExit = Run-Stage "bootstrap" { cmd /c "call `"$env:VCPKG_ROOT\bootstrap-vcpkg.bat`" -disableMetrics" }
+          } else {
+            "Bootstrap skipped because integration failed." | Set-Content validation/v060-full-bootstrap.log
+          }
+
+          if ($bootstrapExit -eq 0) {
+            $configureExit = Run-Stage "configure" { cmake --preset windows-release --fresh }
+          } else {
+            "Configure skipped because vcpkg bootstrap failed." | Set-Content validation/v060-full-configure.log
+          }
+
+          if ($configureExit -eq 0) {
+            $buildExit = Run-Stage "build" { cmake --build --preset windows-release }
+          } else {
+            "Build skipped because configuration failed." | Set-Content validation/v060-full-build.log
+          }
+
+          if ($buildExit -eq 0) {
+            $testExit = Run-Stage "test" { ctest --preset windows-release --output-on-failure -V }
+            $versionExit = Run-Stage "version" { build/windows-release/Release/EpochRunner.exe --version }
+            $vulkanExit = Run-Stage "vulkan" { build/windows-release/Release/EpochRunner.exe --diagnose-vulkan }
+            $installExit = Run-Stage "install" { cmake --install build/windows-release --config Release --prefix package/v060-diagnostic }
+          } else {
+            "Tests skipped because compilation failed." | Set-Content validation/v060-full-test.log
+            "Version check skipped because compilation failed." | Set-Content validation/v060-full-version.log
+            "Vulkan diagnostic skipped because compilation failed." | Set-Content validation/v060-full-vulkan.log
+            "Install skipped because compilation failed." | Set-Content validation/v060-full-install.log
+          }
+
+          $env:SOURCE_SHA = (git rev-parse HEAD).Trim()
+          $env:PATCH_EXIT = "$patchExit"
+          $env:BOOTSTRAP_EXIT = "$bootstrapExit"
+          $env:CONFIGURE_EXIT = "$configureExit"
+          $env:BUILD_EXIT = "$buildExit"
+          $env:TEST_EXIT = "$testExit"
+          $env:VERSION_EXIT = "$versionExit"
+          $env:VULKAN_EXIT = "$vulkanExit"
+          $env:INSTALL_EXIT = "$installExit"
+
+          @'
+          from pathlib import Path
+          import os
+
+          stages = [
+              ("Patch integration", "PATCH_EXIT", "patch"),
+              ("vcpkg bootstrap", "BOOTSTRAP_EXIT", "bootstrap"),
+              ("Full configure", "CONFIGURE_EXIT", "configure"),
+              ("Full Vulkan build", "BUILD_EXIT", "build"),
+              ("Tests", "TEST_EXIT", "test"),
+              ("Version check", "VERSION_EXIT", "version"),
+              ("SDL3/Vulkan diagnostic", "VULKAN_EXIT", "vulkan"),
+              ("Install/package staging", "INSTALL_EXIT", "install"),
+          ]
+
+          def status(key: str) -> str:
+              value = int(os.environ[key])
+              if value == 0:
+                  return "success"
+              if value == -1:
+                  return "skipped"
+              return f"failed ({value})"
+
+          lines = [
+              "# EpochRunner v0.6.0 full application diagnostic",
+              "",
+              f"Source before integration: `{os.environ['SOURCE_SHA']}`",
+              "",
+          ]
+          for label, key, _ in stages:
+              lines.append(f"- {label}: {status(key)}")
+
+          for label, _, filename in stages:
+              path = Path("validation") / f"v060-full-{filename}.log"
+              content = path.read_text(encoding="utf-8", errors="replace") if path.exists() else "missing log"
+              lines.extend(["", f"## {label}", "", "```text", content, "```"])
+
+          Path("validation/v060-full-diagnostic.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          '@ | python -
+
+          "patch_exit=$patchExit" >> $env:GITHUB_OUTPUT
+          "bootstrap_exit=$bootstrapExit" >> $env:GITHUB_OUTPUT
+          "configure_exit=$configureExit" >> $env:GITHUB_OUTPUT
+          "build_exit=$buildExit" >> $env:GITHUB_OUTPUT
+          "test_exit=$testExit" >> $env:GITHUB_OUTPUT
+          "version_exit=$versionExit" >> $env:GITHUB_OUTPUT
+          "vulkan_exit=$vulkanExit" >> $env:GITHUB_OUTPUT
+          "install_exit=$installExit" >> $env:GITHUB_OUTPUT
+          exit 0
+
+      - name: Commit complete diagnostic evidence
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add validation/v060-full-diagnostic.md
+          git commit -m "Record v0.6 full application diagnostic"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Fail only after logs are safely committed
+        shell: pwsh
+        run: |
+          $values = @(
+            "${{ steps.diagnostic.outputs.patch_exit }}",
+            "${{ steps.diagnostic.outputs.bootstrap_exit }}",
+            "${{ steps.diagnostic.outputs.configure_exit }}",
+            "${{ steps.diagnostic.outputs.build_exit }}",
+            "${{ steps.diagnostic.outputs.test_exit }}",
+            "${{ steps.diagnostic.outputs.version_exit }}",
+            "${{ steps.diagnostic.outputs.vulkan_exit }}",
+            "${{ steps.diagnostic.outputs.install_exit }}"
+          )
+          if ($values | Where-Object { $_ -ne "0" }) {
+            throw "EpochRunner v0.6.0 full diagnostic failed; inspect validation/v060-full-diagnostic.md"
+          }
