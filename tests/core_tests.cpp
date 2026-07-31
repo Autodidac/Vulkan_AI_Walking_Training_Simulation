@@ -300,6 +300,26 @@ int main()
             "coroutine pipeline never suspended for persistent worker completion");
         require(!autonomous.autonomy_status().pipeline_stage.empty(),
             "coroutine pipeline stage telemetry is missing");
+
+        const std::filesystem::path async_checkpoint =
+            std::filesystem::temp_directory_path() / "epochrunner-v070-async-save.eppo";
+        std::string async_error{};
+        const auto save_started = std::chrono::steady_clock::now();
+        require(autonomous.save_checkpoint(async_checkpoint, async_error),
+            "asynchronous checkpoint request was rejected");
+        require(std::chrono::steady_clock::now() - save_started < std::chrono::milliseconds(20),
+            "checkpoint save blocked the caller on serialization or disk I/O");
+        for (int attempt = 0; attempt < 2000 && !std::filesystem::exists(async_checkpoint); ++attempt)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            autonomous.synchronize();
+        }
+        require(std::filesystem::exists(async_checkpoint),
+            "asynchronous checkpoint was never written");
+        require(autonomous.autonomy_status().persistence_completed > 0,
+            "asynchronous persistence completion was not published");
+        std::error_code remove_error{};
+        std::filesystem::remove(async_checkpoint, remove_error);
         autonomous.set_updates_per_cycle(1);
         require(autonomous.updates_per_cycle() == 1, "NORMAL speed mode did not latch");
         autonomous.set_updates_per_cycle(2);

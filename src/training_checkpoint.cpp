@@ -50,8 +50,32 @@ namespace epochrunner::rl
         }
     }
 
-    bool PpoTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    CheckpointSnapshot PpoTrainer::checkpoint_snapshot() const
     {
+        CheckpointSnapshot snapshot{};
+        snapshot.signature = blueprint_.signature();
+        snapshot.adam_step = adam_.step;
+        snapshot.random_state = random_state_;
+        snapshot.metrics = metrics_;
+        snapshot.stage = course_stage_;
+        snapshot.difficulty = course_difficulty_;
+        snapshot.parameters = policy_.parameters();
+        snapshot.first_moment = adam_.first_moment;
+        snapshot.second_moment = adam_.second_moment;
+        snapshot.best_parameters = best_parameters_;
+        snapshot.reward_history = reward_history_;
+        snapshot.speed_history = speed_history_;
+        return snapshot;
+    }
+
+    bool PpoTrainer::save_checkpoint_snapshot(const CheckpointSnapshot& snapshot,
+        const std::filesystem::path& path, std::string& error)
+    {
+        if (path.empty())
+        {
+            error = "Checkpoint path is empty.";
+            return false;
+        }
         const std::filesystem::path temporary = path.string() + ".tmp";
         std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
         if (!output)
@@ -60,36 +84,44 @@ namespace epochrunner::rl
             return false;
         }
 
-        const std::uint64_t signature = blueprint_.signature();
-        const std::uint64_t parameter_count = policy_.parameters().size();
-        const std::uint64_t reward_count = reward_history_.size();
-        const std::uint64_t speed_count = speed_history_.size();
-        const std::uint64_t best_count = best_parameters_.size();
-        const auto stage = static_cast<std::uint8_t>(course_stage_);
-        const std::uint8_t evaluation_valid = metrics_.evaluation_valid ? 1u : 0u;
+        const std::uint64_t parameter_count = snapshot.parameters.size();
+        const std::uint64_t reward_count = snapshot.reward_history.size();
+        const std::uint64_t speed_count = snapshot.speed_history.size();
+        const std::uint64_t best_count = snapshot.best_parameters.size();
+        const auto stage = static_cast<std::uint8_t>(snapshot.stage);
+        const std::uint8_t evaluation_valid = snapshot.metrics.evaluation_valid ? 1u : 0u;
+        if (parameter_count == 0
+            || snapshot.first_moment.size() != parameter_count
+            || snapshot.second_moment.size() != parameter_count
+            || (best_count != 0 && best_count != parameter_count))
+        {
+            error = "Invalid immutable checkpoint payload dimensions.";
+            return false;
+        }
 
         output.write(checkpoint_magic.data(), static_cast<std::streamsize>(checkpoint_magic.size()));
-        bool ok = write_value(output, signature) && write_value(output, parameter_count)
+        const TrainingMetrics& metrics = snapshot.metrics;
+        bool ok = write_value(output, snapshot.signature) && write_value(output, parameter_count)
             && write_value(output, reward_count) && write_value(output, speed_count)
-            && write_value(output, best_count) && write_value(output, adam_.step)
-            && write_value(output, random_state_) && write_value(output, metrics_.update)
-            && write_value(output, metrics_.environment_steps) && write_value(output, metrics_.best_update)
-            && write_value(output, metrics_.evaluation_count)
-            && write_value(output, stage) && write_value(output, course_difficulty_)
-            && write_value(output, metrics_.mean_reward) && write_value(output, metrics_.mean_episode_distance)
-            && write_value(output, metrics_.mean_speed) && write_value(output, metrics_.policy_loss)
-            && write_value(output, metrics_.value_loss) && write_value(output, metrics_.entropy)
-            && write_value(output, metrics_.learning_rate) && write_value(output, metrics_.evaluation_reward)
-            && write_value(output, metrics_.evaluation_distance) && write_value(output, metrics_.evaluation_speed)
-            && write_value(output, metrics_.evaluation_score) && write_value(output, metrics_.evaluation_survival)
-            && write_value(output, metrics_.evaluation_collisions) && write_value(output, metrics_.evaluation_airborne_ratio)
-            && write_value(output, metrics_.evaluation_stride_events) && write_value(output, metrics_.evaluation_invalid_runs)
+            && write_value(output, best_count) && write_value(output, snapshot.adam_step)
+            && write_value(output, snapshot.random_state) && write_value(output, metrics.update)
+            && write_value(output, metrics.environment_steps) && write_value(output, metrics.best_update)
+            && write_value(output, metrics.evaluation_count)
+            && write_value(output, stage) && write_value(output, snapshot.difficulty)
+            && write_value(output, metrics.mean_reward) && write_value(output, metrics.mean_episode_distance)
+            && write_value(output, metrics.mean_speed) && write_value(output, metrics.policy_loss)
+            && write_value(output, metrics.value_loss) && write_value(output, metrics.entropy)
+            && write_value(output, metrics.learning_rate) && write_value(output, metrics.evaluation_reward)
+            && write_value(output, metrics.evaluation_distance) && write_value(output, metrics.evaluation_speed)
+            && write_value(output, metrics.evaluation_score) && write_value(output, metrics.evaluation_survival)
+            && write_value(output, metrics.evaluation_collisions) && write_value(output, metrics.evaluation_airborne_ratio)
+            && write_value(output, metrics.evaluation_stride_events) && write_value(output, metrics.evaluation_invalid_runs)
             && write_value(output, evaluation_valid)
-            && write_value(output, metrics_.best_evaluation_distance)
-            && write_value(output, metrics_.best_evaluation_score)
-            && write_vector(output, policy_.parameters()) && write_vector(output, adam_.first_moment)
-            && write_vector(output, adam_.second_moment) && write_vector(output, best_parameters_)
-            && write_vector(output, reward_history_) && write_vector(output, speed_history_);
+            && write_value(output, metrics.best_evaluation_distance)
+            && write_value(output, metrics.best_evaluation_score)
+            && write_vector(output, snapshot.parameters) && write_vector(output, snapshot.first_moment)
+            && write_vector(output, snapshot.second_moment) && write_vector(output, snapshot.best_parameters)
+            && write_vector(output, snapshot.reward_history) && write_vector(output, snapshot.speed_history);
         if (!ok)
         {
             error = "Failed while writing checkpoint: " + path.string();
@@ -112,6 +144,11 @@ namespace epochrunner::rl
         }
         error.clear();
         return true;
+    }
+
+    bool PpoTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    {
+        return save_checkpoint_snapshot(checkpoint_snapshot(), path, error);
     }
 
     bool PpoTrainer::load_checkpoint(const std::filesystem::path& path, std::string& error, bool transfer_only)

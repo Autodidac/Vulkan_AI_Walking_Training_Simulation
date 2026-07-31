@@ -11,6 +11,7 @@
 #include <deque>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -35,6 +36,8 @@ namespace epochrunner::rl
         double updates_per_second{};
         int speed_mode{ 1 };
         bool worker_busy{};
+        bool persistence_pending{};
+        std::uint64_t persistence_completed{};
         std::uint64_t pipeline_suspensions{};
         std::string pipeline_stage{ "IDLE" };
         std::string message{ "LEARNING TO BALANCE" };
@@ -64,7 +67,7 @@ namespace epochrunner::rl
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
-        [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
+        [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error);
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
         [[nodiscard]] bool restore_best_policy() noexcept;
@@ -89,7 +92,9 @@ namespace epochrunner::rl
             set_blueprint,
             reset_policy,
             set_exploration,
-            restore_best
+            restore_best,
+            save_checkpoint,
+            load_checkpoint
         };
 
         struct PendingCommand
@@ -99,6 +104,23 @@ namespace epochrunner::rl
             bool preserve_policy{};
             std::uint64_t seed{};
             float scalar{};
+            std::filesystem::path path{};
+            bool transfer_only{};
+        };
+
+        struct PersistenceRequest
+        {
+            CheckpointSnapshot checkpoint{};
+            sim::CreatureBlueprint blueprint{};
+            std::filesystem::path checkpoint_path{};
+            std::filesystem::path rig_path{};
+            std::filesystem::path state_path{};
+            sim::CourseStage stage{ sim::CourseStage::balance };
+            float difficulty{ 0.25f };
+            std::uint64_t rig_generation{};
+            std::uint64_t accepted_rig_changes{};
+            std::uint64_t rejected_rig_changes{};
+            int rollback_count{};
         };
 
         struct PublishedSnapshot
@@ -179,6 +201,10 @@ namespace epochrunner::rl
         [[nodiscard]] sim::CreatureBlueprint mutate_rig_locked() noexcept;
         void publish_locked();
         void autosave_locked();
+        void enqueue_persistence(PersistenceRequest request);
+        void persistence_main(std::stop_token stop_token);
+        [[nodiscard]] static bool write_persistence_state(
+            const PersistenceRequest& request, std::string& error);
         void write_state_locked() const;
         void read_state_locked();
         [[nodiscard]] bool stage_mastered_locked() const noexcept;
@@ -187,9 +213,13 @@ namespace epochrunner::rl
         mutable std::mutex worker_mutex_{};
         mutable std::mutex snapshot_mutex_{};
         mutable std::mutex command_mutex_{};
+        mutable std::mutex persistence_mutex_{};
         mutable std::mutex wake_mutex_{};
         std::condition_variable_any wake_cv_{};
+        std::condition_variable_any persistence_cv_{};
         std::deque<PendingCommand> command_queue_{};
+        std::optional<PersistenceRequest> pending_persistence_{};
+        std::string persistence_error_{};
 
         PpoTrainer worker_;
         PpoTrainer live_;
@@ -231,6 +261,9 @@ namespace epochrunner::rl
         std::atomic_int64_t last_update_nanoseconds_{};
         std::atomic<RoutineStage> pipeline_stage_{ RoutineStage::idle };
         std::atomic_uint64_t pipeline_suspensions_{};
+        std::atomic_bool persistence_pending_{ false };
+        std::atomic_uint64_t persistence_completed_{};
+        std::jthread persistence_thread_{};
         std::jthread worker_thread_{};
     };
 }

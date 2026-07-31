@@ -9,7 +9,7 @@ namespace epochrunner::rl
     void AutonomousTrainer::set_autosave_paths(std::filesystem::path checkpoint, std::filesystem::path rig,
         std::filesystem::path state)
     {
-        std::scoped_lock lock(worker_mutex_);
+        std::scoped_lock lock(persistence_mutex_);
         autosave_checkpoint_ = std::move(checkpoint);
         autosave_rig_ = std::move(rig);
         autosave_state_ = std::move(state);
@@ -58,27 +58,37 @@ namespace epochrunner::rl
         return loaded_anything;
     }
 
-    bool AutonomousTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    bool AutonomousTrainer::save_checkpoint(
+        const std::filesystem::path& path, std::string& error)
     {
-        std::scoped_lock lock(worker_mutex_);
-        return worker_.save_checkpoint(path, error);
+        if (path.empty())
+        {
+            error = "Checkpoint path is empty.";
+            return false;
+        }
+        PendingCommand command{};
+        command.type = CommandType::save_checkpoint;
+        command.path = path;
+        enqueue_command(std::move(command));
+        error = "CHECKPOINT SAVE QUEUED";
+        return true;
     }
 
-    bool AutonomousTrainer::load_checkpoint(const std::filesystem::path& path, std::string& error,
-        bool transfer_only)
+    bool AutonomousTrainer::load_checkpoint(const std::filesystem::path& path,
+        std::string& error, bool transfer_only)
     {
-        std::scoped_lock lock(worker_mutex_);
-        const bool loaded = worker_.load_checkpoint(path, error, transfer_only);
-        if (loaded)
+        if (path.empty() || !std::filesystem::exists(path))
         {
-            stage_ = worker_.course_stage();
-            difficulty_ = worker_.course_difficulty();
-            worker_message_ = transfer_only
-                ? "CONTROLLER TRANSFERRED - AUTOPILOT RECALIBRATING"
-                : "CHECKPOINT RESUMED - AUTOPILOT CONTINUING";
-            publish_locked();
+            error = "Checkpoint does not exist: " + path.string();
+            return false;
         }
-        return loaded;
+        PendingCommand command{};
+        command.type = CommandType::load_checkpoint;
+        command.path = path;
+        command.transfer_only = transfer_only;
+        enqueue_command(std::move(command));
+        error = "CHECKPOINT LOAD QUEUED";
+        return true;
     }
 
     void AutonomousTrainer::enqueue_command(PendingCommand command)
@@ -167,6 +177,34 @@ namespace epochrunner::rl
                 worker_message_ = "BEST VERIFIED CONTROLLER RESTORED";
             }
             break;
+
+        case CommandType::save_checkpoint:
+        {
+            PersistenceRequest request{};
+            request.checkpoint = worker_.checkpoint_snapshot();
+            request.checkpoint_path = std::move(command.path);
+            enqueue_persistence(std::move(request));
+            worker_message_ = "CHECKPOINT SNAPSHOT QUEUED FOR ASYNCHRONOUS SAVE";
+            break;
+        }
+
+        case CommandType::load_checkpoint:
+        {
+            std::string load_error{};
+            if (worker_.load_checkpoint(command.path, load_error, command.transfer_only))
+            {
+                stage_ = worker_.course_stage();
+                difficulty_ = worker_.course_difficulty();
+                worker_message_ = command.transfer_only
+                    ? "CONTROLLER TRANSFERRED - AUTOPILOT RECALIBRATING"
+                    : "CHECKPOINT RESUMED - AUTOPILOT CONTINUING";
+            }
+            else
+            {
+                worker_message_ = load_error;
+            }
+            break;
+        }
         }
     }
 }

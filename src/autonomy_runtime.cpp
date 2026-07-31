@@ -55,6 +55,10 @@ namespace epochrunner::rl
         live_.set_course(stage_, difficulty_, false);
         publish_locked();
         synchronize();
+        persistence_thread_ = std::jthread([this](std::stop_token stop_token)
+        {
+            persistence_main(stop_token);
+        });
         worker_thread_ = std::jthread([this](std::stop_token stop_token)
         {
             worker_main(stop_token);
@@ -67,20 +71,37 @@ namespace epochrunner::rl
         {
             worker_thread_.request_stop();
             wake_cv_.notify_all();
+            worker_thread_.join();
+        }
+        if (persistence_thread_.joinable())
+        {
+            persistence_thread_.request_stop();
+            persistence_cv_.notify_all();
+            persistence_thread_.join();
         }
     }
 
     void AutonomousTrainer::synchronize()
     {
-        cached_status_.pipeline_stage = std::string(routine_stage_name(
-            pipeline_stage_.load(std::memory_order_relaxed)));
-        cached_status_.pipeline_suspensions = pipeline_suspensions_.load(std::memory_order_relaxed);
+        const RoutineStage live_pipeline_stage = pipeline_stage_.load(std::memory_order_relaxed);
+        const std::uint64_t live_pipeline_suspensions =
+            pipeline_suspensions_.load(std::memory_order_relaxed);
+        const bool live_persistence_pending =
+            persistence_pending_.load(std::memory_order_relaxed);
+        const std::uint64_t live_persistence_completed =
+            persistence_completed_.load(std::memory_order_relaxed);
 
         PublishedSnapshot snapshot{};
         {
             std::scoped_lock lock(snapshot_mutex_);
             if (published_.serial == applied_serial_)
+            {
+                cached_status_.pipeline_stage = std::string(routine_stage_name(live_pipeline_stage));
+                cached_status_.pipeline_suspensions = live_pipeline_suspensions;
+                cached_status_.persistence_pending = live_persistence_pending;
+                cached_status_.persistence_completed = live_persistence_completed;
                 return;
+            }
             snapshot = published_;
         }
 
@@ -105,6 +126,10 @@ namespace epochrunner::rl
         cached_speed_history_ = std::move(snapshot.speed_history);
         cached_controller_state_ = snapshot.controller_state;
         cached_status_ = std::move(snapshot.status);
+        cached_status_.pipeline_stage = std::string(routine_stage_name(live_pipeline_stage));
+        cached_status_.pipeline_suspensions = live_pipeline_suspensions;
+        cached_status_.persistence_pending = live_persistence_pending;
+        cached_status_.persistence_completed = live_persistence_completed;
         cached_exploration_ = snapshot.exploration;
         cached_optimizer_step_ = snapshot.optimizer_step;
         cached_has_best_ = snapshot.has_best;

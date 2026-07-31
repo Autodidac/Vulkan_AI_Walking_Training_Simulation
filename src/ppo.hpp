@@ -55,6 +55,22 @@ namespace epochrunner::rl
         transferred
     };
 
+    struct CheckpointSnapshot
+    {
+        std::uint64_t signature{};
+        std::uint64_t adam_step{};
+        std::uint64_t random_state{};
+        TrainingMetrics metrics{};
+        sim::CourseStage stage{ sim::CourseStage::balance };
+        float difficulty{ 0.25f };
+        std::vector<float> parameters{};
+        std::vector<float> first_moment{};
+        std::vector<float> second_moment{};
+        std::vector<float> best_parameters{};
+        std::vector<float> reward_history{};
+        std::vector<float> speed_history{};
+    };
+
     class PolicyNetwork
     {
     public:
@@ -159,6 +175,9 @@ namespace epochrunner::rl
         void set_exploration(float standard_deviation) noexcept;
         void set_cpu_mode(int mode) noexcept;
         [[nodiscard]] int cpu_mode() const noexcept { return cpu_mode_; }
+        [[nodiscard]] CheckpointSnapshot checkpoint_snapshot() const;
+        [[nodiscard]] static bool save_checkpoint_snapshot(const CheckpointSnapshot& snapshot,
+            const std::filesystem::path& path, std::string& error);
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);

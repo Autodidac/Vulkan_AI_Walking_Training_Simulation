@@ -33,6 +33,8 @@ namespace epochrunner::rl
         snapshot.status.updates_per_second = worker_updates_per_second_;
         snapshot.status.speed_mode = updates_per_cycle_.load(std::memory_order_relaxed);
         snapshot.status.worker_busy = worker_busy_.load(std::memory_order_relaxed);
+        snapshot.status.persistence_pending = persistence_pending_.load(std::memory_order_relaxed);
+        snapshot.status.persistence_completed = persistence_completed_.load(std::memory_order_relaxed);
         snapshot.status.pipeline_suspensions = pipeline_suspensions_.load(std::memory_order_relaxed);
         snapshot.status.pipeline_stage = std::string(routine_stage_name(
             pipeline_stage_.load(std::memory_order_relaxed)));
@@ -43,20 +45,110 @@ namespace epochrunner::rl
         published_ = std::move(snapshot);
     }
 
+    void AutonomousTrainer::enqueue_persistence(PersistenceRequest request)
+    {
+        {
+            std::scoped_lock lock(persistence_mutex_);
+            pending_persistence_ = std::move(request);
+            persistence_error_.clear();
+            persistence_pending_.store(true, std::memory_order_relaxed);
+        }
+        persistence_cv_.notify_one();
+    }
+
+    bool AutonomousTrainer::write_persistence_state(
+        const PersistenceRequest& request, std::string& error)
+    {
+        if (request.state_path.empty())
+            return true;
+        const std::filesystem::path temporary = request.state_path.string() + ".tmp";
+        std::ofstream output(temporary, std::ios::trunc);
+        if (!output)
+        {
+            error = "Could not open autonomy state for writing: " + temporary.string();
+            return false;
+        }
+        output << "EPOCHAUTONOMY 2\n";
+        output << static_cast<int>(request.stage) << ' ' << request.difficulty << ' '
+            << request.rig_generation << ' ' << request.accepted_rig_changes << ' '
+            << request.rejected_rig_changes << ' ' << request.rollback_count << '\n';
+        output.close();
+        if (!output)
+        {
+            error = "Failed while finalizing autonomy state: " + temporary.string();
+            return false;
+        }
+        std::error_code filesystem_error{};
+        std::filesystem::remove(request.state_path, filesystem_error);
+        filesystem_error.clear();
+        std::filesystem::rename(temporary, request.state_path, filesystem_error);
+        if (filesystem_error)
+        {
+            error = "Could not replace autonomy state atomically: " + filesystem_error.message();
+            return false;
+        }
+        return true;
+    }
+
+    void AutonomousTrainer::persistence_main(std::stop_token stop_token)
+    {
+        while (!stop_token.stop_requested())
+        {
+            PersistenceRequest request{};
+            {
+                std::unique_lock lock(persistence_mutex_);
+                persistence_cv_.wait(lock, stop_token, [this]
+                {
+                    return pending_persistence_.has_value();
+                });
+                if (stop_token.stop_requested())
+                    break;
+                request = std::move(*pending_persistence_);
+                pending_persistence_.reset();
+            }
+
+            std::string error{};
+            bool ok = true;
+            if (!request.checkpoint_path.empty())
+            {
+                ok = PpoTrainer::save_checkpoint_snapshot(
+                    request.checkpoint, request.checkpoint_path, error);
+            }
+            if (ok && !request.rig_path.empty())
+                ok = request.blueprint.save(request.rig_path, error);
+            if (ok)
+                ok = write_persistence_state(request, error);
+
+            {
+                std::scoped_lock lock(persistence_mutex_);
+                persistence_error_ = std::move(error);
+                const bool has_newer = pending_persistence_.has_value();
+                persistence_pending_.store(has_newer, std::memory_order_relaxed);
+                if (ok)
+                    persistence_completed_.fetch_add(1u, std::memory_order_relaxed);
+            }
+        }
+        persistence_pending_.store(false, std::memory_order_relaxed);
+    }
+
     void AutonomousTrainer::autosave_locked()
     {
-        std::string error{};
-        if (!autosave_checkpoint_.empty() && !worker_.save_checkpoint(autosave_checkpoint_, error))
+        PersistenceRequest request{};
+        request.checkpoint = worker_.checkpoint_snapshot();
+        request.blueprint = worker_.blueprint();
+        request.stage = stage_;
+        request.difficulty = difficulty_;
+        request.rig_generation = rig_generation_;
+        request.accepted_rig_changes = accepted_rig_changes_;
+        request.rejected_rig_changes = rejected_rig_changes_;
+        request.rollback_count = rollback_count_;
         {
-            worker_message_ = error;
-            return;
+            std::scoped_lock lock(persistence_mutex_);
+            request.checkpoint_path = autosave_checkpoint_;
+            request.rig_path = autosave_rig_;
+            request.state_path = autosave_state_;
         }
-        if (!autosave_rig_.empty() && !worker_.blueprint().save(autosave_rig_, error))
-        {
-            worker_message_ = error;
-            return;
-        }
-        write_state_locked();
+        enqueue_persistence(std::move(request));
     }
 
     void AutonomousTrainer::write_state_locked() const
