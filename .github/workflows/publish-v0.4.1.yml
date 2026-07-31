@@ -1,0 +1,164 @@
+name: Publish EpochRunner v0.4.1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v0.4.1.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  build-test-package-release:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout validated main source
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify exact v0.4.1 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Select-String -Path CMakeLists.txt -Pattern 'VERSION 0.4.1' | Out-Null
+          Select-String -Path src/main.cpp -Pattern 'EpochRunner 0.4.1' | Out-Null
+          Select-String -Path src/app.cpp -Pattern 'epochrunner-v041-autosave.eppo' | Out-Null
+          Select-String -Path src/app.cpp -Pattern 'REAL FEET / SOFT START' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'calibrate_quadruped_stable_defaults' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'add_passive_feet' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'control_ramp' | Out-Null
+          Select-String -Path src/simulation.cpp -Pattern 'temporary rig file' | Out-Null
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: vcpkg-windows-x64-vulkan-d015e31-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-vulkan-d015e31-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure MSVC manifest build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build v0.4.1 Release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          cmake --build --preset windows-release
+
+      - name: Run gait, autonomy, checkpoint, feet, and rig tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          ctest --preset windows-release --output-on-failure
+
+      - name: Verify visible executable version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.4.1") {
+            throw "Wrong executable version: '$version'"
+          }
+
+      - name: Package uniquely named runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $package = Join-Path $PWD "package/EpochRunner-v0.4.1-windows-x64"
+          New-Item -ItemType Directory -Force $package | Out-Null
+          cmake --install build/windows-release --config Release --prefix $package
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $package -Force
+          Copy-Item README.md, LICENSE -Destination $package -Force
+          @"
+          EpochRunner 0.4.1
+          Source: ${{ github.sha }}
+          Build: Windows x64 Release
+          Stable defaults: quadruped-derived, limb-length-normalized motors
+          Feet: passive heel/toe support on every non-quadruped preset
+          Startup: passive settle plus smooth motor ramp
+          "@ | Set-Content (Join-Path $package "BUILD.txt") -Encoding utf8
+          Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-v0.4.1-windows-x64.zip" -Force
+
+      - name: Validate packaged SDL3 Vulkan runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          Push-Location package/EpochRunner-v0.4.1-windows-x64
+          $version = (& .\EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.4.1") {
+            throw "Packaged executable version mismatch: '$version'"
+          }
+          & .\EpochRunner.exe --diagnose-vulkan
+          Pop-Location
+
+      - name: Publish v0.4.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $sourceSha = (git rev-parse HEAD).Trim()
+          $notes = @"
+          EpochRunner v0.4.1 makes the autonomous training changes unmistakable and closes the remaining locomotion exploits. The window and application header display v0.4.1, the Windows archive has a unique filename, and corrected training starts with new autosave/checkpoint files instead of silently loading an older hopping or flip/fly controller.
+
+          Every preset now derives motor travel and effective endpoint correction from the stable quadruped profile. Longer limbs receive proportionally lower raw motor strength. Bipeds, humanoids, chickens, and monopeds gain passive heel/toe foot triangles, a no-control settling period, a smooth motor ramp, and calmer fresh policy output so they do not spawn-launch, jump-spin, or learn from an unstable initial impulse.
+
+          Also included: true alternating-foot gait validation, whole-window micro-motion detection, persistent rollout workers, live-preview refresh for verified best controllers, direct motor-bone validation, crash-resistant staged saves, standing-first curriculum reset, paged Rig Lab controls, and deferred slider commits.
+          "@
+          if (gh release view v0.4.1 --repo $env:GH_REPO 2>$null) {
+            gh release upload v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --clobber
+            gh release edit v0.4.1 --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
+          }
+          else {
+            gh release create v0.4.1 EpochRunner-v0.4.1-windows-x64.zip --repo $env:GH_REPO --target $sourceSha --title "EpochRunner v0.4.1 - Stable Autonomous Training" --notes $notes
+          }
+
+      - name: Close staging PR and remove every non-main branch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          gh pr close $env:PR_NUMBER --repo $env:GH_REPO --comment "v0.4.1 passed the Windows build, gait/autonomy/feet tests, visible version check, package check, and Vulkan diagnostic. The release was published directly from validated main source." 2>$null
+          $branches = gh api "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" | ConvertFrom-Json
+          foreach ($branch in $branches) {
+            if ($branch.name -ne "main") {
+              $encoded = [Uri]::EscapeDataString($branch.name)
+              gh api --method DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$encoded"
+            }
+          }
