@@ -1,4 +1,4 @@
-name: Windows release
+name: Windows tagged release
 
 on:
   push:
@@ -13,12 +13,14 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  build-release:
+  build-test-release:
     runs-on: windows-2025
 
     steps:
-      - name: Checkout source
+      - name: Checkout exact tagged source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -31,38 +33,75 @@ jobs:
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure MSVC manifest build
+      - name: Configure full MSVC release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
 
-      - name: Build Release
+      - name: Build full Vulkan application
         run: cmake --build --preset windows-release
 
-      - name: Test Release
-        run: ctest --preset windows-release
+      - name: Run deterministic, concurrency, throughput, course, and recovery tests
+        run: ctest --preset windows-release --output-on-failure -V
 
-      - name: Package
+      - name: Verify packaged executable identity
+        shell: pwsh
+        run: build/windows-release/Release/EpochRunner.exe --version
+
+      - name: Verify SDL3 and Vulkan runtime path
+        shell: pwsh
+        run: build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+
+      - name: Package exact tagged build
         shell: pwsh
         run: |
-          $package = Join-Path $PWD "package/EpochRunner-windows-x64"
+          $tag = $env:GITHUB_REF_NAME
+          $package = Join-Path $PWD "package/EpochRunner-$tag-windows-x64"
           New-Item -ItemType Directory -Force $package | Out-Null
           cmake --install build/windows-release --config Release --prefix $package
-
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
             Copy-Item -Destination $package -Force
+          Copy-Item README.md, LICENSE, MISSIONS.md -Destination $package -Force
+          $archive = "EpochRunner-$tag-windows-x64.zip"
+          Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
+          (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
 
-          Copy-Item README.md, LICENSE -Destination $package -Force
-          Compress-Archive -Path "$package/*" -DestinationPath "EpochRunner-windows-x64.zip" -Force
-
-      - name: Publish release
+      - name: Publish release and record immutable evidence
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create $env:GITHUB_REF_NAME EpochRunner-windows-x64.zip `
-            --target $env:GITHUB_SHA `
-            --title "EpochRunner $env:GITHUB_REF_NAME" `
+          $tag = $env:GITHUB_REF_NAME
+          $archive = "EpochRunner-$tag-windows-x64.zip"
+          $sourceSha = (git rev-parse HEAD).Trim()
+          $checksum = (Get-Content "$archive.sha256").Trim()
+          gh release create $tag $archive "$archive.sha256" `
+            --target $sourceSha `
+            --title "EpochRunner $tag" `
             --generate-notes
+
+          git fetch origin main
+          git switch main
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner $tag release evidence
+
+          - Source commit: `$sourceSha`
+          - Windows runner: `windows-2025`
+          - Generator: `Visual Studio 18 2026`
+          - Full Vulkan application build: passed
+          - Deterministic/core tests: passed
+          - Concurrency/throughput tests: passed
+          - Procedural course/recovery tests: passed
+          - SDL3/Vulkan diagnostic: passed
+          - Package: `$archive`
+          - SHA-256: `$checksum`
+          "@ | Set-Content -Encoding UTF8 "validation/$tag.md"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "validation/$tag.md"
+          git commit -m "Record $tag release evidence"
+          git push origin main
