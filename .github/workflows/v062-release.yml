@@ -1,14 +1,18 @@
-name: Build and release EpochRunner v0.6.2
+name: Release EpochRunner v0.6.2
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
     paths:
-      - "tools/integrate_v062.py"
-      - "tools/integrate_v062_ui.py"
-      - "tools/integrate_v062_course.py"
-      - ".github/workflows/v062-release.yml"
+      - tools/integrate_v062.py
+      - tools/integrate_v062_ui.py
+      - tools/integrate_v062_course.py
+      - tools/integrate_v062_gait.py
+      - tools/integrate_v062_runtime.py
+      - tools/finalize_v062.py
+      - .github/workflows/v062-release.yml
 
 permissions:
   contents: write
@@ -18,27 +22,33 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  integrate-build-test-release:
+  release:
     runs-on: windows-2025
 
     steps:
-      - name: Checkout merged hotfix
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Apply v0.6.2 source integration
+      - name: Apply source integrations
         shell: pwsh
         run: |
-          python tools/integrate_v062.py
-          if ($LASTEXITCODE -ne 0) { throw "v0.6.2 physics integration failed" }
-          python tools/integrate_v062_ui.py
-          if ($LASTEXITCODE -ne 0) { throw "v0.6.2 UI integration failed" }
-          python tools/integrate_v062_course.py
-          if ($LASTEXITCODE -ne 0) { throw "v0.6.2 course integration failed" }
+          $scripts = @(
+            "tools/integrate_v062.py",
+            "tools/integrate_v062_ui.py",
+            "tools/integrate_v062_course.py",
+            "tools/integrate_v062_gait.py",
+            "tools/integrate_v062_runtime.py"
+          )
+          foreach ($script in $scripts) {
+            python $script
+            if ($LASTEXITCODE -ne 0) { throw "Integration failed: $script" }
+          }
           git diff --check
-          if ($LASTEXITCODE -ne 0) { throw "v0.6.2 patch contains whitespace errors" }
+          if ($LASTEXITCODE -ne 0) { throw "Integrated source contains whitespace errors" }
+          Copy-Item tools/finalize_v062.py "$env:RUNNER_TEMP/finalize_v062.py" -Force
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -62,19 +72,19 @@ jobs:
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure full Visual Studio 2026 release
+      - name: Configure
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
 
-      - name: Build complete SDL3 Vulkan application
+      - name: Build
         run: cmake --build --preset windows-release
 
-      - name: Run physics course UI rig and concurrency tests
+      - name: Test
         run: ctest --preset windows-release --output-on-failure -V
 
-      - name: Verify executable identity and Vulkan path
+      - name: Diagnose executable
         shell: pwsh
         run: |
           $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
@@ -82,70 +92,55 @@ jobs:
           build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
           if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
 
-      - name: Stage package
-        run: cmake --install build/windows-release --config Release --prefix package/EpochRunner-v0.6.2-windows-x64
-
-      - name: Commit exact tested source
-        id: source
-        shell: pwsh
-        run: |
-          @'
-          from pathlib import Path
-
-          path = Path("MISSIONS.md")
-          text = path.read_text(encoding="utf-8")
-          for mission in ("WALK-PHYS-001", "WALK-UI-002", "WALK-COURSE-002"):
-              start = text.index(f"## {mission}")
-              end = text.find("\n## ", start + 4)
-              if end < 0:
-                  end = len(text)
-              section = text[start:end].replace("**Status:** ACTIVE", "**Status:** VERIFIED", 1)
-              text = text[:start] + section + text[end:]
-          warning = (
-              "## Current warning\n\n"
-              "EpochRunner v0.6.2 passed the full Windows/Vulkan build, biped support and traction tests, "
-              "world-anchored mile-marker obstacle schedule tests, readable responsive UI compilation, "
-              "concurrency benchmark, runtime diagnostics, and package gate. Remaining ACTIVE and OPEN missions "
-              "carry forward unchanged.\n"
-          )
-          text = text[:text.index("## Current warning")] + warning
-          path.write_text(text, encoding="utf-8")
-          '@ | python -
-          if ($LASTEXITCODE -ne 0) { throw "Mission finalization failed" }
-
-          Remove-Item tools/integrate_v062.py
-          Remove-Item tools/integrate_v062_ui.py
-          Remove-Item tools/integrate_v062_course.py
-          Remove-Item .github/workflows/v062-release.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CMakeLists.txt vcpkg.json README.md MISSIONS.md `
-            src/simulation.cpp src/simulation.hpp src/app.cpp tests/core_tests.cpp
-          git add -u .github/workflows/v050-core-diagnostic.yml `
-            .github/workflows/v062-release.yml tools/integrate_v062.py `
-            tools/integrate_v062_ui.py tools/integrate_v062_course.py
-          git commit -m "Release EpochRunner v0.6.2 biped course and UI hotfix"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.6.2 source" }
-          git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to push tested v0.6.2 source" }
-          $sourceSha = (git rev-parse HEAD).Trim()
-          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
-
-      - name: Build archive and checksum
+      - name: Build package
         id: package
         shell: pwsh
         run: |
-          Copy-Item README.md, LICENSE, MISSIONS.md -Destination package/EpochRunner-v0.6.2-windows-x64 -Force
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.6.2-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          Copy-Item README.md, LICENSE, MISSIONS.md -Destination $stage -Force
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
-            Copy-Item -Destination package/EpochRunner-v0.6.2-windows-x64 -Force
+            Copy-Item -Destination $stage -Force
           $archive = "EpochRunner-v0.6.2-windows-x64.zip"
-          Compress-Archive -Path "package/EpochRunner-v0.6.2-windows-x64/*" -DestinationPath $archive -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
           $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
           $checksum | Set-Content "$archive.sha256"
           "archive=$archive" >> $env:GITHUB_OUTPUT
           "checksum=$checksum" >> $env:GITHUB_OUTPUT
 
-      - name: Preserve package as workflow artifact
+      - name: Commit exact tested source
+        id: source
+        shell: pwsh
+        run: |
+          python tools/finalize_v062.py source
+          if ($LASTEXITCODE -ne 0) { throw "Mission finalization failed" }
+          Remove-Item tools/integrate_v062.py
+          Remove-Item tools/integrate_v062_ui.py
+          Remove-Item tools/integrate_v062_course.py
+          Remove-Item tools/integrate_v062_gait.py
+          Remove-Item tools/integrate_v062_runtime.py
+          Remove-Item tools/finalize_v062.py
+          Remove-Item .github/workflows/v062-release.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- CMakeLists.txt vcpkg.json README.md MISSIONS.md
+          git add -- src/simulation.cpp src/simulation.hpp src/app.cpp
+          git add -- src/ppo_network.cpp src/autonomy_runtime.cpp
+          git add -- tests/core_tests.cpp tests/concurrency_benchmark.cpp
+          git add -u -- .github/workflows/v050-core-diagnostic.yml
+          git add -u -- .github/workflows/v062-release.yml
+          git add -u -- tools/integrate_v062.py tools/integrate_v062_ui.py
+          git add -u -- tools/integrate_v062_course.py tools/integrate_v062_gait.py
+          git add -u -- tools/integrate_v062_runtime.py tools/finalize_v062.py
+          git commit -m "Release EpochRunner v0.6.2 biped gait course and UI hotfix"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested source" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to push tested source" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
           name: EpochRunner-v0.6.2-windows-x64
@@ -155,7 +150,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish v0.6.2
+      - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -164,14 +159,14 @@ jobs:
           ARCHIVE: ${{ steps.package.outputs.archive }}
         run: |
           gh release view v0.6.2 *> $null
-          if ($LASTEXITCODE -eq 0) { throw "v0.6.2 already exists; refusing to replace it" }
+          if ($LASTEXITCODE -eq 0) { throw "v0.6.2 already exists; refusing replacement" }
           gh release create v0.6.2 $env:ARCHIVE "$env:ARCHIVE.sha256" `
             --target $env:SOURCE_SHA `
             --title "EpochRunner v0.6.2" `
-            --notes "Biped locomotion, course, and readability hotfix: passive heel and toe geometry supplies semantic support and strong foot traction; head, tail, and body contacts slide instead of pinning the actor; every obstacle class is anchored to shared mile-marker coordinates after a three-marker safe runway; incompatible v0.6.1 autosaves start fresh; typography, panels, wrapping, and telemetry no longer overlap."
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish v0.6.2" }
+            --notes "Biped locomotion, gait, course, and readability hotfix. Passive heel/toe geometry supplies semantic support and foot traction. Head, tail, and body contacts slide instead of pinning the actor. Sliding without real alternating steps receives no progress credit, sustained wheel motion is invalid, and knee-before-foot obstacle traversal is penalized. Rocks, hurdles, overhead bars, moving hazards, and thrown projectiles are anchored to shared mile markers after a safe runway. Typography and telemetry no longer overlap."
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }
 
-      - name: Record immutable evidence and remove hotfix branch
+      - name: Record release evidence
         shell: pwsh
         env:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
@@ -181,39 +176,15 @@ jobs:
           git fetch origin main
           if ($LASTEXITCODE -ne 0) { throw "Failed to fetch main" }
           git switch -C main origin/main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to reset to remote main" }
-          New-Item -ItemType Directory -Force validation | Out-Null
-          @'
-          from pathlib import Path
-          import os
-
-          lines = [
-              "# EpochRunner v0.6.2 release evidence",
-              "",
-              f"- Exact tested source commit: `{os.environ['SOURCE_SHA']}`",
-              "- Windows runner: `windows-2025`",
-              "- Generator: `Visual Studio 18 2026`",
-              "- Full SDL3 Vulkan EpochGui application build: passed",
-              "- Passive biped heel and toe support regression: passed",
-              "- Foot traction versus head tail and body sliding regression: passed",
-              "- Shared mile-marker schedule and all obstacle classes regression: passed",
-              "- Responsive typography wrapped status and panel layout: compiled and packaged",
-              "- Core curriculum rig optimizer and concurrency tests: passed",
-              "- Executable version check: passed",
-              "- SDL3 Vulkan diagnostic: passed",
-              f"- Package: `{os.environ['ARCHIVE']}`",
-              f"- Package SHA-256: `{os.environ['CHECKSUM']}`",
-              "",
-          ]
-          Path("validation/v0.6.2.md").write_text("\n".join(lines), encoding="utf-8")
-          '@ | python -
-          if ($LASTEXITCODE -ne 0) { throw "Failed to generate v0.6.2 evidence" }
-
+          if ($LASTEXITCODE -ne 0) { throw "Failed to switch to main" }
+          python "$env:RUNNER_TEMP/finalize_v062.py" evidence `
+            --source-sha $env:SOURCE_SHA --archive $env:ARCHIVE --checksum $env:CHECKSUM
+          if ($LASTEXITCODE -ne 0) { throw "Evidence generation failed" }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add validation/v0.6.2.md
           git commit -m "Record verified EpochRunner v0.6.2 release"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit v0.6.2 evidence" }
+          if ($LASTEXITCODE -ne 0) { throw "Evidence commit failed" }
           git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to push v0.6.2 evidence" }
+          if ($LASTEXITCODE -ne 0) { throw "Evidence push failed" }
           git push origin --delete fix/v062-biped-traction 2>$null
