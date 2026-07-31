@@ -126,7 +126,7 @@ Do not publish the next release until:
 
 ## WALK-COURSE-001 — Procedural obstacle and recovery treadmill
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 The live and training environments must continuously expose movement even when a controller produces no forward translation. A bounded virtual course advances independently of the walker and remains synchronized with physics, observations, rendering, rewards, and diagnostics.
 
@@ -175,4 +175,4 @@ Required recovery behavior:
 
 ## Current warning
 
-EpochRunner v0.6.0 course and recovery source is integrated and core-validated, but WALK-COURSE-001 remains ACTIVE until the full Windows/Vulkan application and release gate pass. EpochRunner v0.5.0 remains the latest verified release. All other ACTIVE/OPEN missions carry forward unchanged.
+EpochRunner v0.6.0 passed the full Windows/Vulkan build, procedural course and recovery tests, concurrency benchmark, executable diagnostics, packaging gate, and immutable release publication. Remaining ACTIVE/OPEN missions carry forward unchanged.
