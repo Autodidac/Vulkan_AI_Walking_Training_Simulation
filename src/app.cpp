@@ -568,6 +568,9 @@ namespace epochrunner
             add_text(canvas, cursor, autonomy.worker_busy ? "TRAINER BUSY" : "TRAINER IDLE", 1.04f,
                 autonomy.worker_busy ? yellow : green);
             cursor.y += 23.0f;
+            add_text(canvas, cursor, std::format("PIPELINE {}   SUSPENSIONS {}",
+                autonomy.pipeline_stage, autonomy.pipeline_suspensions), 1.02f, muted);
+            cursor.y += 23.0f;
             add_text(canvas, cursor, "QUADRUPED-STABLE MOTORS / REAL FEET / SOFT START", 1.04f, muted);
             cursor.y += 23.0f;
             add_text(canvas, cursor, "GPU: VULKAN PRESENTS ONLY THE LIVE BEST AGENT", 1.04f, muted);

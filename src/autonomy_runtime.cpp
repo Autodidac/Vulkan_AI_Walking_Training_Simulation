@@ -72,6 +72,10 @@ namespace epochrunner::rl
 
     void AutonomousTrainer::synchronize()
     {
+        cached_status_.pipeline_stage = std::string(routine_stage_name(
+            pipeline_stage_.load(std::memory_order_relaxed)));
+        cached_status_.pipeline_suspensions = pipeline_suspensions_.load(std::memory_order_relaxed);
+
         PublishedSnapshot snapshot{};
         {
             std::scoped_lock lock(snapshot_mutex_);
@@ -215,7 +219,26 @@ namespace epochrunner::rl
         return false;
     }
 
-    AutonomousTrainer::TrainingRoutine AutonomousTrainer::training_routine(std::stop_token stop_token)
+    std::string_view AutonomousTrainer::routine_stage_name(RoutineStage stage) noexcept
+    {
+        switch (stage)
+        {
+        case RoutineStage::idle: return "IDLE";
+        case RoutineStage::commands: return "COMMANDS";
+        case RoutineStage::rollout_dispatched: return "AWAITING ROLLOUTS";
+        case RoutineStage::advantages_ready: return "ADVANTAGES READY";
+        case RoutineStage::gradient_dispatched: return "AWAITING GRADIENTS";
+        case RoutineStage::gradient_reduced: return "GRADIENT REDUCED";
+        case RoutineStage::optimized: return "OPTIMIZED";
+        case RoutineStage::evaluation_dispatched: return "AWAITING EVALUATION";
+        case RoutineStage::evaluated: return "EVALUATED";
+        case RoutineStage::published: return "PUBLISHED";
+        }
+        return "UNKNOWN";
+    }
+
+    AutonomousTrainer::TrainingRoutine AutonomousTrainer::training_routine(
+        std::stop_token stop_token)
     {
         while (!stop_token.stop_requested())
         {
@@ -228,10 +251,64 @@ namespace epochrunner::rl
                 continue;
             }
 
-            perform_training_update();
-            co_yield RoutineStage::trained;
+            worker_busy_.store(true, std::memory_order_relaxed);
+            const auto started = std::chrono::steady_clock::now();
+            {
+                std::scoped_lock lock(worker_mutex_);
+                worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
+                worker_.begin_update();
+            }
+            co_yield RoutineStage::rollout_dispatched;
+
+            {
+                std::scoped_lock lock(worker_mutex_);
+                worker_.finish_rollout();
+                worker_.compute_advantages();
+                worker_.begin_policy_update();
+            }
+            co_yield RoutineStage::advantages_ready;
+
+            for (;;)
+            {
+                bool complete{};
+                {
+                    std::scoped_lock lock(worker_mutex_);
+                    complete = worker_.policy_update_complete();
+                }
+                if (complete)
+                    break;
+
+                co_yield RoutineStage::gradient_dispatched;
+                {
+                    std::scoped_lock lock(worker_mutex_);
+                    worker_.finish_policy_batch();
+                }
+                co_yield RoutineStage::gradient_reduced;
+            }
+
+            bool evaluate{};
+            {
+                std::scoped_lock lock(worker_mutex_);
+                worker_.finalize_update_metrics();
+                evaluate = worker_.evaluation_due();
+                if (evaluate)
+                    worker_.begin_evaluation();
+            }
+            co_yield RoutineStage::optimized;
+
+            if (evaluate)
+            {
+                co_yield RoutineStage::evaluation_dispatched;
+                {
+                    std::scoped_lock lock(worker_mutex_);
+                    worker_.finish_evaluation();
+                }
+                co_yield RoutineStage::evaluated;
+            }
 
             perform_post_update();
+            record_update_timing(started);
+            worker_busy_.store(false, std::memory_order_relaxed);
             co_yield RoutineStage::published;
         }
     }
@@ -243,8 +320,14 @@ namespace epochrunner::rl
 
         while (!stop_token.stop_requested())
         {
-            const bool post_update_must_finish = stage == RoutineStage::trained;
-            if (!post_update_must_finish && !has_pending_work())
+            const bool pipeline_in_flight = stage == RoutineStage::rollout_dispatched
+                || stage == RoutineStage::advantages_ready
+                || stage == RoutineStage::gradient_dispatched
+                || stage == RoutineStage::gradient_reduced
+                || stage == RoutineStage::optimized
+                || stage == RoutineStage::evaluation_dispatched
+                || stage == RoutineStage::evaluated;
+            if (!pipeline_in_flight && !has_pending_work())
             {
                 std::unique_lock lock(wake_mutex_);
                 wake_cv_.wait_for(lock, std::chrono::milliseconds(8), [this, &stop_token]
@@ -255,26 +338,38 @@ namespace epochrunner::rl
                     break;
             }
 
+            bool completed = true;
+            if (stage == RoutineStage::rollout_dispatched)
+                completed = worker_.wait_for_rollout(stop_token);
+            else if (stage == RoutineStage::gradient_dispatched)
+                completed = worker_.wait_for_policy_batch(stop_token);
+            else if (stage == RoutineStage::evaluation_dispatched)
+                completed = worker_.wait_for_evaluation(stop_token);
+
+            if (!completed || stop_token.stop_requested())
+                break;
+            if (stage == RoutineStage::rollout_dispatched
+                || stage == RoutineStage::gradient_dispatched
+                || stage == RoutineStage::evaluation_dispatched)
+            {
+                pipeline_suspensions_.fetch_add(1u, std::memory_order_relaxed);
+            }
+
             stage = routine.resume();
+            pipeline_stage_.store(stage, std::memory_order_relaxed);
             if (stage == RoutineStage::published)
                 throttle_after_update();
             else if (stage == RoutineStage::idle)
                 std::this_thread::yield();
         }
+        pipeline_stage_.store(RoutineStage::idle, std::memory_order_relaxed);
+        worker_busy_.store(false, std::memory_order_relaxed);
     }
 
-    void AutonomousTrainer::perform_training_update()
+    void AutonomousTrainer::record_update_timing(
+        std::chrono::steady_clock::time_point started)
     {
-        worker_busy_.store(true, std::memory_order_relaxed);
-        const auto started = std::chrono::steady_clock::now();
-        {
-            std::scoped_lock lock(worker_mutex_);
-            worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
-            worker_.train_one_update();
-        }
         const auto finished = std::chrono::steady_clock::now();
-        worker_busy_.store(false, std::memory_order_relaxed);
-
         const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(finished - started);
         last_update_nanoseconds_.store(elapsed.count(), std::memory_order_relaxed);
         ++rate_window_updates_;
@@ -282,7 +377,8 @@ namespace epochrunner::rl
         const std::chrono::duration<double> rate_elapsed = finished - rate_window_started_;
         if (rate_elapsed.count() >= 1.0)
         {
-            worker_updates_per_second_ = static_cast<double>(rate_window_updates_) / rate_elapsed.count();
+            worker_updates_per_second_ = static_cast<double>(rate_window_updates_)
+                / rate_elapsed.count();
             rate_window_updates_ = 0;
             rate_window_started_ = finished;
         }

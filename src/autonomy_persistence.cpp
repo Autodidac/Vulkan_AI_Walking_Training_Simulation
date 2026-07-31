@@ -33,6 +33,9 @@ namespace epochrunner::rl
         snapshot.status.updates_per_second = worker_updates_per_second_;
         snapshot.status.speed_mode = updates_per_cycle_.load(std::memory_order_relaxed);
         snapshot.status.worker_busy = worker_busy_.load(std::memory_order_relaxed);
+        snapshot.status.pipeline_suspensions = pipeline_suspensions_.load(std::memory_order_relaxed);
+        snapshot.status.pipeline_stage = std::string(routine_stage_name(
+            pipeline_stage_.load(std::memory_order_relaxed)));
         snapshot.status.message = worker_message_;
 
         std::scoped_lock lock(snapshot_mutex_);

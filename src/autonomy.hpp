@@ -35,6 +35,8 @@ namespace epochrunner::rl
         double updates_per_second{};
         int speed_mode{ 1 };
         bool worker_busy{};
+        std::uint64_t pipeline_suspensions{};
+        std::string pipeline_stage{ "IDLE" };
         std::string message{ "LEARNING TO BALANCE" };
     };
 
@@ -118,7 +120,13 @@ namespace epochrunner::rl
         {
             idle,
             commands,
-            trained,
+            rollout_dispatched,
+            advantages_ready,
+            gradient_dispatched,
+            gradient_reduced,
+            optimized,
+            evaluation_dispatched,
+            evaluated,
             published
         };
 
@@ -160,9 +168,10 @@ namespace epochrunner::rl
 
         [[nodiscard]] TrainingRoutine training_routine(std::stop_token stop_token);
         void worker_main(std::stop_token stop_token);
-        void perform_training_update();
         void perform_post_update();
+        void record_update_timing(std::chrono::steady_clock::time_point started);
         void throttle_after_update() const;
+        [[nodiscard]] static std::string_view routine_stage_name(RoutineStage stage) noexcept;
 
         void manage_curriculum_locked();
         void attempt_rig_evolution_locked();
@@ -220,6 +229,8 @@ namespace epochrunner::rl
         std::atomic_uint32_t requested_updates_{};
         std::atomic_bool worker_busy_{ false };
         std::atomic_int64_t last_update_nanoseconds_{};
+        std::atomic<RoutineStage> pipeline_stage_{ RoutineStage::idle };
+        std::atomic_uint64_t pipeline_suspensions_{};
         std::jthread worker_thread_{};
     };
 }

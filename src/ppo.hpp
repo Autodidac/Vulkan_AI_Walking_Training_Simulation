@@ -13,6 +13,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace epochrunner::rl
@@ -163,6 +164,24 @@ namespace epochrunner::rl
             bool transfer_only = false);
         [[nodiscard]] bool restore_best_policy() noexcept;
         void train_one_update();
+
+        // Staged update API used by the C++23 coroutine scheduler. Dispatch calls
+        // return immediately; wait calls block only the training-owner thread while
+        // persistent workers run. No UI-facing thread enters these waits.
+        void begin_update();
+        [[nodiscard]] bool wait_for_rollout(std::stop_token stop_token);
+        void finish_rollout();
+        void compute_advantages();
+        void begin_policy_update();
+        [[nodiscard]] bool policy_update_complete() const noexcept;
+        [[nodiscard]] bool wait_for_policy_batch(std::stop_token stop_token);
+        void finish_policy_batch();
+        void finalize_update_metrics();
+        [[nodiscard]] bool evaluation_due() const noexcept;
+        void begin_evaluation();
+        [[nodiscard]] bool wait_for_evaluation(std::stop_token stop_token);
+        void finish_evaluation();
+
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
 
@@ -220,14 +239,28 @@ namespace epochrunner::rl
 
         struct ParallelState;
 
+        struct PolicyUpdateProgress
+        {
+            std::vector<std::size_t> indices{};
+            std::size_t epoch{};
+            std::size_t begin{};
+            std::size_t end{};
+            std::size_t sample_count{};
+            float total_policy_loss{};
+            float total_value_loss{};
+            float total_entropy{};
+            bool batch_pending{};
+            bool complete{ true };
+        };
+
         [[nodiscard]] float random_uniform() noexcept;
         [[nodiscard]] float random_normal() noexcept;
         [[nodiscard]] std::array<float, sim::action_count> sample_action(
             const PolicyNetwork::Evaluation& evaluation,
             std::uint64_t& random_state,
             float& log_probability) const noexcept;
-        void update_policy();
-        void evaluate_policy();
+        void shuffle_policy_indices();
+        void dispatch_policy_batch();
         void reset_training_state(bool clear_best = true) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
         void append_history(std::vector<float>& history, float value);
@@ -237,17 +270,18 @@ namespace epochrunner::rl
 
         void initialize_parallel_workers();
         void shutdown_parallel_workers() noexcept;
-        void parallel_accumulate_batch(
+        void dispatch_parallel_gradient_batch(
             const std::vector<std::size_t>& indices,
             std::size_t begin,
             std::size_t end,
             float clip_range,
             float value_coefficient,
-            float entropy_coefficient,
-            float& policy_loss,
-            float& value_loss,
-            float& entropy);
-        void parallel_evaluate_policy();
+            float entropy_coefficient);
+        [[nodiscard]] bool wait_parallel_job(std::stop_token stop_token);
+        void finish_parallel_gradient_batch(
+            float& policy_loss, float& value_loss, float& entropy);
+        [[nodiscard]] bool dispatch_parallel_evaluation();
+        void finish_parallel_evaluation();
 
         static constexpr std::size_t rollout_horizon = 128;
 
@@ -273,12 +307,23 @@ namespace epochrunner::rl
         std::vector<RolloutTotals> rollout_worker_totals_{};
         std::mutex rollout_mutex_{};
         std::condition_variable_any rollout_start_cv_{};
-        std::condition_variable rollout_done_cv_{};
+        std::condition_variable_any rollout_done_cv_{};
         std::uint64_t rollout_generation_{};
         std::uint64_t rollout_update_seed_{};
         std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
+
+        RolloutTotals current_rollout_totals_{};
+        std::uint64_t current_update_seed_{};
+        bool update_active_{};
+        bool rollout_pending_{};
+        PolicyUpdateProgress policy_update_{};
+        bool evaluation_pending_{};
+        bool serial_parallel_ready_{};
+        float serial_policy_loss_{};
+        float serial_value_loss_{};
+        float serial_entropy_{};
     };
 }

@@ -178,6 +178,47 @@ int main()
             "procedural course omitted thrown objects");
     }
 
+    {
+        rl::PpoTrainer monolithic{ humanoid, 16 };
+        rl::PpoTrainer staged{ humanoid, 16 };
+        monolithic.set_cpu_mode(2);
+        staged.set_cpu_mode(2);
+        monolithic.train_one_update();
+
+        staged.begin_update();
+        require(staged.wait_for_rollout({}), "staged rollout wait was cancelled");
+        staged.finish_rollout();
+        staged.compute_advantages();
+        staged.begin_policy_update();
+        std::size_t gradient_batches{};
+        while (!staged.policy_update_complete())
+        {
+            require(staged.wait_for_policy_batch({}), "staged gradient wait was cancelled");
+            staged.finish_policy_batch();
+            ++gradient_batches;
+            require(gradient_batches < 1024, "staged optimizer failed to terminate");
+        }
+        staged.finalize_update_metrics();
+        if (staged.evaluation_due())
+        {
+            staged.begin_evaluation();
+            require(staged.wait_for_evaluation({}), "staged evaluation wait was cancelled");
+            staged.finish_evaluation();
+        }
+
+        require(staged.metrics().update == 1, "staged PPO update did not finalize");
+        require(staged.optimizer_step() == monolithic.optimizer_step(),
+            "staged PPO changed the number of Adam applications");
+        require(staged.policy().parameters().size() == monolithic.policy().parameters().size(),
+            "staged PPO changed policy dimensions");
+        for (std::size_t index = 0; index < staged.policy().parameters().size(); ++index)
+        {
+            require(std::abs(staged.policy().parameters()[index]
+                    - monolithic.policy().parameters()[index]) < 1.0e-5f,
+                "staged PPO diverged from deterministic monolithic compatibility path");
+        }
+    }
+
     rl::PpoTrainer trainer{ humanoid, 16 };
     require(trainer.rollout_worker_count() >= 1, "parallel rollout worker count is invalid");
     trainer.set_cpu_mode(1);
@@ -255,6 +296,10 @@ int main()
         }
         require(autonomous.rig_signature() == edited.signature(),
             "queued hip edit was not eventually published");
+        require(autonomous.autonomy_status().pipeline_suspensions > 0,
+            "coroutine pipeline never suspended for persistent worker completion");
+        require(!autonomous.autonomy_status().pipeline_stage.empty(),
+            "coroutine pipeline stage telemetry is missing");
         autonomous.set_updates_per_cycle(1);
         require(autonomous.updates_per_cycle() == 1, "NORMAL speed mode did not latch");
         autonomous.set_updates_per_cycle(2);

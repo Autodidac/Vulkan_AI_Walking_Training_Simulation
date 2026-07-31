@@ -195,7 +195,7 @@ namespace epochrunner::rl
         std::vector<std::jthread> workers{};
         std::mutex mutex{};
         std::condition_variable_any start_cv{};
-        std::condition_variable done_cv{};
+        std::condition_variable_any done_cv{};
         Job job{ Job::none };
         std::uint64_t generation{};
         std::size_t completed{};
@@ -239,17 +239,19 @@ namespace epochrunner::rl
             active_worker_count_ = rollout_worker_count_;
     }
 
-    void PpoTrainer::parallel_accumulate_batch(
+    void PpoTrainer::dispatch_parallel_gradient_batch(
         const std::vector<std::size_t>& batch_indices,
         std::size_t batch_begin,
         std::size_t batch_end,
         float batch_clip_range,
         float batch_value_coefficient,
-        float batch_entropy_coefficient,
-        float& policy_loss,
-        float& value_loss,
-        float& entropy)
+        float batch_entropy_coefficient)
     {
+        serial_parallel_ready_ = false;
+        serial_policy_loss_ = 0.0f;
+        serial_value_loss_ = 0.0f;
+        serial_entropy_ = 0.0f;
+
         if (!parallel_ || parallel_->worker_count == 0)
         {
             policy_.zero_gradients();
@@ -265,10 +267,11 @@ namespace epochrunner::rl
                     batch_clip_range,
                     batch_value_coefficient,
                     batch_entropy_coefficient,
-                    policy_loss,
-                    value_loss,
-                    entropy);
+                    serial_policy_loss_,
+                    serial_value_loss_,
+                    serial_entropy_);
             }
+            serial_parallel_ready_ = true;
             return;
         }
 
@@ -287,14 +290,35 @@ namespace epochrunner::rl
             ++state.generation;
         }
         state.start_cv.notify_all();
-        {
-            std::unique_lock lock(state.mutex);
-            state.done_cv.wait(lock, [&state]
-            {
-                return state.completed == state.worker_count;
-            });
-        }
+    }
 
+    bool PpoTrainer::wait_parallel_job(std::stop_token stop_token)
+    {
+        if (serial_parallel_ready_ || !parallel_ || parallel_->worker_count == 0)
+            return true;
+        ParallelState& state = *parallel_;
+        std::unique_lock lock(state.mutex);
+        return state.done_cv.wait(lock, stop_token, [&state]
+        {
+            return state.completed == state.worker_count;
+        });
+    }
+
+    void PpoTrainer::finish_parallel_gradient_batch(
+        float& policy_loss, float& value_loss, float& entropy)
+    {
+        if (serial_parallel_ready_)
+        {
+            policy_loss = serial_policy_loss_;
+            value_loss = serial_value_loss_;
+            entropy = serial_entropy_;
+            serial_parallel_ready_ = false;
+            return;
+        }
+        if (!parallel_ || parallel_->worker_count == 0)
+            return;
+
+        ParallelState& state = *parallel_;
         policy_.zero_gradients();
         std::vector<float>& reduced = policy_.gradients();
         for (std::size_t worker = 0; worker < state.active_workers; ++worker)
@@ -308,11 +332,11 @@ namespace epochrunner::rl
         }
     }
 
-    void PpoTrainer::parallel_evaluate_policy()
+    bool PpoTrainer::dispatch_parallel_evaluation()
     {
         constexpr std::size_t evaluation_agents = 6;
         if (!parallel_ || parallel_->worker_count == 0)
-            return;
+            return false;
 
         ParallelState& state = *parallel_;
         {
@@ -325,14 +349,16 @@ namespace epochrunner::rl
             ++state.generation;
         }
         state.start_cv.notify_all();
-        {
-            std::unique_lock lock(state.mutex);
-            state.done_cv.wait(lock, [&state]
-            {
-                return state.completed == state.worker_count;
-            });
-        }
+        return true;
+    }
 
+    void PpoTrainer::finish_parallel_evaluation()
+    {
+        constexpr std::size_t evaluation_agents = 6;
+        if (!parallel_ || parallel_->worker_count == 0)
+            return;
+
+        ParallelState& state = *parallel_;
         ParallelState::EvaluationTotals totals{};
         for (std::size_t worker = 0; worker < state.active_workers; ++worker)
         {
