@@ -1,0 +1,41 @@
+name: Validate EpochRunner v0.7 runtime stress
+
+on:
+  push:
+    branches:
+      - feature/v070-runtime-pipeline
+
+permissions:
+  contents: read
+
+jobs:
+  windows-msvc:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v070-runtime-pipeline
+      - name: Configure
+        run: cmake -S . -B build/v070-stress-msvc -G "Visual Studio 18 2026" -A x64 -DEPOCHRUNNER_BUILD_APP=OFF -DEPOCHRUNNER_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build/v070-stress-msvc --config Release
+      - name: Test
+        run: ctest --test-dir build/v070-stress-msvc -C Release --output-on-failure -V
+
+  linux-thread-sanitizer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v070-runtime-pipeline
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: cmake -S . -B build/v070-tsan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEPOCHRUNNER_BUILD_APP=OFF -DEPOCHRUNNER_BUILD_TESTS=ON -DEPOCHRUNNER_ENABLE_TSAN=ON
+      - name: Build
+        run: cmake --build build/v070-tsan --target EpochRunnerCoreTests EpochRunnerRuntimeStress
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1:history_size=7:second_deadlock_stack=1
+        run: ctest --test-dir build/v070-tsan --output-on-failure -V -R "EpochRunner\.(Core|RuntimeStress)"
