@@ -3,11 +3,12 @@
 #include "simulation.hpp"
 
 #include <array>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <condition_variable>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>
@@ -70,7 +71,8 @@ namespace epochrunner::rl
         explicit PolicyNetwork(std::uint64_t seed);
 
         [[nodiscard]] Evaluation evaluate(std::span<const float, input_size> observation) const noexcept;
-        [[nodiscard]] std::array<float, output_size> deterministic_action(std::span<const float, input_size> observation) const noexcept;
+        [[nodiscard]] std::array<float, output_size> deterministic_action(
+            std::span<const float, input_size> observation) const noexcept;
         [[nodiscard]] std::size_t parameter_count() const noexcept { return parameters_.size(); }
         [[nodiscard]] const std::vector<float>& parameters() const noexcept { return parameters_; }
         [[nodiscard]] std::vector<float>& parameters() noexcept { return parameters_; }
@@ -90,6 +92,7 @@ namespace epochrunner::rl
             float& entropy) noexcept;
 
         [[nodiscard]] const std::vector<float>& gradients() const noexcept { return gradients_; }
+        [[nodiscard]] std::vector<float>& gradients() noexcept { return gradients_; }
         [[nodiscard]] std::array<float, output_size> standard_deviation() const noexcept;
         void set_exploration(float standard_deviation) noexcept;
         [[nodiscard]] float mean_exploration() const noexcept;
@@ -141,14 +144,20 @@ namespace epochrunner::rl
     class PpoTrainer
     {
     public:
-        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count = 64,
+        explicit PpoTrainer(const sim::CreatureBlueprint& blueprint,
+            std::size_t environment_count = 64,
             bool enable_rollout_workers = true);
         ~PpoTrainer();
+
+        PpoTrainer(const PpoTrainer&) = delete;
+        PpoTrainer& operator=(const PpoTrainer&) = delete;
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
+        void set_cpu_mode(int mode) noexcept;
+        [[nodiscard]] int cpu_mode() const noexcept { return cpu_mode_; }
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
@@ -170,10 +179,14 @@ namespace epochrunner::rl
         [[nodiscard]] std::string_view controller_state_name() const noexcept;
         [[nodiscard]] std::uint64_t rig_signature() const noexcept { return blueprint_.signature(); }
         [[nodiscard]] bool has_best_policy() const noexcept { return !best_parameters_.empty(); }
-        [[nodiscard]] const std::vector<float>& best_policy_parameters() const noexcept { return best_parameters_; }
+        [[nodiscard]] const std::vector<float>& best_policy_parameters() const noexcept
+        {
+            return best_parameters_;
+        }
         [[nodiscard]] std::uint64_t optimizer_step() const noexcept { return adam_.step; }
         [[nodiscard]] float exploration() const noexcept { return policy_.mean_exploration(); }
-        [[nodiscard]] std::size_t rollout_worker_count() const noexcept { return rollout_worker_count_; }
+        [[nodiscard]] std::size_t rollout_worker_count() const noexcept { return active_worker_count_; }
+        [[nodiscard]] std::size_t maximum_worker_count() const noexcept { return rollout_worker_count_; }
         [[nodiscard]] sim::CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
 
@@ -205,6 +218,8 @@ namespace epochrunner::rl
             std::size_t completed_episodes{};
         };
 
+        struct ParallelState;
+
         [[nodiscard]] float random_uniform() noexcept;
         [[nodiscard]] float random_normal() noexcept;
         [[nodiscard]] std::array<float, sim::action_count> sample_action(
@@ -219,6 +234,21 @@ namespace epochrunner::rl
         [[nodiscard]] RolloutTotals collect_rollout_partition(std::size_t worker_index,
             std::size_t worker_count, std::uint64_t update_seed);
         void rollout_worker_main(std::size_t worker_index, std::stop_token stop_token);
+
+        void initialize_parallel_workers();
+        void shutdown_parallel_workers() noexcept;
+        void parallel_accumulate_batch(
+            const std::vector<std::size_t>& indices,
+            std::size_t begin,
+            std::size_t end,
+            float clip_range,
+            float value_coefficient,
+            float entropy_coefficient,
+            float& policy_loss,
+            float& value_loss,
+            float& entropy);
+        void parallel_evaluate_policy();
+
         static constexpr std::size_t rollout_horizon = 128;
 
         sim::CreatureBlueprint blueprint_{};
@@ -236,7 +266,10 @@ namespace epochrunner::rl
         ControllerState controller_state_{ ControllerState::fresh };
         sim::CourseStage course_stage_{ sim::CourseStage::balance };
         float course_difficulty_{ 0.25f };
+        int cpu_mode_{ 4 };
+        std::size_t active_worker_count_{ 1 };
         std::size_t rollout_worker_count_{ 1 };
+        std::size_t rollout_active_worker_count_{ 1 };
         std::vector<RolloutTotals> rollout_worker_totals_{};
         std::mutex rollout_mutex_{};
         std::condition_variable_any rollout_start_cv_{};
@@ -246,5 +279,6 @@ namespace epochrunner::rl
         std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::vector<std::jthread> rollout_workers_{};
+        std::shared_ptr<ParallelState> parallel_{};
     };
 }
