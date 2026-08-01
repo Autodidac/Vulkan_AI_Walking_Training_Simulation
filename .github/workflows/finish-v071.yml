@@ -67,4 +67,4 @@ jobs:
       - name: Test
         run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
 
-# bounded stance hysteresis trigger
+# retained stance evidence trigger
