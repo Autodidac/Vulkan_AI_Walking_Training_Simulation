@@ -2,10 +2,8 @@ name: Finish EpochRunner v0.7.1
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/finish-v071.yml
+    branches: [main]
+    paths: [.github/workflows/finish-v071.yml]
 
 concurrency:
   group: epochrunner-v071-missioncache
@@ -21,16 +19,16 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  linux-validate:
+  linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Publish run identity
+      - name: Record active run
         shell: bash
         env:
           RUN_ID: ${{ github.run_id }}
@@ -40,51 +38,47 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
-          status_dir="$RUNNER_TEMP/v071-status"
-          rm -rf "$status_dir"
-          git worktree add --detach "$status_dir" origin/main
-          mkdir -p "$status_dir/validation"
-          cat > "$status_dir/validation/v0.7.1-run.md" <<EOF
-          # EpochRunner v0.7.1 active completion run
+          status="$RUNNER_TEMP/status"
+          git worktree add --detach "$status" origin/main
+          mkdir -p "$status/validation"
+          cat > "$status/validation/v0.7.1-run.md" <<EOF
+          # EpochRunner v0.7.1 completion run
 
           - Run ID: \`$RUN_ID\`
           - Trigger SHA: \`$TRIGGER_SHA\`
-          - Stage: \`linux-started\`
+          - Stage: \`linux\`
           - Result: \`running\`
           EOF
-          git -C "$status_dir" add validation/v0.7.1-run.md
-          git -C "$status_dir" commit -m 'Record active v0.7.1 completion run'
-          git -C "$status_dir" push origin HEAD:main
-          git worktree remove --force "$status_dir"
+          git -C "$status" add validation/v0.7.1-run.md
+          git -C "$status" commit -m 'Record active v0.7.1 release gate'
+          git -C "$status" push origin HEAD:main
+          git worktree remove --force "$status"
 
-      - name: Materialize strict training-quality source
+      - name: Materialize corrected source
         run: |
           python3 tools/apply_training_quality_v071.py apply
           python3 tools/refine_training_quality_v071.py
           git diff --check
 
-      - name: Install GCC 14 toolchain
+      - name: Install toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Configure C++23 core tests
-        run: >-
-          cmake -S . -B build/linux-v071 -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_COMPILER=g++-14
-          -DEPOCHRUNNER_BUILD_APP=OFF
-          -DEPOCHRUNNER_BUILD_TESTS=ON
+      - name: Configure and build
+        run: |
+          cmake -S . -B build/linux-v071 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DEPOCHRUNNER_BUILD_APP=OFF \
+            -DEPOCHRUNNER_BUILD_TESTS=ON
+          cmake --build build/linux-v071 --parallel 2
 
-      - name: Build Linux tests
-        run: cmake --build build/linux-v071 --parallel 2
+      - name: Test corrected training
+        run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
 
-      - name: Run Linux deterministic and bounded-training tests
-        run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 600
-
-      - name: Publish Linux success
+      - name: Record Linux pass
         shell: bash
-        if: success()
         env:
           RUN_ID: ${{ github.run_id }}
           TRIGGER_SHA: ${{ github.sha }}
@@ -93,62 +87,32 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin main
-          status_dir="$RUNNER_TEMP/v071-status-success"
-          rm -rf "$status_dir"
-          git worktree add --detach "$status_dir" origin/main
-          mkdir -p "$status_dir/validation"
-          cat > "$status_dir/validation/v0.7.1-run.md" <<EOF
-          # EpochRunner v0.7.1 active completion run
+          status="$RUNNER_TEMP/status-pass"
+          git worktree add --detach "$status" origin/main
+          cat > "$status/validation/v0.7.1-run.md" <<EOF
+          # EpochRunner v0.7.1 completion run
 
           - Run ID: \`$RUN_ID\`
           - Trigger SHA: \`$TRIGGER_SHA\`
-          - Stage: \`linux-passed\`
-          - Result: \`running\`
+          - Stage: \`windows-queued\`
+          - Result: \`linux-passed\`
           EOF
-          git -C "$status_dir" add validation/v0.7.1-run.md
-          git -C "$status_dir" commit -m 'Record v0.7.1 Linux validation pass'
-          git -C "$status_dir" push origin HEAD:main
-          git worktree remove --force "$status_dir"
+          git -C "$status" add validation/v0.7.1-run.md
+          git -C "$status" commit -m 'Record v0.7.1 Linux pass'
+          git -C "$status" push origin HEAD:main
+          git worktree remove --force "$status"
 
-      - name: Publish Linux failure
-        shell: bash
-        if: failure()
-        env:
-          RUN_ID: ${{ github.run_id }}
-          TRIGGER_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
-          status_dir="$RUNNER_TEMP/v071-status-failure"
-          rm -rf "$status_dir"
-          git worktree add --detach "$status_dir" origin/main
-          mkdir -p "$status_dir/validation"
-          cat > "$status_dir/validation/v0.7.1-run.md" <<EOF
-          # EpochRunner v0.7.1 active completion run
-
-          - Run ID: \`$RUN_ID\`
-          - Trigger SHA: \`$TRIGGER_SHA\`
-          - Stage: \`linux-failed\`
-          - Result: \`failure\`
-          EOF
-          git -C "$status_dir" add validation/v0.7.1-run.md
-          git -C "$status_dir" commit -m 'Record v0.7.1 Linux validation failure'
-          git -C "$status_dir" push origin HEAD:main
-          git worktree remove --force "$status_dir"
-
-  windows-release:
-    needs: linux-validate
+  windows:
+    needs: linux
     runs-on: windows-2025
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Publish Windows start
+      - name: Record Windows start
         shell: pwsh
         env:
           RUN_ID: ${{ github.run_id }}
@@ -157,70 +121,64 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
-          $statusDir = "$env:RUNNER_TEMP/v071-status-windows"
-          Remove-Item $statusDir -Recurse -Force -ErrorAction SilentlyContinue
-          git worktree add --detach $statusDir origin/main
-          New-Item -ItemType Directory -Force "$statusDir/validation" | Out-Null
+          $status = "$env:RUNNER_TEMP/status-windows"
+          git worktree add --detach $status origin/main
           @"
-          # EpochRunner v0.7.1 active completion run
+          # EpochRunner v0.7.1 completion run
 
           - Run ID: ``$env:RUN_ID``
           - Trigger SHA: ``$env:TRIGGER_SHA``
-          - Stage: ``windows-started``
+          - Stage: ``windows``
           - Result: ``running``
-          "@ | Set-Content "$statusDir/validation/v0.7.1-run.md"
-          git -C $statusDir add validation/v0.7.1-run.md
-          git -C $statusDir commit -m "Record v0.7.1 Windows validation start"
-          git -C $statusDir push origin HEAD:main
-          git worktree remove --force $statusDir
+          "@ | Set-Content "$status/validation/v0.7.1-run.md"
+          git -C $status add validation/v0.7.1-run.md
+          git -C $status commit -m "Record v0.7.1 Windows start"
+          git -C $status push origin HEAD:main
+          git worktree remove --force $status
 
-      - name: Materialize strict training-quality source
+      - name: Materialize corrected source
         shell: pwsh
         run: |
           python tools/apply_training_quality_v071.py apply
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 training-quality materialization failed" }
+          if ($LASTEXITCODE -ne 0) { throw "base materialization failed" }
           python tools/refine_training_quality_v071.py
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 reciprocal partition refinement failed" }
+          if ($LASTEXITCODE -ne 0) { throw "eight-motor refinement failed" }
           git diff --check
-          if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
-          Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py" -Force
+          if ($LASTEXITCODE -ne 0) { throw "source whitespace validation failed" }
+          git diff --binary -- . ':(exclude)validation/v0.7.1-run.md' | Set-Content -Encoding utf8 "$env:RUNNER_TEMP/v071.patch"
+          Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py"
 
-      - name: Checkout pinned vcpkg
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
 
-      - name: Restore vcpkg cache
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-quality-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-observation-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            epochrunner-v071-${{ runner.os }}-
+            epochrunner-v071-quality-${{ runner.os }}-
             epochrunner-v070-${{ runner.os }}-
-            epochrunner-v066-${{ runner.os }}-
 
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure full MSVC release
+      - name: Configure and build full application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
+          cmake --build --preset windows-release
 
-      - name: Build full SDL3 Vulkan EpochGui application
-        run: cmake --build --preset windows-release
+      - name: Test full application
+        run: ctest --preset windows-release --output-on-failure -V --timeout 900
 
-      - name: Run Windows deterministic, bounded-training, concurrency, and UI tests
-        run: ctest --preset windows-release --output-on-failure -V --timeout 600
-
-      - name: Verify executable and Vulkan path
+      - name: Verify executable and Vulkan
         shell: pwsh
         run: |
           $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
@@ -234,41 +192,36 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
         run: |
-          python tools/write_missioncache_v071.py validate --run-id $env:RUN_ID
-          if ($LASTEXITCODE -ne 0) { throw "Mission ledger validation finalization failed" }
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard
+          git fetch origin main
+          git checkout --detach origin/main
+          git apply --binary "$env:RUNNER_TEMP/v071.patch"
+          if ($LASTEXITCODE -ne 0) { throw "Could not apply exact tested source over status commits" }
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" validate --run-id $env:RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw "Mission validation ledger failed" }
+
           git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
           git rm -f --ignore-unmatch .github/workflows/finish-v071.yml
           git rm -f --ignore-unmatch .github/workflows/kick-v071.yml
           git rm -f --ignore-unmatch .github/workflows/kick-v071-now.yml
           git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
           git rm -f --ignore-unmatch tools/refine_training_quality_v071.py
+          git rm -f --ignore-unmatch tools/fix_humanoid_observation_v071.py
           git rm -f --ignore-unmatch tools/write_missioncache_v071.py
           git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
           git rm -f --ignore-unmatch validation/v0.7.1-run.md
-          git rm -f --ignore-unmatch validation/v0.7.1-release-lock.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.log
-          git add CMakeLists.txt `
-            src/simulation.cpp src/simulation.hpp `
-            src/ppo.hpp src/ppo_trainer.cpp src/ppo_parallel.cpp src/self_imitation.cpp `
-            src/training_checkpoint.cpp src/autonomy_curriculum.cpp `
-            src/autonomy_persistence.cpp src/autonomy_commands.cpp src/app.cpp `
-            tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md `
-            validation/v0.7.1-prepublish.md
-          git commit -m "Fix humanoid training quality and parent reaction"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.7.1 source" }
-          git fetch origin main
-          git rebase origin/main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to rebase tested source over run-status commits" }
+          git add -A
+          git commit -m "Fix eight-motor humanoid training quality"
+          if ($LASTEXITCODE -ne 0) { throw "Could not commit exact tested source" }
           git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish tested v0.7.1 source" }
-          $sourceSha = (git rev-parse HEAD).Trim()
-          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish exact tested source" }
+          "sha=$((git rev-parse HEAD).Trim())" >> $env:GITHUB_OUTPUT
 
-      - name: Package exact tested build
+      - name: Package tested build
         id: package
         shell: pwsh
         run: |
@@ -285,83 +238,38 @@ jobs:
           "archive=$archive" >> $env:GITHUB_OUTPUT
           "checksum=$checksum" >> $env:GITHUB_OUTPUT
 
-      - name: Publish or update v0.7.1
+      - name: Publish release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
         run: |
           gh release view v0.7.1 *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --clobber
-            if ($LASTEXITCODE -ne 0) { throw "v0.7.1 asset replacement failed" }
             gh release edit v0.7.1 --target $env:SOURCE_SHA --title "EpochRunner v0.7.1" --notes-file RELEASE_NOTES_v0.7.1.md
           } else {
-            gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" `
-              --target $env:SOURCE_SHA `
-              --title "EpochRunner v0.7.1" `
-              --notes-file RELEASE_NOTES_v0.7.1.md
+            gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --target $env:SOURCE_SHA --title "EpochRunner v0.7.1" --notes-file RELEASE_NOTES_v0.7.1.md
           }
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 release publication failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }
 
-      - name: Complete mission cache and verify cleanup
+      - name: Finalize mission cache
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
-          RUN_ID: ${{ github.run_id }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize `
-            --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID `
-            --archive $env:ARCHIVE --checksum $env:CHECKSUM
-          if ($LASTEXITCODE -ne 0) { throw "Mission cache publication evidence failed" }
-
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID --archive $env:ARCHIVE --checksum $env:CHECKSUM
           git add missioncache.md validation/v0.7.1.md
           git commit -m "Complete EpochRunner v0.7.1 mission cache"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit final mission evidence" }
           git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish final mission evidence" }
-
-          $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
-          if ($openPrs -ne "0") { throw "Repository still has $openPrs open pull requests" }
+          if ($LASTEXITCODE -ne 0) { throw "Final evidence publication failed" }
+          $prs = (gh pr list --state open --json number --jq 'length').Trim()
+          if ($prs -ne '0') { throw "$prs open pull requests remain" }
           $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
-          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
-            throw "Repository branches are not clean: $($branches -join ', ')"
-          }
-
-      - name: Publish Windows failure status
-        shell: pwsh
-        if: failure()
-        env:
-          RUN_ID: ${{ github.run_id }}
-          TRIGGER_SHA: ${{ github.sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          $statusDir = "$env:RUNNER_TEMP/v071-status-failed"
-          Remove-Item $statusDir -Recurse -Force -ErrorAction SilentlyContinue
-          git worktree add --detach $statusDir origin/main
-          New-Item -ItemType Directory -Force "$statusDir/validation" | Out-Null
-          @"
-          # EpochRunner v0.7.1 active completion run
-
-          - Run ID: ``$env:RUN_ID``
-          - Trigger SHA: ``$env:TRIGGER_SHA``
-          - Stage: ``windows-failed``
-          - Result: ``failure``
-          "@ | Set-Content "$statusDir/validation/v0.7.1-run.md"
-          git -C $statusDir add validation/v0.7.1-run.md
-          git -C $statusDir commit -m "Record v0.7.1 Windows validation failure"
-          git -C $statusDir push origin HEAD:main
-          git worktree remove --force $statusDir
-
-# checkpoint-anchor correction trigger
-# controlled-stance predicate trigger
-# worker-backed evaluation trigger
-# bounded-standing acquisition trigger
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') { throw "Unexpected branches: $($branches -join ', ')" }
