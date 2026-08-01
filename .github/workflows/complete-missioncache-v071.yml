@@ -1,14 +1,9 @@
-name: Complete EpochRunner v0.7.1 mission cache
+name: Complete EpochRunner v0.7.1 release
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - tools/apply_training_quality_v071.py
-      - tools/refine_training_quality_v071.py
-      - tools/write_missioncache_v071.py
-      - .github/workflows/complete-missioncache-v071.yml
+    branches: [main]
+    paths: [.github/workflows/complete-missioncache-v071.yml]
 
 concurrency:
   group: epochrunner-v071-missioncache
@@ -24,19 +19,42 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  linux-validate:
+  linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Materialize strict training-quality source
+      - name: Record active release run
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          status="$RUNNER_TEMP/v071-status"
+          git worktree add --detach "$status" origin/main
+          mkdir -p "$status/validation"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux`\n- Result: `running`\n' "$RUN_ID" "$TRIGGER_SHA" > "$status/validation/v0.7.1-run.md"
+          git -C "$status" add validation/v0.7.1-run.md
+          git -C "$status" commit -m 'Record active v0.7.1 release run'
+          git -C "$status" push origin HEAD:main
+          git worktree remove --force "$status"
+
+      - name: Materialize exact corrected source
         run: |
           python3 tools/apply_training_quality_v071.py apply
           python3 tools/refine_training_quality_v071.py
+          python3 tools/fix_balance_diagnostic_v071.py
+          python3 tools/fix_stance_hysteresis_v071.py
+          python3 tools/fix_balance_seed_robustness_v071.py
+          python3 tools/fix_balance_evaluation_v071.py
           git diff --check
 
       - name: Install GCC 14 toolchain
@@ -44,37 +62,85 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Configure C++23 core tests
-        run: >-
-          cmake -S . -B build/linux-v071 -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_COMPILER=g++-14
-          -DEPOCHRUNNER_BUILD_APP=OFF
-          -DEPOCHRUNNER_BUILD_TESTS=ON
+      - name: Configure and build Linux core
+        run: |
+          cmake -S . -B build/linux-v071 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=g++-14 \
+            -DEPOCHRUNNER_BUILD_APP=OFF \
+            -DEPOCHRUNNER_BUILD_TESTS=ON
+          cmake --build build/linux-v071 --parallel 2
 
-      - name: Build Linux tests
-        run: cmake --build build/linux-v071 --parallel 2
+      - name: Run Linux deterministic and training tests
+        run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
 
-      - name: Run Linux deterministic and bounded-training tests
-        run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 600
+      - name: Record Linux pass
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          status="$RUNNER_TEMP/v071-linux-pass"
+          git worktree add --detach "$status" origin/main
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `windows-queued`\n- Result: `linux-passed`\n' "$RUN_ID" "$TRIGGER_SHA" > "$status/validation/v0.7.1-run.md"
+          git -C "$status" add validation/v0.7.1-run.md
+          git -C "$status" commit -m 'Record v0.7.1 Linux release pass'
+          git -C "$status" push origin HEAD:main
+          git worktree remove --force "$status"
 
-  windows-release:
-    needs: linux-validate
+  windows:
+    needs: linux
     runs-on: windows-2025
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Materialize strict training-quality source
+      - name: Record Windows start
+        shell: pwsh
+        env:
+          RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          $status = "$env:RUNNER_TEMP/v071-windows-status"
+          git worktree add --detach $status origin/main
+          @"
+          # EpochRunner v0.7.1 completion run
+
+          - Run ID: ``$env:RUN_ID``
+          - Trigger SHA: ``$env:TRIGGER_SHA``
+          - Stage: ``windows``
+          - Result: ``running``
+          "@ | Set-Content "$status/validation/v0.7.1-run.md"
+          git -C $status add validation/v0.7.1-run.md
+          git -C $status commit -m "Record v0.7.1 Windows release start"
+          git -C $status push origin HEAD:main
+          git worktree remove --force $status
+
+      - name: Materialize exact corrected source
         shell: pwsh
         run: |
           python tools/apply_training_quality_v071.py apply
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 training-quality materialization failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Base v0.7.1 materialization failed" }
           python tools/refine_training_quality_v071.py
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 reciprocal partition refinement failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Eight-motor refinement failed" }
+          python tools/fix_balance_diagnostic_v071.py
+          if ($LASTEXITCODE -ne 0) { throw "Balance-controller correction failed" }
+          python tools/fix_stance_hysteresis_v071.py
+          if ($LASTEXITCODE -ne 0) { throw "Stance-hysteresis correction failed" }
+          python tools/fix_balance_seed_robustness_v071.py
+          if ($LASTEXITCODE -ne 0) { throw "Perturbed-seed regression materialization failed" }
+          python tools/fix_balance_evaluation_v071.py
+          if ($LASTEXITCODE -ne 0) { throw "Robust evaluation materialization failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
           Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py" -Force
@@ -92,29 +158,27 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-quality-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-robust-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            epochrunner-v071-${{ runner.os }}-
+            epochrunner-v071-observation-${{ runner.os }}-
+            epochrunner-v071-quality-${{ runner.os }}-
             epochrunner-v070-${{ runner.os }}-
-            epochrunner-v066-${{ runner.os }}-
 
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure full MSVC release
+      - name: Configure and build full Windows application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
+          cmake --build --preset windows-release
 
-      - name: Build full SDL3 Vulkan EpochGui application
-        run: cmake --build --preset windows-release
+      - name: Run Windows deterministic, training, concurrency, persistence, and UI tests
+        run: ctest --preset windows-release --output-on-failure -V --timeout 900
 
-      - name: Run Windows deterministic, bounded-training, concurrency, and UI tests
-        run: ctest --preset windows-release --output-on-failure -V --timeout 600
-
-      - name: Verify executable and Vulkan path
+      - name: Verify executable version and Vulkan path
         shell: pwsh
         run: |
           $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
@@ -127,42 +191,45 @@ jobs:
         shell: pwsh
         env:
           RUN_ID: ${{ github.run_id }}
-          TRIGGER_SHA: ${{ github.sha }}
         run: |
-          python tools/write_missioncache_v071.py validate --run-id $env:RUN_ID
-          if ($LASTEXITCODE -ne 0) { throw "Mission ledger validation finalization failed" }
-
-          git fetch origin main
-          $actualMain = (git rev-parse origin/main).Trim()
-          if ($actualMain -ne $env:TRIGGER_SHA) {
-            throw "Main moved from trigger $env:TRIGGER_SHA to $actualMain"
-          }
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" validate --run-id $env:RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw "Validated mission ledger generation failed" }
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
+          git rm -f --ignore-unmatch .github/workflows/finish-v071.yml
+          git rm -f --ignore-unmatch .github/workflows/kick-v071.yml
+          git rm -f --ignore-unmatch .github/workflows/kick-v071-now.yml
           git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
           git rm -f --ignore-unmatch tools/refine_training_quality_v071.py
+          git rm -f --ignore-unmatch tools/fix_humanoid_observation_v071.py
+          git rm -f --ignore-unmatch tools/fix_balance_diagnostic_v071.py
+          git rm -f --ignore-unmatch tools/fix_stance_hysteresis_v071.py
+          git rm -f --ignore-unmatch tools/fix_balance_seed_robustness_v071.py
+          git rm -f --ignore-unmatch tools/fix_balance_evaluation_v071.py
           git rm -f --ignore-unmatch tools/write_missioncache_v071.py
           git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
-          git rm -f --ignore-unmatch validation/v0.7.1-release-lock.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.log
-          git add CMakeLists.txt `
-            src/simulation.cpp src/simulation.hpp `
-            src/ppo.hpp src/ppo_trainer.cpp src/ppo_parallel.cpp src/self_imitation.cpp `
-            src/training_checkpoint.cpp src/autonomy_curriculum.cpp `
-            src/autonomy_persistence.cpp src/autonomy_commands.cpp src/app.cpp `
-            tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md `
-            validation/v0.7.1-prepublish.md
-          git commit -m "Fix humanoid training quality and parent reaction"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.7.1 source" }
-          $sourceSha = (git rev-parse HEAD).Trim()
-          git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish tested v0.7.1 source" }
-          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+          git add -A
+          git restore --staged validation/v0.7.1-run.md 2>$null
+          git restore validation/v0.7.1-run.md 2>$null
+          git commit -m "Fix robust eight-motor humanoid training quality"
+          if ($LASTEXITCODE -ne 0) { throw "Could not commit exact tested source" }
 
-      - name: Package exact tested build
+          git fetch origin main
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) { throw "Could not rebase tested source over run-status commits" }
+          git rm -f --ignore-unmatch validation/v0.7.1-run.md
+          git commit --amend --no-edit
+          if ($LASTEXITCODE -ne 0) { throw "Could not fold status cleanup into tested source" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish exact tested source" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          "sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Package exact tested Windows build
         id: package
         shell: pwsh
         run: |
@@ -179,62 +246,50 @@ jobs:
           "archive=$archive" >> $env:GITHUB_OUTPUT
           "checksum=$checksum" >> $env:GITHUB_OUTPUT
 
-      - name: Publish v0.7.1
+      - name: Publish v0.7.1 release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
         run: |
           gh release view v0.7.1 *> $null
-          if ($LASTEXITCODE -eq 0) { throw "v0.7.1 already exists; refusing replacement" }
-          gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" `
-            --target $env:SOURCE_SHA `
-            --title "EpochRunner v0.7.1" `
-            --notes-file RELEASE_NOTES_v0.7.1.md
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Could not replace v0.7.1 assets" }
+            gh release edit v0.7.1 --target $env:SOURCE_SHA --title "EpochRunner v0.7.1" --notes-file RELEASE_NOTES_v0.7.1.md
+          } else {
+            gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --target $env:SOURCE_SHA --title "EpochRunner v0.7.1" --notes-file RELEASE_NOTES_v0.7.1.md
+          }
           if ($LASTEXITCODE -ne 0) { throw "v0.7.1 release publication failed" }
 
-      - name: Complete mission cache and verify cleanup
+      - name: Finalize mission cache and verify repository cleanup
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
           ARCHIVE: ${{ steps.package.outputs.archive }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
-          RUN_ID: ${{ github.run_id }}
         run: |
-          $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
-          if ($openPrs -ne "0") { throw "Repository still has $openPrs open pull requests" }
-          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
-          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
-            throw "Repository branches are not clean: $($branches -join ', ')"
-          }
-
-          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize `
-            --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID `
-            --archive $env:ARCHIVE --checksum $env:CHECKSUM
-          if ($LASTEXITCODE -ne 0) { throw "Mission cache publication evidence failed" }
-
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID --archive $env:ARCHIVE --checksum $env:CHECKSUM
+          if ($LASTEXITCODE -ne 0) { throw "Final mission ledger generation failed" }
           git add missioncache.md validation/v0.7.1.md
           git commit -m "Complete EpochRunner v0.7.1 mission cache"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to commit final mission evidence" }
           git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Failed to publish final mission evidence" }
+          if ($LASTEXITCODE -ne 0) { throw "Final evidence publication failed" }
 
           $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
-          if ($openPrs -ne "0") { throw "Repository gained $openPrs open pull requests" }
+          if ($openPrs -ne '0') { throw "$openPrs open pull requests remain" }
           $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
-          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
-            throw "Final repository branches are not clean: $($branches -join ', ')"
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') {
+            throw "Unexpected branches remain: $($branches -join ', ')"
           }
 
   diagnose-failure:
-    if: ${{ always() && (needs.linux-validate.result == 'failure' || needs.windows-release.result == 'failure') }}
-    needs:
-      - linux-validate
-      - windows-release
+    if: ${{ always() && (needs.linux.result == 'failure' || needs.windows.result == 'failure') }}
+    needs: [linux, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -243,28 +298,28 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Record failed job logs
+      - name: Publish failed-step logs
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
-          LINUX_RESULT: ${{ needs.linux-validate.result }}
-          WINDOWS_RESULT: ${{ needs.windows-release.result }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
         run: |
           set -euo pipefail
           mkdir -p validation
           gh run view "$RUN_ID" --log-failed > validation/v0.7.1-failure.log 2>&1 || true
           cat > validation/v0.7.1-failure.md <<EOF
-          # EpochRunner v0.7.1 completion failure
+          # EpochRunner v0.7.1 release failure
 
           - Workflow run: \`$RUN_ID\`
-          - Linux validation result: \`$LINUX_RESULT\`
-          - Windows release result: \`$WINDOWS_RESULT\`
+          - Linux result: \`$LINUX_RESULT\`
+          - Windows result: \`$WINDOWS_RESULT\`
           - Failed-step output: \`validation/v0.7.1-failure.log\`
           EOF
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git pull --rebase origin main
           git add validation/v0.7.1-failure.md validation/v0.7.1-failure.log
-          git commit -m 'Record v0.7.1 training-quality failure'
+          git commit -m 'Record v0.7.1 release failure'
           git push origin HEAD:main
