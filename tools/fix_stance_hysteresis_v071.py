@@ -83,6 +83,41 @@ source = replace_once(
 )
 source_path.write_text(source, encoding="utf-8")
 
+ppo_path = Path("src/ppo.hpp")
+ppo = ppo_path.read_text(encoding="utf-8")
+ppo = replace_once(
+    ppo,
+    "            if (environment.stable_stance_seconds() < 3.0f)\n"
+    "                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);",
+    "            if (environment.longest_stable_stance_seconds() < 3.0f)\n"
+    "                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);",
+    "retained balance qualification",
+)
+ppo = replace_once(
+    ppo,
+    "                quality_bucket(environment.stable_stance_seconds()),\n"
+    "                quality_bucket(environment.longest_stable_stance_seconds()),\n"
+    "                quality_bucket(environment.elapsed_seconds()),",
+    "                quality_bucket(environment.longest_stable_stance_seconds()),\n"
+    "                quality_bucket(environment.stable_stance_seconds()),\n"
+    "                quality_bucket(environment.elapsed_seconds()),",
+    "retained balance quality ordering",
+)
+ppo_path.write_text(ppo, encoding="utf-8")
+
+curriculum_path = Path("src/autonomy_curriculum.cpp")
+curriculum = curriculum_path.read_text(encoding="utf-8")
+curriculum = replace_once(
+    curriculum,
+    "            return metrics.evaluation_stable_stance >= 6.0f\n"
+    "                && metrics.evaluation_longest_stance >= 6.0f\n"
+    "                && metrics.evaluation_survival >= 10.0f",
+    "            return metrics.evaluation_longest_stance >= 6.0f\n"
+    "                && metrics.evaluation_survival >= 10.0f",
+    "retained standing mastery evidence",
+)
+curriculum_path.write_text(curriculum, encoding="utf-8")
+
 # Keep diagnostic counters aligned with the production predicate.
 test_path = Path("tests/core_tests.cpp")
 tests = test_path.read_text(encoding="utf-8")
