@@ -1,0 +1,229 @@
+name: Release EpochRunner v0.7.1 humanoid parent reaction
+
+on:
+  push:
+    branches:
+      - fix/humanoid-parent-reaction-v071
+    paths:
+      - tools/apply_humanoid_parent_reaction.py
+      - .github/workflows/v071-humanoid-parent-reaction.yml
+
+permissions:
+  contents: write
+  pull-requests: read
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  linux-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/humanoid-parent-reaction-v071
+          fetch-depth: 0
+
+      - name: Apply parent-reaction correction
+        run: python3 tools/apply_humanoid_parent_reaction.py
+
+      - name: Install Linux toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Configure CPU-only C++23 tests
+        run: >-
+          cmake -S . -B build/linux-v071 -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build Linux tests
+        run: cmake --build build/linux-v071 --parallel 2
+
+      - name: Run Linux deterministic tests
+        run: ctest --test-dir build/linux-v071 --output-on-failure -V
+
+  windows-release:
+    needs: linux-validate
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/humanoid-parent-reaction-v071
+          fetch-depth: 0
+
+      - name: Apply parent-reaction correction
+        shell: pwsh
+        run: |
+          python tools/apply_humanoid_parent_reaction.py
+          if ($LASTEXITCODE -ne 0) { throw "Parent-reaction patch failed" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "Patched source contains whitespace errors" }
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v071-parent-reaction-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v070-${{ runner.os }}-
+            epochrunner-v066-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure full MSVC release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build full SDL3 Vulkan EpochGui application
+        run: cmake --build --preset windows-release
+
+      - name: Run Windows deterministic and concurrency tests
+        run: ctest --preset windows-release --output-on-failure -V
+
+      - name: Verify executable and Vulkan path
+        shell: pwsh
+        run: |
+          $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.7.1") { throw "Unexpected version: $version" }
+          build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+
+      - name: Package exact tested build
+        id: package
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.1-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.1.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          $archive = "EpochRunner-v0.7.1-windows-x64.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Commit clean tested source to main
+        id: source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner v0.7.1 prepublication validation
+
+          - Linux C++23 CPU-only build and deterministic/runtime tests: passed.
+          - Windows 2025 full SDL3/Vulkan/EpochGui build: passed.
+          - Windows deterministic, runtime-pipeline, concurrency, persistence, arm, and UI tests: passed.
+          - Executable version and Vulkan diagnostic: passed.
+          - Humanoid shoulder input changes the chest trajectory relative to a neutral simulation.
+          - Motor correction is divided by rotational inertia across driven and parent components.
+          - Runtime visual acceptance remains open in missioncache.md.
+          "@ | Set-Content -Encoding UTF8 validation/v0.7.1-prepublish.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt src/simulation.cpp src/app.cpp tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md validation/v0.7.1-prepublish.md
+          git commit -m "Stage validated EpochRunner v0.7.1 parent reaction fix"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to stage tested source" }
+          $patchedSha = (git rev-parse HEAD).Trim()
+
+          git fetch origin main
+          $expectedMain = "010b9c454c372331fb5e62f0bd1f50af56b610a3"
+          $actualMain = (git rev-parse origin/main).Trim()
+          if ($actualMain -ne $expectedMain) { throw "Main moved from $expectedMain to $actualMain" }
+          git switch --detach origin/main
+          git checkout $patchedSha -- CMakeLists.txt src/simulation.cpp src/app.cpp tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md validation/v0.7.1-prepublish.md
+          git add CMakeLists.txt src/simulation.cpp src/app.cpp tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md validation/v0.7.1-prepublish.md
+          git commit -m "Fix humanoid parent-side motor reaction"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create clean source commit" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish tested source to main" }
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Publish v0.7.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          gh release view v0.7.1 *> $null
+          if ($LASTEXITCODE -eq 0) { throw "v0.7.1 already exists; refusing replacement" }
+          gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" `
+            --target $env:SOURCE_SHA `
+            --title "EpochRunner v0.7.1" `
+            --notes-file RELEASE_NOTES_v0.7.1.md
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }
+
+      - name: Delete temporary branch and record final evidence
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          git push origin --delete fix/humanoid-parent-reaction-v071
+          if ($LASTEXITCODE -ne 0) { throw "Failed to delete temporary branch" }
+
+          git fetch origin main
+          git switch -C main origin/main
+          python -c "from pathlib import Path; p=Path('missioncache.md'); s=p.read_text(encoding='utf-8'); s=s.replace('**Release state:** VALIDATION IN PROGRESS — EpochRunner v0.7.1 parent-reaction hotfix','**Release state:** VERIFIED — EpochRunner v0.7.1 published',1); marker='### WALK-REL-011 — Verified v0.7.0 release'; entry='### WALK-REL-013 — Verified v0.7.1 parent-reaction hotfix\n**Status:** VERIFIED\n\nThe exact Windows-tested source was published as v0.7.1 after Linux and Windows validation. The release fixes parent-side motor anchoring and starts a fresh v0.7.1 autosave namespace. WALK-MOTOR-012 remains PARTIAL only for Adam’s packaged visual confirmation.\n\n'; s=s.replace(marker,entry+marker,1); p.write_text(s,encoding='utf-8')"
+
+          @"
+          # EpochRunner v0.7.1 release evidence
+
+          - Exact tested source commit: `$env:SOURCE_SHA`
+          - Workflow run: `$env:RUN_ID`
+          - Linux C++23 tests: passed
+          - Windows 2025 full application build and all tests: passed
+          - Vulkan diagnostic: passed
+          - Package: `$env:ARCHIVE`
+          - Package SHA-256: `$env:CHECKSUM`
+          - Runtime visual acceptance: still tracked by WALK-MOTOR-012
+          "@ | Set-Content -Encoding UTF8 validation/v0.7.1.md
+
+          $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
+          if ($openPrs -ne "0") { throw "Repository still has $openPrs open pull requests" }
+          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
+            throw "Repository branches are not clean: $($branches -join ', ')"
+          }
+          @"
+          # Repository cleanup after EpochRunner v0.7.1
+
+          - Remaining branches: `main`
+          - Open pull requests: `0`
+          - Temporary release branch deleted.
+          - Temporary patch and workflow files never entered the main source tree.
+          "@ | Set-Content -Encoding UTF8 validation/repository-cleanup-v0.7.1.md
+
+          git add missioncache.md validation/v0.7.1.md validation/repository-cleanup-v0.7.1.md
+          git commit -m "Record verified EpochRunner v0.7.1 release and cleanup"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to record final release evidence" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish final release evidence" }
