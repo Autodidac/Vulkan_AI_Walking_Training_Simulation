@@ -667,7 +667,7 @@ namespace epochrunner::sim
 
     float Environment::ground_height_at(float x) const noexcept
     {
-        if (course_stage_ == CourseStage::balance || course_stage_ == CourseStage::walk)
+        if (course_stage_ != CourseStage::moving_hazards)
             return 0.0f;
 
         const float course_x = std::max(0.0f, x + course_progress());
@@ -704,8 +704,8 @@ namespace epochrunner::sim
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
-        if (static_cast<std::uint8_t>(course_stage_)
-            < static_cast<std::uint8_t>(CourseStage::hurdles))
+        if (course_stage_ != CourseStage::hurdles
+            && course_stage_ != CourseStage::moving_hazards)
             return;
 
         const float root_x = valid_node(blueprint_.root_node)
@@ -838,6 +838,7 @@ namespace epochrunner::sim
         previous_torso_angle_ = torso_roll_angle();
         previous_angles_.fill(0.0f);
         angular_velocities_.fill(0.0f);
+        previous_applied_actions_.fill(0.0f);
         for (std::size_t index = 0; index < action_count; ++index)
             previous_angles_[index] = joint_angle(blueprint_.motors[index]);
         elapsed_seconds_ = 0.0f;
@@ -848,6 +849,23 @@ namespace epochrunner::sim
         collision_count_ = 0.0f;
         airborne_seconds_ = 0.0f;
         cumulative_airborne_ = 0.0f;
+        duck_seconds_ = 0.0f;
+        duck_depth_ = 0.0f;
+        current_airborne_rotation_ = 0.0f;
+        maximum_spin_turns_ = 0.0f;
+        powered_jump_count_ = 0;
+        landed_jump_count_ = 0;
+        spin_landing_count_ = 0;
+        obstacles_passed_ = 0;
+        last_passed_feature_sequence_ = course_safe_runway_markers - 1;
+        duck_active_ = false;
+        powered_takeoff_ = false;
+        powered_takeoff_this_step_ = false;
+        powered_landing_this_step_ = false;
+        spin_landing_this_step_ = false;
+        passed_obstacle_this_step_ = false;
+        collision_contact_active_ = false;
+        collision_event_this_step_ = false;
         progress_window_seconds_ = 0.0f;
         progress_window_start_x_ = previous_pelvis_.x;
         micro_motion_seconds_ = 0.0f;
@@ -856,6 +874,12 @@ namespace epochrunner::sim
         previous_root_for_path_ = previous_pelvis_;
         last_step_time_ = -100.0f;
         last_step_x_ = previous_pelvis_.x;
+        left_swing_seconds_ = 0.0f;
+        right_swing_seconds_ = 0.0f;
+        left_swing_clearance_ = 0.0f;
+        right_swing_clearance_ = 0.0f;
+        action_change_energy_ = 0.0f;
+        alternating_step_this_step_ = false;
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
         progress_window_start_steps_ = 0;
@@ -1253,29 +1277,56 @@ namespace epochrunner::sim
     {
         const bool left = contact_supported(blueprint_.left_contact_node);
         const bool right = contact_supported(blueprint_.right_contact_node);
+        const bool was_supported = previous_left_grounded_ || previous_right_grounded_;
         const bool new_left = left && !previous_left_grounded_;
         const bool new_right = right && !previous_right_grounded_;
         const int strike_side = new_left == new_right ? 0 : (new_left ? -1 : 1);
         const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
+        const float left_clearance = contact_cluster_clearance(blueprint_.left_contact_node);
+        const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
+        if (!left)
+        {
+            left_swing_seconds_ += dt;
+            left_swing_clearance_ = std::max(left_swing_clearance_, left_clearance);
+        }
+        if (!right)
+        {
+            right_swing_seconds_ += dt;
+            right_swing_clearance_ = std::max(right_swing_clearance_, right_clearance);
+        }
+
+        alternating_step_this_step_ = false;
         if (strike_side != 0)
         {
+            const float swing_air_seconds = new_left ? left_swing_seconds_ : right_swing_seconds_;
+            const float swing_clearance = new_left ? left_swing_clearance_ : right_swing_clearance_;
             if (last_contact_side_ == 0)
             {
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
                 last_step_x_ = root_x;
             }
-            else if (qualifies_alternating_step(last_contact_side_, strike_side,
-                elapsed_seconds_ - last_step_time_, root_x - last_step_x_))
+            else if (qualifies_supported_step(last_contact_side_, strike_side,
+                elapsed_seconds_ - last_step_time_, root_x - last_step_x_,
+                swing_air_seconds, swing_clearance))
             {
                 ++alternating_steps_;
+                alternating_step_this_step_ = true;
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
                 last_step_x_ = root_x;
             }
         }
-        previous_left_grounded_ = left;
-        previous_right_grounded_ = right;
+        if (left)
+        {
+            left_swing_seconds_ = 0.0f;
+            left_swing_clearance_ = 0.0f;
+        }
+        if (right)
+        {
+            right_swing_seconds_ = 0.0f;
+            right_swing_clearance_ = 0.0f;
+        }
 
         const float left_slip = left
             ? contact_cluster_horizontal_speed(blueprint_.left_contact_node, dt) : 0.0f;
@@ -1286,12 +1337,69 @@ namespace epochrunner::sim
             ? (particles_[blueprint_.root_node].position.x
                 - particles_[blueprint_.root_node].previous.x) / std::max(dt, 1.0e-5f)
             : 0.0f;
+        const float root_vertical_speed = valid_node(blueprint_.root_node)
+            ? (particles_[blueprint_.root_node].position.y
+                - particles_[blueprint_.root_node].previous.y) / std::max(dt, 1.0e-5f)
+            : 0.0f;
         const float torso_angle = torso_roll_angle();
-        torso_turn_speed_ = wrap_angle(torso_angle - previous_torso_angle_)
-            / std::max(dt, 1.0e-5f);
+        const float torso_delta = wrap_angle(torso_angle - previous_torso_angle_);
+        torso_turn_speed_ = torso_delta / std::max(dt, 1.0e-5f);
         previous_torso_angle_ = torso_angle;
         non_foot_grounded_ = non_foot_ground_contact();
         const bool feet_supported = left || right;
+        const bool airborne = !feet_supported;
+
+        powered_takeoff_this_step_ = false;
+        powered_landing_this_step_ = false;
+        spin_landing_this_step_ = false;
+        passed_obstacle_this_step_ = false;
+
+        const float head_clearance = valid_node(blueprint_.head_node)
+            ? particles_[blueprint_.head_node].position.y
+                - ground_height_at(particles_[blueprint_.head_node].position.x)
+            : 0.0f;
+        const float rest_head_clearance = valid_node(blueprint_.head_node)
+            ? blueprint_.nodes[blueprint_.head_node].y : 0.0f;
+        duck_depth_ = std::max(0.0f, rest_head_clearance - head_clearance);
+        duck_active_ = feet_supported && torso_uprightness() > 0.60f && duck_depth_ >= 0.48f;
+        if (duck_active_)
+            duck_seconds_ += dt;
+
+        if (was_supported && airborne
+            && powered_joint_launch(course_stage_, root_vertical_speed, action_energy))
+        {
+            powered_takeoff_ = true;
+            powered_takeoff_this_step_ = true;
+            current_airborne_rotation_ = 0.0f;
+            ++powered_jump_count_;
+        }
+
+        if (airborne)
+        {
+            current_airborne_rotation_ += torso_delta;
+            maximum_spin_turns_ = std::max(maximum_spin_turns_,
+                std::abs(current_airborne_rotation_) / (2.0f * pi));
+        }
+        else if (!was_supported)
+        {
+            if (powered_takeoff_)
+            {
+                powered_landing_this_step_ = true;
+                ++landed_jump_count_;
+                const float landed_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
+                maximum_spin_turns_ = std::max(maximum_spin_turns_, landed_turns);
+                if (stage_allows_controlled_flips(course_stage_) && landed_turns >= 0.75f)
+                {
+                    spin_landing_this_step_ = true;
+                    ++spin_landing_count_;
+                }
+            }
+            powered_takeoff_ = false;
+            current_airborne_rotation_ = 0.0f;
+        }
+
+        previous_left_grounded_ = left;
+        previous_right_grounded_ = right;
         if (rolling_body_motion(root_speed, torso_turn_speed_, torso_uprightness(),
             feet_supported, non_foot_grounded_))
             body_rolling_seconds_ += dt;
@@ -1312,7 +1420,7 @@ namespace epochrunner::sim
             invalidate(InvalidMotion::body_rolling);
         }
 
-        if (course_stage_ != CourseStage::balance
+        if (stage_requires_forward_gait(course_stage_)
             && wheel_sliding_motion(root_speed, left, right, stance_slip_speed_))
             wheel_sliding_seconds_ += dt;
         else
@@ -1340,7 +1448,21 @@ namespace epochrunner::sim
         obstacle_lift_clearance_ = std::max(
             contact_cluster_clearance(blueprint_.left_contact_node),
             contact_cluster_clearance(blueprint_.right_contact_node));
-        if (course_stage_ != CourseStage::balance && foot_pivot_rolling_motion(root_speed,
+
+        int highest_passed_sequence = last_passed_feature_sequence_;
+        for (const CourseFeature& feature : course_features_)
+        {
+            const float trailing_edge = feature.center.x + course_feature_half_width(feature);
+            if (trailing_edge < root_x - 0.10f)
+                highest_passed_sequence = std::max(highest_passed_sequence, feature.marker_sequence);
+        }
+        if (highest_passed_sequence > last_passed_feature_sequence_)
+        {
+            last_passed_feature_sequence_ = highest_passed_sequence;
+            ++obstacles_passed_;
+            passed_obstacle_this_step_ = true;
+        }
+        if (stage_requires_forward_gait(course_stage_) && foot_pivot_rolling_motion(root_speed,
             left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_))
             foot_pivot_rolling_seconds_ += dt;
         else
@@ -1383,13 +1505,14 @@ namespace epochrunner::sim
             const bool high_energy_stall = average_energy > 0.10f && net_progress < 0.05f;
             const bool inefficient_vibration = average_energy > 0.16f && net_progress < 0.12f
                 && root_path_window_ > std::max(0.08f, net_progress * 2.5f);
-            if (course_stage_ != CourseStage::balance && (high_energy_stall || inefficient_vibration))
+            if (stage_requires_forward_gait(course_stage_)
+                && (high_energy_stall || inefficient_vibration))
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
 
             const std::uint32_t new_steps = alternating_steps_ - progress_window_start_steps_;
-            const bool idle_window = course_stage_ != CourseStage::balance
+            const bool idle_window = stage_requires_forward_gait(course_stage_)
                 && elapsed_seconds_ > rolling_gate_warmup_end_seconds
                 && zero_progress_window(net_progress, new_steps,
                     obstacle_lift_clearance_, recovery_active_);
@@ -1402,9 +1525,8 @@ namespace epochrunner::sim
             root_path_window_ = 0.0f;
         }
 
-        const float allowed_airtime = course_stage_ == CourseStage::hurdles ? 1.30f
-            : course_stage_ == CourseStage::moving_hazards ? 1.05f
-            : course_stage_ >= CourseStage::ramps ? 0.90f : 0.72f;
+        const float allowed_airtime = allowed_airtime_for_stage(
+            course_stage_, powered_takeoff_);
         if (airborne_seconds_ > allowed_airtime)
             invalidate(InvalidMotion::sustained_flight);
         if (micro_motion_seconds_ >= 3.0f)
@@ -1426,8 +1548,14 @@ namespace epochrunner::sim
         const float ramp_t = clamp((elapsed_seconds_ - 0.35f) / 1.25f, 0.0f, 1.0f);
         const float control_ramp = ramp_t * ramp_t * (3.0f - 2.0f * ramp_t);
         std::array<float, action_count> applied_actions{};
+        action_change_energy_ = 0.0f;
         for (std::size_t index = 0; index < action_count; ++index)
+        {
             applied_actions[index] = clamp(actions[index], -1.0f, 1.0f) * control_ramp;
+            const float action_delta = applied_actions[index] - previous_applied_actions_[index];
+            action_change_energy_ += action_delta * action_delta;
+            previous_applied_actions_[index] = applied_actions[index];
+        }
         constexpr Vec2 gravity{ 0.0f, -22.0f };
         constexpr float damping = 0.996f;
         for (Particle& particle : particles_)
@@ -1451,8 +1579,10 @@ namespace epochrunner::sim
         knee_first_this_step_ = knee_before_foot_fault();
         if (knee_first_this_step_)
             ++knee_first_faults_;
-        if (collided_this_step_)
+        collision_event_this_step_ = collided_this_step_ && !collision_contact_active_;
+        if (collision_event_this_step_)
             collision_count_ += 1.0f;
+        collision_contact_active_ = collided_this_step_;
 
         elapsed_seconds_ += dt;
         const Vec2 pelvis_position = particles_[blueprint_.root_node].position;
@@ -1488,7 +1618,9 @@ namespace epochrunner::sim
         float recovery_reward = 0.0f;
         const bool supported = contact_supported(blueprint_.left_contact_node)
             || contact_supported(blueprint_.right_contact_node);
-        if (!recovery_active_ && recovery_should_start(
+        const bool controlled_airborne_skill = powered_takeoff_
+            && !supported && stage_allows_powered_airtime(course_stage_);
+        if (!recovery_active_ && !controlled_airborne_skill && recovery_should_start(
             collided_this_step_, upright, geometric_fall, hard_fall))
         {
             recovery_active_ = true;
@@ -1512,14 +1644,14 @@ namespace epochrunner::sim
             }
         }
 
-        const float allowed_airtime = course_stage_ == CourseStage::hurdles ? 1.30f
-            : course_stage_ == CourseStage::moving_hazards ? 1.05f
-            : course_stage_ >= CourseStage::ramps ? 0.90f : 0.72f;
+        const float allowed_airtime = allowed_airtime_for_stage(
+            course_stage_, powered_takeoff_);
         const float gated_upright = elapsed_seconds_ > 0.25f ? upright : 1.0f;
         const bool terminal_fall = recovery_terminal_fall(
             geometric_fall, hard_fall, recovery_active_);
         invalidate(classify_motion_gate(gated_upright, maximum_speed_kmh_, pelvis_position,
-            airborne_seconds_, allowed_airtime, micro_motion_seconds_, terminal_fall));
+            airborne_seconds_, allowed_airtime, micro_motion_seconds_, terminal_fall,
+            course_stage_, current_airborne_rotation_ / (2.0f * pi)));
 
         const bool left_supported = contact_supported(blueprint_.left_contact_node);
         const bool right_supported = contact_supported(blueprint_.right_contact_node);
@@ -1537,7 +1669,7 @@ namespace epochrunner::sim
         const float gait = non_foot_grounded_ ? 0.0f
             : gait_progress_multiplier(alternating_steps_, single_support, swing_clearance);
         const float safe_progress = clamp(frame_progress, -0.015f, 0.065f);
-        const float collision_penalty = collided_this_step_ ? 0.070f : 0.0f;
+        const float collision_penalty = collision_event_this_step_ ? 0.070f : 0.0f;
         // This is intentionally a mild shaping penalty. Natural knee lead
         // is now tolerated; only a large low-foot body-first obstacle shove reaches here.
         const float knee_first_penalty = knee_first_this_step_ ? 0.028f : 0.0f;
@@ -1555,30 +1687,87 @@ namespace epochrunner::sim
         const float body_contact_penalty = non_foot_grounded_
             ? (head_ground_contact() ? 0.16f : 0.08f) : 0.0f;
 
-        if (course_stage_ == CourseStage::balance)
+        const float forward_gait_reward = std::max(0.0f, safe_progress) * 1.65f * gait;
+        const float backward_penalty = std::max(0.0f, -safe_progress) * 0.45f;
+        const float duck_reward = duck_active_
+            ? 0.018f + clamp(duck_depth_ - 0.48f, 0.0f, 0.80f) * 0.012f : 0.0f;
+        const float jump_reward = (powered_takeoff_this_step_ ? 0.10f : 0.0f)
+            + (powered_landing_this_step_ ? 0.22f : 0.0f)
+            + (powered_takeoff_ && !left_supported && !right_supported ? 0.0025f : 0.0f);
+        const float spin_delta_turns = std::abs(torso_turn_speed_) * dt / (2.0f * pi);
+        const float spin_reward = stage_allows_controlled_flips(course_stage_) && powered_takeoff_
+            ? clamp(spin_delta_turns, 0.0f, 0.08f) * 0.65f : 0.0f;
+        const float spin_landing_reward = spin_landing_this_step_
+            ? 0.20f + clamp(maximum_spin_turns_, 0.0f, 3.0f) * 0.08f : 0.0f;
+        const float pass_reward = passed_obstacle_this_step_ ? 0.18f : 0.0f;
+        const float target_speed = 0.90f + course_difficulty_ * 1.30f;
+        const float run_reward = stage_requires_forward_gait(course_stage_)
+            ? clamp(forward_speed_ / target_speed, 0.0f, 1.0f) * 0.006f : 0.0f;
+        const float real_step_reward = alternating_step_this_step_ ? 0.070f : 0.0f;
+        const float unearned_progress_penalty = alternating_steps_ == 0u
+            ? std::max(0.0f, safe_progress) * 0.80f : 0.0f;
+        const float double_support_shuffle_penalty = left_supported && right_supported
+            && std::abs(raw_speed) > 0.08f && obstacle_lift_clearance_ < 0.085f
+            ? 0.028f : 0.0f;
+        const float action_change_penalty = action_change_energy_ * 0.0025f;
+
+        switch (course_stage_)
         {
+        case CourseStage::balance:
             last_reward_ = std::max(0.0f, upright) * 0.030f
                 + contact * 0.0030f
                 - std::abs(forward_speed_) * 0.0040f
                 - std::abs(distance_travelled_) * 0.0015f
                 - action_energy * 0.0012f
                 - body_contact_penalty;
-        }
-        else
-        {
-            last_reward_ = std::max(0.0f, safe_progress) * 1.65f * gait
-                + std::max(0.0f, upright) * 0.012f
-                + contact * 0.0006f
-                + swing_reward
-                + obstacle_lift_reward
-                - std::max(0.0f, -safe_progress) * 0.45f
-                - action_energy * 0.0010f
-                - collision_penalty
-                - knee_first_penalty
-                - stance_slip_penalty
-                - wheel_penalty
-                - hazard_stall_penalty
+            break;
+        case CourseStage::walk:
+            last_reward_ = std::max(0.0f, upright) * 0.016f
+                + contact * 0.0015f + duck_reward
+                - std::abs(forward_speed_) * 0.0030f
+                - action_energy * 0.0009f - body_contact_penalty;
+            break;
+        case CourseStage::ramps:
+            last_reward_ = std::max(0.0f, upright) * 0.010f
+                + contact * 0.0008f + jump_reward
+                - std::abs(forward_speed_) * 0.0020f
+                - action_energy * 0.0008f - body_contact_penalty;
+            break;
+        case CourseStage::uneven:
+            last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.012f
+                + contact * 0.0006f + swing_reward + run_reward + real_step_reward
+                - backward_penalty - unearned_progress_penalty
+                - double_support_shuffle_penalty - action_energy * 0.0010f
+                - action_change_penalty - stance_slip_penalty - wheel_penalty
                 - body_contact_penalty;
+            break;
+        case CourseStage::hurdles:
+            last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.011f
+                + swing_reward + run_reward + real_step_reward
+                + duck_reward * 0.60f + jump_reward + obstacle_lift_reward
+                + pass_reward - backward_penalty - unearned_progress_penalty
+                - double_support_shuffle_penalty - action_energy * 0.0010f
+                - action_change_penalty - collision_penalty - knee_first_penalty
+                - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
+                - body_contact_penalty;
+            break;
+        case CourseStage::duck_bars:
+            last_reward_ = std::max(0.0f, upright) * 0.008f
+                + jump_reward + spin_reward + spin_landing_reward
+                - std::abs(forward_speed_) * 0.0015f
+                - action_energy * 0.0009f - body_contact_penalty;
+            break;
+        case CourseStage::moving_hazards:
+            last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.010f
+                + swing_reward + run_reward + real_step_reward
+                + duck_reward * 0.45f + jump_reward + spin_reward
+                + spin_landing_reward + obstacle_lift_reward + pass_reward
+                - backward_penalty - unearned_progress_penalty
+                - double_support_shuffle_penalty - action_energy * 0.0010f
+                - action_change_penalty - collision_penalty - knee_first_penalty
+                - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
+                - body_contact_penalty;
+            break;
         }
 
         last_reward_ += recovery_reward;
@@ -1588,8 +1777,9 @@ namespace epochrunner::sim
             last_reward_ -= 5.0f;
         }
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f
-            : static_cast<std::uint8_t>(course_stage_) >= static_cast<std::uint8_t>(CourseStage::hurdles)
-                ? 48.0f : 30.0f;
+            : course_stage_ == CourseStage::walk || course_stage_ == CourseStage::ramps
+                || course_stage_ == CourseStage::duck_bars ? 20.0f
+            : course_stage_ == CourseStage::moving_hazards ? 48.0f : 36.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
         return { last_reward_, forward_speed_, terminated,
             invalid_reason_ == InvalidMotion::none, invalid_reason_ };
@@ -1662,6 +1852,9 @@ namespace epochrunner::sim
         result[27] = clamp(static_cast<float>(alternating_steps_) / 10.0f, 0.0f, 2.0f);
         result[28] = static_cast<float>(course_stage_) / static_cast<float>(course_stage_count - 1);
         result[29] = course_difficulty_;
+        const float gait_phase = elapsed_seconds_ * 2.0f * pi * 1.25f;
+        result[30] = std::sin(gait_phase);
+        result[31] = std::cos(gait_phase);
         return result;
     }
 }

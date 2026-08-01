@@ -34,6 +34,12 @@ namespace epochrunner::rl
             float collisions{};
             float airborne{};
             float strides{};
+            float duck_seconds{};
+            float powered_jumps{};
+            float jump_landings{};
+            float spin_turns{};
+            float spin_landings{};
+            float obstacles_passed{};
             std::size_t speed_samples{};
             std::uint32_t invalid_runs{};
         };
@@ -165,9 +171,11 @@ namespace epochrunner::rl
                                     break;
                             }
 
-                            const bool gait_valid = current_stage == sim::CourseStage::balance
-                                || environment.alternating_steps() >= 2;
-                            if (!environment.valid_motion() || !gait_valid)
+                            const bool skill_valid = sim::stage_skill_evidence(current_stage,
+                                environment.alternating_steps(), environment.duck_seconds(),
+                                environment.landed_jumps(), environment.maximum_spin_turns(),
+                                environment.spin_landings(), environment.obstacles_passed());
+                            if (!environment.valid_motion() || !skill_valid)
                                 ++totals.invalid_runs;
                             totals.reward += episode_reward;
                             totals.distance += environment.distance_travelled();
@@ -175,6 +183,12 @@ namespace epochrunner::rl
                             totals.collisions += environment.collision_count();
                             totals.airborne += environment.airborne_ratio();
                             totals.strides += static_cast<float>(environment.alternating_steps());
+                            totals.duck_seconds += environment.duck_seconds();
+                            totals.powered_jumps += static_cast<float>(environment.powered_jumps());
+                            totals.jump_landings += static_cast<float>(environment.landed_jumps());
+                            totals.spin_turns += environment.maximum_spin_turns();
+                            totals.spin_landings += static_cast<float>(environment.spin_landings());
+                            totals.obstacles_passed += static_cast<float>(environment.obstacles_passed());
                         }
                     }
                     evaluation_totals[worker_index] = totals;
@@ -345,6 +359,12 @@ namespace epochrunner::rl
             totals.collisions += local.collisions;
             totals.airborne += local.airborne;
             totals.strides += local.strides;
+            totals.duck_seconds += local.duck_seconds;
+            totals.powered_jumps += local.powered_jumps;
+            totals.jump_landings += local.jump_landings;
+            totals.spin_turns += local.spin_turns;
+            totals.spin_landings += local.spin_landings;
+            totals.obstacles_passed += local.obstacles_passed;
             totals.speed_samples += local.speed_samples;
             totals.invalid_runs += local.invalid_runs;
         }
@@ -359,36 +379,103 @@ namespace epochrunner::rl
         metrics_.evaluation_collisions = totals.collisions * inverse_agents;
         metrics_.evaluation_airborne_ratio = totals.airborne * inverse_agents;
         metrics_.evaluation_stride_events = totals.strides * inverse_agents;
+        metrics_.evaluation_duck_seconds = totals.duck_seconds * inverse_agents;
+        metrics_.evaluation_powered_jumps = totals.powered_jumps * inverse_agents;
+        metrics_.evaluation_jump_landings = totals.jump_landings * inverse_agents;
+        metrics_.evaluation_spin_turns = totals.spin_turns * inverse_agents;
+        metrics_.evaluation_spin_landings = totals.spin_landings * inverse_agents;
+        metrics_.evaluation_obstacles_passed = totals.obstacles_passed * inverse_agents;
         metrics_.evaluation_invalid_runs = totals.invalid_runs;
         metrics_.evaluation_valid = totals.invalid_runs == 0;
 
-        if (course_stage_ == sim::CourseStage::balance)
+        if (!metrics_.evaluation_valid)
         {
-            metrics_.evaluation_score = metrics_.evaluation_valid
-                ? metrics_.evaluation_survival * 0.10f + metrics_.evaluation_reward
-                    - std::abs(metrics_.evaluation_distance) * 0.20f
-                : -1000.0f - static_cast<float>(totals.invalid_runs) * 100.0f;
+            metrics_.evaluation_score = -1000.0f
+                - static_cast<float>(totals.invalid_runs) * 100.0f;
         }
         else
         {
-            metrics_.evaluation_score = metrics_.evaluation_valid
-                ? metrics_.evaluation_reward + metrics_.evaluation_distance * 0.75f
-                    + metrics_.evaluation_survival * 0.025f
+            switch (course_stage_)
+            {
+            case sim::CourseStage::balance:
+                metrics_.evaluation_score = metrics_.evaluation_survival * 0.10f
+                    + metrics_.evaluation_reward
+                    - std::abs(metrics_.evaluation_distance) * 0.20f;
+                break;
+            case sim::CourseStage::walk:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_duck_seconds * 0.30f
+                    + metrics_.evaluation_survival * 0.03f
+                    - std::abs(metrics_.evaluation_distance) * 0.10f;
+                break;
+            case sim::CourseStage::ramps:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_jump_landings * 0.60f
+                    + metrics_.evaluation_powered_jumps * 0.15f
+                    - metrics_.evaluation_airborne_ratio * 0.10f;
+                break;
+            case sim::CourseStage::uneven:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_distance * 0.75f
+                    + metrics_.evaluation_stride_events * 0.04f
+                    + metrics_.evaluation_speed * 0.12f;
+                break;
+            case sim::CourseStage::hurdles:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_distance * 0.70f
+                    + metrics_.evaluation_obstacles_passed * 0.45f
+                    + metrics_.evaluation_jump_landings * 0.25f
+                    + metrics_.evaluation_duck_seconds * 0.12f
+                    - metrics_.evaluation_collisions * 0.10f;
+                break;
+            case sim::CourseStage::duck_bars:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_spin_landings * 0.90f
+                    + std::min(metrics_.evaluation_spin_turns, 3.0f) * 0.40f
+                    + metrics_.evaluation_jump_landings * 0.20f;
+                break;
+            case sim::CourseStage::moving_hazards:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_distance * 0.70f
+                    + metrics_.evaluation_obstacles_passed * 0.55f
                     + metrics_.evaluation_stride_events * 0.03f
-                    - metrics_.evaluation_collisions * 0.18f
-                    - metrics_.evaluation_airborne_ratio * 0.75f
-                : -1000.0f - static_cast<float>(totals.invalid_runs) * 100.0f;
+                    + metrics_.evaluation_jump_landings * 0.20f
+                    + metrics_.evaluation_spin_landings * 0.30f
+                    + metrics_.evaluation_duck_seconds * 0.08f
+                    - metrics_.evaluation_collisions * 0.10f;
+                break;
+            }
         }
         ++metrics_.evaluation_count;
 
-        if (metrics_.evaluation_valid
-            && (best_parameters_.empty() || metrics_.evaluation_score > metrics_.best_evaluation_score))
+        const bool regressed = !best_parameters_.empty()
+            && policy_regression_guard(metrics_.best_evaluation_score,
+                metrics_.evaluation_score, metrics_.evaluation_valid);
+        if (regressed)
         {
-            best_parameters_ = policy_.parameters();
-            metrics_.best_evaluation_distance = metrics_.evaluation_distance;
-            metrics_.best_evaluation_score = metrics_.evaluation_score;
-            metrics_.best_update = metrics_.update;
-            refresh_self_imitation_prior();
+            policy_.parameters() = best_parameters_;
+            adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
+            adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
+            adam_.step = 0;
+            metrics_.learning_rate = std::max(4.0e-5f, metrics_.learning_rate * 0.72f);
+            policy_.set_exploration(std::max(0.035f, policy_.mean_exploration() * 0.82f));
+            preview_.reset(0xDEADBEEFu + metrics_.update);
+            controller_state_ = ControllerState::resumed;
+        }
+        else
+        {
+            const float improvement_margin = best_parameters_.empty() ? 0.0f
+                : std::max(0.015f, std::abs(metrics_.best_evaluation_score) * 0.004f);
+            if (metrics_.evaluation_valid
+                && (best_parameters_.empty()
+                    || metrics_.evaluation_score > metrics_.best_evaluation_score + improvement_margin))
+            {
+                best_parameters_ = policy_.parameters();
+                metrics_.best_evaluation_distance = metrics_.evaluation_distance;
+                metrics_.best_evaluation_score = metrics_.evaluation_score;
+                metrics_.best_update = metrics_.update;
+                refresh_self_imitation_prior();
+            }
         }
     }
 }

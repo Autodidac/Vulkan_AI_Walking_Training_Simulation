@@ -359,6 +359,39 @@ Publish one representative worker-owned rollout environment as an immutable snap
 - Live rendering remains responsive while MAX CPU training is active.
 - User confirms the PIP is visible, useful, and does not obscure primary telemetry.
 
+## WALK-SKILL-008 — Ordered locomotion and acrobatics curriculum
+
+**Status:** IMPLEMENTED — USER TRAINING REVIEW
+
+Teach reusable skills in prerequisite order instead of exposing terrain and combat hazards before the controller owns basic body control:
+
+1. stand upright,
+2. duck and return to standing,
+3. jump from joint power and land upright,
+4. walk, then run,
+5. duck or jump while walking/running,
+6. perform controlled airborne flips and land,
+7. combine standing, ducking, jumping, walking/running, and up to three spins to pass a mixed goal course.
+
+Hazard contact is allowed. Touching an obstacle applies physical response and a bounded event penalty, but contact alone never terminates the episode. Passing the obstacle is the goal and earns progress. Ground rolling/body surfing remains invalid. A powered launch may remain airborne for a bounded stage-specific interval; hovering or unpowered sustained flight remains invalid. A fourth spin invalidates the run.
+
+**Acceptance:**
+
+- Curriculum labels and advancement follow the seven prerequisite stages above.
+- Stationary duck, jump, and flip lessons do not trigger zero-movement rejection.
+- Powered takeoff is recognized only when joint action energy and vertical launch speed exceed thresholds.
+- Jump and flip lessons require supported upright landings.
+- Flip lessons allow up to three airborne spins, while ground rolling and a fourth spin remain invalid.
+- Moving-skill and mixed-goal lessons require forward gait and at least one passed obstacle.
+- Ordinary hazard contact never creates a pickup/reward loop and never terminates by itself.
+- Evaluation, self-imitation eligibility, telemetry, and deterministic tests use duck, jump, landing, spin, and obstacle-pass evidence.
+- Real walking steps require measurable swing airtime and foot clearance; contact wiggles may not count as gait.
+- Straight double-supported skating and pivot rolling around planted semantic feet are invalid.
+- Policy actions are smoothed, early gait exploration receives a decaying periodic guide, and phase observations make repeatable cadence learnable before 10,000 updates.
+- The best valid policy is a protected champion: substantial or invalid evaluation regression immediately restores it, reduces learning rate/exploration, and prevents the 15,000-update collapse.
+- PPO uses a smaller clip range, fewer epochs, lower gradient norm, decaying entropy, bounded exploration, and a light champion anchor.
+- The four-action controller remains intact for this pass. Independently controllable humanoid arms require a later controller/output and checkpoint-format expansion rather than stealing leg controls.
+
 ## v0.6.5 release closure
 
 All non-visual locomotion missions introduced or reopened after v0.6.3 have passing deterministic tests, full Windows SDL3/Vulkan/EpochGui build evidence, and Vulkan diagnostics. The release includes true four-leg and six-leg support semantics, flat semantic feet, mature anti-rolling gates, a longer obstacle runway, zero-motion reset, automatic best-result imitation, relaxed joint-clearance guidance, and actual training picture-in-picture publication.

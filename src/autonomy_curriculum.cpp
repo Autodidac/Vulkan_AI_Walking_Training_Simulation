@@ -19,17 +19,28 @@ namespace epochrunner::rl
         case sim::CourseStage::balance:
             return metrics.evaluation_survival >= 10.0f && metrics.evaluation_score >= 0.55f;
         case sim::CourseStage::walk:
-            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_stride_events >= 4.0f;
+            return metrics.evaluation_duck_seconds >= 2.0f
+                && metrics.evaluation_survival >= 8.0f;
         case sim::CourseStage::ramps:
-            return metrics.evaluation_distance >= 5.0f && metrics.evaluation_survival >= 8.0f;
+            return metrics.evaluation_jump_landings >= 2.0f
+                && metrics.evaluation_powered_jumps >= 2.0f;
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 6.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_distance >= 5.0f
+                && metrics.evaluation_stride_events >= 4.0f
+                && metrics.evaluation_speed >= 0.65f;
         case sim::CourseStage::hurdles:
-            return metrics.evaluation_distance >= 7.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_distance >= 7.0f
+                && metrics.evaluation_obstacles_passed >= 2.0f
+                && (metrics.evaluation_jump_landings >= 1.0f
+                    || metrics.evaluation_duck_seconds >= 0.75f);
         case sim::CourseStage::duck_bars:
-            return metrics.evaluation_distance >= 8.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_spin_landings >= 1.0f
+                && metrics.evaluation_spin_turns >= 0.85f
+                && metrics.evaluation_spin_turns <= 3.05f;
         case sim::CourseStage::moving_hazards:
-            return metrics.evaluation_distance >= 9.0f && metrics.evaluation_collisions <= 2.0f;
+            return metrics.evaluation_distance >= 9.0f
+                && metrics.evaluation_obstacles_passed >= 2.0f
+                && metrics.evaluation_collisions <= 4.0f;
         }
         return false;
     }
@@ -128,8 +139,11 @@ namespace epochrunner::rl
                     if (result.terminated)
                         break;
                 }
-                const bool gait_valid = stage == sim::CourseStage::balance || environment.alternating_steps() >= 3;
-                if (!environment.valid_motion() || !gait_valid)
+                const bool skill_valid = sim::stage_skill_evidence(stage,
+                    environment.alternating_steps(), environment.duck_seconds(),
+                    environment.landed_jumps(), environment.maximum_spin_turns(),
+                    environment.spin_landings(), environment.obstacles_passed());
+                if (!environment.valid_motion() || !skill_valid)
                 {
                     scores[agent] = -std::numeric_limits<float>::infinity();
                     return;
@@ -137,8 +151,12 @@ namespace epochrunner::rl
                 scores[agent] = reward + environment.distance_travelled() * 0.75f
                     + environment.elapsed_seconds() * 0.03f
                     + static_cast<float>(environment.alternating_steps()) * 0.03f
-                    - environment.collision_count() * 0.30f
-                    - environment.airborne_ratio() * 1.00f
+                    + environment.duck_seconds() * 0.06f
+                    + static_cast<float>(environment.landed_jumps()) * 0.16f
+                    + std::min(environment.maximum_spin_turns(), 3.0f) * 0.18f
+                    + static_cast<float>(environment.obstacles_passed()) * 0.28f
+                    - environment.collision_count() * 0.10f
+                    - environment.airborne_ratio() * 0.20f
                     - environment.body_rolling_seconds() * 2.00f;
             });
         }

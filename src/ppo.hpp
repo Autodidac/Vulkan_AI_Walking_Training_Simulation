@@ -2,7 +2,9 @@
 
 #include "simulation.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +39,12 @@ namespace epochrunner::rl
         float evaluation_collisions{};
         float evaluation_airborne_ratio{};
         float evaluation_stride_events{};
+        float evaluation_duck_seconds{};
+        float evaluation_powered_jumps{};
+        float evaluation_jump_landings{};
+        float evaluation_spin_turns{};
+        float evaluation_spin_landings{};
+        float evaluation_obstacles_passed{};
         std::uint32_t evaluation_invalid_runs{};
         bool evaluation_valid{};
 
@@ -58,14 +66,31 @@ namespace epochrunner::rl
         return clamp(0.18f / (1.0f + age / 240.0f), 0.040f, 0.18f);
     }
 
+    [[nodiscard]] inline bool policy_regression_guard(float best_score,
+        float current_score, bool current_valid) noexcept
+    {
+        if (!std::isfinite(best_score))
+            return false;
+        if (!current_valid || !std::isfinite(current_score))
+            return true;
+        const float allowed_drop = std::max(0.12f, std::abs(best_score) * 0.08f);
+        return current_score < best_score - allowed_drop;
+    }
+
     [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,
-        std::uint32_t alternating_steps, float distance, float survival_seconds) noexcept
+        std::uint32_t alternating_steps, float distance, float survival_seconds,
+        float duck_seconds = 0.0f, std::uint32_t landed_jumps = 0u,
+        float maximum_spin_turns = 0.0f, std::uint32_t spin_landings = 0u,
+        std::uint32_t obstacles_passed = 0u) noexcept
     {
         if (!valid_motion)
             return false;
         if (stage == sim::CourseStage::balance)
             return survival_seconds >= 3.0f;
-        return alternating_steps >= 2u && distance >= 0.60f;
+        if (!sim::stage_skill_evidence(stage, alternating_steps, duck_seconds,
+            landed_jumps, maximum_spin_turns, spin_landings, obstacles_passed))
+            return false;
+        return sim::stage_requires_forward_gait(stage) ? distance >= 0.60f : true;
     }
 
     enum class ControllerState : std::uint8_t
@@ -294,6 +319,7 @@ namespace epochrunner::rl
         std::vector<Transition> rollout_{};
         std::vector<float> episode_rewards_{};
         std::vector<float> episode_distances_{};
+        std::vector<std::array<float, sim::action_count>> rollout_previous_actions_{};
         std::vector<float> reward_history_{};
         std::vector<float> speed_history_{};
         std::vector<float> best_parameters_{};

@@ -261,9 +261,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v065-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v065-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v065-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v066-skill-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v066-skill-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v066-skill-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -742,7 +742,7 @@ namespace epochrunner
                 autonomy.rig_generation, autonomy.accepted_rig_changes, autonomy.rejected_rig_changes),
                 1.02f, white, usable_width);
             cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   NO FLY / FLIP / >50 KM/H",
+            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   POWERED AIR / <=3 SPINS / <50 KM/H",
                 autonomy.rollback_count), 1.00f, white, usable_width);
             cursor.y += 45.0f;
 
@@ -751,7 +751,7 @@ namespace epochrunner
                 1.06f, muted, usable_width, 4.0f);
             cursor.y += 10.0f;
             add_wrapped_text(canvas, cursor,
-                "NO ROLLING / NO BODY-SURFING / HAZARDS NEVER PAY REWARD",
+                "NO GROUND ROLLING / HAZARD TOUCH ALLOWED / PASS THE GOAL",
                 1.06f, muted, usable_width, 4.0f);
         }
 
@@ -783,11 +783,10 @@ namespace epochrunner
                     sim::invalid_motion_name(environment.invalid_reason())),
                 1.16f, environment.valid_motion() ? green : danger, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("FEET {}/{}  STEPS {}  LIFT {:.2f} M  FOOT-ROLL {:.1f} S  IDLE {:.1f} S",
-                    environment.left_supported() ? "A" : "-",
-                    environment.right_supported() ? "B" : "-",
-                    environment.alternating_steps(), environment.obstacle_lift_clearance(),
-                    environment.foot_pivot_rolling_seconds(), environment.zero_progress_seconds()),
+                std::format("STEPS {}  DUCK {:.1f} S  JUMP {}/{}  SPIN {:.1f}  PASSED {}",
+                    environment.alternating_steps(), environment.duck_seconds(),
+                    environment.powered_jumps(), environment.landed_jumps(),
+                    environment.maximum_spin_turns(), environment.obstacles_passed()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",

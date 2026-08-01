@@ -19,6 +19,8 @@ namespace epochrunner::rl
     {
         constexpr float log_two_pi = 1.83787706640934548356f;
         constexpr float epsilon = 1.0e-8f;
+        constexpr float minimum_log_standard_deviation = -4.0f;
+        constexpr float maximum_log_standard_deviation = -1.51412773f;
 
         [[nodiscard]] float tanh_derivative_from_output(float value) noexcept
         {
@@ -109,13 +111,14 @@ namespace epochrunner::rl
     {
         std::array<float, output_size> result{};
         for (std::size_t index = 0; index < output_size; ++index)
-            result[index] = std::exp(std::clamp(parameters_[layout_.log_std + index], -4.0f, 0.0f));
+            result[index] = std::exp(std::clamp(parameters_[layout_.log_std + index],
+                minimum_log_standard_deviation, maximum_log_standard_deviation));
         return result;
     }
 
     void PolicyNetwork::set_exploration(float standard_deviation) noexcept
     {
-        const float value = std::log(clamp(standard_deviation, 0.02f, 0.80f));
+        const float value = std::log(clamp(standard_deviation, 0.02f, 0.22f));
         for (std::size_t index = 0; index < output_size; ++index)
             parameters_[layout_.log_std + index] = value;
     }
@@ -136,7 +139,8 @@ namespace epochrunner::rl
         float result = 0.0f;
         for (std::size_t index = 0; index < output_size; ++index)
         {
-            const float log_std = std::clamp(parameters_[layout_.log_std + index], -4.0f, 0.0f);
+            const float log_std = std::clamp(parameters_[layout_.log_std + index],
+                minimum_log_standard_deviation, maximum_log_standard_deviation);
             const float stddev = std::exp(log_std);
             const float normalized_delta = (action[index] - evaluation.mean[index]) / stddev;
             result += -0.5f * (normalized_delta * normalized_delta + 2.0f * log_std + log_two_pi);
@@ -214,7 +218,8 @@ namespace epochrunner::rl
         std::array<float, output_size> d_actor_pre{};
         for (std::size_t output = 0; output < output_size; ++output)
         {
-            const float log_std = std::clamp(parameters_[layout_.log_std + output], -4.0f, 0.0f);
+            const float log_std = std::clamp(parameters_[layout_.log_std + output],
+                minimum_log_standard_deviation, maximum_log_standard_deviation);
             const float variance = std::exp(2.0f * log_std);
             const float delta = action[output] - evaluation.mean[output];
             const float d_logp_d_mean = delta / variance;

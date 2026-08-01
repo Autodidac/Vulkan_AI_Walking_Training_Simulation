@@ -30,11 +30,23 @@ int main()
     require(sim::classify_motion_gate(1.0f, 50.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::overspeed, "50 km/h hard gate missing");
     require(sim::classify_motion_gate(-0.2f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
-        == sim::InvalidMotion::flipped, "flip hard gate missing");
+        == sim::InvalidMotion::flipped, "flip hard gate missing outside flip lessons");
+    require(sim::classify_motion_gate(-0.2f, 0.0f, { 0.0f, 4.0f }, 0.4f, 2.7f, 0.0f,
+            false, sim::CourseStage::duck_bars, 0.5f)
+        == sim::InvalidMotion::none, "controlled flip lesson still rejects an airborne flip");
+    require(sim::classify_motion_gate(0.4f, 0.0f, { 0.0f, 4.0f }, 1.2f, 2.7f, 0.0f,
+            false, sim::CourseStage::duck_bars, 3.21f)
+        == sim::InvalidMotion::excessive_spins, "more than three spins is not rejected");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.8f, 0.7f, 0.0f, false)
-        == sim::InvalidMotion::sustained_flight, "flight hard gate missing");
+        == sim::InvalidMotion::sustained_flight, "unpowered flight hard gate missing");
+    require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
+        "joint-powered jump is not recognized");
+    require(!sim::powered_joint_launch(sim::CourseStage::walk, 1.0f, 0.08f),
+        "duck lesson incorrectly enables flight");
+    require(sim::allowed_airtime_for_stage(sim::CourseStage::duck_bars, true) > 2.0f,
+        "controlled flip lesson does not allow bounded powered airtime");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 3.0f, false)
         == sim::InvalidMotion::micro_motion, "micro-motion gate missing");
     require(!sim::recovery_should_start(true, 0.95f, false, false),
@@ -61,6 +73,10 @@ int main()
         "in-place foot twitch counted as walking");
     require(sim::qualifies_alternating_step(-1, 1, 0.30f, 0.08f),
         "real spaced alternating step was rejected");
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.03f, 0.02f),
+        "tiny contact wiggle still counts as a supported walking step");
+    require(sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.16f, 0.12f),
+        "real lifted swing and landing is rejected as a walking step");
 
     const sim::CourseFeature rock_feature{
         sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
@@ -94,6 +110,22 @@ int main()
         "course debris does not advance in world space solely from course progress");
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
+    require(sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
+        && sim::course_stage_name(sim::CourseStage::walk) == "2. DUCK / RECOVER"
+        && sim::course_stage_name(sim::CourseStage::ramps) == "3. JUMP / LAND"
+        && sim::course_stage_name(sim::CourseStage::uneven) == "4. WALK / RUN"
+        && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING DUCK / JUMP"
+        && sim::course_stage_name(sim::CourseStage::duck_bars) == "6. CONTROLLED FLIPS"
+        && sim::course_stage_name(sim::CourseStage::moving_hazards) == "7. MIXED GOAL COURSE",
+        "skill curriculum is not ordered by prerequisite");
+    require(sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
+        "duck evidence cannot complete the duck lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
+        "landed jump cannot complete the jump lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
+        "controlled landed flip cannot complete the flip lesson");
+    require(!sim::stage_skill_evidence(sim::CourseStage::moving_hazards, 2u, 0.0f, 0u, 0.0f, 0u, 0u),
+        "mixed goal lesson can complete without passing an obstacle");
     require(sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 5)
             == sim::CourseFeatureKind::rock
         && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 6)
@@ -156,9 +188,17 @@ int main()
         "best-result imitation guide does not decay into a light prior");
     require(rl::self_imitation_prior_weight(0, 0) == 0.0f,
         "empty imitation memory still changes PPO gradients");
-    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 3, 1.2f, 4.0f),
+    require(rl::policy_regression_guard(10.0f, 8.5f, true),
+        "large valid-policy degradation does not restore the champion");
+    require(rl::policy_regression_guard(10.0f, 10.5f, false),
+        "invalid policy does not restore the champion");
+    require(!rl::policy_regression_guard(10.0f, 9.4f, true),
+        "small exploration change triggers an unnecessary champion rollback");
+    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
         "valid stepped best result cannot seed self-imitation");
-    require(!rl::elite_motion_eligible(sim::CourseStage::walk, false, 8, 12.0f, 20.0f),
+    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+        "valid duck result cannot seed self-imitation");
+    require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
         "near obstacle does not activate full leg-lift training");
@@ -174,6 +214,8 @@ int main()
         "double-supported rolling around stationary orange foot nodes is not detected");
     require(!sim::foot_pivot_rolling_motion(0.24f, true, false, 0.01f, 0.18f, 0.50f),
         "single-support lifted-foot walking is incorrectly rejected as foot-node rolling");
+    require(sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f, 0.02f),
+        "straight double-supported skating around planted feet is not rejected");
     require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
         "long flat sand-sim patrol zones are missing");
     require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),
@@ -277,8 +319,10 @@ int main()
         sim::Environment environment{ humanoid, 42u + stage_index };
         const auto stage = static_cast<sim::CourseStage>(stage_index);
         environment.set_course(stage, 0.45f);
-        if (stage >= sim::CourseStage::hurdles)
-            require(!environment.course_features().empty(), "obstacle curriculum stage has no course features");
+        if (stage == sim::CourseStage::hurdles
+            || stage == sim::CourseStage::moving_hazards)
+            require(!environment.course_features().empty(),
+                "moving obstacle curriculum stage has no course features");
         const std::array<float, sim::action_count> zero_actions{};
         for (int frame = 0; frame < 120; ++frame)
         {
