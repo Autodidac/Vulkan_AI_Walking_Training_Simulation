@@ -1,0 +1,79 @@
+windows	Build full Windows application	﻿2026-08-01T21:43:28.8738922Z ##[group]Run cmake --build --preset windows-release --parallel 4
+windows	Build full Windows application	2026-08-01T21:43:28.8739530Z ^[[36;1mcmake --build --preset windows-release --parallel 4^[[0m
+windows	Build full Windows application	2026-08-01T21:43:28.8816975Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+windows	Build full Windows application	2026-08-01T21:43:28.8817404Z env:
+windows	Build full Windows application	2026-08-01T21:43:28.8817842Z   VCPKG_ROOT: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\vcpkg
+windows	Build full Windows application	2026-08-01T21:43:28.8818647Z   VCPKG_DEFAULT_BINARY_CACHE: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\vcpkg-bincache
+windows	Build full Windows application	2026-08-01T21:43:28.8819230Z ##[endgroup]
+windows	Build full Windows application	2026-08-01T21:43:29.3139761Z MSBuild version 18.8.2+ce25c0108 for .NET Framework
+windows	Build full Windows application	2026-08-01T21:43:29.3527687Z 
+windows	Build full Windows application	2026-08-01T21:43:29.6446600Z   1>Checking Build System
+windows	Build full Windows application	2026-08-01T21:43:29.9806231Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/windows-release/_deps/epochgui-src/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:43:30.1527490Z   Scanning sources for module dependencies...
+windows	Build full Windows application	2026-08-01T21:43:30.3925829Z   dock_layout.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.3955763Z   dockable_window.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.4031782Z   image.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.4191930Z   floating_window.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.8164268Z   popup_layout.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.8266498Z   panel_host.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.8577474Z   rounded_rect.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.8896146Z   text_control.cpp
+windows	Build full Windows application	2026-08-01T21:43:30.9888314Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:43:31.0209427Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:43:31.1843044Z   epoch.gui.ixx
+windows	Build full Windows application	2026-08-01T21:43:31.1996886Z   input.cpp
+windows	Build full Windows application	2026-08-01T21:43:31.2391245Z   epoch.gui.font.ixx
+windows	Build full Windows application	2026-08-01T21:43:31.3170568Z   epoch.gui.image.ixx
+windows	Build full Windows application	2026-08-01T21:43:31.4043006Z   shader_compiler.cpp
+windows	Build full Windows application	2026-08-01T21:43:31.4115444Z   simulation.cpp
+windows	Build full Windows application	2026-08-01T21:43:31.5055232Z   epoch.gui.input.ixx
+windows	Build full Windows application	2026-08-01T21:43:31.5055939Z   epoch.gui.rounded_rect.ixx
+windows	Build full Windows application	2026-08-01T21:43:31.7053086Z   Compiling...
+windows	Build full Windows application	2026-08-01T21:43:31.7565087Z   epoch.gui.ixx
+windows	Build full Windows application	2026-08-01T21:43:33.0313460Z   floating_window.cpp
+windows	Build full Windows application	2026-08-01T21:43:33.0348922Z   dockable_window.cpp
+windows	Build full Windows application	2026-08-01T21:43:33.0755881Z   panel_host.cpp
+windows	Build full Windows application	2026-08-01T21:43:33.1095449Z   dock_layout.cpp
+windows	Build full Windows application	2026-08-01T21:43:35.3277309Z   epoch.gui.font.ixx
+windows	Build full Windows application	2026-08-01T21:43:35.3398518Z   text_control.cpp
+windows	Build full Windows application	2026-08-01T21:43:35.3647269Z   epoch.gui.image.ixx
+windows	Build full Windows application	2026-08-01T21:43:35.4701585Z   popup_layout.cpp
+windows	Build full Windows application	2026-08-01T21:43:37.1066395Z   ppo_network.cpp
+windows	Build full Windows application	2026-08-01T21:43:37.8624952Z   epoch.gui.rounded_rect.ixx
+windows	Build full Windows application	2026-08-01T21:43:37.8671163Z   image.cpp
+windows	Build full Windows application	2026-08-01T21:43:37.8960401Z   epoch.gui.input.ixx
+windows	Build full Windows application	2026-08-01T21:43:39.3150432Z   EpochRunnerShaderCompiler.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerShaderCompiler.exe
+windows	Build full Windows application	2026-08-01T21:43:40.6171471Z   2>Compiling flat.vert with vcpkg shaderc
+windows	Build full Windows application	2026-08-01T21:43:40.6174624Z   1>Compiling flat.frag with vcpkg shaderc
+windows	Build full Windows application	2026-08-01T21:43:40.6961304Z   input.cpp
+windows	Build full Windows application	2026-08-01T21:43:40.7416513Z   rounded_rect.cpp
+windows	Build full Windows application	2026-08-01T21:43:40.9680756Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:43:41.3594511Z   ppo_trainer.cpp
+windows	Build full Windows application	2026-08-01T21:43:42.0569036Z   EpochGui.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\epochgui-build\Release\EpochGui.lib
+windows	Build full Windows application	2026-08-01T21:43:44.2211733Z   ppo_parallel.cpp
+windows	Build full Windows application	2026-08-01T21:43:46.7711290Z   self_imitation.cpp
+windows	Build full Windows application	2026-08-01T21:43:49.2058744Z   training_checkpoint.cpp
+windows	Build full Windows application	2026-08-01T21:43:51.8687876Z   autonomy_runtime.cpp
+windows	Build full Windows application	2026-08-01T21:43:54.5408616Z   autonomy_commands.cpp
+windows	Build full Windows application	2026-08-01T21:43:57.2397781Z   autonomy_curriculum.cpp
+windows	Build full Windows application	2026-08-01T21:44:00.0697908Z   autonomy_persistence.cpp
+windows	Build full Windows application	2026-08-01T21:44:02.7058236Z   Generating Code...
+windows	Build full Windows application	2026-08-01T21:44:11.8907774Z   EpochRunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerCore.lib
+windows	Build full Windows application	2026-08-01T21:44:12.0137499Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:44:12.0414156Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:44:12.1195976Z   concurrency_benchmark.cpp
+windows	Build full Windows application	2026-08-01T21:44:12.1493733Z   core_tests.cpp
+windows	Build full Windows application	2026-08-01T21:44:12.1520154Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:44:12.2642860Z   runtime_pipeline_tests.cpp
+windows	Build full Windows application	2026-08-01T21:44:12.8662830Z   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
+windows	Build full Windows application	2026-08-01T21:44:13.3392757Z   main.cpp
+windows	Build full Windows application	2026-08-01T21:44:16.2714216Z D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\src\main.cpp(63,33): error C2220: the following warning is treated as an error [D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\EpochRunner.vcxproj]
+windows	Build full Windows application	2026-08-01T21:44:16.3045020Z D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\src\main.cpp(63,33): warning C4996: 'std::filesystem::u8path': warning STL4021: The std::filesystem::u8path() overloads are deprecated in C++20. The constructors of std::filesystem::path provide equivalent functionality via construction from u8string, u8string_view, or iterators with value_type char8_t. You can define _SILENCE_CXX20_U8PATH_DEPRECATION_WARNING or _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS to suppress this warning. [D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\EpochRunner.vcxproj]
+windows	Build full Windows application	2026-08-01T21:44:17.4954343Z   EpochRunnerConcurrencyBenchmark.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerConcurrencyBenchmark.exe
+windows	Build full Windows application	2026-08-01T21:44:17.7877034Z   app.cpp
+windows	Build full Windows application	2026-08-01T21:44:18.5203176Z   EpochRunnerRuntimePipelineTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerRuntimePipelineTests.exe
+windows	Build full Windows application	2026-08-01T21:44:20.6384342Z   EpochRunnerCoreTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerCoreTests.exe
+windows	Build full Windows application	2026-08-01T21:44:22.0355899Z   canvas.cpp
+windows	Build full Windows application	2026-08-01T21:44:24.2585017Z   renderer.cpp
+windows	Build full Windows application	2026-08-01T21:44:26.8165274Z   Generating Code...
+windows	Build full Windows application	2026-08-01T21:44:30.0595578Z ##[error]Process completed with exit code 1.
