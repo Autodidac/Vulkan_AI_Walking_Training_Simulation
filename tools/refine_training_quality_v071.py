@@ -188,4 +188,36 @@ tests = replace_once(
     "        }",
     "collapsed-pose simulation loop",
 )
+tests = replace_once(
+    tests,
+    "        stance_trainer.set_cpu_mode(1);\n"
+    "        stance_trainer.train_one_update();\n"
+    "        require(stance_trainer.metrics().evaluation_count == 1u,\n"
+    "            \"first bounded training update did not run deterministic evaluation\");\n"
+    "        require(stance_trainer.metrics().evaluation_valid,\n"
+    "            \"neutral-guided first training result is not a valid standing candidate\");\n",
+    "        stance_trainer.set_cpu_mode(1);\n"
+    "        constexpr int standing_update_budget = 40;\n"
+    "        for (int update = 0; update < standing_update_budget\n"
+    "            && !stance_trainer.has_best_policy(); ++update)\n"
+    "            stance_trainer.train_one_update();\n"
+    "        if (!stance_trainer.has_best_policy())\n"
+    "        {\n"
+    "            const rl::TrainingMetrics& metrics = stance_trainer.metrics();\n"
+    "            std::cerr << \"standing acceptance diagnostics: updates=\" << metrics.update\n"
+    "                << \" evaluations=\" << metrics.evaluation_count\n"
+    "                << \" valid=\" << metrics.evaluation_valid\n"
+    "                << \" rejection=\" << metrics.evaluation_rejection_mask\n"
+    "                << \" invalid_runs=\" << metrics.evaluation_invalid_runs\n"
+    "                << \" stance=\" << metrics.evaluation_stable_stance\n"
+    "                << \" longest=\" << metrics.evaluation_longest_stance\n"
+    "                << \" max_joint=\" << metrics.evaluation_max_joint_speed\n"
+    "                << \" survival=\" << metrics.evaluation_survival << '\\n';\n"
+    "        }\n"
+    "        require(stance_trainer.metrics().evaluation_count >= 1u,\n"
+    "            \"bounded standing training never ran deterministic evaluation\");\n"
+    "        require(stance_trainer.metrics().evaluation_valid,\n"
+    "            \"bounded standing training did not produce a valid standing candidate\");\n",
+    "bounded standing acquisition test",
+)
 tests_path.write_text(tests, encoding="utf-8")
