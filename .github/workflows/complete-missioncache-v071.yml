@@ -26,6 +26,7 @@ env:
 jobs:
   linux-validate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,11 +56,12 @@ jobs:
         run: cmake --build build/linux-v071 --parallel 2
 
       - name: Run Linux deterministic and bounded-training tests
-        run: ctest --test-dir build/linux-v071 --output-on-failure -V
+        run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 600
 
   windows-release:
     needs: linux-validate
     runs-on: windows-2025
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,7 +112,7 @@ jobs:
         run: cmake --build --preset windows-release
 
       - name: Run Windows deterministic, bounded-training, concurrency, and UI tests
-        run: ctest --preset windows-release --output-on-failure -V
+        run: ctest --preset windows-release --output-on-failure -V --timeout 600
 
       - name: Verify executable and Vulkan path
         shell: pwsh
@@ -234,6 +236,7 @@ jobs:
       - linux-validate
       - windows-release
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
