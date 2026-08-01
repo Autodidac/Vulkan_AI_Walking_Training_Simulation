@@ -1,6 +1,7 @@
 #include "app.hpp"
 #include "autonomy.hpp"
 #include "simulation.hpp"
+#include "ui_layout.hpp"
 
 #include <algorithm>
 #include <array>
@@ -261,9 +262,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v065-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v065-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v065-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v070-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v070-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v070-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -295,26 +296,35 @@ namespace epochrunner
             rig_edit_reason = reason;
         }
 
-        [[nodiscard]] std::array<std::string_view, 4> motor_names() const noexcept
+        [[nodiscard]] std::array<std::string_view, sim::action_count> motor_names() const noexcept
         {
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG" };
+                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::crawler4:
-                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG" };
+                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::hexapod:
-                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR" };
+                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::monoped:
-                return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT" };
+                return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::humanoid:
+                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
+                    "LEFT SHOULDER", "LEFT ELBOW", "RIGHT SHOULDER", "RIGHT ELBOW" };
             case RigPreset::biped:
             case RigPreset::chicken:
-                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE" };
+                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::custom:
-                return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4" };
+                return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4",
+                    "MOTOR 5", "MOTOR 6", "MOTOR 7", "MOTOR 8" };
             }
-            return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4" };
+            return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4",
+                "MOTOR 5", "MOTOR 6", "MOTOR 7", "MOTOR 8" };
         }
 
         void set_status(std::string text)
@@ -416,8 +426,8 @@ namespace epochrunner
             switch (joint_test_group)
             {
             case JointTestGroup::selected: return index == selected_motor;
-            case JointTestGroup::pair_a: return index < 2;
-            case JointTestGroup::pair_b: return index >= 2;
+            case JointTestGroup::pair_a: return index < 4;
+            case JointTestGroup::pair_b: return index >= 4;
             case JointTestGroup::all: return true;
             }
             return false;
@@ -724,7 +734,7 @@ namespace epochrunner
                 1.04f, metrics.imitation_samples > 0 ? accent : muted, usable_width);
             cursor.y += 45.0f;
 
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 230.0f } },
+            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 259.0f } },
                 8.0f, panel_alt, border, 1.0f);
             add_text(canvas, cursor, "RUNTIME", 1.18f, accent);
             cursor.y += 31.0f;
@@ -738,11 +748,15 @@ namespace epochrunner
                 autonomy.pending_commands, autonomy.worker_busy ? "TRAINER BUSY" : "TRAINER IDLE"),
                 1.06f, autonomy.worker_busy ? yellow : green, usable_width);
             cursor.y += 29.0f;
+            add_text_fit(canvas, cursor, std::format("PIPELINE {}   MASK {:02X}",
+                autonomy.pipeline_stage, autonomy.pipeline_stage_mask),
+                1.02f, autonomy.worker_busy ? yellow : green, usable_width);
+            cursor.y += 29.0f;
             add_text_fit(canvas, cursor, std::format("RIG GEN {}   ACCEPTED {}   REJECTED {}",
                 autonomy.rig_generation, autonomy.accepted_rig_changes, autonomy.rejected_rig_changes),
                 1.02f, white, usable_width);
             cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   NO FLY / FLIP / >50 KM/H",
+            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   POWERED AIR / <=3 SPINS / <50 KM/H",
                 autonomy.rollback_count), 1.00f, white, usable_width);
             cursor.y += 45.0f;
 
@@ -751,7 +765,7 @@ namespace epochrunner
                 1.06f, muted, usable_width, 4.0f);
             cursor.y += 10.0f;
             add_wrapped_text(canvas, cursor,
-                "NO ROLLING / NO BODY-SURFING / HAZARDS NEVER PAY REWARD",
+                "NO GROUND ROLLING / HAZARD TOUCH ALLOWED / PASS THE GOAL",
                 1.06f, muted, usable_width, 4.0f);
         }
 
@@ -783,23 +797,18 @@ namespace epochrunner
                     sim::invalid_motion_name(environment.invalid_reason())),
                 1.16f, environment.valid_motion() ? green : danger, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("FEET {}/{}  STEPS {}  LIFT {:.2f} M  FOOT-ROLL {:.1f} S  IDLE {:.1f} S",
-                    environment.left_supported() ? "A" : "-",
-                    environment.right_supported() ? "B" : "-",
-                    environment.alternating_steps(), environment.obstacle_lift_clearance(),
-                    environment.foot_pivot_rolling_seconds(), environment.zero_progress_seconds()),
+                std::format("STEPS {}  DUCK {:.1f} S  JUMP {}/{}  SPIN {:.1f}  PASSED {}",
+                    environment.alternating_steps(), environment.duck_seconds(),
+                    environment.powered_jumps(), environment.landed_jumps(),
+                    environment.maximum_spin_turns(), environment.obstacles_passed()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
                 1.05f, muted, overlay_width, 1.00f);
 
-            const float pip_width = std::clamp(viewport.size.x * 0.34f, 300.0f, 390.0f);
-            const float pip_height = std::clamp(viewport.size.y * 0.27f, 190.0f, 245.0f);
-            draw_training_pip({
-                { viewport.position.x + viewport.size.x - pip_width - 18.0f,
-                  viewport.position.y + 18.0f },
-                { pip_width, pip_height }
-            });
+            const ui_layout::Box pip = ui_layout::training_pip_box({
+                viewport.position.x, viewport.position.y, viewport.size.x, viewport.size.y });
+            draw_training_pip({ { pip.x, pip.y }, { pip.width, pip.height } });
         }
 
         void draw_joint_lab(Rect rect, const InputState& input)
@@ -813,10 +822,10 @@ namespace epochrunner
             if (button({ row, { group_width - 4.0f, 31.0f } }, "SELECTED", input,
                 joint_test_group == JointTestGroup::selected))
                 joint_test_group = JointTestGroup::selected;
-            if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "PAIR 1+2", input,
+            if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "LEGS 1-4", input,
                 joint_test_group == JointTestGroup::pair_a))
                 joint_test_group = JointTestGroup::pair_a;
-            if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "PAIR 3+4", input,
+            if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "ARMS 5-8", input,
                 joint_test_group == JointTestGroup::pair_b))
                 joint_test_group = JointTestGroup::pair_b;
             if (button({ row + Vec2{ group_width * 3.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "ALL", input,
@@ -1177,16 +1186,20 @@ namespace epochrunner
                 add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
                 cursor.y += 29.0f;
                 const float motor_width = (rect.size.x - 48.0f) * 0.25f;
-                for (int index = 0; index < 4; ++index)
+                for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
                 {
-                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(index), 0.0f },
-                        { motor_width - 4.0f, 35.0f } }, std::to_string(index + 1), input, selected_motor == index))
+                    const int column = index % 4;
+                    const int row = index / 4;
+                    const bool motor_available = static_cast<std::size_t>(index) < blueprint.active_motor_count;
+                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(column),
+                        static_cast<float>(row) * 41.0f }, { motor_width - 4.0f, 35.0f } },
+                        std::to_string(index + 1), input, selected_motor == index, motor_available))
                     {
                         selected_motor = index;
                         joint_test_group = JointTestGroup::selected;
                     }
                 }
-                cursor.y += 46.0f;
+                cursor.y += 87.0f;
                 const auto names = motor_names();
                 add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
                 cursor.y += 30.0f;
@@ -1320,20 +1333,25 @@ namespace epochrunner
             process_shortcuts(input);
             draw_top_bar(input, width);
 
-            const Rect content{ { 10.0f, 92.0f },
-                { static_cast<float>(width) - 20.0f, static_cast<float>(height) - 102.0f } };
-            if (content.size.x < 1080.0f || content.size.y < 640.0f)
+            const ui_layout::Box layout_content = ui_layout::content_box(
+                static_cast<float>(width), static_cast<float>(height));
+            const Rect content{ { layout_content.x, layout_content.y },
+                { layout_content.width, layout_content.height } };
+            if (!ui_layout::supported_window(static_cast<float>(width), static_cast<float>(height)))
             {
-                add_text(canvas, { 24.0f, 100.0f }, "WINDOW TOO SMALL", 2.0f, danger);
+                add_text(canvas, { 24.0f, 100.0f },
+                    "WINDOW TOO SMALL - MINIMUM CONTENT 1080 X 800", 2.0f, danger);
                 return;
             }
 
             if (mode == Mode::live)
             {
-                const float panel_width = std::clamp(content.size.x * 0.42f, 650.0f, 720.0f);
-                const Rect world{ content.position, { content.size.x - panel_width - 10.0f, content.size.y } };
-                const Rect side{ { content.position.x + world.size.x + 10.0f, content.position.y },
-                    { panel_width, content.size.y } };
+                const ui_layout::Box layout_world = ui_layout::live_world_box(layout_content);
+                const ui_layout::Box layout_side = ui_layout::live_panel_box(layout_content);
+                const Rect world{ { layout_world.x, layout_world.y },
+                    { layout_world.width, layout_world.height } };
+                const Rect side{ { layout_side.x, layout_side.y },
+                    { layout_side.width, layout_side.height } };
                 draw_live_world(world, dt);
                 draw_live_panel(side, input);
             }

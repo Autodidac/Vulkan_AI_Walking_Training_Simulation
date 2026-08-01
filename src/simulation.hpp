@@ -13,8 +13,8 @@
 
 namespace epochrunner::sim
 {
-    inline constexpr std::size_t action_count = 4;
-    inline constexpr std::size_t observation_count = 30;
+    inline constexpr std::size_t action_count = 8;
+    inline constexpr std::size_t observation_count = 32;
 
     enum class CourseStage : std::uint8_t
     {
@@ -29,17 +29,89 @@ namespace epochrunner::sim
 
     inline constexpr std::size_t course_stage_count = 7;
 
+    [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
+    {
+        return stage == CourseStage::uneven
+            || stage == CourseStage::hurdles
+            || stage == CourseStage::moving_hazards;
+    }
+
+    [[nodiscard]] inline bool stage_allows_powered_airtime(CourseStage stage) noexcept
+    {
+        return stage == CourseStage::ramps
+            || stage == CourseStage::hurdles
+            || stage == CourseStage::duck_bars
+            || stage == CourseStage::moving_hazards;
+    }
+
+    [[nodiscard]] inline bool stage_allows_controlled_flips(CourseStage stage) noexcept
+    {
+        return stage == CourseStage::duck_bars
+            || stage == CourseStage::moving_hazards;
+    }
+
+    [[nodiscard]] inline bool powered_joint_launch(CourseStage stage, float vertical_speed,
+        float action_energy) noexcept
+    {
+        return stage_allows_powered_airtime(stage)
+            && vertical_speed >= 0.85f
+            && action_energy >= 0.055f;
+    }
+
+    [[nodiscard]] inline float allowed_airtime_for_stage(CourseStage stage,
+        bool powered_launch) noexcept
+    {
+        if (!powered_launch)
+            return 0.72f;
+        if (stage == CourseStage::ramps)
+            return 1.65f;
+        if (stage == CourseStage::hurdles)
+            return 1.85f;
+        if (stage == CourseStage::duck_bars)
+            return 2.75f;
+        if (stage == CourseStage::moving_hazards)
+            return 2.45f;
+        return 0.72f;
+    }
+
+    [[nodiscard]] inline bool stage_skill_evidence(CourseStage stage,
+        std::uint32_t alternating_steps, float duck_seconds,
+        std::uint32_t landed_jumps, float maximum_spin_turns,
+        std::uint32_t spin_landings, std::uint32_t obstacles_passed) noexcept
+    {
+        switch (stage)
+        {
+        case CourseStage::balance:
+            return true;
+        case CourseStage::walk:
+            return duck_seconds >= 0.50f;
+        case CourseStage::ramps:
+            return landed_jumps >= 1u;
+        case CourseStage::uneven:
+            return alternating_steps >= 2u;
+        case CourseStage::hurdles:
+            return alternating_steps >= 2u && obstacles_passed >= 1u
+                && (duck_seconds >= 0.25f || landed_jumps >= 1u);
+        case CourseStage::duck_bars:
+            return spin_landings >= 1u && maximum_spin_turns >= 0.75f;
+        case CourseStage::moving_hazards:
+            return alternating_steps >= 2u && obstacles_passed >= 1u
+                && (duck_seconds >= 0.25f || landed_jumps >= 1u || spin_landings >= 1u);
+        }
+        return false;
+    }
+
     [[nodiscard]] inline std::string_view course_stage_name(CourseStage stage) noexcept
     {
         switch (stage)
         {
-        case CourseStage::balance: return "SPAWN STANCE";
-        case CourseStage::walk: return "FLAT SAND PATROL";
-        case CourseStage::ramps: return "SAND MOUNDS";
-        case CourseStage::uneven: return "LOOSE / DEFORMED SAND";
-        case CourseStage::hurdles: return "FLAT DEBRIS";
-        case CourseStage::duck_bars: return "LOW-CLEARANCE DEBRIS";
-        case CourseStage::moving_hazards: return "COMBAT TRAVERSAL";
+        case CourseStage::balance: return "1. STAND";
+        case CourseStage::walk: return "2. DUCK / RECOVER";
+        case CourseStage::ramps: return "3. JUMP / LAND";
+        case CourseStage::uneven: return "4. WALK / RUN";
+        case CourseStage::hurdles: return "5. MOVING DUCK / JUMP";
+        case CourseStage::duck_bars: return "6. CONTROLLED FLIPS";
+        case CourseStage::moving_hazards: return "7. MIXED GOAL COURSE";
         }
         return "UNKNOWN";
     }
@@ -164,10 +236,10 @@ namespace epochrunner::sim
         float maximum_foot_clearance, float torso_turn_speed) noexcept
     {
         return left_supported && right_supported
-            && std::abs(root_speed) > 0.10f
-            && stance_slip_speed < 0.065f
-            && maximum_foot_clearance < 0.075f
-            && std::abs(torso_turn_speed) > 0.20f;
+            && std::abs(root_speed) > 0.085f
+            && stance_slip_speed < 0.080f
+            && maximum_foot_clearance < 0.085f
+            && (std::abs(torso_turn_speed) > 0.12f || std::abs(root_speed) > 0.18f);
     }
 
     inline constexpr float rolling_gate_activation_seconds = 1.35f;
@@ -281,6 +353,7 @@ namespace epochrunner::sim
         body_rolling,
         foot_pivot_rolling,
         zero_progress,
+        excessive_spins,
         hazard_quiver
     };
 
@@ -297,8 +370,9 @@ namespace epochrunner::sim
         case InvalidMotion::micro_motion: return "MICRO-MOTION EXPLOIT";
         case InvalidMotion::wheel_sliding: return "WHEEL-SLIDING EXPLOIT";
         case InvalidMotion::body_rolling: return "HEAD / TAIL / BODY ROLLING";
-        case InvalidMotion::foot_pivot_rolling: return "FOOT-NODE ROLLING";
+        case InvalidMotion::foot_pivot_rolling: return "FOOT-NODE SKATING / ROLLING";
         case InvalidMotion::zero_progress: return "ZERO MOVEMENT - RESET";
+        case InvalidMotion::excessive_spins: return "MORE THAN 3 SPINS";
         case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
         }
         return "INVALID";
@@ -306,9 +380,12 @@ namespace epochrunner::sim
 
     [[nodiscard]] inline InvalidMotion classify_motion_gate(float uprightness, float speed_kmh,
         Vec2 root_position, float airborne_seconds, float allowed_airtime,
-        float micro_motion_seconds, bool fallen) noexcept
+        float micro_motion_seconds, bool fallen,
+        CourseStage stage = CourseStage::balance, float airborne_spin_turns = 0.0f) noexcept
     {
-        if (uprightness < -0.15f)
+        if (std::abs(airborne_spin_turns) > 3.20f)
+            return InvalidMotion::excessive_spins;
+        if (uprightness < -0.15f && !stage_allows_controlled_flips(stage))
             return InvalidMotion::flipped;
         if (speed_kmh >= 50.0f)
             return InvalidMotion::overspeed;
@@ -343,6 +420,17 @@ namespace epochrunner::sim
     {
         return previous_side != 0 && strike_side != 0 && strike_side != previous_side
             && seconds_since_previous >= 0.12f && std::abs(root_displacement) >= 0.025f;
+    }
+
+    [[nodiscard]] inline bool qualifies_supported_step(int previous_side, int strike_side,
+        float seconds_since_previous, float root_displacement,
+        float swing_air_seconds, float swing_clearance) noexcept
+    {
+        return qualifies_alternating_step(previous_side, strike_side,
+            seconds_since_previous, root_displacement)
+            && std::abs(root_displacement) >= 0.055f
+            && swing_air_seconds >= 0.10f
+            && swing_clearance >= 0.075f;
     }
 
     [[nodiscard]] inline float ground_velocity_retention(bool traction_contact,
@@ -383,7 +471,13 @@ namespace epochrunner::sim
         if (stage == CourseStage::ramps || stage == CourseStage::uneven)
             return CourseFeatureKind::rock;
         if (stage == CourseStage::hurdles)
-            return selector == 0 ? CourseFeatureKind::rock : CourseFeatureKind::hurdle;
+        {
+            if (selector == 0)
+                return CourseFeatureKind::rock;
+            if (selector == 1)
+                return CourseFeatureKind::hurdle;
+            return CourseFeatureKind::overhead_bar;
+        }
         if (stage == CourseStage::duck_bars)
         {
             if (selector == 0)
@@ -448,6 +542,7 @@ namespace epochrunner::sim
         std::vector<float> radii{};
         std::vector<DistanceConstraint> bones{};
         std::array<MotorConstraint, action_count> motors{};
+        std::size_t active_motor_count{ 4 };
 
         std::uint16_t root_node{};
         std::uint16_t torso_node{ 1 };
@@ -533,12 +628,16 @@ namespace epochrunner::sim
         [[nodiscard]] float ground_height_at(float x) const noexcept;
         [[nodiscard]] float course_speed() const noexcept
         {
-            if (course_stage_ == CourseStage::balance)
+            if (course_stage_ == CourseStage::balance
+                || course_stage_ == CourseStage::walk
+                || course_stage_ == CourseStage::ramps
+                || course_stage_ == CourseStage::duck_bars)
                 return 0.0f;
-            if (static_cast<std::uint8_t>(course_stage_)
-                < static_cast<std::uint8_t>(CourseStage::hurdles))
-                return 0.68f + course_difficulty_ * 0.72f;
-            return 1.05f + course_difficulty_ * 0.82f;
+            if (course_stage_ == CourseStage::uneven)
+                return 0.82f + course_difficulty_ * 0.88f;
+            if (course_stage_ == CourseStage::hurdles)
+                return 1.05f + course_difficulty_ * 0.95f;
+            return 1.20f + course_difficulty_ * 1.05f;
         }
         [[nodiscard]] float course_progress() const noexcept { return elapsed_seconds_ * course_speed(); }
         [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
@@ -547,6 +646,13 @@ namespace epochrunner::sim
         [[nodiscard]] float collision_count() const noexcept { return collision_count_; }
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
+        [[nodiscard]] float duck_seconds() const noexcept { return duck_seconds_; }
+        [[nodiscard]] bool duck_active() const noexcept { return duck_active_; }
+        [[nodiscard]] std::uint32_t powered_jumps() const noexcept { return powered_jump_count_; }
+        [[nodiscard]] std::uint32_t landed_jumps() const noexcept { return landed_jump_count_; }
+        [[nodiscard]] float maximum_spin_turns() const noexcept { return maximum_spin_turns_; }
+        [[nodiscard]] std::uint32_t spin_landings() const noexcept { return spin_landing_count_; }
+        [[nodiscard]] std::uint32_t obstacles_passed() const noexcept { return obstacles_passed_; }
         [[nodiscard]] std::uint32_t knee_first_faults() const noexcept { return knee_first_faults_; }
         [[nodiscard]] float stance_slip_speed() const noexcept { return stance_slip_speed_; }
         [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
@@ -598,6 +704,7 @@ namespace epochrunner::sim
         std::uint64_t random_state_{ 1 };
         std::array<float, action_count> previous_angles_{};
         std::array<float, action_count> angular_velocities_{};
+        std::array<float, action_count> previous_applied_actions_{};
         Vec2 previous_pelvis_{};
         float elapsed_seconds_{};
         float distance_travelled_{};
@@ -610,6 +717,23 @@ namespace epochrunner::sim
         float collision_count_{};
         float airborne_seconds_{};
         float cumulative_airborne_{};
+        float duck_seconds_{};
+        float duck_depth_{};
+        float current_airborne_rotation_{};
+        float maximum_spin_turns_{};
+        std::uint32_t powered_jump_count_{};
+        std::uint32_t landed_jump_count_{};
+        std::uint32_t spin_landing_count_{};
+        std::uint32_t obstacles_passed_{};
+        int last_passed_feature_sequence_{ course_safe_runway_markers - 1 };
+        bool duck_active_{};
+        bool powered_takeoff_{};
+        bool powered_takeoff_this_step_{};
+        bool powered_landing_this_step_{};
+        bool spin_landing_this_step_{};
+        bool passed_obstacle_this_step_{};
+        bool collision_contact_active_{};
+        bool collision_event_this_step_{};
         float progress_window_seconds_{};
         float progress_window_start_x_{};
         float micro_motion_seconds_{};
@@ -618,6 +742,12 @@ namespace epochrunner::sim
         Vec2 previous_root_for_path_{};
         float last_step_time_{ -100.0f };
         float last_step_x_{};
+        float left_swing_seconds_{};
+        float right_swing_seconds_{};
+        float left_swing_clearance_{};
+        float right_swing_clearance_{};
+        float action_change_energy_{};
+        bool alternating_step_this_step_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
         std::uint32_t progress_window_start_steps_{};

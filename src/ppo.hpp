@@ -2,7 +2,9 @@
 
 #include "simulation.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace epochrunner::rl
@@ -37,6 +40,12 @@ namespace epochrunner::rl
         float evaluation_collisions{};
         float evaluation_airborne_ratio{};
         float evaluation_stride_events{};
+        float evaluation_duck_seconds{};
+        float evaluation_powered_jumps{};
+        float evaluation_jump_landings{};
+        float evaluation_spin_turns{};
+        float evaluation_spin_landings{};
+        float evaluation_obstacles_passed{};
         std::uint32_t evaluation_invalid_runs{};
         bool evaluation_valid{};
 
@@ -58,14 +67,31 @@ namespace epochrunner::rl
         return clamp(0.18f / (1.0f + age / 240.0f), 0.040f, 0.18f);
     }
 
+    [[nodiscard]] inline bool policy_regression_guard(float best_score,
+        float current_score, bool current_valid) noexcept
+    {
+        if (!std::isfinite(best_score))
+            return false;
+        if (!current_valid || !std::isfinite(current_score))
+            return true;
+        const float allowed_drop = std::max(0.12f, std::abs(best_score) * 0.08f);
+        return current_score < best_score - allowed_drop;
+    }
+
     [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,
-        std::uint32_t alternating_steps, float distance, float survival_seconds) noexcept
+        std::uint32_t alternating_steps, float distance, float survival_seconds,
+        float duck_seconds = 0.0f, std::uint32_t landed_jumps = 0u,
+        float maximum_spin_turns = 0.0f, std::uint32_t spin_landings = 0u,
+        std::uint32_t obstacles_passed = 0u) noexcept
     {
         if (!valid_motion)
             return false;
         if (stage == sim::CourseStage::balance)
             return survival_seconds >= 3.0f;
-        return alternating_steps >= 2u && distance >= 0.60f;
+        if (!sim::stage_skill_evidence(stage, alternating_steps, duck_seconds,
+            landed_jumps, maximum_spin_turns, spin_landings, obstacles_passed))
+            return false;
+        return sim::stage_requires_forward_gait(stage) ? distance >= 0.60f : true;
     }
 
     enum class ControllerState : std::uint8_t
@@ -166,6 +192,21 @@ namespace epochrunner::rl
     class PpoTrainer
     {
     public:
+        struct CheckpointData
+        {
+            std::uint64_t rig_signature{};
+            std::vector<float> parameters{};
+            std::vector<float> first_moment{};
+            std::vector<float> second_moment{};
+            std::vector<float> best_parameters{};
+            std::vector<float> reward_history{};
+            std::vector<float> speed_history{};
+            std::uint64_t optimizer_step{};
+            std::uint64_t random_state{};
+            TrainingMetrics metrics{};
+            sim::CourseStage stage{ sim::CourseStage::balance };
+            float difficulty{ 0.25f };
+        };
         explicit PpoTrainer(const sim::CreatureBlueprint& blueprint,
             std::size_t environment_count = 64,
             bool enable_rollout_workers = true);
@@ -183,7 +224,19 @@ namespace epochrunner::rl
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
+        [[nodiscard]] CheckpointData checkpoint_data() const;
+        [[nodiscard]] static bool write_checkpoint_data(const CheckpointData& data,
+            const std::filesystem::path& path, std::string& error);
+        [[nodiscard]] static bool read_checkpoint_data(const std::filesystem::path& path,
+            CheckpointData& data, std::string& error);
+        [[nodiscard]] bool apply_checkpoint_data(CheckpointData data, std::string& error,
+            bool transfer_only = false);
         [[nodiscard]] bool restore_best_policy() noexcept;
+        void begin_staged_update();
+        void compute_staged_advantages();
+        void optimize_staged_update();
+        void finish_staged_update();
+        [[nodiscard]] bool staged_update_active() const noexcept { return staged_update_active_; }
         void train_one_update();
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
@@ -294,6 +347,7 @@ namespace epochrunner::rl
         std::vector<Transition> rollout_{};
         std::vector<float> episode_rewards_{};
         std::vector<float> episode_distances_{};
+        std::vector<std::array<float, sim::action_count>> rollout_previous_actions_{};
         std::vector<float> reward_history_{};
         std::vector<float> speed_history_{};
         std::vector<float> best_parameters_{};
@@ -317,5 +371,9 @@ namespace epochrunner::rl
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
+        RolloutTotals staged_totals_{};
+        bool staged_update_active_{};
+        bool staged_advantages_ready_{};
+        bool staged_optimized_{};
     };
 }

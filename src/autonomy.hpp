@@ -11,6 +11,7 @@
 #include <deque>
 #include <filesystem>
 #include <mutex>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -35,6 +36,8 @@ namespace epochrunner::rl
         double updates_per_second{};
         int speed_mode{ 1 };
         bool worker_busy{};
+        std::string pipeline_stage{ "IDLE" };
+        std::uint32_t pipeline_stage_mask{};
         std::string message{ "LEARNING TO BALANCE" };
     };
 
@@ -62,7 +65,7 @@ namespace epochrunner::rl
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
-        [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
+        [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error);
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
         [[nodiscard]] bool restore_best_policy() noexcept;
@@ -92,7 +95,10 @@ namespace epochrunner::rl
             set_blueprint,
             reset_policy,
             set_exploration,
-            restore_best
+            restore_best,
+            save_checkpoint,
+            apply_checkpoint,
+            apply_autosave
         };
 
         struct PendingCommand
@@ -102,6 +108,13 @@ namespace epochrunner::rl
             bool preserve_policy{};
             std::uint64_t seed{};
             float scalar{};
+            std::filesystem::path path{};
+            std::shared_ptr<PpoTrainer::CheckpointData> checkpoint{};
+            bool transfer_only{};
+            std::uint64_t rig_generation{};
+            std::uint64_t accepted_rig_changes{};
+            std::uint64_t rejected_rig_changes{};
+            int rollback_count{};
         };
 
         struct PublishedSnapshot
@@ -125,8 +138,12 @@ namespace epochrunner::rl
         {
             idle,
             commands,
-            trained,
-            published
+            rollout,
+            advantages,
+            optimizer,
+            evaluation,
+            published,
+            persistence
         };
 
         class TrainingRoutine
@@ -167,8 +184,7 @@ namespace epochrunner::rl
 
         [[nodiscard]] TrainingRoutine training_routine(std::stop_token stop_token);
         void worker_main(std::stop_token stop_token);
-        void perform_training_update();
-        void perform_post_update();
+        void consume_persistence_message();
         void throttle_after_update() const;
 
         void manage_curriculum_locked();
@@ -176,18 +192,51 @@ namespace epochrunner::rl
         [[nodiscard]] float evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const;
         [[nodiscard]] sim::CreatureBlueprint mutate_rig_locked() noexcept;
         void publish_locked();
-        void autosave_locked();
-        void write_state_locked() const;
-        void read_state_locked();
+        void queue_autosave();
+        void queue_checkpoint_save(std::filesystem::path path, PpoTrainer::CheckpointData data);
+        void queue_checkpoint_load(std::filesystem::path path, bool transfer_only);
+        void queue_autosave_load();
+        void persistence_main(std::stop_token stop_token);
         [[nodiscard]] bool stage_mastered_locked() const noexcept;
         void advance_stage_locked();
 
-        mutable std::mutex worker_mutex_{};
         mutable std::mutex snapshot_mutex_{};
         mutable std::mutex command_mutex_{};
         mutable std::mutex wake_mutex_{};
         std::condition_variable_any wake_cv_{};
         std::deque<PendingCommand> command_queue_{};
+
+        enum class PersistenceKind : std::uint8_t
+        {
+            save_checkpoint,
+            save_autosave,
+            load_checkpoint,
+            load_autosave
+        };
+
+        struct PersistenceJob
+        {
+            PersistenceKind kind{ PersistenceKind::save_checkpoint };
+            std::filesystem::path checkpoint_path{};
+            std::filesystem::path rig_path{};
+            std::filesystem::path state_path{};
+            PpoTrainer::CheckpointData checkpoint{};
+            sim::CreatureBlueprint blueprint{};
+            bool transfer_only{};
+            sim::CourseStage stage{ sim::CourseStage::balance };
+            float difficulty{ 0.25f };
+            std::uint64_t rig_generation{};
+            std::uint64_t accepted_rig_changes{};
+            std::uint64_t rejected_rig_changes{};
+            int rollback_count{};
+        };
+
+        mutable std::mutex persistence_mutex_{};
+        std::condition_variable_any persistence_cv_{};
+        std::deque<PersistenceJob> persistence_queue_{};
+        std::string persistence_message_{};
+        std::uint64_t persistence_message_serial_{};
+        std::uint64_t consumed_persistence_message_serial_{};
 
         PpoTrainer worker_;
         PpoTrainer live_;
@@ -219,6 +268,8 @@ namespace epochrunner::rl
         int degradation_streak_{};
         int rollback_count_{};
         std::string worker_message_{ "LEARNING TO BALANCE" };
+        std::string worker_pipeline_stage_{ "IDLE" };
+        std::uint32_t worker_pipeline_stage_mask_{};
 
         std::chrono::steady_clock::time_point rate_window_started_{ std::chrono::steady_clock::now() };
         std::uint64_t rate_window_updates_{};
@@ -230,5 +281,6 @@ namespace epochrunner::rl
         std::atomic_bool worker_busy_{ false };
         std::atomic_int64_t last_update_nanoseconds_{};
         std::jthread worker_thread_{};
+        std::jthread persistence_thread_{};
     };
 }

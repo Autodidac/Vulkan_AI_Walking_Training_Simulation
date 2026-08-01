@@ -19,17 +19,28 @@ namespace epochrunner::rl
         case sim::CourseStage::balance:
             return metrics.evaluation_survival >= 10.0f && metrics.evaluation_score >= 0.55f;
         case sim::CourseStage::walk:
-            return metrics.evaluation_distance >= 4.0f && metrics.evaluation_stride_events >= 4.0f;
+            return metrics.evaluation_duck_seconds >= 2.0f
+                && metrics.evaluation_survival >= 8.0f;
         case sim::CourseStage::ramps:
-            return metrics.evaluation_distance >= 5.0f && metrics.evaluation_survival >= 8.0f;
+            return metrics.evaluation_jump_landings >= 2.0f
+                && metrics.evaluation_powered_jumps >= 2.0f;
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 6.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_distance >= 5.0f
+                && metrics.evaluation_stride_events >= 4.0f
+                && metrics.evaluation_speed >= 0.65f;
         case sim::CourseStage::hurdles:
-            return metrics.evaluation_distance >= 7.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_distance >= 7.0f
+                && metrics.evaluation_obstacles_passed >= 2.0f
+                && (metrics.evaluation_jump_landings >= 1.0f
+                    || metrics.evaluation_duck_seconds >= 0.75f);
         case sim::CourseStage::duck_bars:
-            return metrics.evaluation_distance >= 8.0f && metrics.evaluation_collisions <= 1.0f;
+            return metrics.evaluation_spin_landings >= 1.0f
+                && metrics.evaluation_spin_turns >= 0.85f
+                && metrics.evaluation_spin_turns <= 3.05f;
         case sim::CourseStage::moving_hazards:
-            return metrics.evaluation_distance >= 9.0f && metrics.evaluation_collisions <= 2.0f;
+            return metrics.evaluation_distance >= 9.0f
+                && metrics.evaluation_obstacles_passed >= 2.0f
+                && metrics.evaluation_collisions <= 4.0f;
         }
         return false;
     }
@@ -44,7 +55,7 @@ namespace epochrunner::rl
         if (worker_.has_best_policy() && metrics.best_update != last_saved_best_update_)
         {
             last_saved_best_update_ = metrics.best_update;
-            autosave_locked();
+            queue_autosave();
         }
 
         mastery_streak_ = stage_mastered_locked() ? mastery_streak_ + 1 : 0;
@@ -96,7 +107,7 @@ namespace epochrunner::rl
             worker_message_ = std::format("FULL COURSE MASTERED - DIFFICULTY {:.0f}%", difficulty_ * 100.0f);
         }
         worker_.set_course(stage_, difficulty_, false);
-        autosave_locked();
+        queue_autosave();
     }
 
     float AutonomousTrainer::evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const
@@ -128,8 +139,11 @@ namespace epochrunner::rl
                     if (result.terminated)
                         break;
                 }
-                const bool gait_valid = stage == sim::CourseStage::balance || environment.alternating_steps() >= 3;
-                if (!environment.valid_motion() || !gait_valid)
+                const bool skill_valid = sim::stage_skill_evidence(stage,
+                    environment.alternating_steps(), environment.duck_seconds(),
+                    environment.landed_jumps(), environment.maximum_spin_turns(),
+                    environment.spin_landings(), environment.obstacles_passed());
+                if (!environment.valid_motion() || !skill_valid)
                 {
                     scores[agent] = -std::numeric_limits<float>::infinity();
                     return;
@@ -137,8 +151,12 @@ namespace epochrunner::rl
                 scores[agent] = reward + environment.distance_travelled() * 0.75f
                     + environment.elapsed_seconds() * 0.03f
                     + static_cast<float>(environment.alternating_steps()) * 0.03f
-                    - environment.collision_count() * 0.30f
-                    - environment.airborne_ratio() * 1.00f
+                    + environment.duck_seconds() * 0.06f
+                    + static_cast<float>(environment.landed_jumps()) * 0.16f
+                    + std::min(environment.maximum_spin_turns(), 3.0f) * 0.18f
+                    + static_cast<float>(environment.obstacles_passed()) * 0.28f
+                    - environment.collision_count() * 0.10f
+                    - environment.airborne_ratio() * 0.20f
                     - environment.body_rolling_seconds() * 2.00f;
             });
         }
@@ -207,8 +225,9 @@ namespace epochrunner::rl
         else
         {
             const float delta = direction * 0.012f;
-            for (const sim::MotorConstraint& motor : candidate.motors)
+            for (std::size_t motor_index = 0; motor_index < candidate.active_motor_count; ++motor_index)
             {
+                const sim::MotorConstraint& motor = candidate.motors[motor_index];
                 if (motor.pivot < candidate.nodes.size() && motor.pivot != candidate.root_node)
                     candidate.nodes[motor.pivot].y = clamp(candidate.nodes[motor.pivot].y + delta, 0.20f, 5.5f);
             }
@@ -217,7 +236,7 @@ namespace epochrunner::rl
         std::array<float, sim::action_count> negative{};
         std::array<float, sim::action_count> positive{};
         std::array<float, sim::action_count> power{};
-        for (std::size_t index = 0; index < candidate.motors.size(); ++index)
+        for (std::size_t index = 0; index < candidate.active_motor_count; ++index)
         {
             negative[index] = std::max(2.0f * pi / 180.0f,
                 candidate.motors[index].neutral_angle - candidate.motors[index].minimum_angle);
@@ -226,7 +245,7 @@ namespace epochrunner::rl
             power[index] = candidate.motors[index].strength;
         }
         candidate.rebuild_rest_lengths();
-        for (std::size_t index = 0; index < candidate.motors.size(); ++index)
+        for (std::size_t index = 0; index < candidate.active_motor_count; ++index)
         {
             sim::MotorConstraint& motor = candidate.motors[index];
             motor.neutral_angle = candidate.rest_joint_angle(index);
@@ -253,7 +272,7 @@ namespace epochrunner::rl
             degradation_streak_ = 0;
             worker_message_ = std::format("RIG GENERATION {} ACCEPTED  {:+.3f} VALID SCORE",
                 rig_generation_, candidate_score - baseline);
-            autosave_locked();
+            queue_autosave();
         }
         else
         {

@@ -1,6 +1,7 @@
 #include "autonomy.hpp"
 #include "ppo.hpp"
 #include "simulation.hpp"
+#include "ui_layout.hpp"
 
 #include <array>
 #include <chrono>
@@ -27,14 +28,42 @@ int main()
 {
     using namespace epochrunner;
 
+    require(ui_layout::live_layout_valid(1100.0f, 902.0f),
+        "supported minimum live layout overlaps its panel, telemetry, or PIP");
+    require(!ui_layout::supported_window(1099.0f, 902.0f)
+            && !ui_layout::supported_window(1100.0f, 901.0f),
+        "undersized windows are incorrectly treated as fully supported");
+    const ui_layout::Box minimum_content = ui_layout::content_box(1100.0f, 902.0f);
+    const ui_layout::Box minimum_world = ui_layout::live_world_box(minimum_content);
+    const ui_layout::Box minimum_pip = ui_layout::training_pip_box(minimum_world);
+    require(ui_layout::contains(minimum_world, minimum_pip),
+        "training PIP escapes the world viewport");
+    require(!ui_layout::overlaps(minimum_pip,
+                ui_layout::primary_telemetry_box(minimum_world))
+            && !ui_layout::overlaps(minimum_pip,
+                ui_layout::bottom_telemetry_box(minimum_world)),
+        "training PIP overlaps primary telemetry at the supported minimum window");
+
     require(sim::classify_motion_gate(1.0f, 50.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::overspeed, "50 km/h hard gate missing");
     require(sim::classify_motion_gate(-0.2f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
-        == sim::InvalidMotion::flipped, "flip hard gate missing");
+        == sim::InvalidMotion::flipped, "flip hard gate missing outside flip lessons");
+    require(sim::classify_motion_gate(-0.2f, 0.0f, { 0.0f, 4.0f }, 0.4f, 2.7f, 0.0f,
+            false, sim::CourseStage::duck_bars, 0.5f)
+        == sim::InvalidMotion::none, "controlled flip lesson still rejects an airborne flip");
+    require(sim::classify_motion_gate(0.4f, 0.0f, { 0.0f, 4.0f }, 1.2f, 2.7f, 0.0f,
+            false, sim::CourseStage::duck_bars, 3.21f)
+        == sim::InvalidMotion::excessive_spins, "more than three spins is not rejected");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.8f, 0.7f, 0.0f, false)
-        == sim::InvalidMotion::sustained_flight, "flight hard gate missing");
+        == sim::InvalidMotion::sustained_flight, "unpowered flight hard gate missing");
+    require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
+        "joint-powered jump is not recognized");
+    require(!sim::powered_joint_launch(sim::CourseStage::walk, 1.0f, 0.08f),
+        "duck lesson incorrectly enables flight");
+    require(sim::allowed_airtime_for_stage(sim::CourseStage::duck_bars, true) > 2.0f,
+        "controlled flip lesson does not allow bounded powered airtime");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 3.0f, false)
         == sim::InvalidMotion::micro_motion, "micro-motion gate missing");
     require(!sim::recovery_should_start(true, 0.95f, false, false),
@@ -61,6 +90,10 @@ int main()
         "in-place foot twitch counted as walking");
     require(sim::qualifies_alternating_step(-1, 1, 0.30f, 0.08f),
         "real spaced alternating step was rejected");
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.03f, 0.02f),
+        "tiny contact wiggle still counts as a supported walking step");
+    require(sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.16f, 0.12f),
+        "real lifted swing and landing is rejected as a walking step");
 
     const sim::CourseFeature rock_feature{
         sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
@@ -94,6 +127,22 @@ int main()
         "course debris does not advance in world space solely from course progress");
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
+    require(sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
+        && sim::course_stage_name(sim::CourseStage::walk) == "2. DUCK / RECOVER"
+        && sim::course_stage_name(sim::CourseStage::ramps) == "3. JUMP / LAND"
+        && sim::course_stage_name(sim::CourseStage::uneven) == "4. WALK / RUN"
+        && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING DUCK / JUMP"
+        && sim::course_stage_name(sim::CourseStage::duck_bars) == "6. CONTROLLED FLIPS"
+        && sim::course_stage_name(sim::CourseStage::moving_hazards) == "7. MIXED GOAL COURSE",
+        "skill curriculum is not ordered by prerequisite");
+    require(sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
+        "duck evidence cannot complete the duck lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
+        "landed jump cannot complete the jump lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
+        "controlled landed flip cannot complete the flip lesson");
+    require(!sim::stage_skill_evidence(sim::CourseStage::moving_hazards, 2u, 0.0f, 0u, 0.0f, 0u, 0u),
+        "mixed goal lesson can complete without passing an obstacle");
     require(sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 5)
             == sim::CourseFeatureKind::rock
         && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 6)
@@ -156,9 +205,17 @@ int main()
         "best-result imitation guide does not decay into a light prior");
     require(rl::self_imitation_prior_weight(0, 0) == 0.0f,
         "empty imitation memory still changes PPO gradients");
-    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 3, 1.2f, 4.0f),
+    require(rl::policy_regression_guard(10.0f, 8.5f, true),
+        "large valid-policy degradation does not restore the champion");
+    require(rl::policy_regression_guard(10.0f, 10.5f, false),
+        "invalid policy does not restore the champion");
+    require(!rl::policy_regression_guard(10.0f, 9.4f, true),
+        "small exploration change triggers an unnecessary champion rollback");
+    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
         "valid stepped best result cannot seed self-imitation");
-    require(!rl::elite_motion_eligible(sim::CourseStage::walk, false, 8, 12.0f, 20.0f),
+    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+        "valid duck result cannot seed self-imitation");
+    require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
         "near obstacle does not activate full leg-lift training");
@@ -174,6 +231,8 @@ int main()
         "double-supported rolling around stationary orange foot nodes is not detected");
     require(!sim::foot_pivot_rolling_motion(0.24f, true, false, 0.01f, 0.18f, 0.50f),
         "single-support lifted-foot walking is incorrectly rejected as foot-node rolling");
+    require(sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f, 0.02f),
+        "straight double-supported skating around planted feet is not rejected");
     require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
         "long flat sand-sim patrol zones are missing");
     require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),
@@ -198,7 +257,7 @@ int main()
     {
         require(preset.valid(), "preset is structurally invalid");
         require(preset.signature() != 0, "preset signature is empty");
-        for (std::size_t motor_index = 0; motor_index < preset.motors.size(); ++motor_index)
+        for (std::size_t motor_index = 0; motor_index < preset.active_motor_count; ++motor_index)
         {
             const sim::MotorConstraint& motor = preset.motors[motor_index];
             require(motor.minimum_angle <= motor.neutral_angle && motor.neutral_angle <= motor.maximum_angle,
@@ -217,22 +276,37 @@ int main()
     require(!disconnected.valid(), "enabled motor without direct A-pivot-C bones was accepted");
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
-    require(humanoid.nodes.size() == 11, "human-calibrated rig should include passive heel/toe feet");
-    require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f, "uploaded humanoid pelvis calibration not applied");
-    require(humanoid.nodes.size() == 11, "humanoid passive heel/toe feet were not created");
-    require(humanoid.bones.size() == 12, "humanoid feet are not structurally connected");
-    for (std::size_t motor_index = 0; motor_index < humanoid.motors.size(); ++motor_index)
+    require(humanoid.nodes.size() >= 17,
+        "human-calibrated rig should include passive heel/toe feet and articulated arms");
+    require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
+        "uploaded humanoid pelvis calibration not applied");
+    require(humanoid.bones.size() >= 17,
+        "humanoid feet or arms are not structurally connected");
+    require(humanoid.active_motor_count == sim::action_count,
+        "humanoid does not expose independent shoulder and elbow motors");
+    for (std::size_t motor_index = 0; motor_index < humanoid.active_motor_count; ++motor_index)
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
-        const float driven_arm = length(humanoid.nodes[motor.c] - humanoid.nodes[motor.pivot]);
-        const float expected_linear_gain = (motor_index % 2u) == 0u ? 0.045f : 0.051f;
-        const float expected_travel = (motor_index % 2u) == 0u ? 36.0f : 58.0f;
-        require(std::abs(motor.strength * std::max(0.75f, driven_arm) - expected_linear_gain) < 0.003f,
-            "humanoid motor does not use the bounded obstacle-capable effective gain");
-        require(std::abs((motor.neutral_angle - motor.minimum_angle) * 180.0f / pi - expected_travel) < 0.05f,
-            "obstacle-capable backward travel was not applied");
-        require(std::abs((motor.maximum_angle - motor.neutral_angle) * 180.0f / pi - expected_travel) < 0.05f,
-            "obstacle-capable forward travel was not applied");
+        require(motor.enabled, "humanoid active motor is disabled");
+        if (motor_index < 4u)
+        {
+            const float driven_arm = length(humanoid.nodes[motor.c] - humanoid.nodes[motor.pivot]);
+            const float expected_linear_gain = (motor_index % 2u) == 0u ? 0.045f : 0.051f;
+            const float expected_travel = (motor_index % 2u) == 0u ? 36.0f : 58.0f;
+            require(std::abs(motor.strength * std::max(0.75f, driven_arm) - expected_linear_gain) < 0.003f,
+                "humanoid leg motor does not use the bounded obstacle-capable effective gain");
+            require(std::abs((motor.neutral_angle - motor.minimum_angle) * 180.0f / pi
+                - expected_travel) < 0.05f, "obstacle-capable backward leg travel was not applied");
+            require(std::abs((motor.maximum_angle - motor.neutral_angle) * 180.0f / pi
+                - expected_travel) < 0.05f, "obstacle-capable forward leg travel was not applied");
+        }
+        else
+        {
+            require((motor.maximum_angle - motor.minimum_angle) * 180.0f / pi >= 180.0f,
+                "humanoid arm motor lacks useful acrobatic travel");
+            require(motor.strength <= 0.040f,
+                "humanoid arm motor is too strong for balance and controlled flips");
+        }
     }
 
     const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
@@ -277,8 +351,10 @@ int main()
         sim::Environment environment{ humanoid, 42u + stage_index };
         const auto stage = static_cast<sim::CourseStage>(stage_index);
         environment.set_course(stage, 0.45f);
-        if (stage >= sim::CourseStage::hurdles)
-            require(!environment.course_features().empty(), "obstacle curriculum stage has no course features");
+        if (stage == sim::CourseStage::hurdles
+            || stage == sim::CourseStage::moving_hazards)
+            require(!environment.course_features().empty(),
+                "moving obstacle curriculum stage has no course features");
         const std::array<float, sim::action_count> zero_actions{};
         for (int frame = 0; frame < 120; ++frame)
         {

@@ -1,5 +1,12 @@
 # EpochRunner
 
+## Ordered skill curriculum
+
+Training now advances through stand, duck/recover, jump/land, walk/run, moving duck/jump, controlled flips, and a mixed goal course. Hazard contact is legal: collision applies physics and a bounded event penalty, while passing the obstacle earns progress. Joint-powered launches receive bounded airtime, controlled airborne flips may reach three spins, and a fourth spin, ground rolling, hovering, or unpowered sustained flight remains invalid.
+
+Walking convergence now uses phase observations, temporally smoothed actions, and a decaying early gait guide. A step counts only after real swing airtime and clearance, so foot-contact wiggles and double-supported skating cannot masquerade as gait. PPO updates are less destructive, exploration is bounded, and every substantial or invalid regression restores the best valid champion immediately instead of allowing late training to degrade beyond it.
+
+
 EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.5 completes the guided sand-simulation enemy pass: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
 
 ## Guided multi-leg training release

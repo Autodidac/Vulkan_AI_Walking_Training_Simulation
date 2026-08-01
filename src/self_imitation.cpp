@@ -59,14 +59,20 @@ namespace epochrunner::rl
 
             if (!elite_motion_eligible(course_stage_, environment.valid_motion(),
                 environment.alternating_steps(), environment.distance_travelled(),
-                environment.elapsed_seconds()))
+                environment.elapsed_seconds(), environment.duck_seconds(),
+                environment.landed_jumps(), environment.maximum_spin_turns(),
+                environment.spin_landings(), environment.obstacles_passed()))
                 continue;
 
             const float score = reward + environment.distance_travelled() * 0.75f
                 + environment.elapsed_seconds() * 0.025f
                 + static_cast<float>(environment.alternating_steps()) * 0.03f
-                - environment.collision_count() * 0.18f
-                - environment.airborne_ratio() * 0.75f;
+                + environment.duck_seconds() * 0.08f
+                + static_cast<float>(environment.landed_jumps()) * 0.20f
+                + std::min(environment.maximum_spin_turns(), 3.0f) * 0.25f
+                + static_cast<float>(environment.obstacles_passed()) * 0.35f
+                - environment.collision_count() * 0.10f
+                - environment.airborne_ratio() * 0.20f;
             if (score > best_score && !trajectory.empty())
             {
                 best_score = score;
