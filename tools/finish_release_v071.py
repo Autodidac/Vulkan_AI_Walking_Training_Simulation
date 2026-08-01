@@ -71,6 +71,7 @@ new_shader_block = '''    find_package(SDL3 CONFIG REQUIRED)
         set(output "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/${shader}.spv")
         add_custom_command(
             OUTPUT "${output}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${EPOCHRUNNER_SHADER_OUTPUT_DIR}"
             COMMAND "${Vulkan_GLSLC_EXECUTABLE}" "${source}" -o "${output}"
             DEPENDS "${source}"
             VERBATIM
