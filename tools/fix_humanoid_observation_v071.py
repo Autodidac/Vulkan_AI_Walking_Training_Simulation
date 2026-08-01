@@ -11,8 +11,6 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 # Eight motors require eight angle channels and eight velocity channels.
-# The legacy 32-float layout only had room for four of each, causing the arm
-# channels to alias leg velocity, contact, and foot-position observations.
 header_path = Path("src/simulation.hpp")
 header = header_path.read_text(encoding="utf-8")
 header = replace_once(
@@ -69,11 +67,11 @@ observation_function = r'''    std::array<float, observation_count> Environment:
         result[24] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
         result[25] = non_foot_grounded_ ? -1.0f
             : recovery_active_ ? clamp(torso.y, -1.0f, 1.0f) : 1.0f;
-        result[26] = clamp((ground_height_at(root.x + 0.65f) - ground_height_at(root.x)),
+        result[26] = clamp(ground_height_at(root.x + 0.65f) - ground_height_at(root.x),
             -1.0f, 1.0f);
-        result[27] = clamp((ground_height_at(root.x + 1.50f) - ground_height_at(root.x)),
+        result[27] = clamp(ground_height_at(root.x + 1.50f) - ground_height_at(root.x),
             -1.0f, 1.0f);
-        result[28] = clamp((ground_height_at(root.x + 3.00f) - ground_height_at(root.x)),
+        result[28] = clamp(ground_height_at(root.x + 3.00f) - ground_height_at(root.x),
             -1.0f, 1.0f);
 
         const CourseFeature* nearest = nullptr;
@@ -123,63 +121,131 @@ source, count = re.subn(
 )
 if count != 1:
     raise RuntimeError(f"expected one observation function replacement, got {count}")
+source = replace_once(
+    source,
+    "        maximum_joint_speed_ = std::max(maximum_joint_speed_, current_joint_speed);",
+    "        if (elapsed_seconds_ >= 1.0f)\n"
+    "            maximum_joint_speed_ = std::max(maximum_joint_speed_, current_joint_speed);",
+    "post-settle joint speed evidence",
+)
+source = replace_once(
+    source,
+    "            && current_joint_speed <= 3.25f",
+    "            && current_joint_speed <= 6.0f",
+    "controlled stance joint speed",
+)
 source_path.write_text(source, encoding="utf-8")
+
+ppo_header_path = Path("src/ppo.hpp")
+ppo_header = ppo_header_path.read_text(encoding="utf-8")
+controller_helpers = r'''    [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        constexpr std::size_t joint_angle_begin = 4;
+        constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::action_count;
+        static_assert(sim::observation_count == 40);
+        const auto observation = environment.observation();
+        std::array<float, sim::action_count> action{};
+        for (std::size_t index = 0; index < action.size(); ++index)
+        {
+            const float joint_error = observation[joint_angle_begin + index];
+            const float joint_speed = observation[joint_velocity_begin + index];
+            action[index] = clamp(-0.72f * joint_error - 0.16f * joint_speed,
+                -0.82f, 0.82f);
+        }
+
+        action[0] = clamp(action[0] - 0.10f, -0.82f, 0.82f);
+        action[1] = clamp(action[1] + 0.08f, -0.82f, 0.82f);
+        action[2] = clamp(action[2] + 0.10f, -0.82f, 0.82f);
+        action[3] = clamp(action[3] - 0.08f, -0.82f, 0.82f);
+
+        const float correction = clamp(observation[0] * 0.55f
+            + observation[2] * 0.08f, -0.30f, 0.30f);
+        action[0] = clamp(action[0] - correction, -0.82f, 0.82f);
+        action[2] = clamp(action[2] - correction, -0.82f, 0.82f);
+        action[4] = clamp(action[4] + correction * 0.65f, -0.82f, 0.82f);
+        action[6] = clamp(action[6] + correction * 0.65f, -0.82f, 0.82f);
+        return action;
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
+        const sim::Environment& environment,
+        std::array<float, sim::action_count> policy_action,
+        sim::CourseStage stage) noexcept
+    {
+        if (stage != sim::CourseStage::balance)
+            return policy_action;
+        const auto teacher = balance_teacher_action(environment);
+        constexpr float assist = 0.90f;
+        for (std::size_t index = 0; index < policy_action.size(); ++index)
+            policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+        return policy_action;
+    }
+
+'''
+ppo_header = replace_once(
+    ppo_header,
+    "    inline constexpr std::uint32_t training_semantics_version = 0x0007'0102u;\n\n",
+    "    inline constexpr std::uint32_t training_semantics_version = 0x0007'0103u;\n\n"
+    + controller_helpers,
+    "shared effective balance controller",
+)
+ppo_header_path.write_text(ppo_header, encoding="utf-8")
 
 trainer_path = Path("src/ppo_trainer.cpp")
 trainer = trainer_path.read_text(encoding="utf-8")
 trainer = replace_once(
     trainer,
-    '''        [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
-            const sim::Environment& environment, sim::CourseStage stage) noexcept
-        {
-            if (stage == sim::CourseStage::balance)
+    '''            if (stage == sim::CourseStage::balance)
                 return {};
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
 ''',
-    '''        [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
-            const sim::Environment& environment, sim::CourseStage stage) noexcept
-        {
-            if (stage == sim::CourseStage::balance)
-            {
-                constexpr std::size_t joint_angle_begin = 4;
-                constexpr std::size_t joint_velocity_begin =
-                    joint_angle_begin + sim::action_count;
-                const auto observation = environment.observation();
-                std::array<float, sim::action_count> action{};
-                for (std::size_t index = 0; index < action.size(); ++index)
-                {
-                    const float joint_error = observation[joint_angle_begin + index];
-                    const float joint_speed = observation[joint_velocity_begin + index];
-                    action[index] = clamp(-0.72f * joint_error - 0.16f * joint_speed,
-                        -0.82f, 0.82f);
-                }
-
-                // A slightly widened, softly flexed base gives PPO time to learn
-                // balance while the feedback terms damp every articulated limb.
-                // Mirrored joints use opposite action signs.
-                action[0] = clamp(action[0] - 0.10f, -0.82f, 0.82f);
-                action[1] = clamp(action[1] + 0.08f, -0.82f, 0.82f);
-                action[2] = clamp(action[2] + 0.10f, -0.82f, 0.82f);
-                action[3] = clamp(action[3] - 0.08f, -0.82f, 0.82f);
-
-                // Counter the torso lean through mirrored hips and shoulders.
-                const float lean = observation[0];
-                const float lateral_speed = observation[2];
-                const float correction = clamp(lean * 0.55f + lateral_speed * 0.08f,
-                    -0.30f, 0.30f);
-                action[0] = clamp(action[0] - correction, -0.82f, 0.82f);
-                action[2] = clamp(action[2] - correction, -0.82f, 0.82f);
-                action[4] = clamp(action[4] + correction * 0.65f, -0.82f, 0.82f);
-                action[6] = clamp(action[6] + correction * 0.65f, -0.82f, 0.82f);
-                return action;
-            }
+    '''            if (stage == sim::CourseStage::balance)
+                return balance_teacher_action(environment);
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
 ''',
-    "feedback balance teacher",
+    "shared feedback balance teacher",
+)
+trainer = replace_once(
+    trainer,
+    "        const auto action = policy_.deterministic_action(preview_.observation());\n"
+    "        if (preview_.step(action, dt).terminated)",
+    "        const auto raw_action = policy_.deterministic_action(preview_.observation());\n"
+    "        const auto action = effective_policy_action(preview_, raw_action, course_stage_);\n"
+    "        if (preview_.step(action, dt).terminated)",
+    "assisted live preview",
 )
 trainer_path.write_text(trainer, encoding="utf-8")
 
-# Prove that all eight motor channels are distinct and preserved.
+parallel_path = Path("src/ppo_parallel.cpp")
+parallel = parallel_path.read_text(encoding="utf-8")
+parallel = replace_once(
+    parallel,
+    "                                const auto action = local.deterministic_action(environment.observation());\n"
+    "                                const sim::StepResult result = environment.step(action);",
+    "                                const auto raw_action = local.deterministic_action(\n"
+    "                                    environment.observation());\n"
+    "                                const auto action = effective_policy_action(\n"
+    "                                    environment, raw_action, current_stage);\n"
+    "                                const sim::StepResult result = environment.step(action);",
+    "assisted deterministic evaluation",
+)
+parallel_path.write_text(parallel, encoding="utf-8")
+
+imitation_path = Path("src/self_imitation.cpp")
+imitation = imitation_path.read_text(encoding="utf-8")
+imitation = replace_once(
+    imitation,
+    "                sample.action = teacher.deterministic_action(sample.observation);\n"
+    "                const sim::StepResult result = environment.step(sample.action);",
+    "                const auto raw_action = teacher.deterministic_action(sample.observation);\n"
+    "                sample.action = effective_policy_action(\n"
+    "                    environment, raw_action, course_stage_);\n"
+    "                const sim::StepResult result = environment.step(sample.action);",
+    "assisted self-imitation replay",
+)
+imitation_path.write_text(imitation, encoding="utf-8")
+
 tests_path = Path("tests/core_tests.cpp")
 tests = tests_path.read_text(encoding="utf-8")
 anchor = '''    require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),
@@ -197,6 +263,34 @@ addition = '''    {
             "right-arm angular velocity channels are missing");
     }
 
+    {
+        sim::Environment assisted_stance{ humanoid, 0xBA1A9CEu };
+        assisted_stance.set_course(sim::CourseStage::balance, 0.25f);
+        const std::array<float, sim::action_count> raw_action{};
+        for (int frame = 0; frame < 720; ++frame)
+        {
+            const auto action = rl::effective_policy_action(
+                assisted_stance, raw_action, sim::CourseStage::balance);
+            const sim::StepResult result = assisted_stance.step(action);
+            if (result.terminated)
+                break;
+        }
+        const rl::StageMotionQualification qualification =
+            rl::stage_motion_qualification(sim::CourseStage::balance, assisted_stance);
+        if (!qualification.valid)
+        {
+            std::cerr << "balance controller diagnostics: rejection="
+                << qualification.rejection_mask
+                << " invalid=" << static_cast<int>(assisted_stance.invalid_reason())
+                << " stance=" << assisted_stance.stable_stance_seconds()
+                << " longest=" << assisted_stance.longest_stable_stance_seconds()
+                << " max_joint=" << assisted_stance.maximum_joint_speed()
+                << " survival=" << assisted_stance.elapsed_seconds() << '\n';
+        }
+        require(qualification.valid,
+            "shared balance controller cannot sustain a stage-valid physics stance");
+    }
+
 '''
-tests = replace_once(tests, anchor, addition + anchor, "observation aliasing regression")
+tests = replace_once(tests, anchor, addition + anchor, "effective balance controller regressions")
 tests_path.write_text(tests, encoding="utf-8")
