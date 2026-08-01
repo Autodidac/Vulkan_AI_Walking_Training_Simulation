@@ -6,6 +6,7 @@ on:
       - feature/mission-cache-completion
     paths:
       - tools/patch_flat_foot_contacts.py
+      - tools/repair_flat_foot_driver.py
       - .github/workflows/flat-foot-validation.yml
 
 permissions:
@@ -29,6 +30,8 @@ jobs:
       - name: Apply flat-foot anti-rolling patch
         shell: pwsh
         run: |
+          python tools/repair_flat_foot_driver.py
+          if ($LASTEXITCODE -ne 0) { throw "Flat-foot driver repair failed" }
           python tools/patch_flat_foot_contacts.py
           if ($LASTEXITCODE -ne 0) { throw "Flat-foot integration failed" }
           git diff --check
@@ -78,11 +81,12 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item tools/patch_flat_foot_contacts.py
+          Remove-Item tools/repair_flat_foot_driver.py
           Remove-Item .github/workflows/flat-foot-validation.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add MISSIONS.md src/app.cpp src/simulation.cpp src/simulation.hpp tests/core_tests.cpp
-          git add -u tools/patch_flat_foot_contacts.py .github/workflows/flat-foot-validation.yml
+          git add -u tools/patch_flat_foot_contacts.py tools/repair_flat_foot_driver.py .github/workflows/flat-foot-validation.yml
           git commit -m "Replace orange foot wheels with flat locked soles"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested flat-foot source" }
           git push origin HEAD:feature/mission-cache-completion
