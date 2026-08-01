@@ -241,6 +241,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
           git rm -f --ignore-unmatch .github/workflows/finish-v071.yml
+          git rm -f --ignore-unmatch .github/workflows/kick-v071.yml
           git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
           git rm -f --ignore-unmatch tools/refine_training_quality_v071.py
           git rm -f --ignore-unmatch tools/write_missioncache_v071.py
@@ -358,3 +359,5 @@ jobs:
           git -C $statusDir commit -m "Record v0.7.1 Windows validation failure"
           git -C $statusDir push origin HEAD:main
           git worktree remove --force $statusDir
+
+# checkpoint-anchor correction trigger
