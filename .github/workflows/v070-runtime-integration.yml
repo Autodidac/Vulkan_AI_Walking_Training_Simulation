@@ -6,6 +6,7 @@ on:
       - work/mission-cache-completion
     paths:
       - tools/integrate_v070_runtime.py
+      - tools/integrate_v070_fixups.py
       - tests/runtime_pipeline_tests.cpp
       - .github/workflows/v070-runtime-integration.yml
 
@@ -24,6 +25,7 @@ jobs:
       - name: Integrate runtime completion
         run: |
           python tools/integrate_v070_runtime.py
+          python tools/integrate_v070_fixups.py
           git diff --check
 
       - name: Configure Linux CPU release
@@ -58,6 +60,7 @@ jobs:
       - name: Commit exact Linux-tested source
         run: |
           rm tools/integrate_v070_runtime.py
+          rm tools/integrate_v070_fixups.py
           rm .github/workflows/v070-runtime-integration.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
