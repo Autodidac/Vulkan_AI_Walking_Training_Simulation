@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - tools/complete_missioncache_v071.py
+      - tools/apply_training_quality_v071.py
       - .github/workflows/complete-missioncache-v071.yml
 
 concurrency:
@@ -30,9 +30,9 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Materialize v0.7.1 source
+      - name: Materialize strict training-quality source
         run: |
-          python3 tools/complete_missioncache_v071.py apply
+          python3 tools/apply_training_quality_v071.py apply
           git diff --check
 
       - name: Install GCC 14 toolchain
@@ -51,7 +51,7 @@ jobs:
       - name: Build Linux tests
         run: cmake --build build/linux-v071 --parallel 2
 
-      - name: Run Linux tests
+      - name: Run Linux deterministic and bounded-training tests
         run: ctest --test-dir build/linux-v071 --output-on-failure -V
 
   windows-release:
@@ -63,14 +63,14 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Materialize v0.7.1 source
+      - name: Materialize strict training-quality source
         shell: pwsh
         run: |
-          python tools/complete_missioncache_v071.py apply
-          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 materialization failed" }
+          python tools/apply_training_quality_v071.py apply
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 training-quality materialization failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
-          Copy-Item tools/complete_missioncache_v071.py "$env:RUNNER_TEMP/complete_missioncache_v071.py" -Force
+          Copy-Item tools/apply_training_quality_v071.py "$env:RUNNER_TEMP/apply_training_quality_v071.py" -Force
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -85,8 +85,9 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-quality-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            epochrunner-v071-${{ runner.os }}-
             epochrunner-v070-${{ runner.os }}-
             epochrunner-v066-${{ runner.os }}-
 
@@ -103,7 +104,7 @@ jobs:
       - name: Build full SDL3 Vulkan EpochGui application
         run: cmake --build --preset windows-release
 
-      - name: Run Windows tests
+      - name: Run Windows deterministic, bounded-training, concurrency, and UI tests
         run: ctest --preset windows-release --output-on-failure -V
 
       - name: Verify executable and Vulkan path
@@ -114,14 +115,14 @@ jobs:
           build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
           if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
 
-      - name: Finalize validated source
+      - name: Commit exact tested source
         id: source
         shell: pwsh
         env:
           RUN_ID: ${{ github.run_id }}
           TRIGGER_SHA: ${{ github.sha }}
         run: |
-          python tools/complete_missioncache_v071.py validate --run-id $env:RUN_ID
+          python tools/apply_training_quality_v071.py validate --run-id $env:RUN_ID
           if ($LASTEXITCODE -ne 0) { throw "Mission validation finalization failed" }
 
           git fetch origin main
@@ -132,13 +133,20 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/complete-missioncache-v071.yml
-          git rm tools/complete_missioncache_v071.py
-          git rm validation/v0.7.1-release-lock.md
-          git add CMakeLists.txt src/simulation.cpp src/simulation.hpp src/app.cpp `
+          git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
+          git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
+          git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
+          git rm -f --ignore-unmatch validation/v0.7.1-release-lock.md
+          git rm -f --ignore-unmatch validation/v0.7.1-failure.md
+          git rm -f --ignore-unmatch validation/v0.7.1-failure.log
+          git add CMakeLists.txt `
+            src/simulation.cpp src/simulation.hpp `
+            src/ppo.hpp src/ppo_trainer.cpp src/ppo_parallel.cpp src/self_imitation.cpp `
+            src/training_checkpoint.cpp src/autonomy_curriculum.cpp `
+            src/autonomy_persistence.cpp src/autonomy_commands.cpp src/app.cpp `
             tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md `
             validation/v0.7.1-prepublish.md
-          git commit -m "Fix humanoid parent-side motor reaction"
+          git commit -m "Fix humanoid training quality and parent reaction"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.7.1 source" }
           $sourceSha = (git rev-parse HEAD).Trim()
           git push origin HEAD:main
@@ -195,7 +203,7 @@ jobs:
             throw "Repository branches are not clean: $($branches -join ', ')"
           }
 
-          python "$env:RUNNER_TEMP/complete_missioncache_v071.py" finalize `
+          python "$env:RUNNER_TEMP/apply_training_quality_v071.py" finalize `
             --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID `
             --archive $env:ARCHIVE --checksum $env:CHECKSUM
           if ($LASTEXITCODE -ne 0) { throw "Mission cache publication evidence failed" }
@@ -229,7 +237,6 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           LINUX_RESULT: ${{ needs.linux-validate.result }}
           WINDOWS_RESULT: ${{ needs.windows-release.result }}
@@ -247,6 +254,7 @@ jobs:
           EOF
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
           git add validation/v0.7.1-failure.md validation/v0.7.1-failure.log
-          git commit -m 'Record v0.7.1 completion failure'
+          git commit -m 'Record v0.7.1 training-quality failure'
           git push origin HEAD:main
