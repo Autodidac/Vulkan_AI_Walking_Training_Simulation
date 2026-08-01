@@ -242,6 +242,7 @@ jobs:
           git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
           git rm -f --ignore-unmatch .github/workflows/finish-v071.yml
           git rm -f --ignore-unmatch .github/workflows/kick-v071.yml
+          git rm -f --ignore-unmatch .github/workflows/kick-v071-now.yml
           git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
           git rm -f --ignore-unmatch tools/refine_training_quality_v071.py
           git rm -f --ignore-unmatch tools/write_missioncache_v071.py
@@ -361,3 +362,4 @@ jobs:
           git worktree remove --force $statusDir
 
 # checkpoint-anchor correction trigger
+# controlled-stance predicate trigger
