@@ -1,0 +1,31 @@
+name: Launch stance-qualified v0.7.1 gate
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  launch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Trigger bounded completion workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf '\n# controlled-stance predicate trigger\n' >> .github/workflows/finish-v071.yml
+          git rm .github/workflows/kick-v071-now.yml
+          git add .github/workflows/finish-v071.yml
+          git commit -m 'Start stance-qualified v0.7.1 completion gate'
+          git push origin HEAD:main
