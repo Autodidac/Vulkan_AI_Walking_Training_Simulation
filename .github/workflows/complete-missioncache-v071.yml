@@ -7,6 +7,7 @@ on:
     paths:
       - tools/apply_training_quality_v071.py
       - tools/refine_training_quality_v071.py
+      - tools/write_missioncache_v071.py
       - .github/workflows/complete-missioncache-v071.yml
 
 concurrency:
@@ -74,7 +75,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "v0.7.1 reciprocal partition refinement failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
-          Copy-Item tools/apply_training_quality_v071.py "$env:RUNNER_TEMP/apply_training_quality_v071.py" -Force
+          Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py" -Force
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -126,8 +127,8 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           TRIGGER_SHA: ${{ github.sha }}
         run: |
-          python tools/apply_training_quality_v071.py validate --run-id $env:RUN_ID
-          if ($LASTEXITCODE -ne 0) { throw "Mission validation finalization failed" }
+          python tools/write_missioncache_v071.py validate --run-id $env:RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw "Mission ledger validation finalization failed" }
 
           git fetch origin main
           $actualMain = (git rev-parse origin/main).Trim()
@@ -140,6 +141,7 @@ jobs:
           git rm -f --ignore-unmatch .github/workflows/complete-missioncache-v071.yml
           git rm -f --ignore-unmatch tools/apply_training_quality_v071.py
           git rm -f --ignore-unmatch tools/refine_training_quality_v071.py
+          git rm -f --ignore-unmatch tools/write_missioncache_v071.py
           git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
           git rm -f --ignore-unmatch validation/v0.7.1-release-lock.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.md
@@ -208,7 +210,7 @@ jobs:
             throw "Repository branches are not clean: $($branches -join ', ')"
           }
 
-          python "$env:RUNNER_TEMP/apply_training_quality_v071.py" finalize `
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize `
             --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID `
             --archive $env:ARCHIVE --checksum $env:CHECKSUM
           if ($LASTEXITCODE -ne 0) { throw "Mission cache publication evidence failed" }
