@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Retry after correcting the stale obstacle-stage assertion replacement.
 jobs:
   materialize:
     runs-on: ubuntu-latest
