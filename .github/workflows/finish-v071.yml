@@ -41,9 +41,9 @@ jobs:
           status="$RUNNER_TEMP/status"
           git worktree add --detach "$status" origin/main
           mkdir -p "$status/validation"
-          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux-latched-acceptance`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux-release-cleanup`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
           git -C "$status" add validation/v0.7.1-run.md
-          git -C "$status" commit -m 'Record latched-acceptance v0.7.1 release run'
+          git -C "$status" commit -m 'Record release-cleanup v0.7.1 run'
           git -C "$status" push origin HEAD:main
           git worktree remove --force "$status"
 
@@ -112,8 +112,9 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-latched-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-clean-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            epochrunner-v071-latched-${{ runner.os }}-
             epochrunner-v071-msvc-parity-${{ runner.os }}-
             epochrunner-v071-robust-${{ runner.os }}-
             epochrunner-v071-observation-${{ runner.os }}-
@@ -168,6 +169,8 @@ jobs:
           git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
           git rm -f --ignore-unmatch validation/v0.7.1-failure.md
           git rm -f --ignore-unmatch validation/v0.7.1-failure.log
+          Remove-Item vcpkg -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item vcpkg-bincache -Recurse -Force -ErrorAction SilentlyContinue
           git add -A
           git restore --staged validation/v0.7.1-run.md 2>$null
           git restore validation/v0.7.1-run.md 2>$null
@@ -243,4 +246,4 @@ jobs:
             throw "Unexpected branches remain: $($branches -join ', ')"
           }
 
-# direct-latched acceptance trigger
+# exclude generated vcpkg state trigger
