@@ -46,6 +46,7 @@ jobs:
         run: |
           python3 tools/apply_training_quality_v071.py apply
           python3 tools/refine_training_quality_v071.py
+          python3 tools/fix_balance_diagnostic_v071.py
           git diff --check
 
       - name: Install compiler
@@ -64,3 +65,5 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
+
+# diagnostic-literal repair trigger
