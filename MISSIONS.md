@@ -294,6 +294,22 @@ Non-foot body contact may slide during a fall but may not become a movement stra
 
 The previous UI mission was incorrectly closed from compilation evidence without a visual acceptance pass. Increase all bitmap text substantially, enlarge minimum fitted text, marker signs, hazard labels, panels, and the default window. This mission remains active until the packaged application is visually confirmed readable by the user.
 
+## WALK-LOCO-004 — Obstacle-capable bipeds, quadrupeds, and multi-leg enemies
+
+**Status:** ACTIVE
+
+The biped still fails to establish a usable gait, and the quadruped can stall and quiver at hazards because the old safe motor envelope cannot lift a leg high enough. Add explicit four-legged and six-legged sand-sim enemy bodies and eliminate the high-energy no-lift local optimum.
+
+**Acceptance:**
+
+- Biped and humanoid hips/knees have bounded travel sufficient to clear configured rocks and hurdles.
+- Quadruped can articulate a foot above the first debris target without excessive joint strength.
+- High-energy obstacle quivering with no useful leg lift is detected, penalized, and eventually invalidated.
+- Approaching a rock or hurdle creates a measurable foot-lift objective before collision.
+- Four-legged crawler and six-legged hexapod presets are structurally valid, selectable, trainable, and use semantic foot clusters rather than treating extra feet as body contact.
+- Deterministic tests cover all built-in presets, leg travel, support clustering, obstacle approach, and quiver rejection.
+- No release is prepared until every non-visual `OPEN` or `ACTIVE` mission in this ledger has passing evidence.
+
 ## Current warning
 
 The user visually rejected the v0.6.2 typography and confirmed that rolling and pickup-like obstacle behavior remained. Those missions are reopened. v0.6.3 may record build and deterministic-test evidence, but visual readability remains `ACTIVE` until user confirmation. All other ACTIVE and OPEN missions carry forward unchanged.

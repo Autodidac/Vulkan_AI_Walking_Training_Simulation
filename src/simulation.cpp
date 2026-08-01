@@ -51,23 +51,28 @@ namespace epochrunner::sim
             add_foot(rig.right_contact_node);
         }
 
-        void calibrate_quadruped_stable_defaults(CreatureBlueprint& rig) noexcept
+        void calibrate_grounded_defaults(CreatureBlueprint& rig,
+            float major_travel_degrees, float minor_travel_degrees,
+            float major_linear_gain, float minor_linear_gain) noexcept
         {
-            // The quadruped is the stable reference because its roughly one-metre
-            // driven arms, symmetric travel, and moderate correction speed do not
-            // launch the body. Preserve that effective endpoint displacement on
-            // every body instead of copying a raw strength onto longer limbs.
-            constexpr std::array<float, action_count> travel_degrees{ 22.0f, 30.0f, 22.0f, 30.0f };
-            constexpr std::array<float, action_count> reference_linear_gain{ 0.0525f, 0.0575f, 0.0525f, 0.0575f };
             for (std::size_t index = 0; index < action_count; ++index)
             {
                 const MotorConstraint& motor = rig.motors[index];
+                const bool minor_joint = (index & 1u) != 0u;
+                const float travel = minor_joint ? minor_travel_degrees : major_travel_degrees;
+                const float linear_gain = minor_joint ? minor_linear_gain : major_linear_gain;
                 const float driven_arm = motor.pivot < rig.nodes.size() && motor.c < rig.nodes.size()
                     ? length(rig.nodes[motor.c] - rig.nodes[motor.pivot]) : 1.0f;
                 const float normalized_strength = clamp(
-                    reference_linear_gain[index] / std::max(0.75f, driven_arm), 0.035f, 0.058f);
-                rig.calibrate_motor(index, travel_degrees[index], travel_degrees[index], normalized_strength);
+                    linear_gain / std::max(0.75f, driven_arm), 0.032f, 0.056f);
+                rig.calibrate_motor(index, travel, travel, normalized_strength);
             }
+        }
+
+        void calibrate_obstacle_legs(CreatureBlueprint& rig, float travel = 46.0f) noexcept
+        {
+            for (std::size_t index = 0; index < action_count; ++index)
+                rig.calibrate_motor(index, travel, travel, 0.043f);
         }
     }
 
@@ -91,7 +96,7 @@ namespace epochrunner::sim
         };
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_quadruped_stable_defaults(result);
+        calibrate_grounded_defaults(result, 34.0f, 56.0f, 0.044f, 0.050f);
         return result;
     }
 
@@ -115,7 +120,7 @@ namespace epochrunner::sim
         };
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_quadruped_stable_defaults(result);
+        calibrate_grounded_defaults(result, 36.0f, 58.0f, 0.045f, 0.051f);
         return result;
     }
 
@@ -142,7 +147,7 @@ namespace epochrunner::sim
         };
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_quadruped_stable_defaults(result);
+        calibrate_grounded_defaults(result, 36.0f, 58.0f, 0.045f, 0.051f);
         return result;
     }
 
@@ -170,7 +175,76 @@ namespace epochrunner::sim
             MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 5, 6 }
         };
         result.rebuild_rest_lengths();
-        calibrate_quadruped_stable_defaults(result);
+        calibrate_grounded_defaults(result, 34.0f, 50.0f, 0.046f, 0.052f);
+        return result;
+    }
+
+    CreatureBlueprint CreatureBlueprint::crawler4()
+    {
+        CreatureBlueprint result{};
+        result.nodes = {
+            { 0.0f, 2.05f }, { 1.05f, 2.12f }, { 1.82f, 2.42f },
+            { -0.72f, 0.30f }, { -0.20f, 0.28f },
+            { 1.22f, 0.28f }, { 1.72f, 0.30f },
+            { -0.48f, 2.10f }, { 1.52f, 2.16f }
+        };
+        result.radii = { 0.29f, 0.29f, 0.24f, 0.15f, 0.15f, 0.15f, 0.15f, 0.18f, 0.18f };
+        result.bones = {
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.92f },
+            { 7, 0, 0.0f, 0.98f }, { 1, 8, 0.0f, 0.98f },
+            { 7, 3, 0.0f, 0.97f }, { 0, 4, 0.0f, 0.97f },
+            { 1, 5, 0.0f, 0.97f }, { 8, 6, 0.0f, 0.97f },
+            { 3, 4, 0.0f, 0.42f }, { 5, 6, 0.0f, 0.42f }
+        };
+        result.root_node = 0;
+        result.torso_node = 1;
+        result.head_node = 2;
+        result.left_contact_node = 3;
+        result.right_contact_node = 5;
+        result.motors = {
+            MotorConstraint{ 0, 7, 3 }, MotorConstraint{ 1, 0, 4 },
+            MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 8, 6 }
+        };
+        result.rebuild_rest_lengths();
+        calibrate_obstacle_legs(result, 48.0f);
+        return result;
+    }
+
+    CreatureBlueprint CreatureBlueprint::hexapod()
+    {
+        CreatureBlueprint result{};
+        result.nodes = {
+            { 0.0f, 2.08f }, { 0.92f, 2.12f }, { 1.82f, 2.36f },
+            { -0.92f, 0.30f }, { -0.42f, 0.27f },
+            { 0.42f, 0.27f }, { 0.92f, 0.27f },
+            { 1.55f, 0.28f }, { 2.02f, 0.31f },
+            { -0.48f, 2.10f }, { 0.45f, 2.15f }, { 1.48f, 2.16f }
+        };
+        result.radii = {
+            0.28f, 0.29f, 0.23f,
+            0.14f, 0.14f, 0.14f, 0.14f, 0.14f, 0.14f,
+            0.17f, 0.17f, 0.17f
+        };
+        result.bones = {
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.92f },
+            { 9, 0, 0.0f, 0.98f }, { 0, 10, 0.0f, 0.98f }, { 1, 11, 0.0f, 0.98f },
+            { 9, 3, 0.0f, 0.96f }, { 9, 4, 0.0f, 0.96f },
+            { 10, 5, 0.0f, 0.96f }, { 10, 6, 0.0f, 0.96f },
+            { 11, 7, 0.0f, 0.96f }, { 11, 8, 0.0f, 0.96f },
+            { 3, 4, 0.0f, 0.42f }, { 4, 5, 0.0f, 0.36f },
+            { 5, 6, 0.0f, 0.42f }, { 6, 7, 0.0f, 0.36f }, { 7, 8, 0.0f, 0.42f }
+        };
+        result.root_node = 0;
+        result.torso_node = 1;
+        result.head_node = 2;
+        result.left_contact_node = 3;
+        result.right_contact_node = 6;
+        result.motors = {
+            MotorConstraint{ 0, 9, 3 }, MotorConstraint{ 0, 9, 4 },
+            MotorConstraint{ 1, 10, 5 }, MotorConstraint{ 0, 1, 11 }
+        };
+        result.rebuild_rest_lengths();
+        calibrate_obstacle_legs(result, 50.0f);
         return result;
     }
 
@@ -196,7 +270,7 @@ namespace epochrunner::sim
         };
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_quadruped_stable_defaults(result);
+        calibrate_grounded_defaults(result, 32.0f, 48.0f, 0.043f, 0.049f);
         return result;
     }
 
@@ -736,6 +810,10 @@ namespace epochrunner::sim
         head_contact_seconds_ = 0.0f;
         torso_turn_speed_ = 0.0f;
         stance_slip_speed_ = 0.0f;
+        hazard_stall_seconds_ = 0.0f;
+        obstacle_approach_weight_ = 0.0f;
+        obstacle_lift_clearance_ = 0.0f;
+        obstacle_clearance_target_ = 0.20f;
         non_foot_grounded_ = false;
         knee_first_this_step_ = false;
         last_contact_side_ = 0;
@@ -821,18 +899,37 @@ namespace epochrunner::sim
         if (!valid_node(contact_node) || particle_index >= particles_.size()
             || particle_index >= blueprint_.nodes.size())
             return false;
-        if (particle_index == static_cast<std::size_t>(contact_node))
-            return true;
 
         const float contact_height = blueprint_.nodes[contact_node].y;
-        if (blueprint_.nodes[particle_index].y > contact_height + 0.08f)
+        if (blueprint_.nodes[particle_index].y > contact_height + 0.18f)
             return false;
-        const auto node = static_cast<std::uint16_t>(particle_index);
-        return std::ranges::any_of(blueprint_.bones, [contact_node, node](const DistanceConstraint& bone)
+
+        std::array<bool, 128> visited{};
+        std::array<std::uint16_t, 128> queue{};
+        std::size_t head = 0;
+        std::size_t tail = 0;
+        visited[contact_node] = true;
+        queue[tail++] = contact_node;
+        while (head < tail)
         {
-            return (bone.a == contact_node && bone.b == node)
-                || (bone.a == node && bone.b == contact_node);
-        });
+            const std::uint16_t current = queue[head++];
+            if (current == particle_index)
+                return true;
+            for (const DistanceConstraint& bone : blueprint_.bones)
+            {
+                std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                if (bone.a == current)
+                    next = bone.b;
+                else if (bone.b == current)
+                    next = bone.a;
+                if (next >= blueprint_.nodes.size() || visited[next]
+                    || blueprint_.nodes[next].y > contact_height + 0.18f)
+                    continue;
+                visited[next] = true;
+                queue[tail++] = next;
+            }
+        }
+        return false;
     }
 
     bool Environment::contact_supported(std::uint16_t contact_node) const noexcept
@@ -913,6 +1010,20 @@ namespace epochrunner::sim
         return count == 0 ? 0.0f : accumulated / static_cast<float>(count);
     }
 
+    float Environment::contact_cluster_clearance(std::uint16_t contact_node) const noexcept
+    {
+        float maximum = 0.0f;
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (!contact_cluster_contains(contact_node, index))
+                continue;
+            const Particle& particle = particles_[index];
+            maximum = std::max(maximum, particle.position.y
+                - ground_height_at(particle.position.x) - particle.radius);
+        }
+        return maximum;
+    }
+
     bool Environment::knee_before_foot_fault() const noexcept
     {
         constexpr std::array<std::size_t, 2> knee_motors{ 1u, 3u };
@@ -980,7 +1091,7 @@ namespace epochrunner::sim
                     const Vec2 normal = distance > 1.0e-5f ? delta / distance : Vec2{ -1.0f, 0.0f };
                     const Vec2 correction = normal * (minimum - distance);
                     particle.position += correction;
-                    particle.previous += correction * 0.25f;
+                    particle.previous += correction * 0.06f;
                     if (feature.kind == CourseFeatureKind::projectile)
                         particle.previous -= feature.velocity * (1.0f / 60.0f) * 0.34f;
                     else if (feature.kind == CourseFeatureKind::moving_hazard)
@@ -1015,7 +1126,7 @@ namespace epochrunner::sim
                 const Vec2 normal = normalized(delta, { -1.0f, 0.0f });
                 const Vec2 correction = normal * (particle.radius - distance);
                 particle.position += correction;
-                particle.previous += correction * 0.18f;
+                particle.previous += correction * 0.05f;
                 collided_this_step_ = true;
             }
         }
@@ -1123,6 +1234,34 @@ namespace epochrunner::sim
         if (wheel_sliding_seconds_ > 0.90f)
             invalidate(InvalidMotion::wheel_sliding);
 
+        float nearest_hazard_dx = std::numeric_limits<float>::infinity();
+        float nearest_hazard_target = 0.20f;
+        for (const CourseFeature& feature : course_features_)
+        {
+            if (!ground_clearance_hazard(feature.kind))
+                continue;
+            const float dx = feature.center.x - root_x;
+            if (dx < nearest_hazard_dx && dx >= -0.35f)
+            {
+                nearest_hazard_dx = dx;
+                nearest_hazard_target = course_feature_top(feature)
+                    - ground_height_at(feature.center.x) + 0.12f;
+            }
+        }
+        obstacle_approach_weight_ = std::isfinite(nearest_hazard_dx)
+            ? hazard_approach_weight(nearest_hazard_dx) : 0.0f;
+        obstacle_clearance_target_ = std::max(0.18f, nearest_hazard_target);
+        obstacle_lift_clearance_ = std::max(
+            contact_cluster_clearance(blueprint_.left_contact_node),
+            contact_cluster_clearance(blueprint_.right_contact_node));
+        if (std::isfinite(nearest_hazard_dx) && hazard_quiver_motion(nearest_hazard_dx,
+            root_speed, obstacle_lift_clearance_, obstacle_clearance_target_, action_energy))
+            hazard_stall_seconds_ += dt;
+        else
+            hazard_stall_seconds_ = std::max(0.0f, hazard_stall_seconds_ - dt * 1.75f);
+        if (hazard_stall_seconds_ > 1.35f)
+            invalidate(InvalidMotion::hazard_quiver);
+
         if (!left && !right)
         {
             airborne_seconds_ += dt;
@@ -1193,7 +1332,7 @@ namespace epochrunner::sim
 
         collided_this_step_ = false;
         rebuild_course_features();
-        for (int iteration = 0; iteration < 12; ++iteration)
+        for (int iteration = 0; iteration < 14; ++iteration)
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
                 solve_distance(bone);
@@ -1297,7 +1436,13 @@ namespace epochrunner::sim
         const float wheel_penalty = wheel_sliding_motion(raw_speed,
             left_supported, right_supported, stance_slip_speed_) ? 0.055f : 0.0f;
         const float swing_reward = single_support && swing_clearance > 0.10f
-            ? clamp(swing_clearance, 0.0f, 0.45f) * 0.004f : 0.0f;
+            ? clamp(swing_clearance, 0.0f, 0.55f) * 0.005f : 0.0f;
+        const float obstacle_lift_ratio = clamp(
+            obstacle_lift_clearance_ / std::max(0.10f, obstacle_clearance_target_), 0.0f, 1.25f);
+        const float obstacle_lift_reward = obstacle_approach_weight_
+            * obstacle_lift_ratio * (single_support ? 0.020f : 0.007f);
+        const float hazard_stall_penalty = obstacle_approach_weight_
+            * clamp(hazard_stall_seconds_, 0.0f, 1.5f) * 0.022f;
         const float body_contact_penalty = non_foot_grounded_
             ? (head_ground_contact() ? 0.16f : 0.08f) : 0.0f;
 
@@ -1316,12 +1461,14 @@ namespace epochrunner::sim
                 + std::max(0.0f, upright) * 0.012f
                 + contact * 0.0006f
                 + swing_reward
+                + obstacle_lift_reward
                 - std::max(0.0f, -safe_progress) * 0.45f
                 - action_energy * 0.0010f
                 - collision_penalty
                 - knee_first_penalty
                 - stance_slip_penalty
                 - wheel_penalty
+                - hazard_stall_penalty
                 - body_contact_penalty;
         }
 

@@ -47,7 +47,7 @@ The trainer automatically:
 - tests tiny symmetric rig changes and keeps only changes that improve deterministic valid-walking score;
 - resumes its curriculum, optimizer, metrics, controller, and evolved rig on restart.
 
-The **Rig Lab** remains available for inspecting joints, testing individual motors or groups, selecting A/Pivot/C, changing safe travel limits, and manually correcting geometry.
+The **Rig Lab** remains available for inspecting joints, testing individual motors or groups, selecting A/Pivot/C, changing safe travel limits, and manually correcting geometry. Built-in enemy bodies now include the humanoid and basic bipeds, the original quadruped, a four-legged crawler, and a six-legged hexapod.
 
 ## Walking validity gates
 

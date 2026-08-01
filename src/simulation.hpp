@@ -144,6 +144,29 @@ namespace epochrunner::sim
             && (!feet_supported || std::abs(root_speed) > 0.08f);
     }
 
+    [[nodiscard]] inline bool ground_clearance_hazard(CourseFeatureKind kind) noexcept
+    {
+        return kind == CourseFeatureKind::rock || kind == CourseFeatureKind::hurdle;
+    }
+
+    [[nodiscard]] inline float hazard_approach_weight(float distance_ahead) noexcept
+    {
+        if (distance_ahead <= -0.20f || distance_ahead >= 2.60f)
+            return 0.0f;
+        if (distance_ahead <= 0.45f)
+            return 1.0f;
+        return clamp((2.60f - distance_ahead) / 2.15f, 0.0f, 1.0f);
+    }
+
+    [[nodiscard]] inline bool hazard_quiver_motion(float distance_ahead, float root_speed,
+        float lifted_foot_clearance, float target_clearance, float action_energy) noexcept
+    {
+        return hazard_approach_weight(distance_ahead) > 0.35f
+            && std::abs(root_speed) < 0.16f
+            && lifted_foot_clearance < target_clearance * 0.55f
+            && action_energy > 0.075f;
+    }
+
     inline constexpr float terrain_cycle_length_m = 56.0f;
 
     [[nodiscard]] inline bool course_zone_is_flat(float course_distance) noexcept
@@ -186,7 +209,8 @@ namespace epochrunner::sim
         sustained_flight,
         micro_motion,
         wheel_sliding,
-        body_rolling
+        body_rolling,
+        hazard_quiver
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -202,6 +226,7 @@ namespace epochrunner::sim
         case InvalidMotion::micro_motion: return "MICRO-MOTION EXPLOIT";
         case InvalidMotion::wheel_sliding: return "WHEEL-SLIDING EXPLOIT";
         case InvalidMotion::body_rolling: return "HEAD / TAIL / BODY ROLLING";
+        case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
         }
         return "INVALID";
     }
@@ -362,6 +387,8 @@ namespace epochrunner::sim
         [[nodiscard]] static CreatureBlueprint biped();
         [[nodiscard]] static CreatureBlueprint humanoid();
         [[nodiscard]] static CreatureBlueprint quadruped();
+        [[nodiscard]] static CreatureBlueprint crawler4();
+        [[nodiscard]] static CreatureBlueprint hexapod();
         [[nodiscard]] static CreatureBlueprint monoped();
         void rebuild_rest_lengths() noexcept;
         void calibrate_motor(std::size_t motor_index, float negative_degrees = 30.0f,
@@ -426,6 +453,8 @@ namespace epochrunner::sim
         [[nodiscard]] float stance_slip_speed() const noexcept { return stance_slip_speed_; }
         [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
         [[nodiscard]] float body_rolling_seconds() const noexcept { return body_rolling_seconds_; }
+        [[nodiscard]] float hazard_stall_seconds() const noexcept { return hazard_stall_seconds_; }
+        [[nodiscard]] float obstacle_lift_clearance() const noexcept { return obstacle_lift_clearance_; }
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
@@ -460,6 +489,7 @@ namespace epochrunner::sim
         [[nodiscard]] float contact_cluster_top_y(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] float contact_cluster_horizontal_speed(std::uint16_t contact_node,
             float dt) const noexcept;
+        [[nodiscard]] float contact_cluster_clearance(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] bool knee_before_foot_fault() const noexcept;
 
         CreatureBlueprint blueprint_{};
@@ -497,6 +527,10 @@ namespace epochrunner::sim
         float previous_torso_angle_{};
         float torso_turn_speed_{};
         float stance_slip_speed_{};
+        float hazard_stall_seconds_{};
+        float obstacle_approach_weight_{};
+        float obstacle_lift_clearance_{};
+        float obstacle_clearance_target_{ 0.20f };
         bool non_foot_grounded_{};
         bool knee_first_this_step_{};
         int last_contact_side_{};

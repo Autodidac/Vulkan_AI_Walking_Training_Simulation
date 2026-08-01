@@ -233,7 +233,9 @@ namespace epochrunner
     struct Application::Impl
     {
         enum class Mode : std::uint8_t { live, rig_lab };
-        enum class RigPreset : std::uint8_t { humanoid, biped, chicken, quadruped, monoped, custom };
+        enum class RigPreset : std::uint8_t {
+            humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
+        };
         enum class RigPanelPage : std::uint8_t { body, motor };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
@@ -271,6 +273,8 @@ namespace epochrunner
             case RigPreset::biped: return "BASIC BIPED";
             case RigPreset::chicken: return "CHICKEN BIPED";
             case RigPreset::quadruped: return "QUADRUPED";
+            case RigPreset::crawler4: return "FOUR-LEG CRAWLER";
+            case RigPreset::hexapod: return "SIX-LEG HEXAPOD";
             case RigPreset::monoped: return "MONOPED";
             case RigPreset::custom: return "CUSTOM / EVOLVED";
             }
@@ -297,6 +301,10 @@ namespace epochrunner
             {
             case RigPreset::quadruped:
                 return { "REAR HIP", "REAR KNEE", "FRONT SHOULDER", "FRONT KNEE" };
+            case RigPreset::crawler4:
+                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG" };
+            case RigPreset::hexapod:
+                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR" };
             case RigPreset::monoped:
                 return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT" };
             case RigPreset::humanoid:
@@ -378,6 +386,8 @@ namespace epochrunner
             case RigPreset::biped: blueprint = sim::CreatureBlueprint::biped(); break;
             case RigPreset::chicken: blueprint = sim::CreatureBlueprint::chicken(); break;
             case RigPreset::quadruped: blueprint = sim::CreatureBlueprint::quadruped(); break;
+            case RigPreset::crawler4: blueprint = sim::CreatureBlueprint::crawler4(); break;
+            case RigPreset::hexapod: blueprint = sim::CreatureBlueprint::hexapod(); break;
             case RigPreset::monoped: blueprint = sim::CreatureBlueprint::monoped(); break;
             case RigPreset::custom: break;
             }
@@ -697,11 +707,12 @@ namespace epochrunner
                     sim::invalid_motion_name(environment.invalid_reason())),
                 1.16f, environment.valid_motion() ? green : danger, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("RECOVERY {}   FEET {}/{}   STEPS {}   KNEE FAULTS {}",
+                std::format("RECOVERY {}  FEET {}/{}  STEPS {}  LIFT {:.2f} M  STALL {:.1f} S",
                     environment.recovering() ? "ACTIVE" : "READY",
                     environment.left_supported() ? "L" : "-",
                     environment.right_supported() ? "R" : "-",
-                    environment.alternating_steps(), environment.knee_first_faults()),
+                    environment.alternating_steps(), environment.obstacle_lift_clearance(),
+                    environment.hazard_stall_seconds()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
@@ -981,20 +992,26 @@ namespace epochrunner
             {
                 add_text(canvas, cursor, "CHOOSE A BODY; AUTOPILOT RESTARTS AT BALANCE", 1.02f, muted);
                 cursor.y += 27.0f;
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
+                const float fourth = (rect.size.x - 54.0f) / 4.0f;
+                if (button({ cursor, { fourth, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
                     use_preset(RigPreset::humanoid);
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "BIPED", input,
+                if (button({ cursor + Vec2{ fourth + 6.0f, 0.0f }, { fourth, 35.0f } }, "BIPED", input,
                     rig_preset == RigPreset::biped))
                     use_preset(RigPreset::biped);
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "QUADRUPED", input,
+                if (button({ cursor + Vec2{ (fourth + 6.0f) * 2.0f, 0.0f }, { fourth, 35.0f } }, "QUADRUPED", input,
                     rig_preset == RigPreset::quadruped))
                     use_preset(RigPreset::quadruped);
+                if (button({ cursor + Vec2{ (fourth + 6.0f) * 3.0f, 0.0f }, { fourth, 35.0f } }, "4-LEG", input,
+                    rig_preset == RigPreset::crawler4))
+                    use_preset(RigPreset::crawler4);
                 cursor.y += 43.0f;
-                const float half = (rect.size.x - 42.0f) * 0.5f;
-                if (button({ cursor, { half, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
+                const float third = (rect.size.x - 48.0f) / 3.0f;
+                if (button({ cursor, { third, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
                     use_preset(RigPreset::chicken);
-                if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } }, "MONOPED", input,
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "6-LEG", input,
+                    rig_preset == RigPreset::hexapod))
+                    use_preset(RigPreset::hexapod);
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "MONOPED", input,
                     rig_preset == RigPreset::monoped))
                     use_preset(RigPreset::monoped);
                 cursor.y += 48.0f;

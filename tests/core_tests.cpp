@@ -120,6 +120,12 @@ int main()
         "double-supported wheel-like sliding is not detected");
     require(!sim::wheel_sliding_motion(0.45f, true, false, 0.50f),
         "single-support walking is incorrectly classified as wheel sliding");
+    require(sim::hazard_approach_weight(0.40f) == 1.0f,
+        "near obstacle does not activate full leg-lift training");
+    require(sim::hazard_quiver_motion(0.50f, 0.02f, 0.03f, 0.40f, 0.20f),
+        "high-energy no-lift obstacle quiver is not detected");
+    require(!sim::hazard_quiver_motion(0.50f, 0.02f, 0.35f, 0.40f, 0.20f),
+        "useful obstacle leg lift is incorrectly classified as quivering");
     require(sim::rolling_body_motion(0.20f, 0.70f, 0.35f, false, true),
         "head, tail, or body rolling is not detected");
     require(!sim::rolling_body_motion(0.20f, 0.70f, 0.95f, true, false),
@@ -135,11 +141,13 @@ int main()
     require(sim::first_course_feature_sequence(0.0f, 29.9f) <= 3,
         "a contacted obstacle is culled like a pickup before it passes behind the actor");
 
-    const std::array<sim::CreatureBlueprint, 5> presets{
+    const std::array<sim::CreatureBlueprint, 7> presets{
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid(),
         sim::CreatureBlueprint::quadruped(),
+        sim::CreatureBlueprint::crawler4(),
+        sim::CreatureBlueprint::hexapod(),
         sim::CreatureBlueprint::monoped()
     };
     for (const sim::CreatureBlueprint& preset : presets)
@@ -154,6 +162,8 @@ int main()
             require(std::abs(wrap_angle(preset.rest_joint_angle(motor_index) - motor.neutral_angle)) < 0.001f,
                 "preset motor is not calibrated to rest geometry");
             require(motor.strength <= 0.060f, "default joint speed remains too strong");
+            require((motor.maximum_angle - motor.minimum_angle) * 180.0f / pi >= 60.0f,
+                "preset cannot articulate enough to lift a leg over debris");
         }
     }
 
@@ -171,15 +181,22 @@ int main()
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
         const float driven_arm = length(humanoid.nodes[motor.c] - humanoid.nodes[motor.pivot]);
-        const float expected_linear_gain = (motor_index % 2u) == 0u ? 0.0525f : 0.0575f;
-        const float expected_travel = (motor_index % 2u) == 0u ? 22.0f : 30.0f;
-        require(std::abs(motor.strength * std::max(0.75f, driven_arm) - expected_linear_gain) < 0.002f,
-            "non-quadruped motor does not use the quadruped-stable effective gain");
+        const float expected_linear_gain = (motor_index % 2u) == 0u ? 0.045f : 0.051f;
+        const float expected_travel = (motor_index % 2u) == 0u ? 36.0f : 58.0f;
+        require(std::abs(motor.strength * std::max(0.75f, driven_arm) - expected_linear_gain) < 0.003f,
+            "humanoid motor does not use the bounded obstacle-capable effective gain");
         require(std::abs((motor.neutral_angle - motor.minimum_angle) * 180.0f / pi - expected_travel) < 0.05f,
-            "quadruped-stable backward travel was not applied");
+            "obstacle-capable backward travel was not applied");
         require(std::abs((motor.maximum_angle - motor.neutral_angle) * 180.0f / pi - expected_travel) < 0.05f,
-            "quadruped-stable forward travel was not applied");
+            "obstacle-capable forward travel was not applied");
     }
+
+    const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
+    const sim::CreatureBlueprint hexapod = sim::CreatureBlueprint::hexapod();
+    require(crawler4.nodes.size() >= 9 && crawler4.bones.size() >= 10,
+        "four-legged crawler geometry is incomplete");
+    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16,
+        "six-legged hexapod geometry is incomplete");
 
     {
         sim::Environment biped_support{ humanoid, 0xFEE7u };
