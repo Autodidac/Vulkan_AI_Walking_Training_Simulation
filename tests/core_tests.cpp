@@ -1,6 +1,7 @@
 #include "autonomy.hpp"
 #include "ppo.hpp"
 #include "simulation.hpp"
+#include "ui_layout.hpp"
 
 #include <array>
 #include <chrono>
@@ -26,6 +27,22 @@ namespace
 int main()
 {
     using namespace epochrunner;
+
+    require(ui_layout::live_layout_valid(1100.0f, 902.0f),
+        "supported minimum live layout overlaps its panel, telemetry, or PIP");
+    require(!ui_layout::supported_window(1099.0f, 902.0f)
+            && !ui_layout::supported_window(1100.0f, 901.0f),
+        "undersized windows are incorrectly treated as fully supported");
+    const ui_layout::Box minimum_content = ui_layout::content_box(1100.0f, 902.0f);
+    const ui_layout::Box minimum_world = ui_layout::live_world_box(minimum_content);
+    const ui_layout::Box minimum_pip = ui_layout::training_pip_box(minimum_world);
+    require(ui_layout::contains(minimum_world, minimum_pip),
+        "training PIP escapes the world viewport");
+    require(!ui_layout::overlaps(minimum_pip,
+                ui_layout::primary_telemetry_box(minimum_world))
+            && !ui_layout::overlaps(minimum_pip,
+                ui_layout::bottom_telemetry_box(minimum_world)),
+        "training PIP overlaps primary telemetry at the supported minimum window");
 
     require(sim::classify_motion_gate(1.0f, 50.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::overspeed, "50 km/h hard gate missing");
