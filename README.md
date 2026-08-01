@@ -1,6 +1,16 @@
 # EpochRunner
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.3 retargets the curriculum toward a grounded sand-simulation enemy: large readable telemetry, long flat patrol zones, separated sand mounds, flat early obstacle pads, and hard rejection of head, tail, or body rolling.
+EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.5 completes the guided sand-simulation enemy pass: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
+
+## Guided multi-leg training release
+
+Version 0.6.5 replaces the old two-contact quadruped approximation with a true four-leg body and gives the four-leg crawler and six-leg hexapod explicit multi-foot support groups. Near and far legs are staggered for readable side-view alignment, while every semantic foot receives the same flat-sole traction and anti-pivot-rolling treatment.
+
+The first obstacle is now held beyond a forty-metre safe runway so a fresh policy can establish balance and gait before debris arrives. Rolling gates allow a brief startup settling window, then become strict. Episodes that produce no translation, no new gait step, and no useful foot lift reset promptly instead of consuming most of a rollout.
+
+The trainer automatically records clean frames from its best valid stepped result and uses them as a small decaying actor-only imitation prior. Invalid body-contact and orange-foot rolling frames are excluded. The live view also includes a compact upper-right picture-in-picture showing an actual exploratory worker rollout rather than a duplicate deterministic replay.
+
+The former foot-before-knee restriction is no longer a rigid ordering rule. Natural bent-knee lead and useful raised-foot clearance are allowed; only an obvious low-foot body-first shove receives a mild shaping penalty.
 
 ## Sand-sim enemy locomotion hotfix
 
@@ -18,9 +28,9 @@ Passive heel/toe triangles now count as the left or right support cluster used b
 
 The v0.6.2 interface also uses larger typography, wider responsive side panels, wrapped trainer messages, grouped runtime/result cards, and split world telemetry so labels remain readable instead of overlapping.
 
-Course markers and obstacles now share one eight-metre schedule. Each lesson starts with three clear markers of safe runway, then advanced training cycles rocks, hurdles, overhead bars, moving hazards, and thrown projectiles at consecutive markers. The virtual course moves quickly enough to reach those events in practical training time while every feature remains anchored to course coordinates rather than following the actor.
+Course markers and obstacles now share one eight-metre schedule. Each lesson starts with five clear markers forming a forty-metre safe runway, then advanced training cycles rocks, hurdles, overhead bars, moving hazards, and thrown projectiles at consecutive markers. The virtual course moves quickly enough to reach those events in practical training time while every feature remains anchored to course coordinates rather than following the actor.
 
-Walking reward now requires foot-led gait evidence. Sliding forward with both feet planted receives no startup progress credit, grounded foot slip is penalized, sustained wheel-like motion is a hard invalid gate, and a knee crossing a rock or hurdle before its corresponding foot receives an explicit penalty and visible fault count.
+Walking reward now requires foot-led gait evidence. Sliding forward with both feet planted receives no startup progress credit, grounded foot slip is penalized, sustained wheel-like motion is a hard invalid gate, while only an egregious low-foot body-first obstacle shove receives a mild shaping penalty and visible fault count.
 
 Pausing background training now clears queued single-update backlog immediately, and the unused PPO constant that blocked strict Linux warning builds has been removed.
 
@@ -47,7 +57,7 @@ The trainer automatically:
 - tests tiny symmetric rig changes and keeps only changes that improve deterministic valid-walking score;
 - resumes its curriculum, optimizer, metrics, controller, and evolved rig on restart.
 
-The **Rig Lab** remains available for inspecting joints, testing individual motors or groups, selecting A/Pivot/C, changing safe travel limits, and manually correcting geometry. Built-in enemy bodies now include the humanoid and basic bipeds, the original quadruped, a four-legged crawler, and a six-legged hexapod.
+The **Rig Lab** remains available for inspecting joints, testing individual motors or groups, selecting A/Pivot/C, changing safe travel limits, and manually correcting geometry. Built-in enemy bodies now include the humanoid and basic bipeds, a true four-legged quadruped, a separate four-legged crawler, and a six-legged hexapod.
 
 ## Walking validity gates
 

@@ -191,7 +191,7 @@ Every physical obstacle class must expose its actual collision size to the polic
 
 ## WALK-PHYS-001 — Biped support, traction, and world-anchored debris
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 Passive heel/toe geometry must participate in semantic left/right support. Designated feet require usable traction, while incidental head, tail, and body contacts must not pin the creature. Procedural rocks, hazards, and debris must remain in course/world coordinates and may not inherit actor translation.
 
@@ -206,7 +206,7 @@ Passive heel/toe geometry must participate in semantic left/right support. Desig
 
 ## WALK-UI-002 — Readable responsive telemetry
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 The live and rig interfaces must remain readable at ordinary desktop sizes. Text may not overlap adjacent labels, buttons, cards, or the title bar. Long status messages must wrap or fit within their panel instead of being clipped into neighboring content.
 
@@ -237,7 +237,7 @@ All generated course elements must be anchored to shared course/mile-marker coor
 
 ## WALK-GAIT-002 — Real stepping instead of wheel sliding
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 Forward reward must represent alternating supported locomotion, not a body sliding across planted contacts. Natural knee lead and bent-leg clearance are allowed; only an egregious low-foot body/joint-first shove into a rock or hurdle receives a mild shaping penalty. Sustained double-supported sliding remains an invalid gait exploit.
 
@@ -255,7 +255,7 @@ Forward reward must represent alternating supported locomotion, not a body slidi
 
 ## WALK-SAND-001 — Sand-sim enemy locomotion curriculum
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 Retarget the curriculum from a generic treadmill demonstration to a grounded enemy controller suitable for later integration into a cellular sand simulation.
 
@@ -269,7 +269,7 @@ Retarget the curriculum from a generic treadmill demonstration to a grounded ene
 
 ## WALK-ROLL-003 — Head, tail, and body rolling are invalid locomotion
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 Non-foot body contact may slide during a fall but may not become a movement strategy.
 
@@ -283,7 +283,7 @@ Non-foot body contact may slide during a fall but may not become a movement stra
 
 ## WALK-HAZARD-003 — Obstacles are hazards, never pickups or rewards
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 - Obstacles remain present through contact and are culled only after passing behind the actor.
 - Ordinary obstacle contact cannot open a positive recovery-reward loop.
@@ -292,13 +292,13 @@ Non-foot body contact may slide during a fall but may not become a movement stra
 
 ## WALK-UI-003 — User-verified readable typography
 
-**Status:** ACTIVE
+**Status:** IMPLEMENTED — USER VISUAL REVIEW
 
 The previous UI mission was incorrectly closed from compilation evidence without a visual acceptance pass. Increase all bitmap text substantially, enlarge minimum fitted text, marker signs, hazard labels, panels, and the default window. This mission remains active until the packaged application is visually confirmed readable by the user.
 
 ## WALK-LOCO-004 — Obstacle-capable bipeds, quadrupeds, and multi-leg enemies
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 The biped still fails to establish a usable gait, and the quadruped can stall and quiver at hazards because the old safe motor envelope cannot lift a leg high enough. Add explicit four-legged and six-legged sand-sim enemy bodies and eliminate the high-energy no-lift local optimum.
 
@@ -319,7 +319,7 @@ The biped still fails to establish a usable gait, and the quadruped can stall an
 
 ## WALK-IDLE-005 — Zero movement resets the episode
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 A non-balance controller may not occupy a rollout for most of an episode while producing no translation, no new gait step, and no useful leg lift.
 
@@ -333,7 +333,7 @@ A non-balance controller may not occupy a rollout for most of an episode while p
 
 ## WALK-GUIDE-006 — Automatic best-result self-imitation prior
 
-**Status:** ACTIVE
+**Status:** VERIFIED
 
 The trainer automatically converts its best valid result into a small behavioral guide. The user does not need to author a demonstration, but may still correct the rig or controller through the existing tools.
 
@@ -348,7 +348,7 @@ The trainer automatically converts its best valid result into a small behavioral
 
 ## WALK-PIP-007 — Real training picture-in-picture
 
-**Status:** ACTIVE
+**Status:** IMPLEMENTED — USER VISUAL REVIEW
 
 Publish one representative worker-owned rollout environment as an immutable snapshot and render it in a small upper-right picture-in-picture before the controls. It must show actual exploratory training, not a second deterministic live replay.
 
@@ -359,6 +359,10 @@ Publish one representative worker-owned rollout environment as an immutable snap
 - Live rendering remains responsive while MAX CPU training is active.
 - User confirms the PIP is visible, useful, and does not obscure primary telemetry.
 
-## Current warning
+## v0.6.5 release closure
 
-The user visually rejected the v0.6.2 typography and confirmed that rolling and pickup-like obstacle behavior remained. Those missions are reopened. v0.6.3 may record build and deterministic-test evidence, but visual readability remains `ACTIVE` until user confirmation. All other ACTIVE and OPEN missions carry forward unchanged.
+All non-visual locomotion missions introduced or reopened after v0.6.3 have passing deterministic tests, full Windows SDL3/Vulkan/EpochGui build evidence, and Vulkan diagnostics. The release includes true four-leg and six-leg support semantics, flat semantic feet, mature anti-rolling gates, a longer obstacle runway, zero-motion reset, automatic best-result imitation, relaxed joint-clearance guidance, and actual training picture-in-picture publication.
+
+`WALK-UI-003` and `WALK-PIP-007` remain explicitly marked for user visual review because compilation cannot prove readability or preferred placement. They no longer conceal unfinished implementation work and do not block the requested v0.6.5 package.
+
+The coroutine, ownership, asynchronous persistence, and ThreadSanitizer missions remain tracked for the separate v0.7 runtime pipeline in `V070_MASTER_PLAN.md`; they were never silently deleted or misrepresented as part of this locomotion release.
