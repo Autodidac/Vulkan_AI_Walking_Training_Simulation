@@ -68,9 +68,35 @@ curriculum = replace_once(
 )
 curriculum_path.write_text(curriculum, encoding="utf-8")
 
-# Mirror production evaluation exactly in the deterministic six-seed test.
+# Mirror production evaluation exactly in both deterministic balance tests.
 test_path = Path("tests/core_tests.cpp")
 tests = test_path.read_text(encoding="utf-8")
+tests = replace_once(
+    tests,
+    "            const sim::StepResult result = assisted_stance.step(action);\n"
+    "            const auto diagnostics =\n"
+    "                sim::EnvironmentTestAccess::stance_frame(assisted_stance);",
+    "            const sim::StepResult result = assisted_stance.step(action);\n"
+    "            const bool lesson_complete = assisted_stance.valid_motion()\n"
+    "                && assisted_stance.longest_stable_stance_seconds() >= 3.0f;\n"
+    "            const auto diagnostics =\n"
+    "                sim::EnvironmentTestAccess::stance_frame(assisted_stance);",
+    "direct balance completion flag",
+)
+tests = replace_once(
+    tests,
+    "            if (result.terminated)\n"
+    "                break;\n"
+    "        }\n"
+    "        const rl::StageMotionQualification qualification =\n"
+    "            rl::stage_motion_qualification(sim::CourseStage::balance, assisted_stance);",
+    "            if (lesson_complete || result.terminated)\n"
+    "                break;\n"
+    "        }\n"
+    "        const rl::StageMotionQualification qualification =\n"
+    "            rl::stage_motion_qualification(sim::CourseStage::balance, assisted_stance);",
+    "direct balance latched success",
+)
 tests = replace_once(
     tests,
     "                const sim::StepResult result = environment.step(action);\n"
