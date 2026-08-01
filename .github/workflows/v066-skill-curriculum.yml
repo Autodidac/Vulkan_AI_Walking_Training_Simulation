@@ -1,4 +1,4 @@
-name: Validate EpochRunner v0.6.6 skill curriculum
+name: Release EpochRunner v0.6.6 skill curriculum
 
 on:
   push:
@@ -7,6 +7,8 @@ on:
     paths:
       - tools/integrate_skill_core.py
       - tools/integrate_skill_training.py
+      - tools/integrate_training_stability.py
+      - tools/integrate_training_stability_fixups.py
       - .github/workflows/v066-skill-curriculum.yml
 
 permissions:
@@ -17,7 +19,7 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  validate:
+  release:
     runs-on: windows-2025
     steps:
       - name: Checkout main
@@ -26,13 +28,17 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Integrate ordered skill curriculum
+      - name: Integrate ordered skill curriculum and training stability
         shell: pwsh
         run: |
           python tools/integrate_skill_core.py
           if ($LASTEXITCODE -ne 0) { throw "Core skill integration failed" }
           python tools/integrate_skill_training.py
           if ($LASTEXITCODE -ne 0) { throw "Training skill integration failed" }
+          python tools/integrate_training_stability.py
+          if ($LASTEXITCODE -ne 0) { throw "Training stability integration failed" }
+          python tools/integrate_training_stability_fixups.py
+          if ($LASTEXITCODE -ne 0) { throw "Training stability fixups failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Integrated source contains whitespace errors" }
 
@@ -49,8 +55,9 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v066-skill-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v066-stable-gait-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            epochrunner-v066-skill-${{ runner.os }}-
             epochrunner-v065-${{ runner.os }}-
             epochrunner-guided-training-${{ runner.os }}-
 
@@ -78,34 +85,81 @@ jobs:
           build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
           if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
 
+      - name: Package exact tested build
+        id: package
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.6.6-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          Copy-Item README.md, LICENSE, MISSIONS.md, V070_MASTER_PLAN.md -Destination $stage -Force -ErrorAction SilentlyContinue
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          $archive = "EpochRunner-v0.6.6-windows-x64.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
       - name: Commit exact tested source
         id: source
         shell: pwsh
         run: |
           Remove-Item tools/integrate_skill_core.py
           Remove-Item tools/integrate_skill_training.py
+          Remove-Item tools/integrate_training_stability.py
+          Remove-Item tools/integrate_training_stability_fixups.py
           Remove-Item .github/workflows/v066-skill-curriculum.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Implement ordered standing-to-acrobatics curriculum"
+          git commit -m "Release EpochRunner v0.6.6 stable skill curriculum"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested skill curriculum" }
           $sourceSha = (git rev-parse HEAD).Trim()
           git push origin HEAD:main
           if ($LASTEXITCODE -ne 0) { throw "Failed to update main" }
           "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
 
-      - name: Record validation evidence
+      - name: Upload verified package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EpochRunner-v0.6.6-windows-x64
+          path: |
+            EpochRunner-v0.6.6-windows-x64.zip
+            EpochRunner-v0.6.6-windows-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish v0.6.6
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          gh release view v0.6.6 *> $null
+          if ($LASTEXITCODE -eq 0) { throw "v0.6.6 already exists; refusing replacement" }
+          gh release create v0.6.6 $env:ARCHIVE "$env:ARCHIVE.sha256" `
+            --target $env:SOURCE_SHA `
+            --title "EpochRunner v0.6.6" `
+            --notes "Ordered locomotion and acrobatics curriculum with stable gait training. Teaches stand, duck/recover, jump/land, walk/run, moving duck/jump, controlled flips, and a mixed goal course. Hazard contact is legal and physical; passing obstacles is rewarded. Powered airtime is bounded, up to three airborne spins are allowed in flip-capable lessons, and ground rolling, skating, hovering, unpowered flight, or a fourth spin remain invalid. Adds real swing-airtime step validation, phase observations, action smoothing, a decaying early gait guide, less destructive PPO settings, bounded exploration, champion anchoring, and immediate best-policy rollback on substantial or invalid regression so late training cannot collapse below the best valid result."
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed" }
+
+      - name: Record release evidence
         shell: pwsh
         env:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
           RUN_ID: ${{ github.run_id }}
         run: |
           git fetch origin main
           git switch -C main origin/main
           New-Item -ItemType Directory -Force validation | Out-Null
           @"
-          # EpochRunner v0.6.6 ordered skill curriculum validation
+          # EpochRunner v0.6.6 stable skill curriculum release
 
           - Exact tested source commit: `$env:SOURCE_SHA`
           - Workflow run: `$env:RUN_ID`
@@ -118,12 +172,18 @@ jobs:
           - Obstacle passing: tracked and rewarded as progress
           - Powered airtime: bounded by lesson and launch evidence
           - Airborne spins: up to three allowed in flip-capable lessons; fourth spin invalid
-          - Ground rolling/body surfing: still invalid
-          - New autosave namespace prevents old locomotion policies from resuming into the changed curriculum
+          - Ground rolling, planted-foot skating, body surfing, hovering, and unpowered flight: invalid
+          - Walking steps require real swing airtime and clearance; contact wiggles cannot count as gait
+          - Phase observations, smoothed actions, and a decaying gait guide accelerate early locomotion learning
+          - PPO clip, epochs, gradient norm, entropy, and exploration were reduced/bounded for stability
+          - Substantial or invalid evaluation regression restores the protected best policy immediately
+          - New autosave namespace prevents old policies from resuming into the changed curriculum
           - Independently controlled arms remain a separate controller-output/checkpoint expansion mission
+          - Package: `$env:ARCHIVE`
+          - Package SHA-256: `$env:CHECKSUM`
           "@ | Set-Content -Encoding UTF8 validation/v0.6.6-skill-curriculum.md
           git add validation/v0.6.6-skill-curriculum.md
-          git commit -m "Record v0.6.6 skill curriculum validation"
-          if ($LASTEXITCODE -ne 0) { throw "Validation evidence commit failed" }
+          git commit -m "Record verified EpochRunner v0.6.6 release evidence"
+          if ($LASTEXITCODE -ne 0) { throw "Release evidence commit failed" }
           git push origin HEAD:main
-          if ($LASTEXITCODE -ne 0) { throw "Validation evidence push failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Release evidence push failed" }
