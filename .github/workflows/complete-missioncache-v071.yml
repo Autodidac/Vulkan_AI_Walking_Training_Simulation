@@ -1,0 +1,213 @@
+name: Complete EpochRunner v0.7.1 mission cache
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/complete_missioncache_v071.py
+      - .github/workflows/complete-missioncache-v071.yml
+
+concurrency:
+  group: epochrunner-v071-missioncache
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  linux-validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Materialize v0.7.1 source
+        run: |
+          python3 tools/complete_missioncache_v071.py apply
+          git diff --check
+
+      - name: Install GCC 14 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Configure C++23 core tests
+        run: >-
+          cmake -S . -B build/linux-v071 -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build Linux tests
+        run: cmake --build build/linux-v071 --parallel 2
+
+      - name: Run Linux tests
+        run: ctest --test-dir build/linux-v071 --output-on-failure -V
+
+  windows-release:
+    needs: linux-validate
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Materialize v0.7.1 source
+        shell: pwsh
+        run: |
+          python tools/complete_missioncache_v071.py apply
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 materialization failed" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
+          Copy-Item tools/complete_missioncache_v071.py "$env:RUNNER_TEMP/complete_missioncache_v071.py" -Force
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v071-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v070-${{ runner.os }}-
+            epochrunner-v066-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure full MSVC release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build full SDL3 Vulkan EpochGui application
+        run: cmake --build --preset windows-release
+
+      - name: Run Windows tests
+        run: ctest --preset windows-release --output-on-failure -V
+
+      - name: Verify executable and Vulkan path
+        shell: pwsh
+        run: |
+          $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.7.1") { throw "Unexpected version: $version" }
+          build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+
+      - name: Finalize validated source
+        id: source
+        shell: pwsh
+        env:
+          RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          python tools/complete_missioncache_v071.py validate --run-id $env:RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw "Mission validation finalization failed" }
+
+          git fetch origin main
+          $actualMain = (git rev-parse origin/main).Trim()
+          if ($actualMain -ne $env:TRIGGER_SHA) {
+            throw "Main moved from trigger $env:TRIGGER_SHA to $actualMain"
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/complete-missioncache-v071.yml
+          git rm tools/complete_missioncache_v071.py
+          git rm validation/v0.7.1-release-lock.md
+          git add CMakeLists.txt src/simulation.cpp src/simulation.hpp src/app.cpp `
+            tests/core_tests.cpp missioncache.md RELEASE_NOTES_v0.7.1.md `
+            validation/v0.7.1-prepublish.md
+          git commit -m "Fix humanoid parent-side motor reaction"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested v0.7.1 source" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish tested v0.7.1 source" }
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Package exact tested build
+        id: package
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.1-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.1.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          $archive = "EpochRunner-v0.7.1-windows-x64.zip"
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Publish v0.7.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          gh release view v0.7.1 *> $null
+          if ($LASTEXITCODE -eq 0) { throw "v0.7.1 already exists; refusing replacement" }
+          gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" `
+            --target $env:SOURCE_SHA `
+            --title "EpochRunner v0.7.1" `
+            --notes-file RELEASE_NOTES_v0.7.1.md
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.1 release publication failed" }
+
+      - name: Complete mission cache and verify cleanup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
+          if ($openPrs -ne "0") { throw "Repository still has $openPrs open pull requests" }
+          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
+            throw "Repository branches are not clean: $($branches -join ', ')"
+          }
+
+          python "$env:RUNNER_TEMP/complete_missioncache_v071.py" finalize `
+            --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID `
+            --archive $env:ARCHIVE --checksum $env:CHECKSUM
+          if ($LASTEXITCODE -ne 0) { throw "Mission cache publication evidence failed" }
+
+          git add missioncache.md validation/v0.7.1.md
+          git commit -m "Complete EpochRunner v0.7.1 mission cache"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to commit final mission evidence" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish final mission evidence" }
+
+          $openPrs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
+          if ($openPrs -ne "0") { throw "Repository gained $openPrs open pull requests" }
+          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
+            throw "Final repository branches are not clean: $($branches -join ', ')"
+          }
