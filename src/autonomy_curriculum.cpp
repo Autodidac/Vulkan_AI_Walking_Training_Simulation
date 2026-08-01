@@ -55,7 +55,7 @@ namespace epochrunner::rl
         if (worker_.has_best_policy() && metrics.best_update != last_saved_best_update_)
         {
             last_saved_best_update_ = metrics.best_update;
-            autosave_locked();
+            queue_autosave();
         }
 
         mastery_streak_ = stage_mastered_locked() ? mastery_streak_ + 1 : 0;
@@ -107,7 +107,7 @@ namespace epochrunner::rl
             worker_message_ = std::format("FULL COURSE MASTERED - DIFFICULTY {:.0f}%", difficulty_ * 100.0f);
         }
         worker_.set_course(stage_, difficulty_, false);
-        autosave_locked();
+        queue_autosave();
     }
 
     float AutonomousTrainer::evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const
@@ -225,8 +225,9 @@ namespace epochrunner::rl
         else
         {
             const float delta = direction * 0.012f;
-            for (const sim::MotorConstraint& motor : candidate.motors)
+            for (std::size_t motor_index = 0; motor_index < candidate.active_motor_count; ++motor_index)
             {
+                const sim::MotorConstraint& motor = candidate.motors[motor_index];
                 if (motor.pivot < candidate.nodes.size() && motor.pivot != candidate.root_node)
                     candidate.nodes[motor.pivot].y = clamp(candidate.nodes[motor.pivot].y + delta, 0.20f, 5.5f);
             }
@@ -235,7 +236,7 @@ namespace epochrunner::rl
         std::array<float, sim::action_count> negative{};
         std::array<float, sim::action_count> positive{};
         std::array<float, sim::action_count> power{};
-        for (std::size_t index = 0; index < candidate.motors.size(); ++index)
+        for (std::size_t index = 0; index < candidate.active_motor_count; ++index)
         {
             negative[index] = std::max(2.0f * pi / 180.0f,
                 candidate.motors[index].neutral_angle - candidate.motors[index].minimum_angle);
@@ -244,7 +245,7 @@ namespace epochrunner::rl
             power[index] = candidate.motors[index].strength;
         }
         candidate.rebuild_rest_lengths();
-        for (std::size_t index = 0; index < candidate.motors.size(); ++index)
+        for (std::size_t index = 0; index < candidate.active_motor_count; ++index)
         {
             sim::MotorConstraint& motor = candidate.motors[index];
             motor.neutral_angle = candidate.rest_joint_angle(index);
@@ -271,7 +272,7 @@ namespace epochrunner::rl
             degradation_streak_ = 0;
             worker_message_ = std::format("RIG GENERATION {} ACCEPTED  {:+.3f} VALID SCORE",
                 rig_generation_, candidate_score - baseline);
-            autosave_locked();
+            queue_autosave();
         }
         else
         {

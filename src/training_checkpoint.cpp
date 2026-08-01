@@ -9,10 +9,7 @@ namespace epochrunner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '6', '\0', '\1' };
-        constexpr std::array<char, 8> previous_magic{ 'E', 'P', 'P', 'O', '2', '5', '\0', '\1' };
-        constexpr std::array<char, 8> previous_v24_magic{ 'E', 'P', 'P', 'O', '2', '4', '\0', '\1' };
-        constexpr std::array<char, 8> legacy_magic{ 'E', 'P', 'P', 'O', '2', '3', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '7', '\0', '\1' };
 
         template <typename T>
         bool write_value(std::ofstream& output, const T& value)
@@ -32,6 +29,9 @@ namespace epochrunner::rl
 
         bool write_vector(std::ofstream& output, const std::vector<float>& values)
         {
+            const std::uint64_t count = values.size();
+            if (!write_value(output, count))
+                return false;
             if (values.empty())
                 return true;
             output.write(reinterpret_cast<const char*>(values.data()),
@@ -39,18 +39,112 @@ namespace epochrunner::rl
             return static_cast<bool>(output);
         }
 
-        bool read_vector(std::ifstream& input, std::vector<float>& values, std::size_t count)
+        bool read_vector(std::ifstream& input, std::vector<float>& values, std::size_t maximum)
         {
-            values.resize(count);
+            std::uint64_t count{};
+            if (!read_value(input, count) || count > maximum)
+                return false;
+            values.resize(static_cast<std::size_t>(count));
             if (values.empty())
                 return true;
             input.read(reinterpret_cast<char*>(values.data()),
                 static_cast<std::streamsize>(values.size() * sizeof(float)));
             return static_cast<bool>(input);
         }
+
+        bool write_metrics(std::ofstream& output, const TrainingMetrics& value)
+        {
+            return write_value(output, value.update)
+                && write_value(output, value.environment_steps)
+                && write_value(output, value.mean_reward)
+                && write_value(output, value.mean_episode_distance)
+                && write_value(output, value.mean_speed)
+                && write_value(output, value.policy_loss)
+                && write_value(output, value.value_loss)
+                && write_value(output, value.entropy)
+                && write_value(output, value.learning_rate)
+                && write_value(output, value.evaluation_reward)
+                && write_value(output, value.evaluation_distance)
+                && write_value(output, value.evaluation_speed)
+                && write_value(output, value.evaluation_score)
+                && write_value(output, value.evaluation_survival)
+                && write_value(output, value.evaluation_collisions)
+                && write_value(output, value.evaluation_airborne_ratio)
+                && write_value(output, value.evaluation_stride_events)
+                && write_value(output, value.evaluation_duck_seconds)
+                && write_value(output, value.evaluation_powered_jumps)
+                && write_value(output, value.evaluation_jump_landings)
+                && write_value(output, value.evaluation_spin_turns)
+                && write_value(output, value.evaluation_spin_landings)
+                && write_value(output, value.evaluation_obstacles_passed)
+                && write_value(output, value.evaluation_invalid_runs)
+                && write_value(output, value.evaluation_valid)
+                && write_value(output, value.best_evaluation_distance)
+                && write_value(output, value.best_evaluation_score)
+                && write_value(output, value.best_update)
+                && write_value(output, value.evaluation_count)
+                && write_value(output, value.imitation_samples)
+                && write_value(output, value.imitation_weight)
+                && write_value(output, value.imitation_source_score);
+        }
+
+        bool read_metrics(std::ifstream& input, TrainingMetrics& value)
+        {
+            return read_value(input, value.update)
+                && read_value(input, value.environment_steps)
+                && read_value(input, value.mean_reward)
+                && read_value(input, value.mean_episode_distance)
+                && read_value(input, value.mean_speed)
+                && read_value(input, value.policy_loss)
+                && read_value(input, value.value_loss)
+                && read_value(input, value.entropy)
+                && read_value(input, value.learning_rate)
+                && read_value(input, value.evaluation_reward)
+                && read_value(input, value.evaluation_distance)
+                && read_value(input, value.evaluation_speed)
+                && read_value(input, value.evaluation_score)
+                && read_value(input, value.evaluation_survival)
+                && read_value(input, value.evaluation_collisions)
+                && read_value(input, value.evaluation_airborne_ratio)
+                && read_value(input, value.evaluation_stride_events)
+                && read_value(input, value.evaluation_duck_seconds)
+                && read_value(input, value.evaluation_powered_jumps)
+                && read_value(input, value.evaluation_jump_landings)
+                && read_value(input, value.evaluation_spin_turns)
+                && read_value(input, value.evaluation_spin_landings)
+                && read_value(input, value.evaluation_obstacles_passed)
+                && read_value(input, value.evaluation_invalid_runs)
+                && read_value(input, value.evaluation_valid)
+                && read_value(input, value.best_evaluation_distance)
+                && read_value(input, value.best_evaluation_score)
+                && read_value(input, value.best_update)
+                && read_value(input, value.evaluation_count)
+                && read_value(input, value.imitation_samples)
+                && read_value(input, value.imitation_weight)
+                && read_value(input, value.imitation_source_score);
+        }
     }
 
-    bool PpoTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    PpoTrainer::CheckpointData PpoTrainer::checkpoint_data() const
+    {
+        CheckpointData data{};
+        data.rig_signature = blueprint_.signature();
+        data.parameters = policy_.parameters();
+        data.first_moment = adam_.first_moment;
+        data.second_moment = adam_.second_moment;
+        data.best_parameters = best_parameters_;
+        data.reward_history = reward_history_;
+        data.speed_history = speed_history_;
+        data.optimizer_step = adam_.step;
+        data.random_state = random_state_;
+        data.metrics = metrics_;
+        data.stage = course_stage_;
+        data.difficulty = course_difficulty_;
+        return data;
+    }
+
+    bool PpoTrainer::write_checkpoint_data(const CheckpointData& data,
+        const std::filesystem::path& path, std::string& error)
     {
         const std::filesystem::path temporary = path.string() + ".tmp";
         std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
@@ -59,46 +153,24 @@ namespace epochrunner::rl
             error = "Could not open checkpoint for writing: " + temporary.string();
             return false;
         }
-
-        const std::uint64_t signature = blueprint_.signature();
-        const std::uint64_t parameter_count = policy_.parameters().size();
-        const std::uint64_t reward_count = reward_history_.size();
-        const std::uint64_t speed_count = speed_history_.size();
-        const std::uint64_t best_count = best_parameters_.size();
-        const auto stage = static_cast<std::uint8_t>(course_stage_);
-        const std::uint8_t evaluation_valid = metrics_.evaluation_valid ? 1u : 0u;
-
+        const auto stage = static_cast<std::uint8_t>(data.stage);
         output.write(checkpoint_magic.data(), static_cast<std::streamsize>(checkpoint_magic.size()));
-        bool ok = write_value(output, signature) && write_value(output, parameter_count)
-            && write_value(output, reward_count) && write_value(output, speed_count)
-            && write_value(output, best_count) && write_value(output, adam_.step)
-            && write_value(output, random_state_) && write_value(output, metrics_.update)
-            && write_value(output, metrics_.environment_steps) && write_value(output, metrics_.best_update)
-            && write_value(output, metrics_.evaluation_count)
-            && write_value(output, stage) && write_value(output, course_difficulty_)
-            && write_value(output, metrics_.mean_reward) && write_value(output, metrics_.mean_episode_distance)
-            && write_value(output, metrics_.mean_speed) && write_value(output, metrics_.policy_loss)
-            && write_value(output, metrics_.value_loss) && write_value(output, metrics_.entropy)
-            && write_value(output, metrics_.learning_rate) && write_value(output, metrics_.evaluation_reward)
-            && write_value(output, metrics_.evaluation_distance) && write_value(output, metrics_.evaluation_speed)
-            && write_value(output, metrics_.evaluation_score) && write_value(output, metrics_.evaluation_survival)
-            && write_value(output, metrics_.evaluation_collisions) && write_value(output, metrics_.evaluation_airborne_ratio)
-            && write_value(output, metrics_.evaluation_stride_events) && write_value(output, metrics_.evaluation_invalid_runs)
-            && write_value(output, evaluation_valid)
-            && write_value(output, metrics_.best_evaluation_distance)
-            && write_value(output, metrics_.best_evaluation_score)
-            && write_vector(output, policy_.parameters()) && write_vector(output, adam_.first_moment)
-            && write_vector(output, adam_.second_moment) && write_vector(output, best_parameters_)
-            && write_vector(output, reward_history_) && write_vector(output, speed_history_);
-        if (!ok)
+        const bool ok = write_value(output, data.rig_signature)
+            && write_value(output, data.optimizer_step)
+            && write_value(output, data.random_state)
+            && write_value(output, stage)
+            && write_value(output, data.difficulty)
+            && write_metrics(output, data.metrics)
+            && write_vector(output, data.parameters)
+            && write_vector(output, data.first_moment)
+            && write_vector(output, data.second_moment)
+            && write_vector(output, data.best_parameters)
+            && write_vector(output, data.reward_history)
+            && write_vector(output, data.speed_history);
+        output.close();
+        if (!ok || !output)
         {
             error = "Failed while writing checkpoint: " + path.string();
-            return false;
-        }
-        output.close();
-        if (!output)
-        {
-            error = "Failed while finalizing checkpoint: " + temporary.string();
             return false;
         }
         std::error_code filesystem_error{};
@@ -114,7 +186,8 @@ namespace epochrunner::rl
         return true;
     }
 
-    bool PpoTrainer::load_checkpoint(const std::filesystem::path& path, std::string& error, bool transfer_only)
+    bool PpoTrainer::read_checkpoint_data(const std::filesystem::path& path,
+        CheckpointData& data, std::string& error)
     {
         std::ifstream input(path, std::ios::binary);
         if (!input)
@@ -124,109 +197,93 @@ namespace epochrunner::rl
         }
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
-        if (!input)
+        std::uint8_t stage{};
+        if (!input || magic != checkpoint_magic
+            || !read_value(input, data.rig_signature)
+            || !read_value(input, data.optimizer_step)
+            || !read_value(input, data.random_state)
+            || !read_value(input, stage)
+            || !read_value(input, data.difficulty)
+            || !read_metrics(input, data.metrics)
+            || !read_vector(input, data.parameters, 2'000'000)
+            || !read_vector(input, data.first_moment, 2'000'000)
+            || !read_vector(input, data.second_moment, 2'000'000)
+            || !read_vector(input, data.best_parameters, 2'000'000)
+            || !read_vector(input, data.reward_history, 10'000)
+            || !read_vector(input, data.speed_history, 10'000)
+            || stage >= sim::course_stage_count
+            || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
-            error = "Truncated checkpoint header.";
+            error = "Invalid or incompatible EpochRunner v0.7 checkpoint.";
             return false;
         }
-        if (magic == legacy_magic || magic == previous_magic || magic == previous_v24_magic)
-        {
-            error = transfer_only
-                ? "OLDER CONTROLLER/CHECKPOINT IS QUARANTINED. V0.4.1 REQUIRES CLEAN GAIT VALIDATION AND WILL NOT IMPORT HOP/FLY BEST STATE."
-                : "OLDER EPPO23/24/25 CHECKPOINT CANNOT RESUME: V0.4.1 FIXES THE GAIT AND MICRO-MOTION GATES.";
-            return false;
-        }
-        if (magic != checkpoint_magic)
-        {
-            error = "Invalid EpochRunner checkpoint.";
-            return false;
-        }
+        data.stage = static_cast<sim::CourseStage>(stage);
+        error.clear();
+        return true;
+    }
 
-        std::uint64_t signature{}, parameter_count{}, reward_count{}, speed_count{}, best_count{};
-        std::uint64_t adam_step{}, random_state{}, update{}, environment_steps{}, best_update{}, evaluation_count{};
-        std::uint8_t stage_value{}, evaluation_valid{};
-        float difficulty{};
-        TrainingMetrics loaded{};
-        bool ok = read_value(input, signature) && read_value(input, parameter_count)
-            && read_value(input, reward_count) && read_value(input, speed_count)
-            && read_value(input, best_count) && read_value(input, adam_step)
-            && read_value(input, random_state) && read_value(input, update)
-            && read_value(input, environment_steps) && read_value(input, best_update)
-            && read_value(input, evaluation_count)
-            && read_value(input, stage_value) && read_value(input, difficulty)
-            && read_value(input, loaded.mean_reward) && read_value(input, loaded.mean_episode_distance)
-            && read_value(input, loaded.mean_speed) && read_value(input, loaded.policy_loss)
-            && read_value(input, loaded.value_loss) && read_value(input, loaded.entropy)
-            && read_value(input, loaded.learning_rate) && read_value(input, loaded.evaluation_reward)
-            && read_value(input, loaded.evaluation_distance) && read_value(input, loaded.evaluation_speed)
-            && read_value(input, loaded.evaluation_score) && read_value(input, loaded.evaluation_survival)
-            && read_value(input, loaded.evaluation_collisions) && read_value(input, loaded.evaluation_airborne_ratio)
-            && read_value(input, loaded.evaluation_stride_events) && read_value(input, loaded.evaluation_invalid_runs)
-            && read_value(input, evaluation_valid)
-            && read_value(input, loaded.best_evaluation_distance)
-            && read_value(input, loaded.best_evaluation_score);
-        if (!ok || parameter_count != policy_.parameter_count() || reward_count > 10000
-            || speed_count > 10000 || (best_count != 0 && best_count != parameter_count)
-            || stage_value >= sim::course_stage_count || difficulty < 0.10f || difficulty > 1.0f)
+    bool PpoTrainer::apply_checkpoint_data(CheckpointData data, std::string& error,
+        bool transfer_only)
+    {
+        const std::size_t expected = policy_.parameter_count();
+        if (data.parameters.size() != expected
+            || data.first_moment.size() != expected
+            || data.second_moment.size() != expected
+            || (!data.best_parameters.empty() && data.best_parameters.size() != expected))
         {
             error = "Invalid or incompatible checkpoint dimensions.";
             return false;
         }
-
-        std::vector<float> parameters, first, second, best, rewards, speeds;
-        ok = read_vector(input, parameters, static_cast<std::size_t>(parameter_count))
-            && read_vector(input, first, static_cast<std::size_t>(parameter_count))
-            && read_vector(input, second, static_cast<std::size_t>(parameter_count))
-            && read_vector(input, best, static_cast<std::size_t>(best_count))
-            && read_vector(input, rewards, static_cast<std::size_t>(reward_count))
-            && read_vector(input, speeds, static_cast<std::size_t>(speed_count));
-        if (!ok)
+        if (!transfer_only && data.rig_signature != blueprint_.signature())
         {
-            error = "Truncated checkpoint data.";
+            error = std::format("RIG MISMATCH {:016X} != {:016X}.",
+                data.rig_signature, blueprint_.signature());
             return false;
         }
-        if (!transfer_only && signature != blueprint_.signature())
-        {
-            error = std::format("RIG MISMATCH {:016X} != {:016X}. AUTOPILOT WILL NOT SILENTLY RESUME ANOTHER BODY.",
-                signature, blueprint_.signature());
-            return false;
-        }
-
-        policy_.parameters() = std::move(parameters);
+        policy_.parameters() = std::move(data.parameters);
         if (transfer_only)
         {
             reset_training_state();
             controller_state_ = ControllerState::transferred;
-            error = "WEIGHTS TRANSFERRED - OPTIMIZER, CURRICULUM METRICS, AND BEST SNAPSHOT RESET";
+            error = "WEIGHTS TRANSFERRED - OPTIMIZER AND BEST STATE RESET";
             return true;
         }
-
-        course_stage_ = static_cast<sim::CourseStage>(stage_value);
-        course_difficulty_ = difficulty;
+        adam_.first_moment = std::move(data.first_moment);
+        adam_.second_moment = std::move(data.second_moment);
+        adam_.step = data.optimizer_step;
+        random_state_ = data.random_state;
+        metrics_ = data.metrics;
+        best_parameters_ = std::move(data.best_parameters);
+        reward_history_ = std::move(data.reward_history);
+        speed_history_ = std::move(data.speed_history);
+        course_stage_ = data.stage;
+        course_difficulty_ = data.difficulty;
         for (sim::Environment& environment : environments_)
             environment.set_course(course_stage_, course_difficulty_);
         preview_.set_course(course_stage_, course_difficulty_);
-        adam_.first_moment = std::move(first);
-        adam_.second_moment = std::move(second);
-        adam_.step = adam_step;
-        random_state_ = random_state;
-        loaded.update = update;
-        loaded.environment_steps = environment_steps;
-        loaded.best_update = best_update;
-        loaded.evaluation_count = evaluation_count;
-        loaded.evaluation_valid = evaluation_valid != 0;
-        metrics_ = loaded;
-        best_parameters_ = std::move(best);
-        reward_history_ = std::move(rewards);
-        speed_history_ = std::move(speeds);
         refresh_self_imitation_prior();
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
+        for (auto& action : rollout_previous_actions_)
+            action.fill(0.0f);
         for (std::size_t index = 0; index < environments_.size(); ++index)
             environments_[index].reset(0x1000u + index * 7919u);
         preview_.reset(0xDEADBEEFu + metrics_.update);
         controller_state_ = ControllerState::resumed;
         error.clear();
         return true;
+    }
+
+    bool PpoTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    {
+        return write_checkpoint_data(checkpoint_data(), path, error);
+    }
+
+    bool PpoTrainer::load_checkpoint(const std::filesystem::path& path, std::string& error,
+        bool transfer_only)
+    {
+        CheckpointData data{};
+        return read_checkpoint_data(path, data, error)
+            && apply_checkpoint_data(std::move(data), error, transfer_only);
     }
 }

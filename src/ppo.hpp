@@ -15,6 +15,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace epochrunner::rl
@@ -191,6 +192,21 @@ namespace epochrunner::rl
     class PpoTrainer
     {
     public:
+        struct CheckpointData
+        {
+            std::uint64_t rig_signature{};
+            std::vector<float> parameters{};
+            std::vector<float> first_moment{};
+            std::vector<float> second_moment{};
+            std::vector<float> best_parameters{};
+            std::vector<float> reward_history{};
+            std::vector<float> speed_history{};
+            std::uint64_t optimizer_step{};
+            std::uint64_t random_state{};
+            TrainingMetrics metrics{};
+            sim::CourseStage stage{ sim::CourseStage::balance };
+            float difficulty{ 0.25f };
+        };
         explicit PpoTrainer(const sim::CreatureBlueprint& blueprint,
             std::size_t environment_count = 64,
             bool enable_rollout_workers = true);
@@ -208,7 +224,19 @@ namespace epochrunner::rl
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);
+        [[nodiscard]] CheckpointData checkpoint_data() const;
+        [[nodiscard]] static bool write_checkpoint_data(const CheckpointData& data,
+            const std::filesystem::path& path, std::string& error);
+        [[nodiscard]] static bool read_checkpoint_data(const std::filesystem::path& path,
+            CheckpointData& data, std::string& error);
+        [[nodiscard]] bool apply_checkpoint_data(CheckpointData data, std::string& error,
+            bool transfer_only = false);
         [[nodiscard]] bool restore_best_policy() noexcept;
+        void begin_staged_update();
+        void compute_staged_advantages();
+        void optimize_staged_update();
+        void finish_staged_update();
+        [[nodiscard]] bool staged_update_active() const noexcept { return staged_update_active_; }
         void train_one_update();
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
@@ -343,5 +371,9 @@ namespace epochrunner::rl
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
+        RolloutTotals staged_totals_{};
+        bool staged_update_active_{};
+        bool staged_advantages_ready_{};
+        bool staged_optimized_{};
     };
 }

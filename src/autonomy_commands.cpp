@@ -6,10 +6,10 @@
 
 namespace epochrunner::rl
 {
-    void AutonomousTrainer::set_autosave_paths(std::filesystem::path checkpoint, std::filesystem::path rig,
-        std::filesystem::path state)
+    void AutonomousTrainer::set_autosave_paths(std::filesystem::path checkpoint,
+        std::filesystem::path rig, std::filesystem::path state)
     {
-        std::scoped_lock lock(worker_mutex_);
+        std::scoped_lock lock(persistence_mutex_);
         autosave_checkpoint_ = std::move(checkpoint);
         autosave_rig_ = std::move(rig);
         autosave_state_ = std::move(state);
@@ -17,68 +17,49 @@ namespace epochrunner::rl
 
     bool AutonomousTrainer::load_autosave(std::string& message)
     {
-        std::scoped_lock lock(worker_mutex_);
-        bool loaded_anything = false;
-        read_state_locked();
-        if (std::filesystem::exists(autosave_rig_))
+        bool exists = false;
         {
-            std::string rig_error{};
-            const sim::CreatureBlueprint loaded = sim::CreatureBlueprint::load(autosave_rig_, rig_error);
-            if (rig_error.empty())
-            {
-                worker_.set_blueprint(loaded, false);
-                loaded_anything = true;
-            }
-            else
-            {
-                message = rig_error;
-            }
+            std::scoped_lock lock(persistence_mutex_);
+            exists = std::filesystem::exists(autosave_checkpoint_)
+                || std::filesystem::exists(autosave_rig_)
+                || std::filesystem::exists(autosave_state_);
         }
-        worker_.set_course(stage_, difficulty_, false);
-        if (std::filesystem::exists(autosave_checkpoint_))
+        if (!exists)
         {
-            std::string checkpoint_error{};
-            if (worker_.load_checkpoint(autosave_checkpoint_, checkpoint_error, false))
-            {
-                stage_ = worker_.course_stage();
-                difficulty_ = worker_.course_difficulty();
-                loaded_anything = true;
-                worker_message_ = "AUTOSAVE RESUMED - TRAINING CONTINUES IN BACKGROUND";
-            }
-            else
-            {
-                message = checkpoint_error;
-            }
+            message = "NO V0.7 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            return false;
         }
-        publish_locked();
-        if (loaded_anything)
-            message = worker_message_;
-        else if (message.empty())
-            message = "NO V0.4 AUTOSAVE FOUND - STARTING WITH BALANCE TRAINING";
-        return loaded_anything;
+        queue_autosave_load();
+        message = "AUTOSAVE LOAD QUEUED - TRAINER REMAINS RESPONSIVE";
+        return true;
     }
 
-    bool AutonomousTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error) const
+    bool AutonomousTrainer::save_checkpoint(const std::filesystem::path& path, std::string& error)
     {
-        std::scoped_lock lock(worker_mutex_);
-        return worker_.save_checkpoint(path, error);
+        if (path.empty())
+        {
+            error = "Checkpoint path is empty.";
+            return false;
+        }
+        PendingCommand command{};
+        command.type = CommandType::save_checkpoint;
+        command.path = path;
+        enqueue_command(std::move(command));
+        error = "CHECKPOINT SAVE QUEUED";
+        return true;
     }
 
     bool AutonomousTrainer::load_checkpoint(const std::filesystem::path& path, std::string& error,
         bool transfer_only)
     {
-        std::scoped_lock lock(worker_mutex_);
-        const bool loaded = worker_.load_checkpoint(path, error, transfer_only);
-        if (loaded)
+        if (path.empty() || !std::filesystem::exists(path))
         {
-            stage_ = worker_.course_stage();
-            difficulty_ = worker_.course_difficulty();
-            worker_message_ = transfer_only
-                ? "CONTROLLER TRANSFERRED - AUTOPILOT RECALIBRATING"
-                : "CHECKPOINT RESUMED - AUTOPILOT CONTINUING";
-            publish_locked();
+            error = "Could not open checkpoint: " + path.string();
+            return false;
         }
-        return loaded;
+        queue_checkpoint_load(path, transfer_only);
+        error = "CHECKPOINT LOAD QUEUED";
+        return true;
     }
 
     void AutonomousTrainer::enqueue_command(PendingCommand command)
@@ -111,13 +92,10 @@ namespace epochrunner::rl
             return;
 
         worker_busy_.store(true, std::memory_order_relaxed);
-        {
-            std::scoped_lock lock(worker_mutex_);
-            for (PendingCommand& command : pending)
-                apply_command_locked(std::move(command));
-            worker_busy_.store(false, std::memory_order_relaxed);
-            publish_locked();
-        }
+        for (PendingCommand& command : pending)
+            apply_command_locked(std::move(command));
+        worker_busy_.store(false, std::memory_order_relaxed);
+        publish_locked();
     }
 
     void AutonomousTrainer::apply_command_locked(PendingCommand&& command)
@@ -142,7 +120,7 @@ namespace epochrunner::rl
             last_saved_best_update_ = 0;
             worker_message_ = command.preserve_policy
                 ? "RIG UPDATED WITHOUT BLOCKING THE UI - CONTROLLER RECALIBRATING"
-                : "RIG UPDATED WITHOUT BLOCKING THE UI - FRESH BALANCE LESSON STARTED";
+                : "RIG UPDATED WITHOUT BLOCKING THE UI - FRESH STAND LESSON STARTED";
             break;
 
         case CommandType::reset_policy:
@@ -152,7 +130,7 @@ namespace epochrunner::rl
             degradation_streak_ = 0;
             last_evaluation_count_ = 0;
             last_saved_best_update_ = 0;
-            worker_message_ = "CONTROLLER RESET - AUTOPILOT RESTARTED CURRENT LESSON";
+            worker_message_ = "CONTROLLER RESET - CURRENT SKILL RESTARTED";
             break;
 
         case CommandType::set_exploration:
@@ -165,6 +143,53 @@ namespace epochrunner::rl
             {
                 ++rollback_count_;
                 worker_message_ = "BEST VERIFIED CONTROLLER RESTORED";
+            }
+            break;
+
+        case CommandType::save_checkpoint:
+            queue_checkpoint_save(std::move(command.path), worker_.checkpoint_data());
+            worker_message_ = "IMMUTABLE CHECKPOINT SNAPSHOT QUEUED FOR ASYNC WRITE";
+            break;
+
+        case CommandType::apply_checkpoint:
+            if (command.checkpoint)
+            {
+                std::string error{};
+                if (worker_.apply_checkpoint_data(std::move(*command.checkpoint), error,
+                    command.transfer_only))
+                {
+                    stage_ = worker_.course_stage();
+                    difficulty_ = worker_.course_difficulty();
+                    worker_message_ = command.transfer_only
+                        ? "CONTROLLER TRANSFERRED - CURRENT SKILL RECALIBRATING"
+                        : "CHECKPOINT RESUMED - BACKGROUND TRAINING CONTINUES";
+                }
+                else
+                {
+                    worker_message_ = error;
+                }
+            }
+            break;
+
+        case CommandType::apply_autosave:
+            if (command.checkpoint)
+            {
+                worker_.set_blueprint(command.blueprint, false);
+                std::string error{};
+                if (worker_.apply_checkpoint_data(std::move(*command.checkpoint), error, false))
+                {
+                    stage_ = worker_.course_stage();
+                    difficulty_ = worker_.course_difficulty();
+                    rig_generation_ = command.rig_generation;
+                    accepted_rig_changes_ = command.accepted_rig_changes;
+                    rejected_rig_changes_ = command.rejected_rig_changes;
+                    rollback_count_ = command.rollback_count;
+                    worker_message_ = "V0.7 AUTOSAVE RESUMED ASYNCHRONOUSLY";
+                }
+                else
+                {
+                    worker_message_ = error;
+                }
             }
             break;
         }

@@ -347,20 +347,21 @@ namespace epochrunner::rl
         return action;
     }
 
-    void PpoTrainer::train_one_update()
+    void PpoTrainer::begin_staged_update()
     {
+        if (staged_update_active_)
+            return;
         constexpr std::size_t horizon = rollout_horizon;
-        constexpr float gamma = 0.995f;
-        constexpr float gae_lambda = 0.95f;
         const std::size_t environment_count = environments_.size();
         rollout_.clear();
         rollout_.resize(horizon * environment_count);
 
-        const std::uint64_t update_seed = random_state_ ^ (metrics_.update + 1u) * 0x9E3779B97F4A7C15ULL;
-        RolloutTotals totals{};
+        const std::uint64_t update_seed = random_state_
+            ^ (metrics_.update + 1u) * 0x9E3779B97F4A7C15ULL;
+        staged_totals_ = {};
         if (rollout_workers_.empty())
         {
-            totals = collect_rollout_partition(0, 1, update_seed);
+            staged_totals_ = collect_rollout_partition(0, 1, update_seed);
         }
         else
         {
@@ -381,14 +382,25 @@ namespace epochrunner::rl
             }
             for (const RolloutTotals& worker : rollout_worker_totals_)
             {
-                totals.accumulated_speed += worker.accumulated_speed;
-                totals.completed_reward += worker.completed_reward;
-                totals.completed_distance += worker.completed_distance;
-                totals.completed_episodes += worker.completed_episodes;
+                staged_totals_.accumulated_speed += worker.accumulated_speed;
+                staged_totals_.completed_reward += worker.completed_reward;
+                staged_totals_.completed_distance += worker.completed_distance;
+                staged_totals_.completed_episodes += worker.completed_episodes;
             }
         }
         random_state_ ^= update_seed + 0xA0761D6478BD642FULL;
+        staged_update_active_ = true;
+        staged_advantages_ready_ = false;
+        staged_optimized_ = false;
+    }
 
+    void PpoTrainer::compute_staged_advantages()
+    {
+        if (!staged_update_active_ || staged_advantages_ready_)
+            return;
+        constexpr float gamma = 0.995f;
+        constexpr float gae_lambda = 0.95f;
+        const std::size_t environment_count = environments_.size();
         std::vector<float> next_values(environment_count, 0.0f);
         for (std::size_t environment_index = 0; environment_index < environment_count; ++environment_index)
             next_values[environment_index] = policy_.evaluate(environments_[environment_index].observation()).value;
@@ -397,7 +409,7 @@ namespace epochrunner::rl
         {
             float next_value = next_values[environment_index];
             float next_advantage = 0.0f;
-            for (std::size_t reverse = horizon; reverse-- > 0;)
+            for (std::size_t reverse = rollout_horizon; reverse-- > 0;)
             {
                 Transition& transition = rollout_[reverse * environment_count + environment_index];
                 const float continuation = transition.terminal ? 0.0f : 1.0f;
@@ -419,22 +431,40 @@ namespace epochrunner::rl
             const float delta = transition.advantage - mean_advantage;
             variance += delta * delta;
         }
-        const float inverse_std = 1.0f / std::sqrt(variance / static_cast<float>(rollout_.size()) + 1.0e-6f);
+        const float inverse_std = 1.0f
+            / std::sqrt(variance / static_cast<float>(rollout_.size()) + 1.0e-6f);
         for (Transition& transition : rollout_)
             transition.advantage = (transition.advantage - mean_advantage) * inverse_std;
+        staged_advantages_ready_ = true;
+    }
 
+    void PpoTrainer::optimize_staged_update()
+    {
+        if (!staged_update_active_ || !staged_advantages_ready_ || staged_optimized_)
+            return;
         update_policy();
+        staged_optimized_ = true;
+    }
+
+    void PpoTrainer::finish_staged_update()
+    {
+        if (!staged_update_active_ || !staged_advantages_ready_ || !staged_optimized_)
+            return;
         ++metrics_.update;
         metrics_.environment_steps += rollout_.size();
-        metrics_.mean_speed = totals.accumulated_speed / static_cast<float>(rollout_.size());
-        if (totals.completed_episodes > 0)
+        metrics_.mean_speed = staged_totals_.accumulated_speed
+            / static_cast<float>(rollout_.size());
+        if (staged_totals_.completed_episodes > 0)
         {
-            metrics_.mean_reward = totals.completed_reward / static_cast<float>(totals.completed_episodes);
-            metrics_.mean_episode_distance = totals.completed_distance / static_cast<float>(totals.completed_episodes);
+            metrics_.mean_reward = staged_totals_.completed_reward
+                / static_cast<float>(staged_totals_.completed_episodes);
+            metrics_.mean_episode_distance = staged_totals_.completed_distance
+                / static_cast<float>(staged_totals_.completed_episodes);
         }
         else
         {
-            const float partial_reward = std::accumulate(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
+            const float partial_reward = std::accumulate(
+                episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
             metrics_.mean_reward = partial_reward / static_cast<float>(episode_rewards_.size());
         }
         append_history(reward_history_, metrics_.mean_reward);
@@ -442,6 +472,18 @@ namespace epochrunner::rl
         controller_state_ = ControllerState::training;
         if (metrics_.update == 1 || metrics_.update % 5 == 0)
             evaluate_policy();
+        staged_update_active_ = false;
+        staged_advantages_ready_ = false;
+        staged_optimized_ = false;
+        staged_totals_ = {};
+    }
+
+    void PpoTrainer::train_one_update()
+    {
+        begin_staged_update();
+        compute_staged_advantages();
+        optimize_staged_update();
+        finish_staged_update();
     }
 
     void PpoTrainer::evaluate_policy()

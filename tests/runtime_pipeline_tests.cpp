@@ -70,8 +70,8 @@ int main()
         arm_action[7] = 1.0f;
         for (int frame = 0; frame < 80; ++frame)
         {
-            neutral.step(zero);
-            arms.step(arm_action);
+            static_cast<void>(neutral.step(zero));
+            static_cast<void>(arms.step(arm_action));
         }
         const auto& neutral_particles = neutral.particles();
         const auto& arm_particles = arms.particles();

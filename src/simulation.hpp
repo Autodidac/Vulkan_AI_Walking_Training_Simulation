@@ -13,7 +13,7 @@
 
 namespace epochrunner::sim
 {
-    inline constexpr std::size_t action_count = 4;
+    inline constexpr std::size_t action_count = 8;
     inline constexpr std::size_t observation_count = 32;
 
     enum class CourseStage : std::uint8_t
@@ -542,6 +542,7 @@ namespace epochrunner::sim
         std::vector<float> radii{};
         std::vector<DistanceConstraint> bones{};
         std::array<MotorConstraint, action_count> motors{};
+        std::size_t active_motor_count{ 4 };
 
         std::uint16_t root_node{};
         std::uint16_t torso_node{ 1 };

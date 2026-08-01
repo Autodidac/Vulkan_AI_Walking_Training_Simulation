@@ -261,9 +261,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v066-skill-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v066-skill-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v066-skill-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v070-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v070-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v070-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -295,26 +295,35 @@ namespace epochrunner
             rig_edit_reason = reason;
         }
 
-        [[nodiscard]] std::array<std::string_view, 4> motor_names() const noexcept
+        [[nodiscard]] std::array<std::string_view, sim::action_count> motor_names() const noexcept
         {
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG" };
+                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::crawler4:
-                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG" };
+                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::hexapod:
-                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR" };
+                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::monoped:
-                return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT" };
+                return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::humanoid:
+                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
+                    "LEFT SHOULDER", "LEFT ELBOW", "RIGHT SHOULDER", "RIGHT ELBOW" };
             case RigPreset::biped:
             case RigPreset::chicken:
-                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE" };
+                return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
+                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::custom:
-                return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4" };
+                return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4",
+                    "MOTOR 5", "MOTOR 6", "MOTOR 7", "MOTOR 8" };
             }
-            return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4" };
+            return { "MOTOR 1", "MOTOR 2", "MOTOR 3", "MOTOR 4",
+                "MOTOR 5", "MOTOR 6", "MOTOR 7", "MOTOR 8" };
         }
 
         void set_status(std::string text)
@@ -416,8 +425,8 @@ namespace epochrunner
             switch (joint_test_group)
             {
             case JointTestGroup::selected: return index == selected_motor;
-            case JointTestGroup::pair_a: return index < 2;
-            case JointTestGroup::pair_b: return index >= 2;
+            case JointTestGroup::pair_a: return index < 4;
+            case JointTestGroup::pair_b: return index >= 4;
             case JointTestGroup::all: return true;
             }
             return false;
@@ -1176,16 +1185,20 @@ namespace epochrunner
                 add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
                 cursor.y += 29.0f;
                 const float motor_width = (rect.size.x - 48.0f) * 0.25f;
-                for (int index = 0; index < 4; ++index)
+                for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
                 {
-                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(index), 0.0f },
-                        { motor_width - 4.0f, 35.0f } }, std::to_string(index + 1), input, selected_motor == index))
+                    const int column = index % 4;
+                    const int row = index / 4;
+                    const bool motor_available = static_cast<std::size_t>(index) < blueprint.active_motor_count;
+                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(column),
+                        static_cast<float>(row) * 41.0f }, { motor_width - 4.0f, 35.0f } },
+                        std::to_string(index + 1), input, selected_motor == index, motor_available))
                     {
                         selected_motor = index;
                         joint_test_group = JointTestGroup::selected;
                     }
                 }
-                cursor.y += 46.0f;
+                cursor.y += 87.0f;
                 const auto names = motor_names();
                 add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
                 cursor.y += 30.0f;

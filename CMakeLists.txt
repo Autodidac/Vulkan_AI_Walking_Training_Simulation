@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.28)
 
-set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+if(MSVC)
+    set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+else()
+    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+endif()
 
-project(EpochRunner VERSION 0.6.6 LANGUAGES CXX)
+project(EpochRunner VERSION 0.7.0 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
+option(EPOCHRUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 
 find_package(Threads REQUIRED)
 
@@ -45,6 +50,11 @@ function(epochrunner_enable_warnings target)
 endfunction()
 
 epochrunner_enable_warnings(EpochRunnerCore)
+
+if(EPOCHRUNNER_ENABLE_TSAN AND NOT MSVC)
+    target_compile_options(EpochRunnerCore PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+    target_link_options(EpochRunnerCore PRIVATE -fsanitize=thread)
+endif()
 
 if(EPOCHRUNNER_BUILD_APP)
     include(FetchContent)
@@ -185,5 +195,21 @@ if(EPOCHRUNNER_BUILD_TESTS)
     )
     epochrunner_enable_warnings(EpochRunnerConcurrencyBenchmark)
     add_test(NAME EpochRunner.ConcurrencyBenchmark COMMAND EpochRunnerConcurrencyBenchmark)
-    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 30)
+    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
+
+    add_executable(EpochRunnerRuntimePipelineTests tests/runtime_pipeline_tests.cpp)
+    target_link_libraries(EpochRunnerRuntimePipelineTests PRIVATE EpochRunner::Core)
+    target_compile_features(EpochRunnerRuntimePipelineTests PRIVATE cxx_std_23)
+    set_target_properties(EpochRunnerRuntimePipelineTests PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    epochrunner_enable_warnings(EpochRunnerRuntimePipelineTests)
+    if(EPOCHRUNNER_ENABLE_TSAN AND NOT MSVC)
+        target_compile_options(EpochRunnerRuntimePipelineTests PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+        target_link_options(EpochRunnerRuntimePipelineTests PRIVATE -fsanitize=thread)
+    endif()
+    add_test(NAME EpochRunner.RuntimePipeline COMMAND EpochRunnerRuntimePipelineTests)
+    set_tests_properties(EpochRunner.RuntimePipeline PROPERTIES TIMEOUT 90)
 endif()

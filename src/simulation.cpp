@@ -55,7 +55,7 @@ namespace epochrunner::sim
             float major_travel_degrees, float minor_travel_degrees,
             float major_linear_gain, float minor_linear_gain) noexcept
         {
-            for (std::size_t index = 0; index < action_count; ++index)
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
             {
                 const MotorConstraint& motor = rig.motors[index];
                 const bool minor_joint = (index & 1u) != 0u;
@@ -71,7 +71,7 @@ namespace epochrunner::sim
 
         void calibrate_obstacle_legs(CreatureBlueprint& rig, float travel = 46.0f) noexcept
         {
-            for (std::size_t index = 0; index < action_count; ++index)
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
                 rig.calibrate_motor(index, travel, travel, 0.043f);
         }
     }
@@ -126,28 +126,49 @@ namespace epochrunner::sim
 
     CreatureBlueprint CreatureBlueprint::humanoid()
     {
-        // Calibrated from the user's most human-like learned rig. Geometry and
-        // asymmetric travel are retained; motor power is reduced by about 10%
-        // so the useful proportions remain without the flip/fly exploit speed.
         CreatureBlueprint result{};
         result.nodes = {
             { -0.0034f, 2.8127f }, { -0.0148f, 4.0173f }, { -0.010f, 4.86f },
             { -0.3443f, 1.5514f }, { -0.4200f, 0.2500f },
-            { 0.3400f, 1.6200f }, { 0.4200f, 0.2500f }
+            { 0.3400f, 1.6200f }, { 0.4200f, 0.2500f },
+            { -0.42f, 4.06f }, { -0.78f, 3.48f }, { -0.60f, 2.82f },
+            { 0.40f, 4.06f }, { 0.76f, 3.48f }, { 0.58f, 2.82f }
         };
-        result.radii = { 0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f };
+        result.radii = {
+            0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
+            0.16f, 0.15f, 0.14f, 0.16f, 0.15f, 0.14f
+        };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
             { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
-            { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f }
+            { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f },
+            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f }, { 8, 9, 0.0f, 0.96f },
+            { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f }, { 11, 12, 0.0f, 0.96f },
+            { 7, 10, 0.0f, 0.72f }
         };
         result.motors = {
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
-            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
+            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
+            MotorConstraint{ 1, 7, 8 }, MotorConstraint{ 7, 8, 9 },
+            MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 }
         };
+        result.active_motor_count = 8;
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 36.0f, 58.0f, 0.045f, 0.051f);
+        for (std::size_t index = 0; index < 4; ++index)
+        {
+            const bool knee = (index & 1u) != 0u;
+            const MotorConstraint& motor = result.motors[index];
+            const float driven_length = length(result.nodes[motor.c] - result.nodes[motor.pivot]);
+            const float linear_gain = knee ? 0.051f : 0.045f;
+            const float strength = linear_gain / std::max(0.75f, driven_length);
+            result.calibrate_motor(index, knee ? 58.0f : 36.0f,
+                knee ? 58.0f : 36.0f, strength);
+        }
+        result.calibrate_motor(4, 95.0f, 95.0f, 0.034f);
+        result.calibrate_motor(5, 108.0f, 108.0f, 0.031f);
+        result.calibrate_motor(6, 95.0f, 95.0f, 0.034f);
+        result.calibrate_motor(7, 108.0f, 108.0f, 0.031f);
         return result;
     }
 
@@ -295,7 +316,7 @@ namespace epochrunner::sim
 
     float CreatureBlueprint::rest_joint_angle(std::size_t motor_index) const noexcept
     {
-        if (motor_index >= motors.size())
+        if (motor_index >= active_motor_count || motor_index >= motors.size())
             return 0.0f;
         const MotorConstraint& motor = motors[motor_index];
         if (motor.a >= nodes.size() || motor.pivot >= nodes.size() || motor.c >= nodes.size()
@@ -307,7 +328,7 @@ namespace epochrunner::sim
     void CreatureBlueprint::calibrate_motor(std::size_t motor_index, float negative_degrees,
         float positive_degrees, float power) noexcept
     {
-        if (motor_index >= motors.size())
+        if (motor_index >= active_motor_count || motor_index >= motors.size())
             return;
         MotorConstraint& motor = motors[motor_index];
         const bool endpoints = motor.a < nodes.size() && motor.pivot < nodes.size() && motor.c < nodes.size()
@@ -323,13 +344,14 @@ namespace epochrunner::sim
 
     void CreatureBlueprint::calibrate_all_motors(float degrees, float power) noexcept
     {
-        for (std::size_t index = 0; index < motors.size(); ++index)
+        for (std::size_t index = 0; index < active_motor_count; ++index)
             calibrate_motor(index, degrees, degrees, power);
     }
 
     bool CreatureBlueprint::valid() const noexcept
     {
-        if (nodes.size() < 3 || radii.size() != nodes.size() || bones.empty())
+        if (nodes.size() < 3 || radii.size() != nodes.size() || bones.empty()
+            || active_motor_count == 0 || active_motor_count > motors.size())
             return false;
         const auto semantic_valid = [this](std::uint16_t node) { return node < nodes.size(); };
         if (!semantic_valid(root_node) || !semantic_valid(torso_node) || !semantic_valid(head_node)
@@ -351,8 +373,9 @@ namespace epochrunner::sim
                 || !std::isfinite(bone.rest_length) || bone.rest_length <= 0.0f)
                 return false;
         }
-        for (const MotorConstraint& motor : motors)
+        for (std::size_t motor_index = 0; motor_index < active_motor_count; ++motor_index)
         {
+            const MotorConstraint& motor = motors[motor_index];
             if (!motor.enabled)
                 continue;
             if (motor.a >= nodes.size() || motor.pivot >= nodes.size() || motor.c >= nodes.size()
@@ -379,7 +402,7 @@ namespace epochrunner::sim
         };
         auto add_float = [&](float value) { add_u64(std::bit_cast<std::uint32_t>(value)); };
 
-        add_u64(nodes.size()); add_u64(bones.size()); add_u64(motors.size());
+        add_u64(nodes.size()); add_u64(bones.size()); add_u64(active_motor_count);
         add_u64(root_node); add_u64(torso_node); add_u64(head_node);
         add_u64(left_contact_node); add_u64(right_contact_node);
         add_u64(additional_left_contact_nodes.size());
@@ -395,8 +418,9 @@ namespace epochrunner::sim
         {
             add_u64(bone.a); add_u64(bone.b); add_float(bone.rest_length); add_float(bone.stiffness);
         }
-        for (const MotorConstraint& motor : motors)
+        for (std::size_t motor_index = 0; motor_index < active_motor_count; ++motor_index)
         {
+            const MotorConstraint& motor = motors[motor_index];
             add_u64(motor.a); add_u64(motor.pivot); add_u64(motor.c); add_u64(motor.enabled ? 1 : 0);
             add_float(motor.minimum_angle); add_float(motor.maximum_angle);
             add_float(motor.neutral_angle); add_float(motor.strength);
@@ -421,8 +445,8 @@ namespace epochrunner::sim
                 error = "Could not open temporary rig file for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHRIG 3\n";
-            output << nodes.size() << ' ' << bones.size() << ' ' << motors.size() << '\n';
+            output << "EPOCHRIG 4\n";
+            output << nodes.size() << ' ' << bones.size() << ' ' << active_motor_count << '\n';
             output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
                 << left_contact_node << ' ' << right_contact_node << '\n';
             output << "L " << additional_left_contact_nodes.size();
@@ -436,8 +460,9 @@ namespace epochrunner::sim
                 output << "N " << nodes[index].x << ' ' << nodes[index].y << ' ' << radii[index] << '\n';
             for (const DistanceConstraint& bone : bones)
                 output << "B " << bone.a << ' ' << bone.b << ' ' << bone.rest_length << ' ' << bone.stiffness << '\n';
-            for (const MotorConstraint& motor : motors)
+            for (std::size_t motor_index = 0; motor_index < active_motor_count; ++motor_index)
             {
+                const MotorConstraint& motor = motors[motor_index];
                 output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' ' << motor.pivot << ' ' << motor.c << ' '
                     << motor.minimum_angle << ' ' << motor.maximum_angle << ' '
                     << motor.neutral_angle << ' ' << motor.strength << '\n';
@@ -505,14 +530,19 @@ namespace epochrunner::sim
         std::size_t bone_count{};
         std::size_t motor_count{};
         input >> magic >> version >> node_count >> bone_count >> motor_count;
-        if (!input || magic != "EPOCHRIG" || (version != 1 && version != 2 && version != 3)
-            || node_count < 3 || node_count > 128 || bone_count > 256 || motor_count != action_count)
+        if (!input || magic != "EPOCHRIG"
+            || (version != 1 && version != 2 && version != 3 && version != 4)
+            || node_count < 3 || node_count > 128 || bone_count > 256
+            || (motor_count != 4 && motor_count != action_count))
         {
             error = "Invalid or unsupported EpochRunner rig file.";
             return humanoid();
         }
 
         CreatureBlueprint result{};
+        result.active_motor_count = motor_count;
+        for (MotorConstraint& motor : result.motors)
+            motor.enabled = false;
         if (version >= 2)
         {
             char semantic_tag{};
@@ -839,7 +869,7 @@ namespace epochrunner::sim
         previous_angles_.fill(0.0f);
         angular_velocities_.fill(0.0f);
         previous_applied_actions_.fill(0.0f);
-        for (std::size_t index = 0; index < action_count; ++index)
+        for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
             previous_angles_[index] = joint_angle(blueprint_.motors[index]);
         elapsed_seconds_ = 0.0f;
         distance_travelled_ = 0.0f;
@@ -1549,7 +1579,7 @@ namespace epochrunner::sim
         const float control_ramp = ramp_t * ramp_t * (3.0f - 2.0f * ramp_t);
         std::array<float, action_count> applied_actions{};
         action_change_energy_ = 0.0f;
-        for (std::size_t index = 0; index < action_count; ++index)
+        for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
         {
             applied_actions[index] = clamp(actions[index], -1.0f, 1.0f) * control_ramp;
             const float action_delta = applied_actions[index] - previous_applied_actions_[index];
@@ -1571,7 +1601,7 @@ namespace epochrunner::sim
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
                 solve_distance(bone);
-            for (std::size_t index = 0; index < action_count; ++index)
+            for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
             solve_ground(dt);
             solve_course();
@@ -1594,7 +1624,7 @@ namespace epochrunner::sim
         maximum_speed_kmh_ = std::max(maximum_speed_kmh_, std::max(std::abs(raw_speed), std::abs(forward_speed_)) * 3.6f);
 
         float action_energy = 0.0f;
-        for (std::size_t index = 0; index < action_count; ++index)
+        for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
         {
             const float effective = blueprint_.motors[index].enabled ? applied_actions[index] : 0.0f;
             action_energy += effective * effective;
