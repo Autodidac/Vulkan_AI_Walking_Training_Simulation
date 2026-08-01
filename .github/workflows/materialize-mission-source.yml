@@ -3,7 +3,7 @@ name: Materialize mission source
 on:
   push:
     branches:
-      - work/mission-cache-completion
+      - main
     paths:
       - .github/workflows/materialize-mission-source.yml
 
