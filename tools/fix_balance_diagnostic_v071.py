@@ -113,3 +113,131 @@ curriculum = replace_once(
     "standing mastery joint-speed ceiling",
 )
 curriculum_path.write_text(curriculum, encoding="utf-8")
+
+# Count each physical condition that resets the continuous stance timer.
+tests = test_path.read_text(encoding="utf-8")
+tests = replace_once(
+    tests,
+    '''        static void qualify_stable_stance(Environment& environment) noexcept
+        {
+            environment.invalid_reason_ = InvalidMotion::none;
+            environment.non_foot_grounded_ = false;
+            environment.stable_stance_seconds_ = 3.5f;
+            environment.longest_stable_stance_seconds_ = 3.5f;
+            environment.maximum_joint_speed_ = 0.5f;
+        }
+''',
+    '''        static void qualify_stable_stance(Environment& environment) noexcept
+        {
+            environment.invalid_reason_ = InvalidMotion::none;
+            environment.non_foot_grounded_ = false;
+            environment.stable_stance_seconds_ = 3.5f;
+            environment.longest_stable_stance_seconds_ = 3.5f;
+            environment.maximum_joint_speed_ = 0.5f;
+        }
+
+        struct StanceFrame
+        {
+            bool supported{};
+            bool body_clear{};
+            bool upright{};
+            bool head_high{};
+            bool low_slip{};
+            bool low_torso_turn{};
+            bool low_joint_speed{};
+            bool low_vertical_speed{};
+        };
+
+        static StanceFrame stance_frame(const Environment& environment) noexcept
+        {
+            float joint_speed = 0.0f;
+            for (std::size_t index = 0;
+                index < environment.blueprint_.active_motor_count; ++index)
+            {
+                joint_speed = std::max(joint_speed,
+                    std::abs(environment.angular_velocities_[index]));
+            }
+            const std::uint16_t root = environment.blueprint_.root_node;
+            const float vertical_speed = root < environment.particles_.size()
+                ? (environment.particles_[root].position.y
+                    - environment.particles_[root].previous.y) * 60.0f
+                : 0.0f;
+            const std::uint16_t head = environment.blueprint_.head_node;
+            const float head_clearance = head < environment.particles_.size()
+                ? environment.particles_[head].position.y
+                    - environment.ground_height_at(
+                        environment.particles_[head].position.x)
+                : 0.0f;
+            const float rest_head_clearance = head < environment.blueprint_.nodes.size()
+                ? environment.blueprint_.nodes[head].y : 0.0f;
+            const float head_ratio = rest_head_clearance > 1.0e-5f
+                ? head_clearance / rest_head_clearance : 0.0f;
+            return {
+                environment.contact_supported(environment.blueprint_.left_contact_node)
+                    || environment.contact_supported(environment.blueprint_.right_contact_node),
+                !environment.non_foot_grounded_,
+                environment.torso_uprightness() >= 0.84f,
+                head_ratio >= 0.76f,
+                environment.stance_slip_speed_ <= 0.10f,
+                std::abs(environment.torso_turn_speed_) <= 1.10f,
+                joint_speed <= 12.0f,
+                std::abs(vertical_speed) <= 0.55f
+            };
+        }
+''',
+    "stance-frame diagnostics helper",
+)
+tests = replace_once(
+    tests,
+    '''        const std::array<float, sim::action_count> raw_action{};
+        for (int frame = 0; frame < 720; ++frame)
+        {
+            const auto action = rl::effective_policy_action(
+                assisted_stance, raw_action, sim::CourseStage::balance);
+            const sim::StepResult result = assisted_stance.step(action);
+            if (result.terminated)
+                break;
+        }
+''',
+    '''        const std::array<float, sim::action_count> raw_action{};
+        std::array<std::uint32_t, 8> stance_failures{};
+        for (int frame = 0; frame < 720; ++frame)
+        {
+            const auto action = rl::effective_policy_action(
+                assisted_stance, raw_action, sim::CourseStage::balance);
+            const sim::StepResult result = assisted_stance.step(action);
+            const auto diagnostics =
+                sim::EnvironmentTestAccess::stance_frame(assisted_stance);
+            const std::array<bool, 8> passed{
+                diagnostics.supported,
+                diagnostics.body_clear,
+                diagnostics.upright,
+                diagnostics.head_high,
+                diagnostics.low_slip,
+                diagnostics.low_torso_turn,
+                diagnostics.low_joint_speed,
+                diagnostics.low_vertical_speed
+            };
+            for (std::size_t index = 0; index < passed.size(); ++index)
+                stance_failures[index] += passed[index] ? 0u : 1u;
+            if (result.terminated)
+                break;
+        }
+''',
+    "stance-frame failure counters",
+)
+tests = replace_once(
+    tests,
+    '''                << " max_joint=" << assisted_stance.maximum_joint_speed()
+                << " survival=" << assisted_stance.elapsed_seconds() << std::endl;
+''',
+    '''                << " max_joint=" << assisted_stance.maximum_joint_speed()
+                << " survival=" << assisted_stance.elapsed_seconds()
+                << " failures[support,body,upright,head,slip,turn,joint,vertical]=";
+            for (const std::uint32_t failures : stance_failures)
+                std::cerr << failures << ',';
+            std::cerr << std::endl;
+''',
+    "stance-frame diagnostic output",
+)
+test_path.write_text(tests, encoding="utf-8")
