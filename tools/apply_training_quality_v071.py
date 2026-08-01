@@ -1343,8 +1343,8 @@ namespace
     )
     text = replace_once(
         text,
-        "    require(trainer.optimizer_step() == resumed.optimizer_step(), \"checkpoint optimizer state was not restored\");\n",
-        "    require(trainer.optimizer_step() == resumed.optimizer_step(), \"checkpoint optimizer state was not restored\");\n"
+        "    require(resumed.optimizer_step() == trainer.optimizer_step(), \"checkpoint optimizer state was not restored\");\n",
+        "    require(resumed.optimizer_step() == trainer.optimizer_step(), \"checkpoint optimizer state was not restored\");\n"
         "    require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,\n"
         "        \"checkpoint does not persist the current training-semantics signature\");\n",
         "checkpoint semantics test",
