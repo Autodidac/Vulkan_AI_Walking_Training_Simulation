@@ -104,6 +104,8 @@ namespace epochrunner::rl
         cached_exploration_ = snapshot.exploration;
         cached_optimizer_step_ = snapshot.optimizer_step;
         cached_has_best_ = snapshot.has_best;
+        cached_training_preview_ = std::move(snapshot.training_preview);
+        cached_has_training_preview_ = snapshot.has_training_preview;
         applied_serial_ = snapshot.serial;
     }
 

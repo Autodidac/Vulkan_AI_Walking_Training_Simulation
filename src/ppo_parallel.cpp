@@ -138,7 +138,8 @@ namespace epochrunner::rl
                 else if (current_job == Job::evaluation)
                 {
                     constexpr std::size_t evaluation_agents = 6;
-                    constexpr int maximum_steps = 900;
+                    const int maximum_steps = static_cast<std::uint8_t>(current_stage)
+                        >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 2400 : 1200;
                     EvaluationTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();
@@ -387,6 +388,7 @@ namespace epochrunner::rl
             metrics_.best_evaluation_distance = metrics_.evaluation_distance;
             metrics_.best_evaluation_score = metrics_.evaluation_score;
             metrics_.best_update = metrics_.update;
+            refresh_self_imitation_prior();
         }
     }
 }

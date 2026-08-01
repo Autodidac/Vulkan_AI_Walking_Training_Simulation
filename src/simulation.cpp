@@ -154,28 +154,34 @@ namespace epochrunner::sim
     CreatureBlueprint CreatureBlueprint::quadruped()
     {
         CreatureBlueprint result{};
+        // A real planar quadruped: four separate legs, slightly staggered in x
+        // so the near/far pairs remain visible in a side view. The two support
+        // channels are diagonal pairs, allowing a stable trot with four policy
+        // outputs instead of pretending that two articulated legs are four.
         result.nodes = {
-            { 0.0f, 2.05f }, { 1.55f, 2.08f }, { 2.35f, 2.42f },
-            { -0.25f, 1.10f }, { -0.48f, 0.24f },
-            { 1.72f, 1.08f }, { 1.92f, 0.24f }, { -1.05f, 2.35f }
+            { 0.0f, 1.58f }, { 1.48f, 1.62f }, { 2.22f, 1.88f }, { -0.88f, 1.78f },
+            { -0.46f, 0.24f }, { 0.08f, 0.28f },
+            { 1.42f, 0.24f }, { 1.96f, 0.28f }
         };
-        result.radii = { 0.29f, 0.30f, 0.25f, 0.18f, 0.16f, 0.18f, 0.16f, 0.14f };
+        result.radii = { 0.30f, 0.31f, 0.25f, 0.15f, 0.16f, 0.15f, 0.16f, 0.15f };
         result.bones = {
-            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.95f }, { 0, 7, 0.0f, 0.82f },
-            { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
-            { 1, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f }
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.95f }, { 0, 3, 0.0f, 0.84f },
+            { 0, 4, 0.0f, 1.0f }, { 0, 5, 0.0f, 0.98f },
+            { 1, 6, 0.0f, 1.0f }, { 1, 7, 0.0f, 0.98f }
         };
         result.root_node = 0;
         result.torso_node = 1;
         result.head_node = 2;
         result.left_contact_node = 4;
         result.right_contact_node = 6;
+        result.additional_left_contact_nodes = { 7 };
+        result.additional_right_contact_nodes = { 5 };
         result.motors = {
-            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
-            MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 5, 6 }
+            MotorConstraint{ 1, 0, 4 }, MotorConstraint{ 1, 0, 5 },
+            MotorConstraint{ 0, 1, 6 }, MotorConstraint{ 0, 1, 7 }
         };
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 34.0f, 50.0f, 0.046f, 0.052f);
+        calibrate_obstacle_legs(result, 52.0f);
         return result;
     }
 
@@ -201,6 +207,8 @@ namespace epochrunner::sim
         result.head_node = 2;
         result.left_contact_node = 3;
         result.right_contact_node = 5;
+        result.additional_left_contact_nodes = { 6 };
+        result.additional_right_contact_nodes = { 4 };
         result.motors = {
             MotorConstraint{ 0, 7, 3 }, MotorConstraint{ 1, 0, 4 },
             MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 8, 6 }
@@ -238,7 +246,9 @@ namespace epochrunner::sim
         result.torso_node = 1;
         result.head_node = 2;
         result.left_contact_node = 3;
-        result.right_contact_node = 6;
+        result.right_contact_node = 4;
+        result.additional_left_contact_nodes = { 5, 7 };
+        result.additional_right_contact_nodes = { 6, 8 };
         result.motors = {
             MotorConstraint{ 0, 9, 3 }, MotorConstraint{ 0, 9, 4 },
             MotorConstraint{ 1, 10, 5 }, MotorConstraint{ 0, 1, 11 }
@@ -325,6 +335,16 @@ namespace epochrunner::sim
         if (!semantic_valid(root_node) || !semantic_valid(torso_node) || !semantic_valid(head_node)
             || !semantic_valid(left_contact_node) || !semantic_valid(right_contact_node))
             return false;
+        for (const std::uint16_t node : additional_left_contact_nodes)
+        {
+            if (!semantic_valid(node) || node == left_contact_node)
+                return false;
+        }
+        for (const std::uint16_t node : additional_right_contact_nodes)
+        {
+            if (!semantic_valid(node) || node == right_contact_node)
+                return false;
+        }
         for (const DistanceConstraint& bone : bones)
         {
             if (bone.a >= nodes.size() || bone.b >= nodes.size() || bone.a == bone.b
@@ -362,6 +382,10 @@ namespace epochrunner::sim
         add_u64(nodes.size()); add_u64(bones.size()); add_u64(motors.size());
         add_u64(root_node); add_u64(torso_node); add_u64(head_node);
         add_u64(left_contact_node); add_u64(right_contact_node);
+        add_u64(additional_left_contact_nodes.size());
+        for (const std::uint16_t node : additional_left_contact_nodes) add_u64(node);
+        add_u64(additional_right_contact_nodes.size());
+        for (const std::uint16_t node : additional_right_contact_nodes) add_u64(node);
         for (std::size_t index = 0; index < nodes.size(); ++index)
         {
             add_float(nodes[index].x); add_float(nodes[index].y);
@@ -397,10 +421,16 @@ namespace epochrunner::sim
                 error = "Could not open temporary rig file for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHRIG 2\n";
+            output << "EPOCHRIG 3\n";
             output << nodes.size() << ' ' << bones.size() << ' ' << motors.size() << '\n';
             output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
                 << left_contact_node << ' ' << right_contact_node << '\n';
+            output << "L " << additional_left_contact_nodes.size();
+            for (const std::uint16_t node : additional_left_contact_nodes) output << ' ' << node;
+            output << '\n';
+            output << "R " << additional_right_contact_nodes.size();
+            for (const std::uint16_t node : additional_right_contact_nodes) output << ' ' << node;
+            output << '\n';
             output << std::setprecision(9);
             for (std::size_t index = 0; index < nodes.size(); ++index)
                 output << "N " << nodes[index].x << ' ' << nodes[index].y << ' ' << radii[index] << '\n';
@@ -475,7 +505,7 @@ namespace epochrunner::sim
         std::size_t bone_count{};
         std::size_t motor_count{};
         input >> magic >> version >> node_count >> bone_count >> motor_count;
-        if (!input || magic != "EPOCHRIG" || (version != 1 && version != 2)
+        if (!input || magic != "EPOCHRIG" || (version != 1 && version != 2 && version != 3)
             || node_count < 3 || node_count > 128 || bone_count > 256 || motor_count != action_count)
         {
             error = "Invalid or unsupported EpochRunner rig file.";
@@ -491,6 +521,31 @@ namespace epochrunner::sim
             if (!input || semantic_tag != 'S')
             {
                 error = "Invalid rig semantic-node data.";
+                return humanoid();
+            }
+        }
+        if (version >= 3)
+        {
+            auto read_supports = [&](char expected, std::vector<std::uint16_t>& nodes)
+            {
+                char tag{};
+                std::size_t count{};
+                input >> tag >> count;
+                if (!input || tag != expected || count > node_count)
+                    return false;
+                nodes.resize(count);
+                for (std::uint16_t& node : nodes)
+                {
+                    input >> node;
+                    if (!input || node >= node_count)
+                        return false;
+                }
+                return true;
+            };
+            if (!read_supports('L', result.additional_left_contact_nodes)
+                || !read_supports('R', result.additional_right_contact_nodes))
+            {
+                error = "Invalid multi-foot support data.";
                 return humanoid();
             }
         }
@@ -764,8 +819,7 @@ namespace epochrunner::sim
             position.x += (random_unit() - 0.5f) * 0.008f + phase;
             position.y += (random_unit() - 0.5f) * 0.006f;
             const float radius = index < blueprint_.radii.size() ? blueprint_.radii[index] : 0.15f;
-            const bool contact_semantic = index == blueprint_.left_contact_node
-                || index == blueprint_.right_contact_node;
+            const bool contact_semantic = blueprint_.is_support_seed(index);
             const std::size_t degree = static_cast<std::size_t>(std::ranges::count_if(
                 blueprint_.bones, [index](const DistanceConstraint& bone)
                 {
@@ -804,9 +858,12 @@ namespace epochrunner::sim
         last_step_x_ = previous_pelvis_.x;
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
+        progress_window_start_steps_ = 0;
         knee_first_faults_ = 0;
         wheel_sliding_seconds_ = 0.0f;
         body_rolling_seconds_ = 0.0f;
+        foot_pivot_rolling_seconds_ = 0.0f;
+        zero_progress_seconds_ = 0.0f;
         head_contact_seconds_ = 0.0f;
         torso_turn_speed_ = 0.0f;
         stance_slip_speed_ = 0.0f;
@@ -900,16 +957,32 @@ namespace epochrunner::sim
             || particle_index >= blueprint_.nodes.size())
             return false;
 
-        const float contact_height = blueprint_.nodes[contact_node].y;
-        if (blueprint_.nodes[particle_index].y > contact_height + 0.18f)
-            return false;
-
+        float contact_height = blueprint_.nodes[contact_node].y;
         std::array<bool, 128> visited{};
         std::array<std::uint16_t, 128> queue{};
         std::size_t head = 0;
         std::size_t tail = 0;
-        visited[contact_node] = true;
-        queue[tail++] = contact_node;
+        auto add_seed = [&](std::uint16_t seed)
+        {
+            if (seed >= blueprint_.nodes.size() || visited[seed])
+                return;
+            visited[seed] = true;
+            queue[tail++] = seed;
+            contact_height = std::max(contact_height, blueprint_.nodes[seed].y);
+        };
+        add_seed(contact_node);
+        if (contact_node == blueprint_.left_contact_node)
+        {
+            for (const std::uint16_t seed : blueprint_.additional_left_contact_nodes)
+                add_seed(seed);
+        }
+        else if (contact_node == blueprint_.right_contact_node)
+        {
+            for (const std::uint16_t seed : blueprint_.additional_right_contact_nodes)
+                add_seed(seed);
+        }
+        if (blueprint_.nodes[particle_index].y > contact_height + 0.18f)
+            return false;
         while (head < tail)
         {
             const std::uint16_t current = queue[head++];
@@ -1054,21 +1127,27 @@ namespace epochrunner::sim
         {
             Particle& particle = particles_[index];
             particle.grounded = false;
-            const float minimum_y = ground_height_at(particle.position.x) + particle.radius;
+            const bool traction_contact = contact_cluster_contains(blueprint_.left_contact_node, index)
+                || contact_cluster_contains(blueprint_.right_contact_node, index);
+            const float minimum_y = ground_height_at(particle.position.x)
+                + ground_contact_offset(traction_contact, particle.radius);
             if (particle.position.y < minimum_y)
             {
                 particle.position.y = minimum_y;
                 particle.grounded = true;
                 const Vec2 velocity = (particle.position - particle.previous) / dt;
-                const bool traction_contact = contact_cluster_contains(blueprint_.left_contact_node, index)
-                    || contact_cluster_contains(blueprint_.right_contact_node, index);
-                float retained_horizontal_speed = velocity.x
+                const float retained_horizontal_speed = velocity.x
                     * ground_velocity_retention(traction_contact, velocity.y);
-                if (traction_contact && std::abs(retained_horizontal_speed) < 0.03f)
-                    retained_horizontal_speed = 0.0f;
                 particle.previous.x = particle.position.x - retained_horizontal_speed * dt;
-                if (velocity.y < 0.0f)
+                if (traction_contact)
+                {
+                    particle.previous.x = particle.position.x;
+                    particle.previous.y = particle.position.y;
+                }
+                else if (velocity.y < 0.0f)
+                {
                     particle.previous.y = particle.position.y + velocity.y * dt * 0.05f;
+                }
             }
         }
     }
@@ -1222,9 +1301,16 @@ namespace epochrunner::sim
             head_contact_seconds_ += dt;
         else
             head_contact_seconds_ = std::max(0.0f, head_contact_seconds_ - dt * 3.0f);
-        const float rolling_limit = course_stage_ == CourseStage::balance ? 0.55f : 0.32f;
-        if (body_rolling_seconds_ > rolling_limit || head_contact_seconds_ > 0.24f)
+        if (!rolling_gate_active(elapsed_seconds_))
+        {
+            body_rolling_seconds_ = 0.0f;
+            head_contact_seconds_ = 0.0f;
+        }
+        else if (body_rolling_seconds_ > body_rolling_limit(course_stage_, elapsed_seconds_)
+            || head_contact_seconds_ > head_contact_limit(elapsed_seconds_))
+        {
             invalidate(InvalidMotion::body_rolling);
+        }
 
         if (course_stage_ != CourseStage::balance
             && wheel_sliding_motion(root_speed, left, right, stance_slip_speed_))
@@ -1254,6 +1340,16 @@ namespace epochrunner::sim
         obstacle_lift_clearance_ = std::max(
             contact_cluster_clearance(blueprint_.left_contact_node),
             contact_cluster_clearance(blueprint_.right_contact_node));
+        if (course_stage_ != CourseStage::balance && foot_pivot_rolling_motion(root_speed,
+            left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_))
+            foot_pivot_rolling_seconds_ += dt;
+        else
+            foot_pivot_rolling_seconds_ = std::max(0.0f, foot_pivot_rolling_seconds_ - dt * 2.5f);
+        if (!rolling_gate_active(elapsed_seconds_))
+            foot_pivot_rolling_seconds_ = 0.0f;
+        else if (foot_pivot_rolling_seconds_ > foot_pivot_rolling_limit(elapsed_seconds_))
+            invalidate(InvalidMotion::foot_pivot_rolling);
+
         if (std::isfinite(nearest_hazard_dx) && hazard_quiver_motion(nearest_hazard_dx,
             root_speed, obstacle_lift_clearance_, obstacle_clearance_target_, action_energy))
             hazard_stall_seconds_ += dt;
@@ -1291,6 +1387,15 @@ namespace epochrunner::sim
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
+
+            const std::uint32_t new_steps = alternating_steps_ - progress_window_start_steps_;
+            const bool idle_window = course_stage_ != CourseStage::balance
+                && elapsed_seconds_ > rolling_gate_warmup_end_seconds
+                && zero_progress_window(net_progress, new_steps,
+                    obstacle_lift_clearance_, recovery_active_);
+            zero_progress_seconds_ = update_zero_progress_seconds(
+                zero_progress_seconds_, idle_window, progress_window_seconds_);
+            progress_window_start_steps_ = alternating_steps_;
             progress_window_start_x_ = root_x;
             progress_window_seconds_ = 0.0f;
             action_energy_window_ = 0.0f;
@@ -1304,6 +1409,8 @@ namespace epochrunner::sim
             invalidate(InvalidMotion::sustained_flight);
         if (micro_motion_seconds_ >= 3.0f)
             invalidate(InvalidMotion::micro_motion);
+        if (zero_progress_seconds_ >= zero_progress_reset_seconds)
+            invalidate(InvalidMotion::zero_progress);
     }
 
     StepResult Environment::step(std::span<const float, action_count> actions, float dt)
@@ -1431,7 +1538,9 @@ namespace epochrunner::sim
             : gait_progress_multiplier(alternating_steps_, single_support, swing_clearance);
         const float safe_progress = clamp(frame_progress, -0.015f, 0.065f);
         const float collision_penalty = collided_this_step_ ? 0.070f : 0.0f;
-        const float knee_first_penalty = knee_first_this_step_ ? 0.11f : 0.0f;
+        // This is intentionally a mild shaping penalty. Natural knee lead
+        // is now tolerated; only a large low-foot body-first obstacle shove reaches here.
+        const float knee_first_penalty = knee_first_this_step_ ? 0.028f : 0.0f;
         const float stance_slip_penalty = clamp(stance_slip_speed_ - 0.08f, 0.0f, 4.0f) * 0.012f;
         const float wheel_penalty = wheel_sliding_motion(raw_speed,
             left_supported, right_supported, stance_slip_speed_) ? 0.055f : 0.0f;
@@ -1480,7 +1589,7 @@ namespace epochrunner::sim
         }
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f
             : static_cast<std::uint8_t>(course_stage_) >= static_cast<std::uint8_t>(CourseStage::hurdles)
-                ? 32.0f : 24.0f;
+                ? 48.0f : 30.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
         return { last_reward_, forward_speed_, terminated,
             invalid_reason_ == InvalidMotion::none, invalid_reason_ };

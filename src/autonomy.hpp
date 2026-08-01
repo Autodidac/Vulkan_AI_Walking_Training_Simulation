@@ -68,6 +68,11 @@ namespace epochrunner::rl
         [[nodiscard]] bool restore_best_policy() noexcept;
 
         [[nodiscard]] const sim::Environment& preview() const noexcept { return live_.preview(); }
+        [[nodiscard]] const sim::Environment& training_preview() const noexcept
+        {
+            return cached_training_preview_;
+        }
+        [[nodiscard]] bool has_training_preview() const noexcept { return cached_has_training_preview_; }
         [[nodiscard]] const sim::CreatureBlueprint& blueprint() const noexcept { return live_blueprint_; }
         [[nodiscard]] const TrainingMetrics& metrics() const noexcept { return cached_metrics_; }
         [[nodiscard]] const std::vector<float>& reward_history() const noexcept { return cached_reward_history_; }
@@ -111,6 +116,8 @@ namespace epochrunner::rl
             float exploration{ 0.14f };
             std::uint64_t optimizer_step{};
             bool has_best{};
+            sim::Environment training_preview{};
+            bool has_training_preview{};
             std::uint64_t serial{};
         };
 
@@ -185,6 +192,8 @@ namespace epochrunner::rl
         PpoTrainer worker_;
         PpoTrainer live_;
         sim::CreatureBlueprint live_blueprint_{};
+        sim::Environment cached_training_preview_{};
+        bool cached_has_training_preview_{};
         PublishedSnapshot published_{};
         std::uint64_t applied_serial_{};
         TrainingMetrics cached_metrics_{};

@@ -197,6 +197,7 @@ namespace epochrunner::rl
         if (!preserve_best)
         {
             best_parameters_.clear();
+            clear_self_imitation_prior();
             metrics_.best_evaluation_distance = -std::numeric_limits<float>::infinity();
             metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
             metrics_.best_update = 0;
@@ -212,7 +213,10 @@ namespace epochrunner::rl
         reward_history_.clear();
         speed_history_.clear();
         if (clear_best)
+        {
             best_parameters_.clear();
+            clear_self_imitation_prior();
+        }
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
         for (std::size_t index = 0; index < environments_.size(); ++index)
@@ -383,6 +387,8 @@ namespace epochrunner::rl
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
         preview_.reset(0xDEADBEEFu + metrics_.update);
+        if (self_imitation_prior_.empty())
+            refresh_self_imitation_prior();
         controller_state_ = ControllerState::resumed;
         return true;
     }
@@ -420,6 +426,7 @@ namespace epochrunner::rl
                     parallel_accumulate_batch(
                         indices, begin, end, clip_range, value_coefficient, entropy_coefficient,
                         batch_policy_loss, batch_value_loss, batch_entropy);
+                    apply_self_imitation_prior();
 
                     const float inverse_batch = 1.0f / static_cast<float>(end - begin);
                     float norm_squared = 0.0f;

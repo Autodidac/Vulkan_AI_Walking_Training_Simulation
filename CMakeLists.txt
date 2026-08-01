@@ -14,6 +14,7 @@ add_library(EpochRunnerCore STATIC
     src/ppo_network.cpp
     src/ppo_trainer.cpp
     src/ppo_parallel.cpp
+    src/self_imitation.cpp
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
     src/autonomy_commands.cpp

@@ -44,7 +44,29 @@ namespace epochrunner::rl
         float best_evaluation_score{ -std::numeric_limits<float>::infinity() };
         std::uint64_t best_update{};
         std::uint64_t evaluation_count{};
+        std::uint32_t imitation_samples{};
+        float imitation_weight{};
+        float imitation_source_score{ -std::numeric_limits<float>::infinity() };
     };
+
+    [[nodiscard]] inline float self_imitation_prior_weight(std::uint64_t age_updates,
+        std::size_t sample_count) noexcept
+    {
+        if (sample_count == 0)
+            return 0.0f;
+        const float age = static_cast<float>(std::min<std::uint64_t>(age_updates, 2000u));
+        return clamp(0.18f / (1.0f + age / 240.0f), 0.040f, 0.18f);
+    }
+
+    [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,
+        std::uint32_t alternating_steps, float distance, float survival_seconds) noexcept
+    {
+        if (!valid_motion)
+            return false;
+        if (stage == sim::CourseStage::balance)
+            return survival_seconds >= 3.0f;
+        return alternating_steps >= 2u && distance >= 0.60f;
+    }
 
     enum class ControllerState : std::uint8_t
     {
@@ -189,6 +211,10 @@ namespace epochrunner::rl
         [[nodiscard]] std::size_t maximum_worker_count() const noexcept { return rollout_worker_count_; }
         [[nodiscard]] sim::CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
+        [[nodiscard]] std::size_t self_imitation_sample_count() const noexcept
+        {
+            return self_imitation_prior_.size();
+        }
 
     private:
         struct Transition
@@ -201,6 +227,12 @@ namespace epochrunner::rl
             float advantage{};
             float return_value{};
             bool terminal{};
+        };
+
+        struct ImitationSample
+        {
+            std::array<float, sim::observation_count> observation{};
+            std::array<float, sim::action_count> action{};
         };
 
         struct AdamState
@@ -228,6 +260,9 @@ namespace epochrunner::rl
             float& log_probability) const noexcept;
         void update_policy();
         void evaluate_policy();
+        void refresh_self_imitation_prior();
+        void clear_self_imitation_prior() noexcept;
+        void apply_self_imitation_prior();
         void reset_training_state(bool clear_best = true) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
         void append_history(std::vector<float>& history, float value);
@@ -262,6 +297,8 @@ namespace epochrunner::rl
         std::vector<float> reward_history_{};
         std::vector<float> speed_history_{};
         std::vector<float> best_parameters_{};
+        std::vector<ImitationSample> self_imitation_prior_{};
+        float self_imitation_source_score_{ -std::numeric_limits<float>::infinity() };
         TrainingMetrics metrics_{};
         ControllerState controller_state_{ ControllerState::fresh };
         sim::CourseStage course_stage_{ sim::CourseStage::balance };

@@ -219,6 +219,7 @@ namespace epochrunner::rl
         best_parameters_ = std::move(best);
         reward_history_ = std::move(rewards);
         speed_history_ = std::move(speeds);
+        refresh_self_imitation_prior();
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
         for (std::size_t index = 0; index < environments_.size(); ++index)

@@ -261,9 +261,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v063-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v063-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v063-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v065-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v065-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v065-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -300,7 +300,7 @@ namespace epochrunner
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR HIP", "REAR KNEE", "FRONT SHOULDER", "FRONT KNEE" };
+                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG" };
             case RigPreset::crawler4:
                 return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG" };
             case RigPreset::hexapod:
@@ -571,9 +571,18 @@ namespace epochrunner
             {
                 const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f) * scale;
                 Color color = index == rig.head_node ? body_light : body;
-                if (index == rig.left_contact_node || index == rig.right_contact_node)
+                const bool primary_foot = rig.is_support_seed(index);
+                if (primary_foot)
+                {
                     color = leg;
-                canvas.circle(point(index), radius, color, 22);
+                    const Vec2 center = point(index);
+                    canvas.capsule(center - Vec2{ radius * 0.82f, 0.0f },
+                        center + Vec2{ radius * 0.82f, 0.0f }, radius * 0.44f, color, 16);
+                }
+                else
+                {
+                    canvas.circle(point(index), radius, color, 22);
+                }
                 if (show_nodes)
                 {
                     canvas.circle(point(index), 7.0f,
@@ -581,6 +590,69 @@ namespace epochrunner
                     add_text(canvas, point(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
                 }
             }
+        }
+
+        void draw_training_pip(Rect rect)
+        {
+            add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.98f), accent_dim, 1.5f);
+            add_text(canvas, rect.position + Vec2{ 13.0f, 10.0f },
+                "RAW TRAINING SAMPLE", 1.03f, accent);
+            if (!trainer.has_training_preview())
+            {
+                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
+                    "WAITING FOR FIRST ROLLOUT", 1.02f, muted, rect.size.x - 26.0f);
+                return;
+            }
+
+            const sim::Environment& environment = trainer.training_preview();
+            const Rect inner{ rect.position + Vec2{ 9.0f, 35.0f },
+                { rect.size.x - 18.0f, rect.size.y - 44.0f } };
+            const auto& particles = environment.particles();
+            const auto& rig = environment.blueprint();
+            if (particles.empty() || rig.root_node >= particles.size())
+                return;
+            const float camera = particles[rig.root_node].position.x + 0.55f;
+            const float scale = std::clamp(inner.size.y / 5.7f, 28.0f, 43.0f);
+
+            std::vector<Vec2> ground{};
+            ground.reserve(65);
+            for (int sample = 0; sample <= 64; ++sample)
+            {
+                const float screen_fraction = static_cast<float>(sample) / 64.0f;
+                const float world_x = camera
+                    + (screen_fraction - 0.5f) * inner.size.x / scale;
+                ground.push_back(world_to_screen({ world_x, environment.ground_height_at(world_x) },
+                    inner, camera, scale, 0.82f));
+            }
+            canvas.polyline(ground, 3.0f, rgb(0x51606c));
+
+            for (const sim::CourseFeature& feature : environment.course_features())
+            {
+                const Vec2 point = world_to_screen(feature.center, inner, camera, scale, 0.82f);
+                if (point.x < inner.position.x - 20.0f
+                    || point.x > inner.position.x + inner.size.x + 20.0f)
+                    continue;
+                if (feature.kind == sim::CourseFeatureKind::rock
+                    || feature.kind == sim::CourseFeatureKind::moving_hazard
+                    || feature.kind == sim::CourseFeatureKind::projectile)
+                {
+                    canvas.circle(point, feature.radius * scale,
+                        feature.kind == sim::CourseFeatureKind::projectile ? danger : yellow, 18);
+                }
+                else
+                {
+                    const Vec2 minimum = world_to_screen(feature.center - feature.half_extent,
+                        inner, camera, scale, 0.82f);
+                    const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
+                        inner, camera, scale, 0.82f);
+                    canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y }, yellow);
+                }
+            }
+            draw_creature(environment, inner, camera, scale);
+            add_text_fit(canvas, rect.position + Vec2{ 13.0f, rect.size.y - 25.0f },
+                std::format("{:.2f} M  /  {}", environment.distance_travelled(),
+                    sim::invalid_motion_name(environment.invalid_reason())),
+                0.88f, environment.valid_motion() ? green : danger, rect.size.x - 26.0f, 0.72f);
         }
 
         void draw_live_panel(Rect rect, const InputState& input)
@@ -626,7 +698,7 @@ namespace epochrunner
                 trainer.set_updates_per_cycle(4);
             cursor.y += 57.0f;
 
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 218.0f } },
+            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 247.0f } },
                 8.0f, panel_alt, border, 1.0f);
             add_text(canvas, cursor, "TRAINING RESULTS", 1.18f, accent);
             cursor.y += 31.0f;
@@ -646,6 +718,10 @@ namespace epochrunner
             add_text_fit(canvas, cursor, std::format("COLLISIONS {:.1f}   AIRBORNE {:.0f}%",
                 metrics.evaluation_collisions, metrics.evaluation_airborne_ratio * 100.0f),
                 1.08f, white, usable_width);
+            cursor.y += 29.0f;
+            add_text_fit(canvas, cursor, std::format("BEST-RESULT GUIDE {} FRAMES   WEIGHT {:.0f}%",
+                metrics.imitation_samples, metrics.imitation_weight * 100.0f),
+                1.04f, metrics.imitation_samples > 0 ? accent : muted, usable_width);
             cursor.y += 45.0f;
 
             add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 230.0f } },
@@ -707,16 +783,23 @@ namespace epochrunner
                     sim::invalid_motion_name(environment.invalid_reason())),
                 1.16f, environment.valid_motion() ? green : danger, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("RECOVERY {}  FEET {}/{}  STEPS {}  LIFT {:.2f} M  STALL {:.1f} S",
-                    environment.recovering() ? "ACTIVE" : "READY",
-                    environment.left_supported() ? "L" : "-",
-                    environment.right_supported() ? "R" : "-",
+                std::format("FEET {}/{}  STEPS {}  LIFT {:.2f} M  FOOT-ROLL {:.1f} S  IDLE {:.1f} S",
+                    environment.left_supported() ? "A" : "-",
+                    environment.right_supported() ? "B" : "-",
                     environment.alternating_steps(), environment.obstacle_lift_clearance(),
-                    environment.hazard_stall_seconds()),
+                    environment.foot_pivot_rolling_seconds(), environment.zero_progress_seconds()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
                 1.05f, muted, overlay_width, 1.00f);
+
+            const float pip_width = std::clamp(viewport.size.x * 0.34f, 300.0f, 390.0f);
+            const float pip_height = std::clamp(viewport.size.y * 0.27f, 190.0f, 245.0f);
+            draw_training_pip({
+                { viewport.position.x + viewport.size.x - pip_width - 18.0f,
+                  viewport.position.y + 18.0f },
+                { pip_width, pip_height }
+            });
         }
 
         void draw_joint_lab(Rect rect, const InputState& input)
@@ -831,7 +914,7 @@ namespace epochrunner
             {
                 const float radius = (index < blueprint.radii.size() ? blueprint.radii[index] : 0.15f) * scale;
                 Color color = index == blueprint.head_node ? body_light : body;
-                if (index == blueprint.left_contact_node || index == blueprint.right_contact_node)
+                if (blueprint.is_support_seed(index))
                     color = leg;
                 canvas.circle(screen(index), radius, color, 24);
                 canvas.circle(screen(index), 7.0f,
@@ -961,6 +1044,17 @@ namespace epochrunner
             };
             remap(blueprint.root_node); remap(blueprint.torso_node); remap(blueprint.head_node);
             remap(blueprint.left_contact_node); remap(blueprint.right_contact_node);
+            auto remap_supports = [removed](std::vector<std::uint16_t>& nodes)
+            {
+                std::erase(nodes, removed);
+                for (std::uint16_t& node : nodes)
+                {
+                    if (node > removed)
+                        --node;
+                }
+            };
+            remap_supports(blueprint.additional_left_contact_nodes);
+            remap_supports(blueprint.additional_right_contact_nodes);
             for (sim::MotorConstraint& item : blueprint.motors)
             {
                 const bool affected = item.a == removed || item.pivot == removed || item.c == removed;

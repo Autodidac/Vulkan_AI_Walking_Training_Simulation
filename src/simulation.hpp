@@ -112,10 +112,19 @@ namespace epochrunner::sim
         if (feature.kind != CourseFeatureKind::rock
             && feature.kind != CourseFeatureKind::hurdle)
             return false;
+
+        // Natural stepping often puts a bent knee slightly ahead of the foot.
+        // Reject only an obvious body/joint-first shove: the knee must lead well
+        // into the obstacle while the foot is both substantially behind it and
+        // still below useful clearance. This remains guidance, not a hard gate.
         const float obstacle_front = feature.center.x + course_feature_half_width(feature);
-        return knee_front_x > feature.center.x
-            && foot_front_x < obstacle_front - 0.02f
-            && foot_top_y < course_feature_top(feature) + 0.08f;
+        const float obstacle_top = course_feature_top(feature);
+        const float knee_lead = knee_front_x - feature.center.x;
+        const float foot_lag = obstacle_front - foot_front_x;
+        const float clearance_deficit = obstacle_top + 0.015f - foot_top_y;
+        return knee_lead > 0.24f
+            && foot_lag > 0.16f
+            && clearance_deficit > 0.08f;
     }
 
     [[nodiscard]] inline float gait_progress_multiplier(std::uint32_t alternating_steps,
@@ -143,6 +152,66 @@ namespace epochrunner::sim
             && (std::abs(torso_turn_speed) > 0.45f || uprightness < 0.55f)
             && (!feet_supported || std::abs(root_speed) > 0.08f);
     }
+
+    [[nodiscard]] inline float ground_contact_offset(bool traction_contact,
+        float particle_radius) noexcept
+    {
+        return traction_contact ? std::min(particle_radius, 0.065f) : particle_radius;
+    }
+
+    [[nodiscard]] inline bool foot_pivot_rolling_motion(float root_speed,
+        bool left_supported, bool right_supported, float stance_slip_speed,
+        float maximum_foot_clearance, float torso_turn_speed) noexcept
+    {
+        return left_supported && right_supported
+            && std::abs(root_speed) > 0.10f
+            && stance_slip_speed < 0.065f
+            && maximum_foot_clearance < 0.075f
+            && std::abs(torso_turn_speed) > 0.20f;
+    }
+
+    inline constexpr float rolling_gate_activation_seconds = 1.35f;
+    inline constexpr float rolling_gate_warmup_end_seconds = 2.60f;
+
+    [[nodiscard]] inline bool rolling_gate_active(float elapsed_seconds) noexcept
+    {
+        return elapsed_seconds >= rolling_gate_activation_seconds;
+    }
+
+    [[nodiscard]] inline float body_rolling_limit(CourseStage stage,
+        float elapsed_seconds) noexcept
+    {
+        if (elapsed_seconds < rolling_gate_warmup_end_seconds)
+            return stage == CourseStage::balance ? 0.78f : 0.55f;
+        return stage == CourseStage::balance ? 0.55f : 0.32f;
+    }
+
+    [[nodiscard]] inline float head_contact_limit(float elapsed_seconds) noexcept
+    {
+        return elapsed_seconds < rolling_gate_warmup_end_seconds ? 0.38f : 0.24f;
+    }
+
+    [[nodiscard]] inline float foot_pivot_rolling_limit(float elapsed_seconds) noexcept
+    {
+        return elapsed_seconds < rolling_gate_warmup_end_seconds ? 0.68f : 0.42f;
+    }
+
+    [[nodiscard]] inline bool zero_progress_window(float net_progress,
+        std::uint32_t new_steps, float useful_foot_lift, bool recovering) noexcept
+    {
+        return !recovering && net_progress < 0.045f
+            && new_steps == 0u && useful_foot_lift < 0.11f;
+    }
+
+    [[nodiscard]] inline float update_zero_progress_seconds(float previous_seconds,
+        bool zero_progress, float window_seconds) noexcept
+    {
+        return zero_progress
+            ? previous_seconds + window_seconds
+            : std::max(0.0f, previous_seconds - window_seconds * 2.0f);
+    }
+
+    inline constexpr float zero_progress_reset_seconds = 1.80f;
 
     [[nodiscard]] inline bool ground_clearance_hazard(CourseFeatureKind kind) noexcept
     {
@@ -210,6 +279,8 @@ namespace epochrunner::sim
         micro_motion,
         wheel_sliding,
         body_rolling,
+        foot_pivot_rolling,
+        zero_progress,
         hazard_quiver
     };
 
@@ -226,6 +297,8 @@ namespace epochrunner::sim
         case InvalidMotion::micro_motion: return "MICRO-MOTION EXPLOIT";
         case InvalidMotion::wheel_sliding: return "WHEEL-SLIDING EXPLOIT";
         case InvalidMotion::body_rolling: return "HEAD / TAIL / BODY ROLLING";
+        case InvalidMotion::foot_pivot_rolling: return "FOOT-NODE ROLLING";
+        case InvalidMotion::zero_progress: return "ZERO MOVEMENT - RESET";
         case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
         }
         return "INVALID";
@@ -275,13 +348,12 @@ namespace epochrunner::sim
     [[nodiscard]] inline float ground_velocity_retention(bool traction_contact,
         float vertical_speed) noexcept
     {
-        if (!traction_contact)
-            return 0.985f;
-        return std::abs(vertical_speed) < 1.5f ? 0.42f : 0.72f;
+        static_cast<void>(vertical_speed);
+        return traction_contact ? 0.0f : 0.985f;
     }
 
     inline constexpr float course_marker_spacing_m = 8.0f;
-    inline constexpr int course_safe_runway_markers = 3;
+    inline constexpr int course_safe_runway_markers = 5;
     inline constexpr int course_feature_cycle_length = 5;
 
     [[nodiscard]] inline int first_course_feature_sequence(float root_x, float course_progress,
@@ -382,6 +454,32 @@ namespace epochrunner::sim
         std::uint16_t head_node{ 2 };
         std::uint16_t left_contact_node{ 4 };
         std::uint16_t right_contact_node{ 6 };
+        std::vector<std::uint16_t> additional_left_contact_nodes{};
+        std::vector<std::uint16_t> additional_right_contact_nodes{};
+
+        [[nodiscard]] bool is_left_support_seed(std::size_t node) const noexcept
+        {
+            if (node == left_contact_node)
+                return true;
+            return std::ranges::find(additional_left_contact_nodes,
+                static_cast<std::uint16_t>(node)) != additional_left_contact_nodes.end();
+        }
+        [[nodiscard]] bool is_right_support_seed(std::size_t node) const noexcept
+        {
+            if (node == right_contact_node)
+                return true;
+            return std::ranges::find(additional_right_contact_nodes,
+                static_cast<std::uint16_t>(node)) != additional_right_contact_nodes.end();
+        }
+        [[nodiscard]] bool is_support_seed(std::size_t node) const noexcept
+        {
+            return is_left_support_seed(node) || is_right_support_seed(node);
+        }
+        [[nodiscard]] std::size_t support_seed_count() const noexcept
+        {
+            return 2u + additional_left_contact_nodes.size()
+                + additional_right_contact_nodes.size();
+        }
 
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();
@@ -453,6 +551,8 @@ namespace epochrunner::sim
         [[nodiscard]] float stance_slip_speed() const noexcept { return stance_slip_speed_; }
         [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
         [[nodiscard]] float body_rolling_seconds() const noexcept { return body_rolling_seconds_; }
+        [[nodiscard]] float foot_pivot_rolling_seconds() const noexcept { return foot_pivot_rolling_seconds_; }
+        [[nodiscard]] float zero_progress_seconds() const noexcept { return zero_progress_seconds_; }
         [[nodiscard]] float hazard_stall_seconds() const noexcept { return hazard_stall_seconds_; }
         [[nodiscard]] float obstacle_lift_clearance() const noexcept { return obstacle_lift_clearance_; }
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
@@ -520,9 +620,12 @@ namespace epochrunner::sim
         float last_step_x_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
+        std::uint32_t progress_window_start_steps_{};
         std::uint32_t knee_first_faults_{};
         float wheel_sliding_seconds_{};
         float body_rolling_seconds_{};
+        float foot_pivot_rolling_seconds_{};
+        float zero_progress_seconds_{};
         float head_contact_seconds_{};
         float previous_torso_angle_{};
         float torso_turn_speed_{};

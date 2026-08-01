@@ -239,7 +239,7 @@ All generated course elements must be anchored to shared course/mile-marker coor
 
 **Status:** ACTIVE
 
-Forward reward must represent foot-led alternating walking, not a body sliding across planted contacts. A knee may not clear a rock or hurdle before its corresponding foot. Sustained double-supported sliding is an invalid gait exploit.
+Forward reward must represent alternating supported locomotion, not a body sliding across planted contacts. Natural knee lead and bent-leg clearance are allowed; only an egregious low-foot body/joint-first shove into a rock or hurdle receives a mild shaping penalty. Sustained double-supported sliding remains an invalid gait exploit.
 
 **Acceptance:**
 
@@ -247,8 +247,10 @@ Forward reward must represent foot-led alternating walking, not a body sliding a
 - Alternating contact plus visible swing-foot clearance earns the strongest gait multiplier.
 - Grounded foot-cluster slip is measured and penalized.
 - Sustained double-supported root motion with slipping feet terminates as wheel sliding.
-- Knee-before-foot traversal over rocks or hurdles receives a strong per-step penalty and increments telemetry.
-- Foot-first traversal is not penalized.
+- A knee may lead naturally while the foot is rising, close to the obstacle, or already above useful clearance.
+- Only a large knee lead with a substantially trailing, low foot receives a mild shaping penalty and increments telemetry.
+- The joint-clearance rule never terminates an otherwise valid episode and never overrides learned get-up or obstacle strategies.
+- Foot-first and useful-clearance traversal are not penalized.
 - Full Windows/Vulkan build, deterministic gait tests, diagnostics, package, and exact-source evidence pass.
 
 ## WALK-SAND-001 — Sand-sim enemy locomotion curriculum
@@ -302,13 +304,60 @@ The biped still fails to establish a usable gait, and the quadruped can stall an
 
 **Acceptance:**
 
-- Biped and humanoid hips/knees have bounded travel sufficient to clear configured rocks and hurdles.
+- Biped and humanoid hips/knees have bounded travel sufficient to clear configured rocks and hurdles without requiring an artificial foot-before-knee ordering.
 - Quadruped can articulate a foot above the first debris target without excessive joint strength.
 - High-energy obstacle quivering with no useful leg lift is detected, penalized, and eventually invalidated.
 - Approaching a rock or hurdle creates a measurable foot-lift objective before collision.
-- Four-legged crawler and six-legged hexapod presets are structurally valid, selectable, trainable, and use semantic foot clusters rather than treating extra feet as body contact.
-- Deterministic tests cover all built-in presets, leg travel, support clustering, obstacle approach, and quiver rejection.
+- The QUADRUPED preset is a true four-leg body, not a two-leg articulated biped with a long torso.
+- Near/far legs are staggered enough to remain distinguishable in side view.
+- Four-legged crawler and six-legged hexapod presets are structurally valid, selectable, trainable, and use multi-foot semantic support groups rather than treating extra feet as body contact.
+- Orange semantic foot nodes use flat-sole ground contact and cannot retain wheel-like horizontal velocity while grounded.
+- Sustained double-supported pivoting around stationary orange foot nodes is invalidated as `FOOT-NODE ROLLING`.
+- The UI renders primary orange foot contacts as flat soles rather than circular wheels.
+- Deterministic tests cover all built-in presets, leg travel, support clustering, obstacle approach, quiver rejection, flat-foot contact, and foot-pivot rolling rejection.
 - No release is prepared until every non-visual `OPEN` or `ACTIVE` mission in this ledger has passing evidence.
+
+## WALK-IDLE-005 — Zero movement resets the episode
+
+**Status:** ACTIVE
+
+A non-balance controller may not occupy a rollout for most of an episode while producing no translation, no new gait step, and no useful leg lift.
+
+**Acceptance:**
+
+- Startup settling and active recovery are exempt.
+- Two consecutive one-second zero-progress windows terminate as `ZERO MOVEMENT - RESET`.
+- A real step, useful obstacle lift, or meaningful translation clears the idle accumulator quickly.
+- Live telemetry shows the accumulated idle time.
+- Deterministic tests and a packaged runtime trace confirm prompt reset without rejecting useful get-up behavior.
+
+## WALK-GUIDE-006 — Automatic best-result self-imitation prior
+
+**Status:** ACTIVE
+
+The trainer automatically converts its best valid result into a small behavioral guide. The user does not need to author a demonstration, but may still correct the rig or controller through the existing tools.
+
+**Acceptance:**
+
+- Only a valid, grounded, stepped best result can seed the guide.
+- Frames containing body contact or orange-foot pivot rolling are excluded.
+- The guide contributes a bounded actor-only gradient and never replaces PPO reward learning.
+- Prior weight decays from a modest maximum toward a small floor as the best result ages.
+- A new stage, incompatible rig, reset, or better best result clears or rebuilds the guide.
+- UI reports guide frame count and current weight.
+
+## WALK-PIP-007 — Real training picture-in-picture
+
+**Status:** ACTIVE
+
+Publish one representative worker-owned rollout environment as an immutable snapshot and render it in a small upper-right picture-in-picture before the controls. It must show actual exploratory training, not a second deterministic live replay.
+
+**Acceptance:**
+
+- Snapshot copying occurs only at publication boundaries under worker ownership.
+- The PIP identifies itself as a raw training sample and displays its own distance and invalid-motion state.
+- Live rendering remains responsive while MAX CPU training is active.
+- User confirms the PIP is visible, useful, and does not obscure primary telemetry.
 
 ## Current warning
 

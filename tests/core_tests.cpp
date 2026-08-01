@@ -81,6 +81,10 @@ int main()
     require(sim::ground_velocity_retention(true, 0.0f)
         < sim::ground_velocity_retention(false, 0.0f),
         "feet do not receive more ground traction than head, tail, or body nodes");
+    require(sim::ground_velocity_retention(true, 0.0f) == 0.0f,
+        "grounded orange foot nodes still retain wheel-like horizontal velocity");
+    require(std::abs(sim::ground_contact_offset(true, 0.20f) - 0.065f) < 0.0001f,
+        "semantic feet still collide with the ground as rolling circles");
     require(sim::ground_velocity_retention(false, 0.0f) >= 0.95f,
         "non-foot body contact can still pin the creature to the ground");
     const int anchored_sequence = sim::first_course_feature_sequence(1.0f, 3.0f);
@@ -90,27 +94,31 @@ int main()
         "course debris does not advance in world space solely from course progress");
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
-    require(sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 3)
+    require(sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 5)
             == sim::CourseFeatureKind::rock
-        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 4)
-            == sim::CourseFeatureKind::hurdle
-        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 5)
-            == sim::CourseFeatureKind::overhead_bar
         && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 6)
-            == sim::CourseFeatureKind::moving_hazard
+            == sim::CourseFeatureKind::hurdle
         && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 7)
+            == sim::CourseFeatureKind::overhead_bar
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 8)
+            == sim::CourseFeatureKind::moving_hazard
+        && sim::scheduled_course_feature(sim::CourseStage::moving_hazards, 9)
             == sim::CourseFeatureKind::projectile,
         "moving-hazard lesson does not schedule every obstacle class on consecutive markers");
-    require(sim::course_marker_distance_m(sim::course_safe_runway_markers) >= 24.0f,
-        "course does not provide enough safe runway before the first obstacle marker");
+    require(sim::course_marker_distance_m(sim::course_safe_runway_markers) >= 40.0f,
+        "course does not provide the requested longer learning runway");
     sim::CourseFeature rock_order{};
     rock_order.kind = sim::CourseFeatureKind::rock;
     rock_order.center = { 1.0f, 0.25f };
     rock_order.radius = 0.25f;
-    require(sim::knee_crosses_before_foot(1.12f, 0.92f, 0.34f, rock_order),
-        "knee-first rock traversal is not detected");
-    require(!sim::knee_crosses_before_foot(1.12f, 1.32f, 0.34f, rock_order),
+    require(!sim::knee_crosses_before_foot(1.12f, 0.92f, 0.34f, rock_order),
+        "normal bent-knee lead is still over-constrained");
+    require(sim::knee_crosses_before_foot(1.42f, 0.82f, 0.20f, rock_order),
+        "egregious low-foot body-first rock shove is not detected");
+    require(!sim::knee_crosses_before_foot(1.42f, 1.32f, 0.34f, rock_order),
         "foot-first rock traversal is incorrectly penalized");
+    require(!sim::knee_crosses_before_foot(1.42f, 0.82f, 0.58f, rock_order),
+        "useful foot clearance is incorrectly rejected because the knee leads");
     require(sim::gait_progress_multiplier(0, false, 0.0f) == 0.0f,
         "sliding without a real step still receives walking progress credit");
     require(sim::gait_progress_multiplier(2, true, 0.18f)
@@ -120,6 +128,38 @@ int main()
         "double-supported wheel-like sliding is not detected");
     require(!sim::wheel_sliding_motion(0.45f, true, false, 0.50f),
         "single-support walking is incorrectly classified as wheel sliding");
+    require(!sim::rolling_gate_active(1.0f)
+            && sim::rolling_gate_active(sim::rolling_gate_activation_seconds),
+        "rolling hard gate does not provide a bounded startup settle window");
+    require(sim::body_rolling_limit(sim::CourseStage::walk, 1.8f)
+            > sim::body_rolling_limit(sim::CourseStage::walk, 4.0f),
+        "rolling gate does not become strict after startup");
+    require(sim::foot_pivot_rolling_limit(1.8f) > sim::foot_pivot_rolling_limit(4.0f),
+        "orange-foot rolling gate does not become strict after startup");
+    require(sim::zero_progress_window(0.0f, 0u, 0.0f, false),
+        "zero movement is not classified for reset");
+    require(!sim::zero_progress_window(0.08f, 0u, 0.0f, false),
+        "meaningful translation is incorrectly classified as zero movement");
+    require(!sim::zero_progress_window(0.0f, 1u, 0.0f, false),
+        "a new gait step is incorrectly classified as zero movement");
+    require(!sim::zero_progress_window(0.0f, 0u, 0.18f, false),
+        "useful leg lift is incorrectly classified as zero movement");
+    require(!sim::zero_progress_window(0.0f, 0u, 0.0f, true),
+        "active recovery is incorrectly reset as idle");
+    require(sim::update_zero_progress_seconds(1.0f, true, 1.0f)
+            >= sim::zero_progress_reset_seconds,
+        "two idle windows do not reach the reset threshold");
+    require(sim::update_zero_progress_seconds(1.0f, false, 1.0f) == 0.0f,
+        "useful motion does not rapidly clear the idle-reset accumulator");
+    require(rl::self_imitation_prior_weight(0, 128) > rl::self_imitation_prior_weight(500, 128)
+            && rl::self_imitation_prior_weight(500, 128) > 0.0f,
+        "best-result imitation guide does not decay into a light prior");
+    require(rl::self_imitation_prior_weight(0, 0) == 0.0f,
+        "empty imitation memory still changes PPO gradients");
+    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 3, 1.2f, 4.0f),
+        "valid stepped best result cannot seed self-imitation");
+    require(!rl::elite_motion_eligible(sim::CourseStage::walk, false, 8, 12.0f, 20.0f),
+        "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
         "near obstacle does not activate full leg-lift training");
     require(sim::hazard_quiver_motion(0.50f, 0.02f, 0.03f, 0.40f, 0.20f),
@@ -130,6 +170,10 @@ int main()
         "head, tail, or body rolling is not detected");
     require(!sim::rolling_body_motion(0.20f, 0.70f, 0.95f, true, false),
         "normal foot-supported walking is incorrectly classified as rolling");
+    require(sim::foot_pivot_rolling_motion(0.24f, true, true, 0.01f, 0.02f, 0.50f),
+        "double-supported rolling around stationary orange foot nodes is not detected");
+    require(!sim::foot_pivot_rolling_motion(0.24f, true, false, 0.01f, 0.18f, 0.50f),
+        "single-support lifted-foot walking is incorrectly rejected as foot-node rolling");
     require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
         "long flat sand-sim patrol zones are missing");
     require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),
@@ -191,12 +235,23 @@ int main()
             "obstacle-capable forward travel was not applied");
     }
 
+    const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
     const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
     const sim::CreatureBlueprint hexapod = sim::CreatureBlueprint::hexapod();
-    require(crawler4.nodes.size() >= 9 && crawler4.bones.size() >= 10,
-        "four-legged crawler geometry is incomplete");
-    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16,
-        "six-legged hexapod geometry is incomplete");
+    require(quadruped.support_seed_count() == 4,
+        "quadruped is still semantically a two-foot biped");
+    require(quadruped.additional_left_contact_nodes.size() == 1
+            && quadruped.additional_right_contact_nodes.size() == 1,
+        "quadruped diagonal support pairs are missing");
+    require(std::abs(quadruped.nodes[4].x - quadruped.nodes[5].x) > 0.30f
+            && std::abs(quadruped.nodes[6].x - quadruped.nodes[7].x) > 0.30f,
+        "quadruped near/far legs overlap in the side-view geometry");
+    require(crawler4.nodes.size() >= 9 && crawler4.bones.size() >= 10
+            && crawler4.support_seed_count() == 4,
+        "four-legged crawler geometry or support semantics are incomplete");
+    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16
+            && hexapod.support_seed_count() == 6,
+        "six-legged hexapod geometry or support semantics are incomplete");
 
     {
         sim::Environment biped_support{ humanoid, 0xFEE7u };

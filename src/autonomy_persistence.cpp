@@ -19,6 +19,24 @@ namespace epochrunner::rl
         snapshot.exploration = worker_.exploration();
         snapshot.optimizer_step = worker_.optimizer_step();
         snapshot.has_best = worker_.has_best_policy();
+        const std::span<const sim::Environment> environments = worker_.environments();
+        if (!environments.empty())
+        {
+            const sim::Environment* representative = &environments.front();
+            float representative_score = -1.0e9f;
+            for (const sim::Environment& environment : environments)
+            {
+                const float score = (environment.valid_motion() ? 1000.0f : 0.0f)
+                    + environment.distance_travelled() * 10.0f + environment.elapsed_seconds();
+                if (score > representative_score)
+                {
+                    representative = &environment;
+                    representative_score = score;
+                }
+            }
+            snapshot.training_preview = *representative;
+            snapshot.has_training_preview = true;
+        }
         snapshot.status.enabled = enabled_.load(std::memory_order_relaxed);
         snapshot.status.stage = stage_;
         snapshot.status.difficulty = difficulty_;
