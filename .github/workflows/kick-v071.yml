@@ -1,0 +1,33 @@
+name: Retrigger EpochRunner v0.7.1 completion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/kick-v071.yml
+
+permissions:
+  contents: write
+
+jobs:
+  retrigger:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Touch completion workflow and remove trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          printf '\n# retriggered after checkpoint-anchor correction\n' >> .github/workflows/finish-v071.yml
+          git rm .github/workflows/kick-v071.yml
+          git add .github/workflows/finish-v071.yml
+          git commit -m 'Start corrected v0.7.1 completion gate'
+          git push origin HEAD:main
