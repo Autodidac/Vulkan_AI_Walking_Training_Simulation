@@ -208,3 +208,5 @@ Path("RELEASE_NOTES_v0.7.1.md").write_text(
     "- Keeps runtime visual acceptance open in missioncache.md until the packaged humanoid is confirmed.\n",
     encoding="utf-8",
 )
+
+# This update intentionally retriggers the branch release gate after the workflow exists.
