@@ -6,7 +6,9 @@ on:
       - feature/self-imitation-mission-cache
     paths:
       - tools/patch_guided_training_phase1.py
+      - tools/repair_guided_phase1_output.py
       - tools/patch_guided_training_phase2.py
+      - tools/patch_relaxed_joint_clearance.py
       - .github/workflows/guided-training-validation.yml
 
 permissions:
@@ -36,8 +38,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Flat-foot integration failed" }
           python tools/patch_guided_training_phase1.py
           if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 failed" }
+          python tools/repair_guided_phase1_output.py
+          if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 repair failed" }
           python tools/patch_guided_training_phase2.py
           if ($LASTEXITCODE -ne 0) { throw "Guided training phase 2 failed" }
+          python tools/patch_relaxed_joint_clearance.py
+          if ($LASTEXITCODE -ne 0) { throw "Relaxed joint-clearance integration failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Integrated source contains whitespace errors" }
 
@@ -88,7 +94,9 @@ jobs:
           Remove-Item tools/patch_flat_foot_contacts.py
           Remove-Item tools/repair_flat_foot_driver.py
           Remove-Item tools/patch_guided_training_phase1.py
+          Remove-Item tools/repair_guided_phase1_output.py
           Remove-Item tools/patch_guided_training_phase2.py
+          Remove-Item tools/patch_relaxed_joint_clearance.py
           Remove-Item .github/workflows/flat-foot-validation.yml
           Remove-Item .github/workflows/guided-training-validation.yml
           git config user.name "github-actions[bot]"
@@ -98,7 +106,8 @@ jobs:
           git add src/self_imitation.cpp src/simulation.cpp src/simulation.hpp src/training_checkpoint.cpp
           git add tests/core_tests.cpp
           git add -u tools/patch_flat_foot_contacts.py tools/repair_flat_foot_driver.py
-          git add -u tools/patch_guided_training_phase1.py tools/patch_guided_training_phase2.py
+          git add -u tools/patch_guided_training_phase1.py tools/repair_guided_phase1_output.py
+          git add -u tools/patch_guided_training_phase2.py tools/patch_relaxed_joint_clearance.py
           git add -u .github/workflows/flat-foot-validation.yml .github/workflows/guided-training-validation.yml
           git commit -m "Add guided multi-leg training and best-result imitation"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit exact tested source" }
@@ -124,6 +133,7 @@ jobs:
           - True four-leg quadruped support semantics: passed
           - Four-leg crawler and six-leg hexapod support semantics: passed
           - Side-view near/far leg separation tests: passed
+          - Natural knee lead allowed while egregious low-foot body-first impact remains mildly penalized: passed
           - Actual worker-rollout picture-in-picture publication: compiled and packaged
           - Zero-movement reset state-machine tests: passed
           - Automatic best-result imitation eligibility and decay tests: passed
