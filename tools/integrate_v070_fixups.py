@@ -18,4 +18,12 @@ if text.count(old) != 1:
     raise RuntimeError("expected ppo include block not found")
 ppo.write_text(text.replace(old, new, 1), encoding="utf-8")
 
+test = root / "tests/runtime_pipeline_tests.cpp"
+text = test.read_text(encoding="utf-8")
+old = "            neutral.step(zero);\n            arms.step(arm_action);"
+new = "            static_cast<void>(neutral.step(zero));\n            static_cast<void>(arms.step(arm_action));"
+if text.count(old) != 1:
+    raise RuntimeError("expected arm action test calls not found")
+test.write_text(text.replace(old, new, 1), encoding="utf-8")
+
 print("Applied v0.7 integration fixups.")
