@@ -1,0 +1,60 @@
+name: Validate v0.7 UI completion
+
+on:
+  push:
+    branches:
+      - work/mission-cache-completion
+    paths:
+      - tools/apply_ui_completion.py
+      - src/ui_layout.hpp
+      - .github/workflows/v070-ui-integration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  linux-ui-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/mission-cache-completion
+          fetch-depth: 0
+
+      - name: Apply deterministic UI completion
+        run: |
+          python tools/apply_ui_completion.py
+          git diff --check
+
+      - name: Configure Linux CPU release
+        run: >-
+          cmake -S . -B build/linux-release -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+
+      - name: Build and test Linux CPU targets
+        run: |
+          cmake --build build/linux-release --parallel 2
+          ctest --test-dir build/linux-release --output-on-failure -V
+
+      - name: Configure and run ThreadSanitizer regression
+        run: |
+          cmake -S . -B build/linux-tsan -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DEPOCHRUNNER_BUILD_APP=OFF \
+            -DEPOCHRUNNER_BUILD_TESTS=ON \
+            -DEPOCHRUNNER_ENABLE_TSAN=ON
+          cmake --build build/linux-tsan --target EpochRunnerRuntimePipelineTests --parallel 2
+          TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1 \
+            ctest --test-dir build/linux-tsan -R EpochRunner.RuntimePipeline --output-on-failure -V
+
+      - name: Commit exact tested UI-complete source
+        run: |
+          rm tools/apply_ui_completion.py
+          rm .github/workflows/v070-ui-integration.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Complete deterministic UI and PIP layout contracts'
+          git push origin HEAD:work/mission-cache-completion
