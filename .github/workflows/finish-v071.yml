@@ -36,9 +36,9 @@ jobs:
           status="$RUNNER_TEMP/status"
           git worktree add --detach "$status" origin/main
           mkdir -p "$status/validation"
-          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `all-balance-seeds-linux`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `original-controller-all-seeds-linux`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
           git -C "$status" add validation/v0.7.1-run.md
-          git -C "$status" commit -m 'Record all-seed balance validation run'
+          git -C "$status" commit -m 'Record original-controller all-seed run'
           git -C "$status" push origin HEAD:main
           git worktree remove --force "$status"
 
@@ -68,4 +68,4 @@ jobs:
       - name: Test
         run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
 
-# all PPO balance seeds trigger
+# original controller all-seed diagnostic trigger
