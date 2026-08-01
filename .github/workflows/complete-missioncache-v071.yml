@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: write
   pull-requests: read
 
@@ -211,3 +212,41 @@ jobs:
           if ($branches.Count -ne 1 -or $branches[0].Trim() -ne "main") {
             throw "Final repository branches are not clean: $($branches -join ', ')"
           }
+
+  diagnose-failure:
+    if: ${{ always() && (needs.linux-validate.result == 'failure' || needs.windows-release.result == 'failure') }}
+    needs:
+      - linux-validate
+      - windows-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Record failed job logs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          LINUX_RESULT: ${{ needs.linux-validate.result }}
+          WINDOWS_RESULT: ${{ needs.windows-release.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p validation
+          gh run view "$RUN_ID" --log-failed > validation/v0.7.1-failure.log 2>&1 || true
+          cat > validation/v0.7.1-failure.md <<EOF
+          # EpochRunner v0.7.1 completion failure
+
+          - Workflow run: \`$RUN_ID\`
+          - Linux validation result: \`$LINUX_RESULT\`
+          - Windows release result: \`$WINDOWS_RESULT\`
+          - Failed-step output: \`validation/v0.7.1-failure.log\`
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add validation/v0.7.1-failure.md validation/v0.7.1-failure.log
+          git commit -m 'Record v0.7.1 completion failure'
+          git push origin HEAD:main
