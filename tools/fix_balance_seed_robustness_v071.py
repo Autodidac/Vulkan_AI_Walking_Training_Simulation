@@ -9,56 +9,8 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# Balance uses the same motors as later locomotion, but it should not receive
-# full acrobatic impulse while learning a static support manifold.
-simulation_path = Path("src/simulation.cpp")
-simulation = simulation_path.read_text(encoding="utf-8")
-simulation = replace_once(
-    simulation,
-    "        const float correction = clamp(error, -0.24f, 0.24f) * motor.strength;",
-    "        const float stage_motor_scale = course_stage_ == CourseStage::balance\n"
-    "            ? 0.70f : 1.0f;\n"
-    "        const float correction = clamp(error, -0.24f, 0.24f)\n"
-    "            * motor.strength * stage_motor_scale;",
-    "balance motor impulse scale",
-)
-simulation_path.write_text(simulation, encoding="utf-8")
-
-# Arms have roughly twice the angular travel of legs. Applying identical
-# normalized velocity feedback to them produces much larger target excursions
-# and can kick the torso. Use separate damping and clamps.
-ppo_path = Path("src/ppo.hpp")
-ppo = ppo_path.read_text(encoding="utf-8")
-ppo = replace_once(
-    ppo,
-    "            const float joint_speed = observation[joint_velocity_begin + index];\n"
-    "            action[index] = clamp(-0.10f * joint_speed, -0.28f, 0.28f);",
-    "            const float joint_speed = observation[joint_velocity_begin + index];\n"
-    "            const bool arm_motor = index >= 4u;\n"
-    "            const float damping = arm_motor ? 0.025f : 0.080f;\n"
-    "            const float limit = arm_motor ? 0.12f : 0.24f;\n"
-    "            action[index] = clamp(-damping * joint_speed, -limit, limit);",
-    "travel-aware joint damping",
-)
-ppo = replace_once(
-    ppo,
-    "        const float correction = clamp(observation[0] * 0.38f\n"
-    "            + observation[2] * 0.06f, -0.18f, 0.18f);\n"
-    "        action[0] = clamp(action[0] - correction, -0.42f, 0.42f);\n"
-    "        action[2] = clamp(action[2] - correction, -0.42f, 0.42f);\n"
-    "        action[4] = clamp(action[4] + correction * 0.35f, -0.42f, 0.42f);\n"
-    "        action[6] = clamp(action[6] + correction * 0.35f, -0.42f, 0.42f);",
-    "        const float correction = clamp(observation[0] * 0.32f\n"
-    "            + observation[2] * 0.05f, -0.14f, 0.14f);\n"
-    "        action[0] = clamp(action[0] - correction, -0.32f, 0.32f);\n"
-    "        action[2] = clamp(action[2] - correction, -0.32f, 0.32f);\n"
-    "        action[4] = clamp(action[4] + correction * 0.10f, -0.14f, 0.14f);\n"
-    "        action[6] = clamp(action[6] + correction * 0.10f, -0.14f, 0.14f);",
-    "bounded torso counterbalance",
-)
-ppo_path.write_text(ppo, encoding="utf-8")
-
-# Match PPO's deterministic evaluation seeds exactly.
+# Match PPO's deterministic evaluation seeds exactly without changing the
+# controller that already passed the twelve-second single-seed physics test.
 test_path = Path("tests/core_tests.cpp")
 tests = test_path.read_text(encoding="utf-8")
 anchor = '''    require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),
