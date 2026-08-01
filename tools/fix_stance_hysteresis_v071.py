@@ -66,7 +66,7 @@ source = replace_once(
     "            stable_stance_seconds_ += dt;\n"
     "        }\n"
     "        else if (!catastrophic_stance_failure\n"
-    "            && stance_failure_grace_seconds_ < 0.40f)\n"
+    "            && stance_failure_grace_seconds_ < 0.60f)\n"
     "        {\n"
     "            stance_failure_grace_seconds_ += dt;\n"
     "            stable_stance_seconds_ = std::max(\n"
