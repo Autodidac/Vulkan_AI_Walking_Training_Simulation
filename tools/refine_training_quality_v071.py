@@ -221,3 +221,8 @@ tests = replace_once(
     "bounded standing acquisition test",
 )
 tests_path.write_text(tests, encoding="utf-8")
+
+# Apply the eight-motor observation layout and feedback balance teacher after
+# the base v0.7.1 materialization and reciprocal-body corrections above.
+exec(Path("tools/fix_humanoid_observation_v071.py").read_text(encoding="utf-8"),
+    {"__name__": "__main__"})
