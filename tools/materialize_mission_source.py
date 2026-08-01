@@ -19,10 +19,8 @@ for script in (
 # require generated course features.
 tests = ROOT / "tests/core_tests.cpp"
 text = tests.read_text(encoding="utf-8")
-old = '''        if (static_cast<std::uint8_t>(stage)
-            >= static_cast<std::uint8_t>(sim::CourseStage::hurdles))
-            require(!environment.course_features().empty(),
-                "obstacle curriculum stage has no course features");'''
+old = '''        if (stage >= sim::CourseStage::hurdles)
+            require(!environment.course_features().empty(), "obstacle curriculum stage has no course features");'''
 new = '''        if (stage == sim::CourseStage::hurdles
             || stage == sim::CourseStage::moving_hazards)
             require(!environment.course_features().empty(),
