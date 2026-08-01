@@ -1,0 +1,267 @@
+name: Finish EpochRunner v0.7.1 Windows release
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/finish-v071-windows.yml]
+
+concurrency:
+  group: epochrunner-v071-missioncache
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: read
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Record active Windows release run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          $status = "$env:RUNNER_TEMP/status"
+          git worktree add --detach $status origin/main
+          New-Item -ItemType Directory -Force "$status/validation" | Out-Null
+          @"
+          # EpochRunner v0.7.1 completion run
+
+          - Linux validation run: `30718528145`
+          - Windows/release run: `$env:RUN_ID`
+          - Trigger SHA: `$env:TRIGGER_SHA`
+          - Stage: `windows-clean-folder-release`
+          - Result: `running`
+          "@ | Set-Content -Encoding UTF8 "$status/validation/v0.7.1-run.md"
+          git -C $status add validation/v0.7.1-run.md
+          git -C $status commit -m 'Record Windows clean-folder v0.7.1 release run'
+          git -C $status push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not record active release run' }
+          git worktree remove --force $status
+
+      - name: Materialize exact corrected source
+        shell: pwsh
+        run: |
+          python tools/apply_training_quality_v071.py apply
+          if ($LASTEXITCODE -ne 0) { throw 'Materialization failed: apply_training_quality_v071.py apply' }
+
+          $scripts = @(
+            'tools/refine_training_quality_v071.py',
+            'tools/fix_balance_diagnostic_v071.py',
+            'tools/fix_stance_hysteresis_v071.py',
+            'tools/fix_balance_seed_robustness_v071.py',
+            'tools/fix_balance_evaluation_v071.py',
+            'tools/fix_runtime_launch_v071.py',
+            'tools/simplify_runtime_deployment_v071.py',
+            'tools/patch_launch_release_metadata_v071.py',
+            'tools/patch_split_validation_evidence_v071.py'
+          )
+          foreach ($script in $scripts) {
+            python $script
+            if ($LASTEXITCODE -ne 0) { throw "Materialization failed: $script" }
+          }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Materialized source contains whitespace errors' }
+          Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py" -Force
+
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v071-current-runner-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v071-final-launch-${{ runner.os }}-
+            epochrunner-v071-bounded-launch-${{ runner.os }}-
+            epochrunner-v071-runtime-launch-${{ runner.os }}-
+            epochrunner-v071-clean-${{ runner.os }}-
+            epochrunner-v071-latched-${{ runner.os }}-
+            epochrunner-v070-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure full Windows application
+        shell: pwsh
+        timeout-minutes: 45
+        env:
+          VCPKG_MAX_CONCURRENCY: 4
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build full Windows application
+        shell: pwsh
+        timeout-minutes: 15
+        run: cmake --build --preset windows-release --parallel 4
+
+      - name: Test full Windows application and build-tree launch
+        timeout-minutes: 15
+        run: ctest --preset windows-release --output-on-failure -V --timeout 900
+
+      - name: Verify build-tree version and launch from unrelated directory
+        shell: pwsh
+        run: |
+          $exe = "$env:GITHUB_WORKSPACE/build/windows-release/Release/EpochRunner.exe"
+          $version = (& $exe --version | Out-String).Trim()
+          if ($version -ne 'EpochRunner 0.7.1') { throw "Unexpected version: $version" }
+          & $exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) { throw 'Vulkan diagnostic failed' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & $exe --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Build-tree launch from unrelated working directory failed' }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Validate mission ledger
+        shell: pwsh
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" validate --run-id $env:RUN_ID
+          if ($LASTEXITCODE -ne 0) { throw 'Mission validation failed' }
+
+      - name: Package and clean-folder launch Windows build
+        id: package
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.1-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.1.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& "$stage/EpochRunner.exe" --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.1') { throw "Installed package version failed: $version" }
+            & "$stage/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Installed package launch diagnostic failed' }
+          } finally {
+            Pop-Location
+          }
+
+          $archive = 'EpochRunner-v0.7.1-windows-x64.zip'
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Commit exact tested source
+        id: source
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          $temporary = @(
+            '.github/workflows/complete-missioncache-v071.yml',
+            '.github/workflows/finish-v071.yml',
+            '.github/workflows/finish-v071-fast.yml',
+            '.github/workflows/finish-v071-final.yml',
+            '.github/workflows/finish-v071-windows.yml',
+            '.github/workflows/kick-v071.yml',
+            '.github/workflows/kick-v071-now.yml',
+            'tools/apply_training_quality_v071.py',
+            'tools/refine_training_quality_v071.py',
+            'tools/fix_humanoid_observation_v071.py',
+            'tools/fix_balance_diagnostic_v071.py',
+            'tools/fix_stance_hysteresis_v071.py',
+            'tools/fix_balance_seed_robustness_v071.py',
+            'tools/fix_balance_evaluation_v071.py',
+            'tools/fix_runtime_launch_v071.py',
+            'tools/simplify_runtime_deployment_v071.py',
+            'tools/patch_launch_release_metadata_v071.py',
+            'tools/patch_split_validation_evidence_v071.py',
+            'tools/write_missioncache_v071.py',
+            'tools/complete_missioncache_v071.py',
+            'validation/v0.7.1-failure.md',
+            'validation/v0.7.1-failure.log'
+          )
+          foreach ($path in $temporary) { git rm -f --ignore-unmatch $path }
+          Remove-Item vcpkg -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item vcpkg-bincache -Recurse -Force -ErrorAction SilentlyContinue
+          git add -A
+          git restore --staged validation/v0.7.1-run.md 2>$null
+          git restore validation/v0.7.1-run.md 2>$null
+          git commit -m 'Fix robust humanoid training and runtime launch'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not commit tested source' }
+
+          git fetch origin main
+          git rebase origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not rebase over run-status commit' }
+          git rm -f --ignore-unmatch validation/v0.7.1-run.md
+          git commit --amend --no-edit
+          if ($LASTEXITCODE -ne 0) { throw 'Could not fold status cleanup into source commit' }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish tested source' }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          "sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Publish v0.7.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          gh release view v0.7.1 *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Asset replacement failed' }
+            gh release edit v0.7.1 --target $env:SOURCE_SHA --title 'EpochRunner v0.7.1' --notes-file RELEASE_NOTES_v0.7.1.md
+          } else {
+            gh release create v0.7.1 $env:ARCHIVE "$env:ARCHIVE.sha256" --target $env:SOURCE_SHA --title 'EpochRunner v0.7.1' --notes-file RELEASE_NOTES_v0.7.1.md
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+
+      - name: Finalize mission cache and cleanup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          python "$env:RUNNER_TEMP/write_missioncache_v071.py" finalize --source-sha $env:SOURCE_SHA --run-id $env:RUN_ID --archive $env:ARCHIVE --checksum $env:CHECKSUM
+          if ($LASTEXITCODE -ne 0) { throw 'Final ledger generation failed' }
+          git add missioncache.md validation/v0.7.1.md
+          git commit -m 'Complete EpochRunner v0.7.1 mission cache'
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Final evidence publication failed' }
+
+          $prs = (gh pr list --state open --limit 100 --json number --jq 'length').Trim()
+          if ($prs -ne '0') { throw "$prs open pull requests remain" }
+          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') {
+            throw "Unexpected branches remain: $($branches -join ', ')"
+          }
