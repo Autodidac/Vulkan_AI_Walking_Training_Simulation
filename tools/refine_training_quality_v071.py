@@ -141,7 +141,7 @@ simulation_path.write_text(simulation, encoding="utf-8")
 
 # Keep the qualification predicate test deterministic. A passive ragdoll with
 # zero motor input is not a standing controller; controlled evidence tests the
-# gate itself, while the separate bounded PPO test remains end-to-end.
+# gate itself, while the normal worker-backed PPO test remains end-to-end.
 tests_path = Path("tests/core_tests.cpp")
 tests = tests_path.read_text(encoding="utf-8")
 tests = replace_once(
@@ -187,11 +187,5 @@ tests = replace_once(
     "            (void)collapsed.step(neutral);\n"
     "        }",
     "collapsed-pose simulation loop",
-)
-tests = replace_once(
-    tests,
-    "        rl::PpoTrainer stance_trainer{ humanoid, 8 };",
-    "        rl::PpoTrainer stance_trainer{ humanoid, 8, false };",
-    "bounded no-worker training acceptance",
 )
 tests_path.write_text(tests, encoding="utf-8")
