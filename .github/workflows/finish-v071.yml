@@ -36,9 +36,9 @@ jobs:
           status="$RUNNER_TEMP/status"
           git worktree add --detach "$status" origin/main
           mkdir -p "$status/validation"
-          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `shared-balance-linux`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `all-balance-seeds-linux`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
           git -C "$status" add validation/v0.7.1-run.md
-          git -C "$status" commit -m 'Record shared-balance validation run'
+          git -C "$status" commit -m 'Record all-seed balance validation run'
           git -C "$status" push origin HEAD:main
           git worktree remove --force "$status"
 
@@ -48,6 +48,7 @@ jobs:
           python3 tools/refine_training_quality_v071.py
           python3 tools/fix_balance_diagnostic_v071.py
           python3 tools/fix_stance_hysteresis_v071.py
+          python3 tools/fix_balance_seed_robustness_v071.py
           git diff --check
 
       - name: Install compiler
@@ -67,4 +68,4 @@ jobs:
       - name: Test
         run: ctest --test-dir build/linux-v071 --output-on-failure -V --timeout 900
 
-# retained stance evidence trigger
+# all PPO balance seeds trigger
