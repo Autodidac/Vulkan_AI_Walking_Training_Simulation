@@ -139,7 +139,8 @@ if count != 1:
     raise RuntimeError(f"expected one generated motor solver, got {count}")
 simulation_path.write_text(simulation, encoding="utf-8")
 
-# Preserve [[nodiscard]] discipline in the adversarial collapsed-pose loop.
+# Preserve [[nodiscard]] discipline in the adversarial collapsed-pose loop and
+# keep the first-update acceptance deterministic by bypassing rollout workers.
 tests_path = Path("tests/core_tests.cpp")
 tests = tests_path.read_text(encoding="utf-8")
 tests = replace_once(
@@ -152,5 +153,11 @@ tests = replace_once(
     "            (void)collapsed.step(neutral);\n"
     "        }",
     "collapsed-pose simulation loop",
+)
+tests = replace_once(
+    tests,
+    "        rl::PpoTrainer stance_trainer{ humanoid, 8 };",
+    "        rl::PpoTrainer stance_trainer{ humanoid, 8, false };",
+    "bounded no-worker training acceptance",
 )
 tests_path.write_text(tests, encoding="utf-8")
