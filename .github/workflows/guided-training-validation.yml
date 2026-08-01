@@ -6,6 +6,7 @@ on:
       - feature/self-imitation-mission-cache
     paths:
       - tools/patch_guided_training_phase1.py
+      - tools/repair_guided_phase1_driver.py
       - tools/repair_guided_phase1_output.py
       - tools/patch_guided_training_phase2.py
       - tools/patch_relaxed_joint_clearance.py
@@ -36,10 +37,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Flat-foot driver repair failed" }
           python tools/patch_flat_foot_contacts.py
           if ($LASTEXITCODE -ne 0) { throw "Flat-foot integration failed" }
+          python tools/repair_guided_phase1_driver.py
+          if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 driver repair failed" }
           python tools/patch_guided_training_phase1.py
           if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 failed" }
           python tools/repair_guided_phase1_output.py
-          if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 repair failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Guided training phase 1 output repair failed" }
           python tools/patch_guided_training_phase2.py
           if ($LASTEXITCODE -ne 0) { throw "Guided training phase 2 failed" }
           python tools/patch_relaxed_joint_clearance.py
@@ -94,6 +97,7 @@ jobs:
           Remove-Item tools/patch_flat_foot_contacts.py
           Remove-Item tools/repair_flat_foot_driver.py
           Remove-Item tools/patch_guided_training_phase1.py
+          Remove-Item tools/repair_guided_phase1_driver.py
           Remove-Item tools/repair_guided_phase1_output.py
           Remove-Item tools/patch_guided_training_phase2.py
           Remove-Item tools/patch_relaxed_joint_clearance.py
@@ -106,8 +110,9 @@ jobs:
           git add src/self_imitation.cpp src/simulation.cpp src/simulation.hpp src/training_checkpoint.cpp
           git add tests/core_tests.cpp
           git add -u tools/patch_flat_foot_contacts.py tools/repair_flat_foot_driver.py
-          git add -u tools/patch_guided_training_phase1.py tools/repair_guided_phase1_output.py
-          git add -u tools/patch_guided_training_phase2.py tools/patch_relaxed_joint_clearance.py
+          git add -u tools/patch_guided_training_phase1.py tools/repair_guided_phase1_driver.py
+          git add -u tools/repair_guided_phase1_output.py tools/patch_guided_training_phase2.py
+          git add -u tools/patch_relaxed_joint_clearance.py
           git add -u .github/workflows/flat-foot-validation.yml .github/workflows/guided-training-validation.yml
           git commit -m "Add guided multi-leg training and best-result imitation"
           if ($LASTEXITCODE -ne 0) { throw "Failed to commit exact tested source" }
