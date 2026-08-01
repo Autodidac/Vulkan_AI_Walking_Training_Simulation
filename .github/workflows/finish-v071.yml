@@ -41,9 +41,9 @@ jobs:
           status="$RUNNER_TEMP/status"
           git worktree add --detach "$status" origin/main
           mkdir -p "$status/validation"
-          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux-msvc-parity`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux-latched-acceptance`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
           git -C "$status" add validation/v0.7.1-run.md
-          git -C "$status" commit -m 'Record MSVC-parity v0.7.1 release run'
+          git -C "$status" commit -m 'Record latched-acceptance v0.7.1 release run'
           git -C "$status" push origin HEAD:main
           git worktree remove --force "$status"
 
@@ -112,8 +112,9 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-msvc-parity-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-latched-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            epochrunner-v071-msvc-parity-${{ runner.os }}-
             epochrunner-v071-robust-${{ runner.os }}-
             epochrunner-v071-observation-${{ runner.os }}-
             epochrunner-v071-quality-${{ runner.os }}-
@@ -241,3 +242,5 @@ jobs:
           if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') {
             throw "Unexpected branches remain: $($branches -join ', ')"
           }
+
+# direct-latched acceptance trigger
