@@ -99,3 +99,13 @@ tests = replace_once(
     "robust six-seed acceptance",
 )
 test_path.write_text(tests, encoding="utf-8")
+
+notes_path = Path("RELEASE_NOTES_v0.7.1.md")
+notes = notes_path.read_text(encoding="utf-8")
+notes += (
+    "- Expands humanoid observations from 32 to 40 channels so all eight motor angles and velocities are independent.\n"
+    "- Uses the same effective balance controller in rollout collection, deterministic evaluation, self-imitation, live preview, and displayed execution.\n"
+    "- Latches completed standing lessons and requires at least four of six deterministic perturbed starts to pass.\n"
+    "- Adds bounded stance-evidence hysteresis so brief solver contact transitions do not erase a valid sustained stand.\n"
+)
+notes_path.write_text(notes, encoding="utf-8")
