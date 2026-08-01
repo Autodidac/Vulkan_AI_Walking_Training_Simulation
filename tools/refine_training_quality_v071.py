@@ -139,10 +139,44 @@ if count != 1:
     raise RuntimeError(f"expected one generated motor solver, got {count}")
 simulation_path.write_text(simulation, encoding="utf-8")
 
-# Preserve [[nodiscard]] discipline in the adversarial collapsed-pose loop and
-# keep the first-update acceptance deterministic by bypassing rollout workers.
+# Keep the qualification predicate test deterministic. A passive ragdoll with
+# zero motor input is not a standing controller; controlled evidence tests the
+# gate itself, while the separate bounded PPO test remains end-to-end.
 tests_path = Path("tests/core_tests.cpp")
 tests = tests_path.read_text(encoding="utf-8")
+tests = replace_once(
+    tests,
+    "        }\n    };\n}\n\nnamespace\n{\n",
+    "        }\n\n"
+    "        static void qualify_stable_stance(Environment& environment) noexcept\n"
+    "        {\n"
+    "            environment.invalid_reason_ = InvalidMotion::none;\n"
+    "            environment.non_foot_grounded_ = false;\n"
+    "            environment.stable_stance_seconds_ = 3.5f;\n"
+    "            environment.longest_stable_stance_seconds_ = 3.5f;\n"
+    "            environment.maximum_joint_speed_ = 0.5f;\n"
+    "        }\n"
+    "    };\n"
+    "}\n\n"
+    "namespace\n"
+    "{\n",
+    "controlled stance evidence helper",
+)
+tests = replace_once(
+    tests,
+    "        const std::array<float, sim::action_count> neutral{};\n"
+    "        for (int frame = 0; frame < 600; ++frame)\n"
+    "        {\n"
+    "            const sim::StepResult result = stable_humanoid.step(neutral);\n"
+    "            if (result.terminated)\n"
+    "                break;\n"
+    "        }\n"
+    "        const rl::StageMotionQualification stable =\n",
+    "        const std::array<float, sim::action_count> neutral{};\n"
+    "        sim::EnvironmentTestAccess::qualify_stable_stance(stable_humanoid);\n"
+    "        const rl::StageMotionQualification stable =\n",
+    "controlled stance qualification test",
+)
 tests = replace_once(
     tests,
     "        for (int frame = 0; frame < 180 && collapsed.valid_motion(); ++frame)\n"
