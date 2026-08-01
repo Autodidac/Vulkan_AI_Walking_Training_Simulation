@@ -23,6 +23,26 @@ replace_once(
     "ppo include block",
 )
 replace_once(
+    root / "src/simulation.cpp",
+    '''        for (std::size_t index = 0; index < 4; ++index)
+        {
+            const bool knee = (index & 1u) != 0u;
+            result.calibrate_motor(index, knee ? 58.0f : 36.0f,
+                knee ? 58.0f : 36.0f, knee ? 0.051f : 0.045f);
+        }''',
+    '''        for (std::size_t index = 0; index < 4; ++index)
+        {
+            const bool knee = (index & 1u) != 0u;
+            const MotorConstraint& motor = result.motors[index];
+            const float driven_length = length(result.nodes[motor.c] - result.nodes[motor.pivot]);
+            const float linear_gain = knee ? 0.051f : 0.045f;
+            const float strength = linear_gain / std::max(0.75f, driven_length);
+            result.calibrate_motor(index, knee ? 58.0f : 36.0f,
+                knee ? 58.0f : 36.0f, strength);
+        }''',
+    "humanoid leg calibration block",
+)
+replace_once(
     root / "tests/runtime_pipeline_tests.cpp",
     "            neutral.step(zero);\n            arms.step(arm_action);",
     "            static_cast<void>(neutral.step(zero));\n            static_cast<void>(arms.step(arm_action));",
