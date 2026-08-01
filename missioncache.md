@@ -6,7 +6,7 @@ This is the authoritative release ledger. Nothing is removed until it is impleme
 
 **Target:** EpochRunner v0.7.0
 
-**Release state:** VALIDATED — merge, exact-source packaging, publication, and cleanup pending
+**Release state:** VERIFIED — EpochRunner v0.7.0 published
 
 ## Runtime architecture
 
@@ -117,7 +117,7 @@ Deterministic layout checks enforce supported minimum dimensions, title/tab sepa
 The PIP uses an immutable representative worker rollout. Deterministic bounds prove it remains inside the world viewport and does not cover the control panel or primary telemetry.
 
 ### WALK-REL-011 — Verified v0.7.0 release
-**Status:** READY FOR RELEASE
+**Status:** VERIFIED
 
 Completed pre-release evidence:
 
@@ -128,12 +128,4 @@ Completed pre-release evidence:
 - executable version and Vulkan diagnostic: passed;
 - exact Windows-tested source commit recorded in `validation/v0.7.0-windows-premerge.md`.
 
-Remaining release transaction:
-
-- merge the validated completion branch without rewriting history;
-- validate and package the exact merged source;
-- record the Windows x64 package SHA-256;
-- publish tag and GitHub release from the exact tested source;
-- update this release mission to `VERIFIED` with final evidence;
-- remove work, diagnostic, release, and obsolete feature branches;
-- leave zero open cleanup pull requests.
+Final release evidence is recorded in `validation/v0.7.0.md`. Repository branch and pull-request cleanup is performed immediately after publication.
