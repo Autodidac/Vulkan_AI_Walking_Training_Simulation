@@ -1,0 +1,129 @@
+name: Validate EpochRunner v0.6.6 skill curriculum
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - tools/integrate_skill_core.py
+      - tools/integrate_skill_training.py
+      - .github/workflows/v066-skill-curriculum.yml
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+
+jobs:
+  validate:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Integrate ordered skill curriculum
+        shell: pwsh
+        run: |
+          python tools/integrate_skill_core.py
+          if ($LASTEXITCODE -ne 0) { throw "Core skill integration failed" }
+          python tools/integrate_skill_training.py
+          if ($LASTEXITCODE -ne 0) { throw "Training skill integration failed" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "Integrated source contains whitespace errors" }
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v066-skill-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v065-${{ runner.os }}-
+            epochrunner-guided-training-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure full MSVC release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+
+      - name: Build full SDL3 Vulkan EpochGui application
+        run: cmake --build --preset windows-release
+
+      - name: Run deterministic and concurrency tests
+        run: ctest --preset windows-release --output-on-failure -V
+
+      - name: Verify executable and Vulkan path
+        shell: pwsh
+        run: |
+          $version = (& build/windows-release/Release/EpochRunner.exe --version | Out-String).Trim()
+          if ($version -ne "EpochRunner 0.6.6") { throw "Unexpected version: $version" }
+          build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+
+      - name: Commit exact tested source
+        id: source
+        shell: pwsh
+        run: |
+          Remove-Item tools/integrate_skill_core.py
+          Remove-Item tools/integrate_skill_training.py
+          Remove-Item .github/workflows/v066-skill-curriculum.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Implement ordered standing-to-acrobatics curriculum"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to commit tested skill curriculum" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Failed to update main" }
+          "source_sha=$sourceSha" >> $env:GITHUB_OUTPUT
+
+      - name: Record validation evidence
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          git fetch origin main
+          git switch -C main origin/main
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner v0.6.6 ordered skill curriculum validation
+
+          - Exact tested source commit: `$env:SOURCE_SHA`
+          - Workflow run: `$env:RUN_ID`
+          - Windows runner: `windows-2025`
+          - Full SDL3/Vulkan/EpochGui application build: passed
+          - Deterministic core and concurrency tests: passed
+          - Executable version and Vulkan diagnostic: passed
+          - Curriculum order: stand, duck/recover, jump/land, walk/run, moving duck/jump, controlled flips, mixed goal course
+          - Hazard contact: legal, physical, event-penalized, non-terminal by itself
+          - Obstacle passing: tracked and rewarded as progress
+          - Powered airtime: bounded by lesson and launch evidence
+          - Airborne spins: up to three allowed in flip-capable lessons; fourth spin invalid
+          - Ground rolling/body surfing: still invalid
+          - New autosave namespace prevents old locomotion policies from resuming into the changed curriculum
+          - Independently controlled arms remain a separate controller-output/checkpoint expansion mission
+          "@ | Set-Content -Encoding UTF8 validation/v0.6.6-skill-curriculum.md
+          git add validation/v0.6.6-skill-curriculum.md
+          git commit -m "Record v0.6.6 skill curriculum validation"
+          if ($LASTEXITCODE -ne 0) { throw "Validation evidence commit failed" }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Validation evidence push failed" }
