@@ -41,9 +41,9 @@ jobs:
           status="$RUNNER_TEMP/status"
           git worktree add --detach "$status" origin/main
           mkdir -p "$status/validation"
-          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `linux-release-cleanup`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
+          printf '# EpochRunner v0.7.1 completion run\n\n- Run ID: `%s`\n- Trigger SHA: `%s`\n- Stage: `runtime-launch-release`\n- Result: `running`\n' "$RUN_ID" "$SHA" > "$status/validation/v0.7.1-run.md"
           git -C "$status" add validation/v0.7.1-run.md
-          git -C "$status" commit -m 'Record release-cleanup v0.7.1 run'
+          git -C "$status" commit -m 'Record runtime-launch v0.7.1 run'
           git -C "$status" push origin HEAD:main
           git worktree remove --force "$status"
 
@@ -55,6 +55,7 @@ jobs:
           python3 tools/fix_stance_hysteresis_v071.py
           python3 tools/fix_balance_seed_robustness_v071.py
           python3 tools/fix_balance_evaluation_v071.py
+          python3 tools/fix_runtime_launch_v071.py
           git diff --check
 
       - name: Install GCC 14
@@ -97,6 +98,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Seed regression materialization failed" }
           python tools/fix_balance_evaluation_v071.py
           if ($LASTEXITCODE -ne 0) { throw "Robust evaluation materialization failed" }
+          python tools/fix_runtime_launch_v071.py
+          if ($LASTEXITCODE -ne 0) { throw "Runtime launch materialization failed" }
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw "Materialized source contains whitespace errors" }
           Copy-Item tools/write_missioncache_v071.py "$env:RUNNER_TEMP/write_missioncache_v071.py" -Force
@@ -112,8 +115,9 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-clean-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-runtime-launch-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            epochrunner-v071-clean-${{ runner.os }}-
             epochrunner-v071-latched-${{ runner.os }}-
             epochrunner-v071-msvc-parity-${{ runner.os }}-
             epochrunner-v071-robust-${{ runner.os }}-
@@ -132,7 +136,7 @@ jobs:
           cmake --preset windows-release --fresh
           cmake --build --preset windows-release
 
-      - name: Test full Windows application
+      - name: Test full Windows application and launch layout
         run: ctest --preset windows-release --output-on-failure -V --timeout 900
 
       - name: Verify version and Vulkan
@@ -142,6 +146,13 @@ jobs:
           if ($version -ne "EpochRunner 0.7.1") { throw "Unexpected version: $version" }
           build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
           if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$env:GITHUB_WORKSPACE/build/windows-release/Release/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Build-tree launch from unrelated working directory failed" }
+          } finally {
+            Pop-Location
+          }
 
       - name: Commit exact tested source
         id: source
@@ -165,6 +176,7 @@ jobs:
           git rm -f --ignore-unmatch tools/fix_stance_hysteresis_v071.py
           git rm -f --ignore-unmatch tools/fix_balance_seed_robustness_v071.py
           git rm -f --ignore-unmatch tools/fix_balance_evaluation_v071.py
+          git rm -f --ignore-unmatch tools/fix_runtime_launch_v071.py
           git rm -f --ignore-unmatch tools/write_missioncache_v071.py
           git rm -f --ignore-unmatch tools/complete_missioncache_v071.py
           git rm -f --ignore-unmatch validation/v0.7.1-failure.md
@@ -174,7 +186,7 @@ jobs:
           git add -A
           git restore --staged validation/v0.7.1-run.md 2>$null
           git restore validation/v0.7.1-run.md 2>$null
-          git commit -m "Fix robust eight-motor humanoid training quality"
+          git commit -m "Fix robust humanoid training and runtime launch"
           if ($LASTEXITCODE -ne 0) { throw "Could not commit tested source" }
 
           git fetch origin main
@@ -188,7 +200,7 @@ jobs:
           $sha = (git rev-parse HEAD).Trim()
           "sha=$sha" >> $env:GITHUB_OUTPUT
 
-      - name: Package Windows build
+      - name: Package and clean-folder launch Windows build
         id: package
         shell: pwsh
         run: |
@@ -198,6 +210,17 @@ jobs:
           Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.1.md -Destination $stage -Force
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
             Copy-Item -Destination $stage -Force
+
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& "$stage/EpochRunner.exe" --version | Out-String).Trim()
+            if ($version -ne "EpochRunner 0.7.1") { throw "Installed package version failed: $version" }
+            & "$stage/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Installed package launch diagnostic failed" }
+          } finally {
+            Pop-Location
+          }
+
           $archive = "EpochRunner-v0.7.1-windows-x64.zip"
           Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
           $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
@@ -246,4 +269,4 @@ jobs:
             throw "Unexpected branches remain: $($branches -join ', ')"
           }
 
-# exclude generated vcpkg state trigger
+# clean-folder runtime launch trigger
