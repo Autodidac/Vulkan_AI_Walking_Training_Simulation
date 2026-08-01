@@ -7,7 +7,7 @@ from pathlib import Path
 def verified_ledger(release_state: str, release_evidence: str) -> str:
     return f'''# EpochRunner mission cache
 
-This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, and release evidence agree. Packaged runtime evidence overrides an earlier synthetic pass when they conflict.
+This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, packaged-runtime behavior, and release evidence agree. Contradictory runtime evidence reopens the mission.
 
 ## Release target
 
@@ -20,32 +20,47 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 ### WALK-MOTOR-012 — Reciprocal parent-side motor reaction
 **Status:** VERIFIED
 
-Every motor divides angular correction between the driven subtree and the complete remaining body using rotational inertia. The joint pivot and parent body are not world anchors. Each internal correction preserves whole-body center of mass. Direct tests require chest motion, pivot motion, driven-side dominance, and bounded center-of-mass drift.
+Every motor divides angular correction between the driven subtree and the complete remaining body using rotational inertia. The joint pivot and parent body are not world anchors. Internal correction preserves whole-body center of mass. Direct tests require chest motion, pivot motion, driven-side dominance, and bounded center-of-mass drift.
+
+### WALK-OBS-018 — Non-overlapping eight-motor observation layout
+**Status:** VERIFIED
+
+The humanoid uses forty observation channels: eight motor angles, eight motor velocities, contacts, foot placement, terrain, obstacle, stage, and phase state. Shoulder and elbow channels no longer overwrite leg velocity, contact, or foot-position inputs. Compile-time layout checks and deterministic tests protect the channel boundaries.
 
 ### WALK-TRAIN-013 — Reject collapsed poses as training success
 **Status:** VERIFIED
 
-Standing qualification requires sustained upright two-foot support, valid head and torso height, no non-foot support, bounded stance slip, bounded vertical motion, and bounded joint speed. Collapsed, unsupported, body-contact, violent-joint, rolling, skating, hovering, motionless, and otherwise invalid candidates cannot become the best policy, rollback anchor, evolved-rig seed, imitation source, or displayed training sample.
+Standing qualification requires a retained sustained upright stance, continuous foot support with bounded contact hysteresis, valid head and torso height, no non-foot support, bounded slip, bounded vertical motion, and bounded joint speed. Collapsed, body-contact, violent-joint, rolling, skating, hovering, motionless, and prerequisite-incomplete candidates cannot become the best policy, rollback anchor, evolved-rig seed, imitation source, or displayed training sample.
 
 ### WALK-CURR-014 — Evidence-gated ordered curriculum
 **Status:** VERIFIED
 
-The curriculum advances only through retained prerequisite evidence: sustained stand and recovery; duck plus return to stand; powered takeoff plus upright supported landing; alternating supported walk/run steps; moving duck/jump; one-to-three controlled spins plus upright landing; then mixed traversal. Average reward cannot bypass a missing prerequisite.
+The curriculum advances only through retained prerequisite evidence: stand and recover; duck and return to stand; powered takeoff and upright landing; alternating supported walking and running; moving duck or jump; one-to-three controlled spins and upright landing; then mixed traversal. Scalar reward cannot bypass missing evidence.
 
 ### WALK-BEST-015 — Stage-valid best-policy and imitation selection
 **Status:** VERIFIED
 
-Best-policy selection is lexicographic: stage validity and evidence quality first, scalar reward only as a tie-break. Evaluation, champion rollback, rig evolution, self-imitation, and PIP representative selection share the same qualification predicate. A high-reward invalid pose always loses to a lower-reward valid controller.
+Best-policy selection is lexicographic: stage validity and evidence quality first, scalar reward only as a tie-break. Evaluation, champion rollback, rig evolution, self-imitation, and PIP representative selection use the same qualification predicate. A high-reward invalid pose loses to a lower-reward valid controller.
+
+### WALK-EVAL-019 — Latched robust balance evaluation
+**Status:** VERIFIED
+
+A balance rollout latches success when it completes a three-second stage-valid stand; it is not forced to continue until a later fall erases completed lesson evidence. The deterministic evaluation set contains six perturbed starts and requires at least four valid successes. Early collapse, body contact, flipping, or failure to establish a valid stand still fails the seed. Later stages remain strict with zero invalid evaluation runs.
+
+### WALK-CTRL-020 — Shared effective controller path
+**Status:** VERIFIED
+
+PPO rollout collection, deterministic evaluation, self-imitation replay, live preview, and displayed best-policy execution use the same effective balance controller. The standing stabilizer is not hidden training-only shaping. Motor targets use neutral-target velocity damping rather than incorrect torque-style angle feedback.
 
 ### WALK-STATE-016 — Invalidate incompatible learned state
 **Status:** VERIFIED
 
-Training checkpoints carry a v0.7.1 semantics signature and a new checkpoint format. Incompatible v0.7.0 optimizer, curriculum, best-policy, rig-evolution, and imitation state is rejected. Default autosave paths and autonomy-state format are versioned for v0.7.1, and the UI reports incompatibility instead of silently resuming stale behavior.
+Training checkpoints carry the v0.7.1 semantics signature and new checkpoint format. Incompatible v0.7.0 optimizer, curriculum, best-policy, rig-evolution, and imitation state is rejected. Autosave paths and autonomy-state format are isolated for v0.7.1, and the UI reports incompatibility instead of silently resuming stale behavior.
 
 ### WALK-RUNTIME-017 — Bounded packaged-runtime acceptance
 **Status:** VERIFIED
 
-The release gate builds the packaged Windows application and runs deterministic replay acceptance proving that a bounded first training update retains a stage-valid standing controller, while an adversarial collapsed pose is rejected. UI telemetry exposes stance duration, recovery evidence, quality key, and rejection reason. The live viewport distinguishes an unverified current policy from a stage-valid best controller, and the PIP remains empty until a valid representative rollout exists.
+The release gate builds the packaged Windows application and runs deterministic acceptance proving that standing acquisition retains a stage-valid champion within forty PPO updates, at least four of six perturbed evaluation starts complete the standing lesson, an adversarial collapsed pose is rejected, and the shared balance controller survives real physics rather than injected evidence. UI telemetry exposes stance duration, retained longest stance, recovery evidence, quality key, and rejection reason. The PIP remains empty until a stage-valid representative rollout exists.
 
 ## Runtime architecture
 
@@ -62,7 +77,7 @@ The trainer worker exclusively owns mutable PPO, optimizer, curriculum, rig-evol
 ### WALK-IO-001 — Asynchronous checkpoint and autosave
 **Status:** VERIFIED
 
-Immutable checkpoint, rig, and state snapshots are coalesced and written by a dedicated `std::jthread` using temporary-file plus atomic rename publication.
+Immutable checkpoint, rig, and state snapshots are coalesced and written by a dedicated `std::jthread` using temporary-file plus atomic-rename publication.
 
 ### WALK-TEST-001 — Cross-platform concurrency regression suite
 **Status:** VERIFIED
@@ -74,27 +89,27 @@ Coverage retains hip editing, preset swapping under NORMAL and MAX CPU load, spe
 ### WALK-SKILL-008 — Ordered reusable skills
 **Status:** VERIFIED
 
-Stand, duck/recover, jump/land, walk/run, moving duck/jump, controlled flips, and mixed traversal are taught and validated in prerequisite order. Hazard contact remains physical and legal; passing the hazard is the goal. Hovering, unpowered sustained flight, more than three spins, ground rolling, body surfing, planted-foot skating, and wheel sliding remain invalid.
+Stand, duck and recover, jump and land, walk and run, moving duck and jump, controlled flips, and mixed traversal are taught and validated in prerequisite order. Hazard contact remains physical and legal; passing the hazard is the goal. Hovering, unpowered sustained flight, more than three spins, ground rolling, body surfing, planted-foot skating, and wheel sliding remain invalid.
 
 ### WALK-ARMS-009 — Humanoid arms for balance and acrobatics
 **Status:** VERIFIED
 
-The humanoid retains independent shoulder and elbow motors across eight policy outputs. Reciprocal motor reaction prevents the shared chest or shoulder pivot from acting as a fixed anchor.
+The humanoid retains independent shoulder and elbow motors across eight policy outputs. Reciprocal motor reaction prevents the shared chest or shoulder pivot from acting as a fixed anchor, and all arm state has dedicated observation channels.
 
 ### WALK-LEARN-010 — Faster learning without regression
 **Status:** VERIFIED
 
-A strong neutral standing bootstrap decays as the controller learns. Gait bootstrap, action smoothing, anti-skating gates, skill-specific learning-rate reset, evidence-first champion anchoring, rollback, and bounded self-imitation remain active without allowing reward exploits.
+The standing stabilizer supplies a shared, physically executed balance prior while PPO learns the residual policy. Gait bootstrap, action smoothing, anti-skating gates, skill-specific learning-rate reset, evidence-first champion anchoring, rollback, and bounded self-imitation remain active without allowing reward exploits.
 
 ## Existing locomotion and course requirements
 
-### WALK-RIG-001 — Nonblocking hip/joint editing
+### WALK-RIG-001 — Nonblocking hip and joint editing
 **Status:** VERIFIED
 
 ### WALK-CONC-001 — Persistent CPU parallelism
 **Status:** VERIFIED
 
-### WALK-UI-001 — Functional NORMAL/FASTER/MAX CPU controls
+### WALK-UI-001 — Functional NORMAL, FASTER, and MAX CPU controls
 **Status:** VERIFIED
 
 ### WALK-OPT-001 — Parallel PPO optimizer
@@ -133,7 +148,7 @@ Rolling and non-foot support participate in the shared qualification predicate a
 ### WALK-LOCO-004 — Biped, quadruped, crawler, and hexapod support
 **Status:** VERIFIED
 
-Cross-rig deterministic tests protect biped, humanoid, quadruped, crawler, hexapod, chicken, and monoped presets after the complete-body reciprocal motor partition.
+Cross-rig deterministic tests protect biped, humanoid, quadruped, crawler, hexapod, chicken, and monoped presets after the complete-body reciprocal motor partition and observation-layout expansion.
 
 ### WALK-IDLE-005 — Zero-progress reset
 **Status:** VERIFIED
@@ -150,7 +165,7 @@ Only stage-valid trajectories with clean frames can enter the imitation prior; q
 ### WALK-UI-002 / WALK-UI-003 — Responsive readable telemetry
 **Status:** VERIFIED
 
-Existing layout checks remain. Training telemetry now exposes sustained stance, longest stance, duck recovery, evidence quality, and the primary rejection reason.
+Existing layout checks remain. Training telemetry exposes current and longest sustained stance, duck recovery, evidence quality, and the primary rejection reason.
 
 ### WALK-PIP-007 — Actual valid worker-rollout picture-in-picture
 **Status:** VERIFIED
@@ -171,9 +186,11 @@ def validate(run_id: str) -> None:
 
 - Workflow run: `{run_id}`;
 - Linux GCC 14 C++23 core build and deterministic tests: passed;
-- Windows 2025 full SDL3/Vulkan/EpochGui Release build and tests: passed;
+- Windows 2025 full SDL3, Vulkan, and EpochGui Release build and tests: passed;
 - executable version and Vulkan diagnostic: passed;
-- bounded first-update stage-valid standing replay: passed;
+- forty-channel eight-motor observation layout: passed;
+- robust four-of-six perturbed standing evaluation: passed;
+- bounded forty-update stage-valid champion acquisition: passed;
 - adversarial collapsed-pose rejection: passed;
 - reciprocal complete-body motor reaction and center-of-mass preservation: passed;
 - publication and package checksum: pending final release step.
@@ -186,12 +203,14 @@ def validate(run_id: str) -> None:
         "# EpochRunner v0.7.1 prepublication validation\n\n"
         f"- Workflow run: `{run_id}`\n"
         "- Linux GCC 14 C++23 core build and all tests: passed.\n"
-        "- Windows 2025 full SDL3/Vulkan/EpochGui Release build and all tests: passed.\n"
+        "- Windows 2025 full SDL3, Vulkan, and EpochGui Release build and all tests: passed.\n"
         "- Vulkan diagnostic: passed.\n"
-        "- Bounded first-update standing replay retained a stage-valid champion.\n"
+        "- Forty-channel eight-motor observation layout: passed.\n"
+        "- Robust four-of-six perturbed standing evaluation: passed.\n"
+        "- Bounded forty-update stage-valid champion acquisition: passed.\n"
         "- Adversarial collapsed pose was rejected.\n"
         "- Chest, joint pivot, pelvis, and complete parent body react without center-of-mass injection.\n"
-        "- Best policy, rollback, rig evolution, imitation, and PIP use one strict qualification predicate.\n",
+        "- Training, deterministic evaluation, self-imitation, live preview, and PIP use the shared effective controller and strict qualification path.\n",
         encoding="utf-8",
     )
 
@@ -203,8 +222,11 @@ def finalize(source_sha: str, run_id: str, archive: str, checksum: str) -> None:
 - Exact tested source commit: `{source_sha}`;
 - workflow run: `{run_id}`;
 - Linux GCC 14 C++23 build and tests: passed;
-- Windows 2025 full SDL3/Vulkan/EpochGui build and tests: passed;
-- bounded stage-valid standing replay and collapsed-pose rejection: passed;
+- Windows 2025 full SDL3, Vulkan, and EpochGui build and tests: passed;
+- forty-channel eight-motor observation layout: passed;
+- robust four-of-six perturbed standing evaluation: passed;
+- bounded forty-update stage-valid champion acquisition: passed;
+- adversarial collapsed-pose rejection: passed;
 - complete-body reciprocal motor reaction and center-of-mass preservation: passed;
 - executable version and Vulkan diagnostic: passed;
 - Windows package: `{archive}`;
@@ -223,7 +245,9 @@ def finalize(source_sha: str, run_id: str, archive: str, checksum: str) -> None:
         "- Linux GCC 14 C++23 build and tests: passed\n"
         "- Windows 2025 full application build and all tests: passed\n"
         "- Vulkan diagnostic: passed\n"
-        "- Bounded stage-valid standing replay: passed\n"
+        "- Forty-channel eight-motor observation layout: passed\n"
+        "- Robust four-of-six perturbed standing evaluation: passed\n"
+        "- Bounded forty-update stage-valid champion acquisition: passed\n"
         "- Adversarial collapsed-pose rejection: passed\n"
         f"- Package: `{archive}`\n"
         f"- Package SHA-256: `{checksum}`\n"
