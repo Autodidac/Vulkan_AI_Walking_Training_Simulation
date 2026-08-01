@@ -1,9 +1,11 @@
 /build/
 /.vs/
 /out/
+/vcpkg/
+/vcpkg-bincache/
+/vcpkg_installed/
 *.epochrig
 *.eppo
 *.user
 *.suo
 *.VC.db
-/vcpkg_installed/
