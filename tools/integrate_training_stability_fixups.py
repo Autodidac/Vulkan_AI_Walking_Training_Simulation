@@ -31,5 +31,22 @@ replace_exact(
     '''            rollout_previous_actions_.assign(environment_count,
                 std::array<float, sim::action_count>{});'''
 )
+replace_exact(
+    "src/ppo_trainer.cpp",
+    '''        metrics_.evaluation_invalid_runs = 0;
+        metrics_.evaluation_valid = false;''',
+    '''        metrics_.evaluation_invalid_runs = 0;
+        metrics_.evaluation_valid = false;
+        metrics_.learning_rate = 3.0e-4f;'''
+)
+replace_exact(
+    "MISSIONS.md",
+    '''## WALK-SKILL-008 — Ordered locomotion and acrobatics curriculum
 
-print("Applied training-stability compile fixups.")
+**Status:** ACTIVE''',
+    '''## WALK-SKILL-008 — Ordered locomotion and acrobatics curriculum
+
+**Status:** IMPLEMENTED — USER TRAINING REVIEW'''
+)
+
+print("Applied training-stability compile and curriculum fixups.")
