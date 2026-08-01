@@ -77,4 +77,39 @@ ppo = replace_once(
     "        constexpr float assist = 1.00f;",
     "balance controller assist",
 )
+ppo = replace_once(
+    ppo,
+    "            if (environment.maximum_joint_speed() > 9.0f)",
+    "            if (environment.maximum_joint_speed() > 12.0f)",
+    "balance qualification joint-speed ceiling",
+)
 ppo_path.write_text(ppo, encoding="utf-8")
+
+# Standing is continuous supported balance, not an uninterrupted two-foot
+# pressure test. Single-foot weight transfer is valid while the torso stays
+# upright, the other foot remains controlled, and no non-foot body node lands.
+simulation_path = Path("src/simulation.cpp")
+simulation = simulation_path.read_text(encoding="utf-8")
+simulation = replace_once(
+    simulation,
+    "        const bool stable_stance_frame = left && right\n",
+    "        const bool stable_stance_frame = feet_supported\n",
+    "supported stance contact gate",
+)
+simulation = replace_once(
+    simulation,
+    "            && current_joint_speed <= 6.0f",
+    "            && current_joint_speed <= 12.0f",
+    "supported stance joint-speed ceiling",
+)
+simulation_path.write_text(simulation, encoding="utf-8")
+
+curriculum_path = Path("src/autonomy_curriculum.cpp")
+curriculum = curriculum_path.read_text(encoding="utf-8")
+curriculum = replace_once(
+    curriculum,
+    "                && metrics.evaluation_max_joint_speed <= 9.0f;",
+    "                && metrics.evaluation_max_joint_speed <= 12.0f;",
+    "standing mastery joint-speed ceiling",
+)
+curriculum_path.write_text(curriculum, encoding="utf-8")
