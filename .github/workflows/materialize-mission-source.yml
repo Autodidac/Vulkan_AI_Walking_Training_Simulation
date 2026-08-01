@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Materializes the currently tested integration scripts into normal source files.
 jobs:
   materialize:
     runs-on: ubuntu-latest
