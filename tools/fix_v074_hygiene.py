@@ -18,6 +18,7 @@ for path in sorted(root.rglob('*'), key=lambda item: len(item.parts), reverse=Tr
             path.unlink(missing_ok=True)
 
 (root / 'tools/remove_legacy_runner_artifacts.py').unlink(missing_ok=True)
+(root / 'tools/fix_v074_plate_scope.py').unlink(missing_ok=True)
 
 for path in root.rglob('*'):
     if not path.is_file() or '.git' in path.parts or path == Path(__file__):
@@ -90,6 +91,32 @@ for path in root.rglob('*'):
         require(std::abs(duck[4]) < 0.01f && std::abs(duck[5]) < 0.01f
                 && std::abs(duck[6]) < 0.01f && std::abs(duck[7]) < 0.01f,
             "compression lesson still drives shoulders or elbows");''')
+    text = text.replace(
+        '''    void Environment::separate_support_clusters() noexcept
+    {
+        auto support_nodes = [&](bool left)
+''',
+        '''    void Environment::separate_support_clusters() noexcept
+    {
+        auto rigid_contact_plate = [&](std::uint16_t primary,
+            const std::vector<std::uint16_t>& additional) noexcept
+        {
+            return valid_node(primary) && !additional.empty()
+                && std::ranges::all_of(additional,
+                    [&](std::uint16_t node)
+                    {
+                        return valid_node(node)
+                            && direct_bone(blueprint_, primary, node);
+                    });
+        };
+        if (!rigid_contact_plate(blueprint_.left_contact_node,
+                blueprint_.additional_left_contact_nodes)
+            || !rigid_contact_plate(blueprint_.right_contact_node,
+                blueprint_.additional_right_contact_nodes))
+            return;
+
+        auto support_nodes = [&](bool left)
+''')
     normalized = '\n'.join(line.rstrip() for line in text.splitlines()).rstrip() + '\n'
     if normalized != original:
         path.write_text(normalized, encoding='utf-8', newline='\n')
@@ -112,4 +139,4 @@ if workflow.exists():
     workflow.write_text(text, encoding='utf-8', newline='\n')
 
 Path(__file__).unlink()
-print('aligned all legacy duck tests with the compression-first two-part lesson')
+print('aligned duck tests and limited fused-foot separation to rigid heel-toe plates')
