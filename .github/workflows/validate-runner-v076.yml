@@ -37,6 +37,9 @@ jobs:
           if test -f tools/fix_v076_display_gate.py; then
             python3 tools/fix_v076_display_gate.py
           fi
+          if test -f tools/apply_v076_spin_semantics.py; then
+            python3 tools/apply_v076_spin_semantics.py
+          fi
 
       - name: Verify v0.7.6 source and mission ledger
         shell: bash
@@ -44,6 +47,7 @@ jobs:
           git diff --check
           test ! -f tools/apply_v076_standing_pip.py
           test ! -f tools/fix_v076_display_gate.py
+          test ! -f tools/apply_v076_spin_semantics.py
           python3 - <<'PY'
           from pathlib import Path
           cmake = Path('CMakeLists.txt').read_text(encoding='utf-8')
@@ -62,6 +66,8 @@ jobs:
               raise SystemExit('raised central shoulder pivot is missing')
           if 'training_preview_priority' not in ppo:
               raise SystemExit('honest PIP priority logic is missing')
+          if 'course_stage_ == CourseStage::balance' not in simulation or 'uncontrolled_spin_turns_ = 0.0f' not in simulation:
+              raise SystemExit('grounded standing-spin semantics are missing')
           PY
 
       - name: Configure deterministic C++23 suite
@@ -89,7 +95,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Materialize Runner v0.7.6 standing correction"
+          git commit -m "Materialize Runner v0.7.6 standing-spin correction"
           git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
@@ -108,7 +114,7 @@ jobs:
       - name: Confirm exact clean tested source
         shell: pwsh
         run: |
-          foreach ($script in @('tools/apply_v076_standing_pip.py','tools/fix_v076_display_gate.py')) {
+          foreach ($script in @('tools/apply_v076_standing_pip.py','tools/fix_v076_display_gate.py','tools/apply_v076_spin_semantics.py')) {
             if (Test-Path $script) { throw "One-shot v0.7.6 tool remains: $script" }
           }
           git diff --quiet
