@@ -31,7 +31,6 @@ def replace_regex(path: str, pattern: str, replacement: str) -> None:
     write(path, updated)
 
 
-# Stage two requires both the compression lesson and the later moving low bar.
 replace_once(
     "src/simulation.hpp",
     """        case CourseStage::duck_press:
@@ -40,7 +39,6 @@ replace_once(
             return duck_seconds >= 0.50f && obstacles_passed >= 2u;""",
 )
 
-# Start reacting while the later bar is still far enough away to make a real movement.
 replace_regex(
     "src/simulation.hpp",
     r"\[\[nodiscard\]\] inline float duck_obstacle_approach_weight\(float distance_ahead\) noexcept\n    \{.*?\n    \}",
@@ -54,7 +52,6 @@ replace_regex(
     }""",
 )
 
-# Stage-two course stays still during the platen lesson, then moves slowly for a real low bar.
 replace_regex(
     "src/simulation.hpp",
     r"\[\[nodiscard\]\] float course_speed\(\) const noexcept\n        \{.*?\n        \}",
@@ -83,7 +80,6 @@ replace_once(
         void stabilize_passive_appendages() noexcept;""",
 )
 
-# A recognisable side-view bird: horizontal body, raised neck/head, beak, tail, and two legs.
 replace_regex(
     "src/simulation.cpp",
     r"    CreatureBlueprint CreatureBlueprint::chicken\(\)\n    \{.*?\n    \}\n\n    CreatureBlueprint CreatureBlueprint::biped",
@@ -129,7 +125,6 @@ replace_regex(
     CreatureBlueprint CreatureBlueprint::biped""",
 )
 
-# Make passive feet smaller and keep the two support clusters physically distinct.
 replace_once(
     "src/simulation.cpp",
     """                const float radius = ankle < rig.radii.size()
@@ -146,7 +141,7 @@ replace_once(
     """                const float side = ankle_position.x < rig.nodes[rig.root_node].x ? -1.0f : 1.0f;
                 rig.nodes.push_back({
                     ankle_position.x - side * heel_reach * 0.20f,
-                    ankle_position.y - 0.175f
+                    ankle_position.y - 0.205f
                 });""",
 )
 replace_once(
@@ -157,7 +152,7 @@ replace_once(
                 });""",
     """                rig.nodes.push_back({
                     ankle_position.x + side * toe_reach * 0.78f,
-                    ankle_position.y - 0.178f
+                    ankle_position.y - 0.210f
                 });""",
 )
 
@@ -217,7 +212,6 @@ replace_once(
             separate_support_clusters();""",
 )
 
-# The platen teaches compression first. Once recovered, a horizontal low bar begins far ahead.
 replace_regex(
     "src/simulation.cpp",
     r"        if \(course_stage_ == CourseStage::duck_press\)\n        \{.*?\n            return;\n        \}\n        const int first_sequence",
@@ -275,7 +269,6 @@ replace_regex(
         const int first_sequence""",
 )
 
-# Press collision stays one-way, but a small solver tolerance is not treated as clipping.
 replace_once(
     "src/simulation.cpp",
     """        if (duck_press_max_penetration_ > 0.18f)
@@ -284,7 +277,6 @@ replace_once(
             invalidate(InvalidMotion::press_penetration);""",
 )
 
-# Compression is leg-driven. Torso-axis swinging is explicitly costly and arms remain off.
 replace_once(
     "src/simulation.cpp",
     """        const float torso_swing_penalty = course_stage_ == CourseStage::duck_press
@@ -300,7 +292,6 @@ replace_once(
             && std::abs(torso_turn_speed_) > 0.85f)""",
 )
 
-# Keep the platen visually horizontal and clearly distinguish it from the later hazard.
 app = read("src/app.cpp")
 app = app.replace(
     """                    add_rounded_rect(canvas, rect, 4.0f,
@@ -316,7 +307,6 @@ app = app.replace(
 )
 write("src/app.cpp", app)
 
-# Deterministic regression coverage for the exact live failures.
 replace_once(
     "tests/core_tests.cpp",
     """        static void qualify_stable_stance(Environment& environment) noexcept
@@ -404,7 +394,6 @@ tests = tests.replace(
 )
 write("tests/core_tests.cpp", tests)
 
-# Carry the live screenshot failures explicitly in the mission ledger.
 mission = read("missioncache.md")
 addition = """
 
@@ -434,4 +423,4 @@ if "### WALK-FEET-047" not in mission:
 write("missioncache.md", mission)
 
 Path(__file__).unlink()
-print("fixed fused feet, chicken anatomy, and the two-part duck curriculum")
+print("fixed fused feet, ankle clearance, chicken anatomy, and the two-part duck curriculum")
