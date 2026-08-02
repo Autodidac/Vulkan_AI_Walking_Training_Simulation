@@ -1,0 +1,24 @@
+name: Publish Runner v0.7.4
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-runner-v074.yml]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: python .github/scripts/publish_runner_v074.py
