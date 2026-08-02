@@ -21,6 +21,18 @@
 namespace runner::rl
 {
     inline constexpr int mastery_lock_confirmations = 8;
+
+    [[nodiscard]] inline bool strict_balance_mastery(
+        const TrainingMetrics& metrics) noexcept
+    {
+        return metrics.evaluation_valid
+            && metrics.evaluation_invalid_runs == 0u
+            && metrics.evaluation_longest_stance >= standing_mastery_seconds
+            && metrics.evaluation_survival >= standing_mastery_seconds
+            && metrics.evaluation_spin_turns <= standing_mastery_spin_limit
+            && metrics.evaluation_max_joint_speed <= 8.0f;
+    }
+
     struct AutonomyStatus
     {
         bool enabled{ false };

@@ -200,11 +200,11 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { -0.0034f, 2.8127f }, { -0.0148f, 4.0173f }, { -0.010f, 4.86f },
+            { -0.0034f, 2.8127f }, { -0.0060f, 4.2000f }, { -0.0060f, 4.9800f },
             { -0.3443f, 1.5514f }, { -0.4200f, 0.2500f },
             { 0.3400f, 1.6200f }, { 0.4200f, 0.2500f },
-            { -0.42f, 4.06f }, { -0.78f, 3.48f }, { -0.60f, 2.82f },
-            { 0.40f, 4.06f }, { 0.76f, 3.48f }, { 0.58f, 2.82f }
+            { -0.42f, 4.0200f }, { -0.78f, 3.43f }, { -0.60f, 2.76f },
+            { 0.40f, 4.0200f }, { 0.76f, 3.43f }, { 0.58f, 2.76f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -216,7 +216,8 @@ namespace runner::sim
             { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f },
             { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f }, { 8, 9, 0.0f, 0.96f },
             { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f }, { 11, 12, 0.0f, 0.96f },
-            { 7, 10, 0.0f, 0.72f }
+            { 7, 10, 0.0f, 0.72f },
+            { 2, 7, 0.0f, 0.94f }, { 2, 10, 0.0f, 0.94f }
         };
         result.motors = {
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
@@ -1064,6 +1065,7 @@ namespace runner::sim
         duck_press_completed_ = false;
         current_airborne_rotation_ = 0.0f;
         maximum_spin_turns_ = 0.0f;
+        uncontrolled_spin_turns_ = 0.0f;
         powered_jump_count_ = 0;
         landed_jump_count_ = 0;
         spin_landing_count_ = 0;
@@ -1521,6 +1523,20 @@ namespace runner::sim
         return valid_node(blueprint_.head_node) && particles_[blueprint_.head_node].grounded;
     }
 
+    float Environment::maximum_upper_body_motor_deviation() const noexcept
+    {
+        float maximum = 0.0f;
+        for (std::size_t index = 4; index < blueprint_.active_motor_count; ++index)
+        {
+            const MotorConstraint& motor = blueprint_.motors[index];
+            if (!motor.enabled)
+                continue;
+            maximum = std::max(maximum,
+                std::abs(wrap_angle(joint_angle(motor) - motor.neutral_angle)));
+        }
+        return maximum;
+    }
+
     float Environment::torso_roll_angle() const noexcept
     {
         if (!valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node))
@@ -1855,6 +1871,14 @@ namespace runner::sim
         const float torso_delta = wrap_angle(torso_angle - previous_torso_angle_);
         torso_turn_speed_ = torso_delta / std::max(dt, 1.0e-5f);
         previous_torso_angle_ = torso_angle;
+        if (course_stage_ == CourseStage::balance)
+        {
+            // Standing rotation is a posture failure even while both feet remain
+            // planted. Track the maximum wrapped torso turn instead of counting
+            // only airborne flips, so upright spinning cannot pass mastery.
+            uncontrolled_spin_turns_ = std::max(uncontrolled_spin_turns_,
+                std::abs(torso_angle) / (2.0f * pi));
+        }
         non_foot_grounded_ = non_foot_ground_contact();
         const bool feet_supported = left || right;
         const bool airborne = !feet_supported;
@@ -2024,7 +2048,7 @@ namespace runner::sim
             const float airborne_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
             if (powered_takeoff_ && stage_allows_controlled_flips(course_stage_))
                 maximum_spin_turns_ = std::max(maximum_spin_turns_, airborne_turns);
-            else
+            else if (course_stage_ != CourseStage::balance)
                 uncontrolled_spin_turns_ += std::abs(torso_delta) / (2.0f * pi);
         }
         else if (!was_supported)
@@ -2429,6 +2453,13 @@ namespace runner::sim
         const float torso_swing_penalty = (course_stage_ == CourseStage::duck_press
                 || course_stage_ == CourseStage::crouch_walk)
             ? std::max(0.0f, std::abs(torso_turn_speed_) - 0.22f) * 0.030f : 0.0f;
+        const float upper_body_deviation = maximum_upper_body_motor_deviation();
+        const float neutral_upper_body_reward = course_stage_ == CourseStage::balance
+            ? clamp(1.0f - upper_body_deviation / 0.70f, 0.0f, 1.0f) * 0.014f
+            : 0.0f;
+        const float upper_body_posture_penalty = course_stage_ == CourseStage::balance
+            ? std::max(0.0f, upper_body_deviation - 0.30f) * 0.035f
+            : 0.0f;
 
         switch (course_stage_)
         {
@@ -2439,12 +2470,14 @@ namespace runner::sim
                 : -0.012f;
             last_reward_ = stance_reward
                 + std::max(0.0f, upright) * 0.008f
+                + neutral_upper_body_reward
                 + contact * 0.0010f
                 - std::abs(forward_speed_) * 0.0070f
                 - std::abs(distance_travelled_) * 0.0030f
                 - action_energy * 0.0018f
                 - stance_slip_speed_ * 0.010f
                 - posture_failure_seconds_ * 0.020f
+                - upper_body_posture_penalty
                 - body_contact_penalty;
             break;
         }

@@ -132,9 +132,30 @@ namespace runner::sim
         {
             environment.invalid_reason_ = InvalidMotion::none;
             environment.non_foot_grounded_ = false;
-            environment.stable_stance_seconds_ = 3.5f;
-            environment.longest_stable_stance_seconds_ = 3.5f;
+            environment.elapsed_seconds_ = 6.5f;
+            environment.stable_stance_seconds_ = 6.5f;
+            environment.longest_stable_stance_seconds_ = 6.5f;
             environment.maximum_joint_speed_ = 0.5f;
+            environment.uncontrolled_spin_turns_ = 0.0f;
+        }
+
+        static void force_standing_spin(Environment& environment, float turns) noexcept
+        {
+            environment.uncontrolled_spin_turns_ = turns;
+        }
+
+        static void force_arms_overhead(Environment& environment) noexcept
+        {
+            if (environment.particles_.size() < 13u)
+                return;
+            const Vec2 left = environment.particles_[7].position;
+            const Vec2 right = environment.particles_[10].position;
+            environment.particles_[8].position = left + Vec2{ -0.08f, 0.70f };
+            environment.particles_[9].position = left + Vec2{ -0.02f, 1.34f };
+            environment.particles_[11].position = right + Vec2{ 0.08f, 0.70f };
+            environment.particles_[12].position = right + Vec2{ 0.02f, 1.34f };
+            for (const std::size_t index : { 8u, 9u, 11u, 12u })
+                environment.particles_[index].previous = environment.particles_[index].position;
         }
 
         struct StanceFrame
@@ -612,6 +633,18 @@ int main()
     require(!disconnected.valid(), "enabled motor without direct A-pivot-C bones was accepted");
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
+    require(humanoid.torso_node < humanoid.nodes.size()
+            && humanoid.nodes[humanoid.torso_node].y > humanoid.nodes[7].y + 0.10f
+            && humanoid.nodes[humanoid.torso_node].y > humanoid.nodes[10].y + 0.10f,
+        "humanoid central shoulder pivot is not above both lateral shoulder pivots");
+    require(humanoid.nodes[8].y < humanoid.nodes[7].y
+            && humanoid.nodes[11].y < humanoid.nodes[10].y,
+        "humanoid rest arms do not hang below the shoulder pivots");
+    require(std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
+            { return (bone.a == 2u && bone.b == 7u) || (bone.a == 7u && bone.b == 2u); })
+            && std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
+            { return (bone.a == 2u && bone.b == 10u) || (bone.a == 10u && bone.b == 2u); }),
+        "raised humanoid shoulder girdle can still invert through the upper spine");
     require(humanoid.nodes.size() >= 17,
         "human-calibrated rig should include passive heel/toe feet and articulated arms");
     require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
@@ -791,7 +824,8 @@ int main()
                 assisted_stance, raw_action, sim::CourseStage::balance);
             const sim::StepResult result = assisted_stance.step(action);
             const bool lesson_complete = assisted_stance.valid_motion()
-                && assisted_stance.longest_stable_stance_seconds() >= 3.0f;
+                && assisted_stance.longest_stable_stance_seconds()
+                    >= rl::standing_mastery_seconds;
             const auto diagnostics =
                 sim::EnvironmentTestAccess::stance_frame(assisted_stance);
             const std::array<bool, 8> passed{
@@ -825,11 +859,13 @@ int main()
                 std::cerr << failures << ',';
             std::cerr << std::endl;
         }
-        require(qualification.valid,
-            "shared balance controller cannot sustain a stage-valid physics stance");
-        require(rl::stage_display_sample_eligible(
-                sim::CourseStage::balance, assisted_stance),
-            "valid current stance is hidden from the training sample");
+        require(qualification.valid
+                && assisted_stance.longest_stable_stance_seconds()
+                    >= rl::standing_mastery_seconds,
+            "shared balance controller cannot sustain a strict neutral physics stance");
+        require(rl::training_preview_priority(
+                sim::CourseStage::balance, assisted_stance) > 0,
+            "stage-qualified standing environment disappears from the training PIP");
         sim::EnvironmentTestAccess::collapse_upper_body(assisted_stance);
         require(!assisted_stance.current_display_posture_valid(),
             "fresh geometric posture check accepts a collapsed current body");
@@ -854,27 +890,30 @@ int main()
                     environment, raw_action, sim::CourseStage::balance);
                 const sim::StepResult result = environment.step(action);
                 if (environment.valid_motion()
-                    && environment.longest_stable_stance_seconds() >= 3.0f)
+                    && environment.longest_stable_stance_seconds()
+                        >= rl::standing_mastery_seconds)
                     break;
                 if (result.terminated)
                     break;
             }
             const rl::StageMotionQualification qualification =
                 rl::stage_motion_qualification(sim::CourseStage::balance, environment);
-            valid_agents += qualification.valid ? 1u : 0u;
-            if (!qualification.valid)
+            const bool integrity = environment.body_integrity_valid();
+            valid_agents += qualification.valid && integrity ? 1u : 0u;
+            if (!qualification.valid || !integrity)
             {
                 std::cerr << "evaluation seed " << seed
                     << " rejection=" << qualification.rejection_mask
                     << " invalid=" << static_cast<int>(environment.invalid_reason())
+                    << " integrity=" << integrity
                     << " stance=" << environment.stable_stance_seconds()
                     << " longest=" << environment.longest_stable_stance_seconds()
                     << " max_joint=" << environment.maximum_joint_speed()
                     << " survival=" << environment.elapsed_seconds() << std::endl;
             }
         }
-        require(valid_agents >= 4u,
-            "shared balance controller fails the robust four-of-six PPO seed gate");
+        require(valid_agents == evaluation_agents,
+            "shared balance controller fails the strict six-of-six PPO seed gate");
     }
 
     {
@@ -888,7 +927,10 @@ int main()
         require(!intact.body_integrity_valid(),
             "detached foot cluster passes the full skeleton integrity gate");
         require(!rl::stage_display_sample_eligible(sim::CourseStage::balance, intact),
-            "detached feet can still publish into the training preview");
+            "detached feet can still publish as a qualified training preview");
+        require(rl::training_preview_frame_renderable(intact)
+                && rl::training_preview_priority(sim::CourseStage::balance, intact) == 1,
+            "finite rejected training attempts disappear instead of remaining diagnosable in PIP");
     }
 
     {
@@ -916,6 +958,48 @@ int main()
             effective_arms += std::abs(effective[index]);
         require(effective_arms < effective_legs * 0.40f + 0.02f,
             "early balance still grants more authority to arms than legs");
+    }
+
+    {
+        sim::Environment neutral_stance{ humanoid, 0x576A6Eu };
+        sim::EnvironmentTestAccess::qualify_stable_stance(neutral_stance);
+        require(rl::stage_motion_qualification(
+                sim::CourseStage::balance, neutral_stance).valid,
+            "neutral strict standing evidence is rejected");
+        require(rl::stage_display_sample_eligible(
+                sim::CourseStage::balance, neutral_stance),
+            "current neutral strict stance is not eligible for top-priority PIP display");
+        sim::EnvironmentTestAccess::force_arms_overhead(neutral_stance);
+        const auto raised = rl::stage_motion_qualification(
+            sim::CourseStage::balance, neutral_stance);
+        require(!raised.valid
+                && (raised.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::non_neutral_posture)) != 0u,
+            "arms-up standing exploit is still stage-valid");
+
+        sim::Environment spinning_stance{ humanoid, 0x5A1E7u };
+        sim::EnvironmentTestAccess::qualify_stable_stance(spinning_stance);
+        sim::EnvironmentTestAccess::force_standing_spin(
+            spinning_stance, rl::standing_qualification_spin_limit + 0.01f);
+        const auto spinning = rl::stage_motion_qualification(
+            sim::CourseStage::balance, spinning_stance);
+        require(!spinning.valid
+                && (spinning.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::excessive_rotation)) != 0u,
+            "rotating standing exploit is still stage-valid");
+
+        rl::TrainingMetrics strict{};
+        strict.evaluation_valid = true;
+        strict.evaluation_invalid_runs = 0u;
+        strict.evaluation_longest_stance = rl::standing_mastery_seconds;
+        strict.evaluation_survival = rl::standing_mastery_seconds;
+        strict.evaluation_spin_turns = rl::standing_mastery_spin_limit;
+        strict.evaluation_max_joint_speed = 7.5f;
+        require(rl::strict_balance_mastery(strict),
+            "strict standing values cannot advance mastery");
+        strict.evaluation_invalid_runs = 1u;
+        require(!rl::strict_balance_mastery(strict),
+            "partial seed success still advances strict standing mastery");
     }
 
     {
@@ -952,6 +1036,12 @@ int main()
         require(flip_semantics.maximum_flip_turns() == 0.0f
                 && flip_semantics.uncontrolled_spin_turns() == 0.0f,
             "fresh rig does not separate flip and spin counters");
+        sim::EnvironmentTestAccess::force_standing_spin(flip_semantics, 0.25f);
+        require(flip_semantics.uncontrolled_spin_turns() == 0.25f,
+            "grounded standing rotation cannot be represented by the strict gate");
+        flip_semantics.reset(0xF120u);
+        require(flip_semantics.uncontrolled_spin_turns() == 0.0f,
+            "standing spin evidence leaks across episode resets");
     }
 
     require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),
@@ -1194,6 +1284,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "Runner v0.7.4 obstacle, duck-press, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "Runner v0.7.6 standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }

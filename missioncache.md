@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.5
+**Target:** Runner v0.7.6
 
-**Release state:** PUBLISHED - v0.7.5 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+**Release state:** IN PROGRESS - v0.7.5 live screenshot reopened standing mastery and PIP acceptance
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -582,3 +582,26 @@ Acceptance requires seeded scenarios covering glancing hits, direct hits, accumu
 - Installed executable and executable-relative `run.bat`: passed from an unrelated working directory
 - ZIP extraction, per-file manifest comparison, release-asset re-download, and byte comparison: passed by the publisher
 - Live screenshot-level behavior remains explicitly pending Adam's released-package confirmation. Any contradictory result reopens its exact mission.
+
+
+## v0.7.6 standing mastery and live-PIP correction
+
+### WALK-STAND-080 — Make strict standing mastery attainable and honest
+**Status:** IN PROGRESS
+
+The v0.7.5 evaluator stopped each standing trial at three seconds while strict mastery required a longer result, leaving the display at STAGE VALID but STRICT MASTERY 0/8 indefinitely. Evaluation now continues through the same six-second strict target used by mastery. Strict success requires all six seeded evaluations, six seconds of neutral stable stance, low joint speed, and near-zero uncontrolled rotation. The UI exposes the exact target, seed count, spin threshold, and failure reason.
+
+### WALK-SHOULDER-081 — Raise the humanoid central shoulder pivot
+**Status:** IN PROGRESS
+
+The humanoid central chest/shoulder pivot sits above both lateral shoulder pivots. The calibrated rest arms hang below the shoulders, the standing teacher returns upper-body motors toward neutral, and arms-overhead standing is rejected rather than promoted.
+
+### WALK-PIP-082 — Never hide the active training result
+**Status:** IN PROGRESS
+
+The PIP always publishes the best current finite full-rig training environment. A qualified intact sample has highest priority, but rejected or broken finite attempts remain visible with their exact rejection banner instead of leaving a blank WAITING frame. Standing PIP telemetry shows stance versus target, uncontrolled spin, and upper-body angle.
+
+### WALK-RELEASE-083 — Publish audited Runner v0.7.6
+**Status:** IN PROGRESS
+
+Build and test Linux and the complete Windows Vulkan application; verify all deterministic suites, installed executable, executable-relative run.bat, package diagnostics, ZIP, checksum, manifest, and re-downloaded release assets. Remove temporary workflows and branches after publication. Live screenshot acceptance remains pending and contradictory behavior reopens the exact mission.

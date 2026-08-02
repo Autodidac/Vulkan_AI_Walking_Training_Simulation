@@ -178,7 +178,8 @@ namespace runner::rl
                                 ++totals.speed_samples;
                                 if (current_stage == sim::CourseStage::balance
                                     && environment.valid_motion()
-                                    && environment.longest_stable_stance_seconds() >= 3.0f)
+                                    && environment.longest_stable_stance_seconds()
+                                        >= standing_mastery_seconds)
                                     break;
                                 if (result.terminated)
                                     break;
@@ -208,7 +209,9 @@ namespace runner::rl
                             totals.duck_seconds += environment.duck_seconds();
                             totals.powered_jumps += static_cast<float>(environment.powered_jumps());
                             totals.jump_landings += static_cast<float>(environment.landed_jumps());
-                            totals.spin_turns += environment.maximum_flip_turns();
+                            totals.spin_turns += current_stage == sim::CourseStage::balance
+                                ? environment.uncontrolled_spin_turns()
+                                : environment.maximum_flip_turns();
                             totals.spin_landings += static_cast<float>(environment.spin_landings());
                             totals.obstacles_passed += static_cast<float>(environment.obstacles_passed());
                             totals.stable_stance += environment.stable_stance_seconds();

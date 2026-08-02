@@ -22,7 +22,7 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 10\n";
+            output << "RUNAUTONOMY 11\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace runner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "RUNAUTONOMY" || version != 10
+            if (!input || magic != "RUNAUTONOMY" || version != 11
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
@@ -79,6 +79,7 @@ namespace runner::rl
         snapshot.has_best = worker_.has_best_policy();
         const std::span<const sim::Environment> environments = worker_.environments();
         const sim::Environment* representative = nullptr;
+        int representative_priority = 0;
         std::uint64_t representative_quality = 0u;
         float representative_tiebreak = -std::numeric_limits<float>::infinity();
         for (const sim::Environment& environment : environments)
@@ -86,14 +87,14 @@ namespace runner::rl
             const StageMotionQualification qualification =
                 stage_motion_qualification(stage_, environment);
             const bool stage_eligible = stage_display_sample_eligible(stage_, environment);
-            const bool structurally_renderable = !environment.particles().empty()
-                && environment.body_integrity_valid();
-            if (!structurally_renderable)
+            const int display_priority = training_preview_priority(stage_, environment);
+            if (display_priority == 0)
                 continue;
             const std::uint64_t display_quality = qualification.valid
                 ? qualification.quality_key
                 : pack_quality(
-                    static_cast<std::uint16_t>(stage_eligible ? 2u : 1u),
+                    static_cast<std::uint16_t>(stage_eligible ? 3u
+                        : environment.body_integrity_valid() ? 2u : 1u),
                     static_cast<std::uint16_t>(std::min<std::uint32_t>(
                         environment.alternating_steps(), 65535u)),
                     quality_bucket(environment.crouch_walk_distance(), 100.0f),
@@ -102,11 +103,14 @@ namespace runner::rl
                 + environment.distance_travelled() * 10.0f
                 + environment.elapsed_seconds();
             if (representative == nullptr
-                || display_quality > representative_quality
-                || (display_quality == representative_quality
-                    && tiebreak > representative_tiebreak))
+                || display_priority > representative_priority
+                || (display_priority == representative_priority
+                    && (display_quality > representative_quality
+                        || (display_quality == representative_quality
+                            && tiebreak > representative_tiebreak))))
             {
                 representative = &environment;
+                representative_priority = display_priority;
                 representative_quality = display_quality;
                 representative_tiebreak = tiebreak;
             }
