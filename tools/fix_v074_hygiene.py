@@ -42,8 +42,24 @@ for path in root.rglob('*'):
         '0.8f, 0u, 0.0f, 0u, 1u),\n        "valid duck-and-clear result cannot seed self-imitation"',
         '0.8f, 0u, 0.0f, 0u, 2u),\n        "valid press-and-low-bar result cannot seed self-imitation"')
     text = text.replace(
-        'if (environment.obstacles_passed() < 1u)\n                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);',
-        'if (environment.obstacles_passed() < 2u)\n                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);')
+        '''        case sim::CourseStage::duck_press:
+            if (environment.longest_stable_stance_seconds() < 2.0f
+                || environment.stable_stance_seconds() < 0.75f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
+            if (environment.obstacles_passed() < 1u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);''',
+        '''        case sim::CourseStage::duck_press:
+            if (environment.longest_stable_stance_seconds() < 2.0f
+                || environment.stable_stance_seconds() < 0.75f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
+            if (environment.obstacles_passed() < 2u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);''')
+    text = text.replace('const gui::Vec2 measured = font::measure_text(status, scale);',
+                        'const Vec2 measured = font::measure_text(status, scale);')
     normalized = '\n'.join(line.rstrip() for line in text.splitlines()).rstrip() + '\n'
     if normalized != original:
         path.write_text(normalized, encoding='utf-8', newline='\n')
@@ -66,4 +82,4 @@ if workflow.exists():
     workflow.write_text(text, encoding='utf-8', newline='\n')
 
 Path(__file__).unlink()
-print('removed legacy material and aligned all two-part duck acceptance tests')
+print('aligned two-part duck qualification and preempted Windows app namespace failures')
