@@ -20,7 +20,7 @@
 
 namespace epochrunner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0103u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0200u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -50,18 +50,106 @@ namespace epochrunner::rl
         return action;
     }
 
+    [[nodiscard]] inline std::array<float, sim::action_count> bilateral_joint_synergy_action(
+        const sim::Environment& environment,
+        std::array<float, sim::action_count> action,
+        sim::CourseStage stage) noexcept
+    {
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        const bool paired_leg_chains = rig.active_motor_count >= 4u
+            && rig.motors[0].enabled && rig.motors[1].enabled
+            && rig.motors[2].enabled && rig.motors[3].enabled
+            && rig.motors[0].pivot == rig.motors[2].pivot
+            && rig.motors[1].a == rig.motors[0].pivot
+            && rig.motors[3].a == rig.motors[2].pivot;
+        if (!paired_leg_chains)
+        {
+            return action;
+        }
+
+        const float pair_strength = stage == sim::CourseStage::balance
+            || stage == sim::CourseStage::walk || stage == sim::CourseStage::ramps
+            ? 0.72f : 0.42f;
+        auto mirror_pair = [&](std::size_t left, std::size_t right, float strength)
+        {
+            const float mirrored = 0.5f * (action[left] - action[right]);
+            action[left] = lerp(action[left], mirrored, strength);
+            action[right] = lerp(action[right], -mirrored, strength);
+        };
+        mirror_pair(0, 2, pair_strength);
+        mirror_pair(1, 3, pair_strength);
+        mirror_pair(4, 6, pair_strength * 0.75f);
+        mirror_pair(5, 7, pair_strength * 0.75f);
+
+        // Preserve residual freedom, but bias each leg toward a useful hip/knee
+        // chain instead of asking PPO to discover eight unrelated actuators.
+        constexpr float chain_strength = 0.34f;
+        const float left_chain = 0.5f * (-action[0] + action[1]);
+        const float right_chain = 0.5f * (action[2] - action[3]);
+        action[0] = lerp(action[0], -left_chain, chain_strength);
+        action[1] = lerp(action[1], left_chain, chain_strength);
+        action[2] = lerp(action[2], right_chain, chain_strength);
+        action[3] = lerp(action[3], -right_chain, chain_strength);
+        for (float& value : action)
+            value = clamp(value, -1.0f, 1.0f);
+        return action;
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count> duck_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        auto action = balance_teacher_action(environment);
+        const auto observation = environment.observation();
+        const bool overhead_bar = std::abs(observation[30]) < 0.05f
+            && observation[32] > 0.01f;
+        const float distance = observation[29] * 6.0f;
+        const float approach = overhead_bar
+            ? sim::duck_obstacle_approach_weight(distance) : 0.0f;
+        action[0] = clamp(action[0] - 0.28f * approach, -0.70f, 0.70f);
+        action[1] = clamp(action[1] + 0.58f * approach, -0.80f, 0.80f);
+        action[2] = clamp(action[2] + 0.28f * approach, -0.70f, 0.70f);
+        action[3] = clamp(action[3] - 0.58f * approach, -0.80f, 0.80f);
+        action[4] = clamp(action[4] + 0.16f * approach, -0.60f, 0.60f);
+        action[5] = clamp(action[5] - 0.10f * approach, -0.60f, 0.60f);
+        action[6] = clamp(action[6] - 0.16f * approach, -0.60f, 0.60f);
+        action[7] = clamp(action[7] + 0.10f * approach, -0.60f, 0.60f);
+        return bilateral_joint_synergy_action(environment, action, sim::CourseStage::walk);
+    }
+
     [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
         const sim::Environment& environment,
         std::array<float, sim::action_count> policy_action,
         sim::CourseStage stage) noexcept
     {
-        if (stage != sim::CourseStage::balance)
-            return policy_action;
-        const auto teacher = balance_teacher_action(environment);
-        constexpr float assist = 1.00f;
-        for (std::size_t index = 0; index < policy_action.size(); ++index)
-            policy_action[index] = lerp(policy_action[index], teacher[index], assist);
-        return policy_action;
+        policy_action = bilateral_joint_synergy_action(environment, policy_action, stage);
+        if (stage == sim::CourseStage::balance)
+        {
+            const auto teacher = balance_teacher_action(environment);
+            constexpr float assist = 0.78f;
+            for (std::size_t index = 0; index < policy_action.size(); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+        }
+        else if (stage == sim::CourseStage::walk)
+        {
+            const auto teacher = duck_teacher_action(environment);
+            const auto observation = environment.observation();
+            const bool overhead_bar = std::abs(observation[30]) < 0.05f
+                && observation[32] > 0.01f;
+            const float observed_weight = overhead_bar
+                ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
+            const float obstacle_weight = std::max(
+                environment.duck_obstacle_weight(), observed_weight);
+            const float assist = 0.56f + obstacle_weight * 0.34f;
+            for (std::size_t index = 0; index < policy_action.size(); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+        }
+        else if (stage == sim::CourseStage::ramps)
+        {
+            const auto teacher = balance_teacher_action(environment);
+            for (std::size_t index = 0; index < policy_action.size(); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.20f);
+        }
+        return bilateral_joint_synergy_action(environment, policy_action, stage);
     }
 
     struct TrainingMetrics
@@ -211,6 +299,8 @@ namespace epochrunner::rl
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
+            if (environment.obstacles_passed() < 1u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
             break;
@@ -313,6 +403,31 @@ namespace epochrunner::rl
             break;
         }
         return { true, 0u, quality };
+    }
+
+
+    [[nodiscard]] inline bool stage_display_sample_eligible(sim::CourseStage stage,
+        const sim::Environment& environment) noexcept
+    {
+        const StageMotionQualification qualification =
+            stage_motion_qualification(stage, environment);
+        if (!qualification.valid
+            || !environment.current_display_posture_valid())
+            return false;
+        if (stage == sim::CourseStage::balance)
+        {
+            return environment.stable_stance_seconds() >= 1.0f
+                && environment.uprightness() >= 0.82f
+                && (environment.left_supported() || environment.right_supported());
+        }
+        if (stage == sim::CourseStage::walk)
+        {
+            return environment.uprightness() >= 0.60f
+                && (environment.duck_active()
+                    || environment.stable_stance_seconds() >= 0.50f)
+                && (environment.left_supported() || environment.right_supported());
+        }
+        return environment.valid_motion() && environment.uprightness() >= 0.45f;
     }
 
     [[nodiscard]] inline bool policy_candidate_better(std::uint64_t quality,

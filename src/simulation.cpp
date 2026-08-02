@@ -32,23 +32,48 @@ namespace epochrunner::sim
         {
             auto add_foot = [&](std::uint16_t ankle)
             {
-                if (ankle >= rig.nodes.size() || rig.nodes.size() > 124)
-                    return;
-                const Vec2 center = rig.nodes[ankle];
+                std::array<std::uint16_t, 3> result{};
+                if (ankle >= rig.nodes.size() || rig.nodes.size() > 122)
+                    return result;
+
+                const Vec2 ankle_position = rig.nodes[ankle];
                 const float radius = ankle < rig.radii.size()
-                    ? clamp(rig.radii[ankle] * 0.72f, 0.10f, 0.15f) : 0.12f;
+                    ? clamp(rig.radii[ankle] * 0.68f, 0.095f, 0.135f) : 0.11f;
+                const auto foot = static_cast<std::uint16_t>(rig.nodes.size());
+                rig.nodes.push_back({ ankle_position.x + 0.055f, ankle_position.y - 0.205f });
+                rig.radii.push_back(radius);
+                const Vec2 foot_position = rig.nodes[foot];
                 const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ center.x - heel_reach, center.y - 0.01f });
+                rig.nodes.push_back({ foot_position.x - heel_reach, foot_position.y - 0.012f });
                 rig.radii.push_back(radius);
                 const auto toe = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ center.x + toe_reach, center.y - 0.015f });
+                rig.nodes.push_back({ foot_position.x + toe_reach, foot_position.y - 0.018f });
                 rig.radii.push_back(radius);
-                rig.bones.push_back({ ankle, heel, 0.0f, 0.96f });
-                rig.bones.push_back({ ankle, toe, 0.0f, 0.96f });
-                rig.bones.push_back({ heel, toe, 0.0f, 0.88f });
+
+                // The ankle remains the final articulated leg joint. A braced
+                // passive adapter feeds a separate contact plate; the lower-leg
+                // endpoint itself is never a semantic foot or traction contact.
+                rig.bones.push_back({ ankle, foot, 0.0f, 0.98f });
+                rig.bones.push_back({ ankle, heel, 0.0f, 0.94f });
+                rig.bones.push_back({ ankle, toe, 0.0f, 0.94f });
+                rig.bones.push_back({ foot, heel, 0.0f, 0.96f });
+                rig.bones.push_back({ foot, toe, 0.0f, 0.96f });
+                rig.bones.push_back({ heel, toe, 0.0f, 0.90f });
+                result = { foot, heel, toe };
+                return result;
             };
-            add_foot(rig.left_contact_node);
-            add_foot(rig.right_contact_node);
+
+            const std::uint16_t left_ankle = rig.left_contact_node;
+            const std::uint16_t right_ankle = rig.right_contact_node;
+            const auto left = add_foot(left_ankle);
+            const auto right = add_foot(right_ankle);
+            if (left[0] != 0u && right[0] != 0u)
+            {
+                rig.left_contact_node = left[0];
+                rig.right_contact_node = right[0];
+                rig.additional_left_contact_nodes = { left[1], left[2] };
+                rig.additional_right_contact_nodes = { right[1], right[2] };
+            }
         }
 
         void calibrate_grounded_defaults(CreatureBlueprint& rig,
@@ -734,13 +759,39 @@ namespace epochrunner::sim
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
-        if (course_stage_ != CourseStage::hurdles
+        if (course_stage_ != CourseStage::walk
+            && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards)
             return;
 
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float progress = course_progress();
+        if (course_stage_ == CourseStage::walk)
+        {
+            constexpr float cycle = 7.0f;
+            float local = std::fmod(progress, cycle);
+            if (local < 0.0f)
+                local += cycle;
+            float x = root_x + 3.0f - local;
+            int sequence = course_safe_runway_markers
+                + static_cast<int>(std::floor(progress / cycle));
+            if (x < root_x - 1.40f)
+            {
+                x += cycle;
+                ++sequence;
+            }
+            const float rest_head = valid_node(blueprint_.head_node)
+                ? blueprint_.nodes[blueprint_.head_node].y : 4.0f;
+            const float clearance = std::max(1.45f,
+                rest_head - (0.82f + course_difficulty_ * 0.18f));
+            course_features_.push_back({
+                CourseFeatureKind::overhead_bar,
+                { x, clearance + 0.12f }, { 1.05f, 0.12f }, 0.0f,
+                { -course_speed(), 0.0f }, sequence
+            });
+            return;
+        }
         const int first_sequence = first_course_feature_sequence(root_x, progress);
         const float treadmill_velocity = -course_speed();
 
@@ -881,6 +932,8 @@ namespace epochrunner::sim
         cumulative_airborne_ = 0.0f;
         duck_seconds_ = 0.0f;
         duck_depth_ = 0.0f;
+        duck_obstacle_weight_ = 0.0f;
+        duck_clearance_margin_ = 0.0f;
         current_duck_hold_seconds_ = 0.0f;
         stable_stance_seconds_ = 0.0f;
         longest_stable_stance_seconds_ = 0.0f;
@@ -1083,54 +1136,20 @@ namespace epochrunner::sim
     bool Environment::contact_cluster_contains(std::uint16_t contact_node,
         std::size_t particle_index) const noexcept
     {
-        if (!valid_node(contact_node) || particle_index >= particles_.size()
-            || particle_index >= blueprint_.nodes.size())
+        if (!valid_node(contact_node) || particle_index >= particles_.size())
             return false;
-
-        float contact_height = blueprint_.nodes[contact_node].y;
-        std::array<bool, 128> visited{};
-        std::array<std::uint16_t, 128> queue{};
-        std::size_t head = 0;
-        std::size_t tail = 0;
-        auto add_seed = [&](std::uint16_t seed)
-        {
-            if (seed >= blueprint_.nodes.size() || visited[seed])
-                return;
-            visited[seed] = true;
-            queue[tail++] = seed;
-            contact_height = std::max(contact_height, blueprint_.nodes[seed].y);
-        };
-        add_seed(contact_node);
+        if (particle_index == contact_node)
+            return true;
+        const std::uint16_t candidate = static_cast<std::uint16_t>(particle_index);
         if (contact_node == blueprint_.left_contact_node)
         {
-            for (const std::uint16_t seed : blueprint_.additional_left_contact_nodes)
-                add_seed(seed);
+            return std::ranges::find(blueprint_.additional_left_contact_nodes,
+                candidate) != blueprint_.additional_left_contact_nodes.end();
         }
-        else if (contact_node == blueprint_.right_contact_node)
+        if (contact_node == blueprint_.right_contact_node)
         {
-            for (const std::uint16_t seed : blueprint_.additional_right_contact_nodes)
-                add_seed(seed);
-        }
-        if (blueprint_.nodes[particle_index].y > contact_height + 0.18f)
-            return false;
-        while (head < tail)
-        {
-            const std::uint16_t current = queue[head++];
-            if (current == particle_index)
-                return true;
-            for (const DistanceConstraint& bone : blueprint_.bones)
-            {
-                std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
-                if (bone.a == current)
-                    next = bone.b;
-                else if (bone.b == current)
-                    next = bone.a;
-                if (next >= blueprint_.nodes.size() || visited[next]
-                    || blueprint_.nodes[next].y > contact_height + 0.18f)
-                    continue;
-                visited[next] = true;
-                queue[tail++] = next;
-            }
+            return std::ranges::find(blueprint_.additional_right_contact_nodes,
+                candidate) != blueprint_.additional_right_contact_nodes.end();
         }
         return false;
     }
@@ -1368,6 +1387,39 @@ namespace epochrunner::sim
         return clamp(dot(current, desired), -1.0f, 1.0f);
     }
 
+    bool Environment::current_display_posture_valid() const noexcept
+    {
+        if (!valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node)
+            || !valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node))
+            return false;
+
+        const bool supported = contact_supported(blueprint_.left_contact_node)
+            || contact_supported(blueprint_.right_contact_node);
+        if (!supported || non_foot_grounded_)
+            return false;
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const Vec2 torso = particles_[blueprint_.torso_node].position;
+        const Vec2 head = particles_[blueprint_.head_node].position;
+        const float torso_segment = length(torso - root);
+        const float head_segment = length(head - torso);
+        const float rest_torso_segment = length(
+            blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float rest_head_segment = length(
+            blueprint_.nodes[blueprint_.head_node]
+                - blueprint_.nodes[blueprint_.torso_node]);
+
+        // Historical lesson evidence may remain latched, but the body displayed
+        // now must still have intact direct body segments. A balanced crouch
+        // shortens head-to-pelvis distance without collapsing either segment.
+        return torso_segment >= rest_torso_segment * 0.58f
+            && head_segment >= rest_head_segment * 0.55f;
+    }
+
     void Environment::invalidate(InvalidMotion reason) noexcept
     {
         if (invalid_reason_ == InvalidMotion::none)
@@ -1471,6 +1523,25 @@ namespace epochrunner::sim
         duck_active_ = feet_supported && current_uprightness > 0.60f && duck_depth_ >= 0.48f;
         if (duck_active_)
             duck_seconds_ += dt;
+
+        duck_obstacle_weight_ = 0.0f;
+        duck_clearance_margin_ = 0.0f;
+        for (const CourseFeature& feature : course_features_)
+        {
+            if (feature.kind != CourseFeatureKind::overhead_bar)
+                continue;
+            const float dx = feature.center.x - root_x;
+            const float weight = duck_obstacle_approach_weight(dx);
+            if (weight <= duck_obstacle_weight_)
+                continue;
+            duck_obstacle_weight_ = weight;
+            const float bar_bottom = feature.center.y - feature.half_extent.y;
+            const float head_top = valid_node(blueprint_.head_node)
+                ? particles_[blueprint_.head_node].position.y
+                    + particles_[blueprint_.head_node].radius
+                : bar_bottom;
+            duck_clearance_margin_ = bar_bottom - head_top;
+        }
 
         float current_joint_speed = 0.0f;
         for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
@@ -1863,6 +1934,12 @@ namespace epochrunner::sim
         const float backward_penalty = std::max(0.0f, -safe_progress) * 0.45f;
         const float duck_reward = duck_active_
             ? 0.018f + clamp(duck_depth_ - 0.48f, 0.0f, 0.80f) * 0.012f : 0.0f;
+        const float obstacle_duck_reward = duck_obstacle_weight_
+            * (duck_active_ ? 0.055f
+                + clamp(duck_clearance_margin_, -0.30f, 0.20f) * 0.035f
+                : -0.020f);
+        const float premature_duck_penalty = (1.0f - duck_obstacle_weight_)
+            * (duck_active_ ? 0.018f : 0.0f);
         const float jump_reward = (powered_takeoff_this_step_ ? 0.10f : 0.0f)
             + (powered_landing_this_step_ ? 0.22f : 0.0f)
             + (powered_takeoff_ && !left_supported && !right_supported ? 0.0025f : 0.0f);
@@ -1903,9 +1980,10 @@ namespace epochrunner::sim
         }
         case CourseStage::walk:
             last_reward_ = std::max(0.0f, upright) * 0.016f
-                + contact * 0.0015f + duck_reward
-                - std::abs(forward_speed_) * 0.0030f
-                - action_energy * 0.0009f - body_contact_penalty;
+                + contact * 0.0015f + duck_reward + obstacle_duck_reward
+                + pass_reward - std::abs(forward_speed_) * 0.0030f
+                - action_energy * 0.0009f - collision_penalty
+                - premature_duck_penalty - body_contact_penalty;
             break;
         case CourseStage::ramps:
             last_reward_ = std::max(0.0f, upright) * 0.010f

@@ -214,15 +214,17 @@ int main()
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
     require(sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
-        && sim::course_stage_name(sim::CourseStage::walk) == "2. DUCK / RECOVER"
+        && sim::course_stage_name(sim::CourseStage::walk) == "2. LOW BAR DUCK / RECOVER"
         && sim::course_stage_name(sim::CourseStage::ramps) == "3. JUMP / LAND"
         && sim::course_stage_name(sim::CourseStage::uneven) == "4. WALK / RUN"
         && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING DUCK / JUMP"
         && sim::course_stage_name(sim::CourseStage::duck_bars) == "6. CONTROLLED FLIPS"
         && sim::course_stage_name(sim::CourseStage::moving_hazards) == "7. MIXED GOAL COURSE",
         "skill curriculum is not ordered by prerequisite");
-    require(sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
-        "duck evidence cannot complete the duck lesson");
+    require(!sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
+        "duck lesson completes without clearing its low bar");
+    require(sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 1u),
+        "duck-and-clear evidence cannot complete the duck lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
         "landed jump cannot complete the jump lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
@@ -299,8 +301,11 @@ int main()
         "small exploration change triggers an unnecessary champion rollback");
     require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
         "valid stepped best result cannot seed self-imitation");
-    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
-        "valid duck result cannot seed self-imitation");
+    require(!rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+        "ducking without clearing a low bar can still seed self-imitation");
+    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f,
+            0.8f, 0u, 0.0f, 0u, 1u),
+        "valid duck-and-clear result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
@@ -362,14 +367,32 @@ int main()
     require(!disconnected.valid(), "enabled motor without direct A-pivot-C bones was accepted");
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
-    require(humanoid.nodes.size() >= 17,
+    require(humanoid.nodes.size() >= 19,
         "human-calibrated rig should include passive heel/toe feet and articulated arms");
     require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
         "uploaded humanoid pelvis calibration not applied");
-    require(humanoid.bones.size() >= 17,
+    require(humanoid.bones.size() >= 21,
         "humanoid feet or arms are not structurally connected");
     require(humanoid.active_motor_count == sim::action_count,
         "humanoid does not expose independent shoulder and elbow motors");
+    require(humanoid.left_contact_node != humanoid.motors[1].c
+            && humanoid.right_contact_node != humanoid.motors[3].c,
+        "semantic feet are still the lower-leg motor endpoints");
+    require(humanoid.additional_left_contact_nodes.size() == 2u
+            && humanoid.additional_right_contact_nodes.size() == 2u,
+        "dedicated foot plates do not include heel and toe contacts");
+    require(humanoid.nodes[humanoid.motors[1].c].y
+            - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
+            && humanoid.nodes[humanoid.motors[3].c].y
+                - humanoid.nodes[humanoid.right_contact_node].y >= 0.18f,
+        "passive foot adapter leaves an ankle on the contact plane");
+    require(std::ranges::none_of(humanoid.motors,
+            [&humanoid](const sim::MotorConstraint& motor)
+            {
+                return motor.c == humanoid.left_contact_node
+                    || motor.c == humanoid.right_contact_node;
+            }),
+        "a policy motor still terminates directly on a semantic foot contact");
     for (std::size_t motor_index = 0; motor_index < humanoid.active_motor_count; ++motor_index)
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
@@ -470,6 +493,33 @@ int main()
     }
 
     {
+        sim::Environment duck_lesson{ humanoid, 0xD0C7u };
+        duck_lesson.set_course(sim::CourseStage::walk, 0.35f);
+        require(std::ranges::any_of(duck_lesson.course_features(),
+                [](const sim::CourseFeature& feature)
+                {
+                    return feature.kind == sim::CourseFeatureKind::overhead_bar;
+                }),
+            "duck lesson has no explicit low-bar obstacle");
+        std::array<float, sim::action_count> unrelated{
+            0.9f, -0.8f, 0.2f, 0.7f, -0.9f, 0.6f, 0.1f, -0.5f
+        };
+        const auto coordinated = rl::bilateral_joint_synergy_action(
+            duck_lesson, unrelated, sim::CourseStage::walk);
+        require(std::abs(coordinated[0] + coordinated[2])
+                < std::abs(unrelated[0] + unrelated[2])
+            && std::abs(coordinated[1] + coordinated[3])
+                < std::abs(unrelated[1] + unrelated[3]),
+            "AI outputs are still eight unrelated joint commands");
+        const std::array<float, sim::action_count> neutral{};
+        const auto duck = rl::effective_policy_action(
+            duck_lesson, neutral, sim::CourseStage::walk);
+        require(duck[0] < -0.05f && duck[1] > 0.10f
+                && duck[2] > 0.05f && duck[3] < -0.10f,
+            "low-bar obstacle does not trigger a coordinated duck primitive");
+    }
+
+    {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
         static_assert(sim::observation_count == 40);
@@ -528,6 +578,15 @@ int main()
         }
         require(qualification.valid,
             "shared balance controller cannot sustain a stage-valid physics stance");
+        require(rl::stage_display_sample_eligible(
+                sim::CourseStage::balance, assisted_stance),
+            "valid current stance is hidden from the training sample");
+        sim::EnvironmentTestAccess::collapse_upper_body(assisted_stance);
+        require(!assisted_stance.current_display_posture_valid(),
+            "fresh geometric posture check accepts a collapsed current body");
+        require(!rl::stage_display_sample_eligible(
+                sim::CourseStage::balance, assisted_stance),
+            "collapsed current frame is still published as a valid sample");
     }
 
     {

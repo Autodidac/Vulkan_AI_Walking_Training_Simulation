@@ -48,6 +48,18 @@ namespace epochrunner::rl
                 }
                 return 0.05f;
             }
+            if (stage == sim::CourseStage::walk)
+            {
+                if (update < 600u)
+                    return 0.88f;
+                if (update < 3000u)
+                    return lerp(0.88f, 0.32f,
+                        static_cast<float>(update - 600u) / 2400.0f);
+                return 0.18f;
+            }
+            if (stage == sim::CourseStage::ramps
+                || stage == sim::CourseStage::duck_bars)
+                return update < 1200u ? 0.42f : 0.12f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
             if (update < 400u)
@@ -70,6 +82,8 @@ namespace epochrunner::rl
         {
             if (stage == sim::CourseStage::balance)
                 return balance_teacher_action(environment);
+            if (stage == sim::CourseStage::walk)
+                return duck_teacher_action(environment);
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
             const float swing = std::sin(phase);
             const float lift_left = std::max(0.0f, swing);
@@ -170,6 +184,8 @@ namespace epochrunner::rl
                         lerp(previous_action[action_index], guided_action, 0.42f), -1.0f, 1.0f);
                     previous_action[action_index] = transition.action[action_index];
                 }
+                transition.action = effective_policy_action(
+                    environment, transition.action, course_stage_);
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
                 const sim::StepResult result = environment.step(transition.action);
                 transition.reward = result.reward;

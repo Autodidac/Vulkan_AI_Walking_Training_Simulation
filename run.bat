@@ -4,10 +4,18 @@ setlocal EnableExtensions
 rem Always operate relative to this script, not the caller's working directory.
 cd /d "%~dp0"
 
-rem The same launcher works both in an extracted release and in the source tree.
+rem In a source checkout, never let a stale root-level executable override the
+rem current build.  In an extracted release, CMakeLists.txt is absent and the
+rem packaged executable beside this launcher is authoritative.
+if exist "%~dp0CMakeLists.txt" goto source_tree
+
 set "EPOCHRUNNER_EXE=%~dp0EpochRunner.exe"
 if exist "%EPOCHRUNNER_EXE%" goto launch
 
+echo ERROR: The packaged EpochRunner.exe is missing beside run.bat.
+goto failed
+
+:source_tree
 set "EPOCHRUNNER_EXE=%~dp0build\windows-release\Release\EpochRunner.exe"
 if exist "%EPOCHRUNNER_EXE%" goto launch
 
@@ -20,7 +28,6 @@ if errorlevel 1 (
     goto failed
 )
 
-rem Use Adam's normal vcpkg location when VCPKG_ROOT is not already set.
 if not defined VCPKG_ROOT if exist "%USERPROFILE%\source\repos\vcpkg\scripts\buildsystems\vcpkg.cmake" (
     set "VCPKG_ROOT=%USERPROFILE%\source\repos\vcpkg"
 )
@@ -30,10 +37,8 @@ if not defined VCPKG_ROOT if exist "%USERPROFILE%\vcpkg\scripts\buildsystems\vcp
 
 cmake --preset windows-release
 if errorlevel 1 goto build_failed
-
 cmake --build --preset windows-release --parallel
 if errorlevel 1 goto build_failed
-
 if not exist "%EPOCHRUNNER_EXE%" (
     echo ERROR: The build completed without producing:
     echo        %EPOCHRUNNER_EXE%
@@ -46,7 +51,6 @@ pushd "%EPOCHRUNNER_DIR%"
 "%EPOCHRUNNER_EXE%" %*
 set "EPOCHRUNNER_RESULT=%ERRORLEVEL%"
 popd
-
 if not "%EPOCHRUNNER_RESULT%"=="0" (
     echo.
     echo EpochRunner exited with code %EPOCHRUNNER_RESULT%.
