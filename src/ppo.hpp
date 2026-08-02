@@ -20,7 +20,7 @@
 
 namespace epochrunner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0200u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0300u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -30,23 +30,52 @@ namespace epochrunner::rl
         static_assert(sim::observation_count == 40);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
-        for (std::size_t index = 0; index < action.size(); ++index)
+
+        const std::size_t leg_count = std::min<std::size_t>(4u,
+            environment.blueprint().active_motor_count);
+        for (std::size_t index = 0; index < leg_count; ++index)
         {
             const float joint_speed = observation[joint_velocity_begin + index];
-            action[index] = clamp(-0.10f * joint_speed, -0.28f, 0.28f);
+            action[index] = clamp(-0.12f * joint_speed, -0.30f, 0.30f);
+        }
+        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+        {
+            const float joint_speed = observation[joint_velocity_begin + index];
+            action[index] = clamp(-0.035f * joint_speed, -0.08f, 0.08f);
         }
 
-        action[0] = clamp(action[0] - 0.03f, -0.42f, 0.42f);
-        action[1] = clamp(action[1] + 0.03f, -0.42f, 0.42f);
-        action[2] = clamp(action[2] + 0.03f, -0.42f, 0.42f);
-        action[3] = clamp(action[3] - 0.03f, -0.42f, 0.42f);
+        // Plant and load the feet through the leg chains before granting the
+        // arms meaningful authority. The support correction is intentionally
+        // asymmetric so a missing foot is recovered instead of mirrored.
+        // Rest geometry is the standing target. Do not preload a crouch
+        // before both rigid feet have established support.
+        action[0] = clamp(action[0], -0.34f, 0.34f);
+        action[1] = clamp(action[1], -0.34f, 0.34f);
+        action[2] = clamp(action[2], -0.34f, 0.34f);
+        action[3] = clamp(action[3], -0.34f, 0.34f);
+        if (!environment.left_supported())
+        {
+            action[0] = clamp(action[0] - 0.012f, -0.38f, 0.38f);
+            action[1] = clamp(action[1] + 0.020f, -0.40f, 0.40f);
+        }
+        if (!environment.right_supported())
+        {
+            action[2] = clamp(action[2] + 0.012f, -0.38f, 0.38f);
+            action[3] = clamp(action[3] - 0.020f, -0.40f, 0.40f);
+        }
 
-        const float correction = clamp(observation[0] * 0.38f
-            + observation[2] * 0.06f, -0.18f, 0.18f);
-        action[0] = clamp(action[0] - correction, -0.42f, 0.42f);
-        action[2] = clamp(action[2] - correction, -0.42f, 0.42f);
-        action[4] = clamp(action[4] + correction * 0.35f, -0.42f, 0.42f);
-        action[6] = clamp(action[6] + correction * 0.35f, -0.42f, 0.42f);
+        const float correction = clamp(observation[0] * 0.40f
+            + observation[2] * 0.07f, -0.20f, 0.20f);
+        action[0] = clamp(action[0] - correction, -0.52f, 0.52f);
+        action[1] = clamp(action[1] + correction * 0.20f, -0.52f, 0.52f);
+        action[2] = clamp(action[2] - correction, -0.52f, 0.52f);
+        action[3] = clamp(action[3] - correction * 0.20f, -0.52f, 0.52f);
+
+        const bool feet_loaded = environment.left_supported() && environment.right_supported();
+        const float arm_authority = feet_loaded
+            && environment.stable_stance_seconds() >= 1.0f ? 0.20f : 0.03f;
+        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+            action[index] *= arm_authority;
         return action;
     }
 
@@ -63,33 +92,53 @@ namespace epochrunner::rl
             && rig.motors[1].a == rig.motors[0].pivot
             && rig.motors[3].a == rig.motors[2].pivot;
         if (!paired_leg_chains)
-        {
             return action;
-        }
 
-        const float pair_strength = stage == sim::CourseStage::balance
-            || stage == sim::CourseStage::walk || stage == sim::CourseStage::ramps
-            ? 0.72f : 0.42f;
+        const float leg_pair_strength = stage == sim::CourseStage::walk
+            ? 0.28f : (stage == sim::CourseStage::balance
+                ? 0.18f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));
         auto mirror_pair = [&](std::size_t left, std::size_t right, float strength)
         {
             const float mirrored = 0.5f * (action[left] - action[right]);
             action[left] = lerp(action[left], mirrored, strength);
             action[right] = lerp(action[right], -mirrored, strength);
         };
-        mirror_pair(0, 2, pair_strength);
-        mirror_pair(1, 3, pair_strength);
-        mirror_pair(4, 6, pair_strength * 0.75f);
-        mirror_pair(5, 7, pair_strength * 0.75f);
+        mirror_pair(0, 2, leg_pair_strength);
+        mirror_pair(1, 3, leg_pair_strength);
 
-        // Preserve residual freedom, but bias each leg toward a useful hip/knee
-        // chain instead of asking PPO to discover eight unrelated actuators.
-        constexpr float chain_strength = 0.34f;
+        if (rig.active_motor_count >= 8u)
+        {
+            const float arm_pair_strength = sim::stage_allows_controlled_flips(stage)
+                ? 0.24f : 0.06f;
+            mirror_pair(4, 6, arm_pair_strength);
+            mirror_pair(5, 7, arm_pair_strength);
+        }
+
+        // Keep a light hip/knee chain prior without forcing both legs into the
+        // same folded pose. PPO retains most of the residual leg authority.
+        constexpr float chain_strength = 0.04f;
         const float left_chain = 0.5f * (-action[0] + action[1]);
         const float right_chain = 0.5f * (action[2] - action[3]);
         action[0] = lerp(action[0], -left_chain, chain_strength);
         action[1] = lerp(action[1], left_chain, chain_strength);
         action[2] = lerp(action[2], right_chain, chain_strength);
         action[3] = lerp(action[3], -right_chain, chain_strength);
+
+        // The chain prior must not reintroduce same-direction pair motion.
+        const float hip_pair_mean = 0.5f * (action[0] + action[2]);
+        const float knee_pair_mean = 0.5f * (action[1] + action[3]);
+        action[0] -= hip_pair_mean * 0.25f;
+        action[2] -= hip_pair_mean * 0.25f;
+        action[1] -= knee_pair_mean * 0.25f;
+        action[3] -= knee_pair_mean * 0.25f;
+
+        if (rig.active_motor_count >= 8u
+            && environment.longest_stable_stance_seconds() < 1.0f
+            && !sim::stage_allows_controlled_flips(stage))
+        {
+            for (std::size_t index = 4; index < 8; ++index)
+                action[index] *= 0.08f;
+        }
         for (float& value : action)
             value = clamp(value, -1.0f, 1.0f);
         return action;
@@ -121,13 +170,14 @@ namespace epochrunner::rl
         std::array<float, sim::action_count> policy_action,
         sim::CourseStage stage) noexcept
     {
-        policy_action = bilateral_joint_synergy_action(environment, policy_action, stage);
+        const std::size_t active = environment.blueprint().active_motor_count;
         if (stage == sim::CourseStage::balance)
         {
             const auto teacher = balance_teacher_action(environment);
-            constexpr float assist = 0.78f;
-            for (std::size_t index = 0; index < policy_action.size(); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.96f);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.97f);
         }
         else if (stage == sim::CourseStage::walk)
         {
@@ -139,15 +189,27 @@ namespace epochrunner::rl
                 ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
             const float obstacle_weight = std::max(
                 environment.duck_obstacle_weight(), observed_weight);
-            const float assist = 0.56f + obstacle_weight * 0.34f;
-            for (std::size_t index = 0; index < policy_action.size(); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+            const float leg_assist = 0.60f + obstacle_weight * 0.26f;
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.94f);
         }
         else if (stage == sim::CourseStage::ramps)
         {
             const auto teacher = balance_teacher_action(environment);
-            for (std::size_t index = 0; index < policy_action.size(); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.20f);
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.26f);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.88f);
+        }
+
+        if (active >= 8u
+            && environment.longest_stable_stance_seconds() < 1.0f
+            && !sim::stage_allows_controlled_flips(stage))
+        {
+            for (std::size_t index = 4; index < 8; ++index)
+                policy_action[index] *= 0.08f;
         }
         return bilateral_joint_synergy_action(environment, policy_action, stage);
     }
@@ -334,8 +396,8 @@ namespace epochrunner::rl
                 || environment.stable_stance_seconds() < 0.25f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.spin_landings() < 1u
-                || environment.maximum_spin_turns() < 0.75f
-                || environment.maximum_spin_turns() > 3.05f)
+                || environment.maximum_flip_turns() < 0.75f
+                || environment.maximum_flip_turns() > 3.05f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             break;
         case sim::CourseStage::moving_hazards:
@@ -396,7 +458,7 @@ namespace epochrunner::rl
             quality = pack_quality(
                 static_cast<std::uint16_t>(std::min<std::uint32_t>(
                     environment.spin_landings(), 65535u)),
-                quality_bucket(std::min(environment.maximum_spin_turns(), 3.0f), 100.0f),
+                quality_bucket(std::min(environment.maximum_flip_turns(), 3.0f), 100.0f),
                 static_cast<std::uint16_t>(std::min<std::uint32_t>(
                     environment.landed_jumps(), 65535u)),
                 quality_bucket(environment.elapsed_seconds()));
@@ -444,7 +506,8 @@ namespace epochrunner::rl
     [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage,
         const sim::Environment& environment) noexcept
     {
-        return stage_motion_qualification(stage, environment).valid;
+        return environment.body_integrity_valid()
+            && stage_motion_qualification(stage, environment).valid;
     }
 
     [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,

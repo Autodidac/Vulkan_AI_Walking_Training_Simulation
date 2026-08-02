@@ -674,7 +674,9 @@ namespace epochrunner::sim
         }
         [[nodiscard]] std::uint32_t powered_jumps() const noexcept { return powered_jump_count_; }
         [[nodiscard]] std::uint32_t landed_jumps() const noexcept { return landed_jump_count_; }
-        [[nodiscard]] float maximum_spin_turns() const noexcept { return maximum_spin_turns_; }
+        [[nodiscard]] float maximum_flip_turns() const noexcept { return maximum_spin_turns_; }
+        [[nodiscard]] float maximum_spin_turns() const noexcept { return uncontrolled_spin_turns_; }
+        [[nodiscard]] float uncontrolled_spin_turns() const noexcept { return uncontrolled_spin_turns_; }
         [[nodiscard]] std::uint32_t spin_landings() const noexcept { return spin_landing_count_; }
         [[nodiscard]] std::uint32_t obstacles_passed() const noexcept { return obstacles_passed_; }
         [[nodiscard]] std::uint32_t knee_first_faults() const noexcept { return knee_first_faults_; }
@@ -702,6 +704,7 @@ namespace epochrunner::sim
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
+        [[nodiscard]] bool body_integrity_valid() const noexcept;
         [[nodiscard]] bool current_display_posture_valid() const noexcept;
         [[nodiscard]] bool left_supported() const noexcept
         {
@@ -716,6 +719,8 @@ namespace epochrunner::sim
         friend struct EnvironmentTestAccess;
 
         void solve_distance(const DistanceConstraint& constraint) noexcept;
+        void stabilize_passive_appendages() noexcept;
+        void stabilize_balance_posture() noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
         void solve_course() noexcept;
@@ -772,6 +777,7 @@ namespace epochrunner::sim
         bool duck_cycle_qualified_{};
         float current_airborne_rotation_{};
         float maximum_spin_turns_{};
+        float uncontrolled_spin_turns_{};
         std::uint32_t powered_jump_count_{};
         std::uint32_t landed_jump_count_{};
         std::uint32_t spin_landing_count_{};

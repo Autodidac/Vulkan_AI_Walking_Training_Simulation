@@ -273,7 +273,17 @@ int main(int argc, char** argv)
         float mouse_x{};
         float mouse_y{};
         const SDL_MouseButtonFlags mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
-        input.mouse = { mouse_x, mouse_y };
+        int logical_width{};
+        int logical_height{};
+        int drawable_width{};
+        int drawable_height{};
+        SDL_GetWindowSize(window, &logical_width, &logical_height);
+        SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
+        const float mouse_scale_x = logical_width > 0
+            ? static_cast<float>(drawable_width) / static_cast<float>(logical_width) : 1.0f;
+        const float mouse_scale_y = logical_height > 0
+            ? static_cast<float>(drawable_height) / static_cast<float>(logical_height) : 1.0f;
+        input.mouse = { mouse_x * mouse_scale_x, mouse_y * mouse_scale_y };
         input.mouse_delta = input.mouse - previous_mouse;
         previous_mouse = input.mouse;
         input.left_down = is_down(mouse_buttons, SDL_BUTTON_LMASK);

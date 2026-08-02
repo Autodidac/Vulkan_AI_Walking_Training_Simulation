@@ -4,11 +4,65 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** EpochRunner v0.7.2
+**Target:** EpochRunner v0.7.3
 
-**Release state:** VERIFIED — EpochRunner v0.7.2 published and independently audited
+**Release state:** IN PROGRESS — August 2 runtime screenshots reopened body-control and preview integrity
 
-All implementation, validation, publication, release-asset audit, pull-request cleanup, and branch cleanup missions are complete.
+v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
+
+
+## v0.7.3 live-runtime correction
+
+### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
+**Status:** IN PROGRESS
+
+Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
+
+### WALK-FOOT-030 — Connected rigid heel-toe foot plates
+**Status:** IN PROGRESS
+
+Each biped foot uses one ankle/heel/toe triangle with two semantic contacts. Any stretched bone or detached contact cluster invalidates the rollout before champion, imitation, or preview publication.
+
+### WALK-CONTROL-031 — Feet-first control authority
+**Status:** IN PROGRESS
+
+Balance and duck lessons must load feet through knees and hips before arms receive meaningful policy authority. Bilateral coordination remains a light prior and cannot force mirrored leg collapse.
+
+### WALK-PASSIVE-032 — Stable heads and tails on every rig
+**Status:** IN PROGRESS
+
+Head and passive-tail endpoints receive realistic mass, velocity damping, and torso-relative passive angular stabilization. They may react naturally but cannot behave as uncontrolled pendulums.
+
+### WALK-PREVIEW-033 — Complete-body training preview
+**Status:** IN PROGRESS
+
+The training preview may publish only a current, finite, connected full-body snapshot. Its camera fits complete particle bounds; a detached or exploded body is rejected rather than showing isolated feet.
+
+### WALK-TEST-034 — Runtime-shaped regression coverage
+**Status:** IN PROGRESS
+
+Tests cover detached semantic feet, full-skeleton stretch bounds, leg-versus-arm authority, passive head/tail containment, current-frame preview eligibility, Linux C++23 validation, and the complete Windows Vulkan package.
+
+
+### WALK-UI-035 — Full-width DPI-safe GUI background
+**Status:** IN PROGRESS
+
+The header and frame background must span the actual Vulkan drawable width at Windows DPI scaling. Mouse hit testing is converted from SDL logical coordinates to drawable coordinates.
+
+### WALK-UNITS-036 — Metric/Imperial quarter markers
+**Status:** IN PROGRESS
+
+The live panel exposes Metric and Imperial modes. Course reference signs are spaced every 0.25 km or 0.25 mile and all speed/distance labels follow the selected mode.
+
+### WALK-FLIP-037 — Separate flips from generic spin
+**Status:** IN PROGRESS
+
+A flip is powered airborne somersault rotation in the flip lesson followed by a landing. Generic rotation is tracked separately, is never accepted as flip evidence, and is penalized when it destabilizes other lessons.
+
+### WALK-STATS-038 — Rig lifetime and cumulative runtime totals
+**Status:** IN PROGRESS
+
+Display current rig age, rig update delta, rig environment-step delta, session runtime, total updates, and total environment steps. Counter deltas are saturating and reset only when the rig signature changes.
 
 ## v0.7.2 packaged-runtime regression correction
 
