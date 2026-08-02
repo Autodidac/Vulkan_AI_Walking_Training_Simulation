@@ -45,7 +45,7 @@ job = r'''
         run: bash "$RUNNER_TEMP/publish_runner_v075.sh"
 '''
 if '  publish-v075:' not in workflow:
-    workflow = workflow.rstrip() + job + '\n'
+    workflow = workflow.rstrip() + job.rstrip() + '\n'
 workflow_path.write_text(workflow, encoding='utf-8', newline='\n')
 Path(__file__).unlink()
 print('materialized v0.7.5 publisher into the existing validated workflow')
