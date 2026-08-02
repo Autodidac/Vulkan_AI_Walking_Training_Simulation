@@ -41,16 +41,25 @@ patch("src/ppo.hpp", (
         "            ? 0.34f : (stage == sim::CourseStage::balance\n"
         "                || stage == sim::CourseStage::ramps ? 0.28f : 0.20f);",
         "const float leg_pair_strength = stage == sim::CourseStage::walk\n"
-        "            ? 0.28f : (stage == sim::CourseStage::balance\n"
-        "                ? 0.14f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));",
+        "            ? 0.30f : (stage == sim::CourseStage::balance\n"
+        "                ? 0.28f : (stage == sim::CourseStage::ramps ? 0.24f : 0.20f));",
     ),
     (
-        "constexpr float chain_strength = 0.08f;",
-        "constexpr float chain_strength = 0.0f;",
-    ),
-    (
-        "policy_action[index] = lerp(policy_action[index], teacher[index], 0.90f);",
-        "policy_action[index] = lerp(policy_action[index], teacher[index], 0.82f);",
+        "        action[2] = lerp(action[2], right_chain, chain_strength);\n"
+        "        action[3] = lerp(action[3], -right_chain, chain_strength);\n\n"
+        "        if (rig.active_motor_count >= 8u",
+        "        action[2] = lerp(action[2], right_chain, chain_strength);\n"
+        "        action[3] = lerp(action[3], -right_chain, chain_strength);\n\n"
+        "        // The chain prior must not reintroduce same-direction pair motion.\n"
+        "        // Remove only a quarter of each pair mean so the policy keeps\n"
+        "        // useful residual freedom while the final commands stay coordinated.\n"
+        "        const float hip_pair_mean = 0.5f * (action[0] + action[2]);\n"
+        "        const float knee_pair_mean = 0.5f * (action[1] + action[3]);\n"
+        "        action[0] -= hip_pair_mean * 0.25f;\n"
+        "        action[2] -= hip_pair_mean * 0.25f;\n"
+        "        action[1] -= knee_pair_mean * 0.25f;\n"
+        "        action[3] -= knee_pair_mean * 0.25f;\n\n"
+        "        if (rig.active_motor_count >= 8u",
     ),
 ))
 
