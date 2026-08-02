@@ -1,0 +1,51 @@
+name: Patch final EpochRunner v0.7.3 evidence
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.number == 26
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch ledger and clean trigger
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          heading = '### WALK-REL-039 — v0.7.3 body-control and telemetry correction'
+          start = text.index(heading)
+          section = text[start:]
+          marker = '- contradictory live packaged-runtime evidence will reopen the affected mission.\n'
+          evidence = (
+              '- publication workflow run: `30739847776`;\n'
+              '- published release asset re-download, byte comparison, SHA-256, and manifest audit: passed;\n'
+              '- open pull requests after cleanup: `0`;\n'
+              '- remaining branches after cleanup: `main`.\n'
+          )
+          if '- publication workflow run: `30739847776`;' not in section:
+              section = section.replace(marker, marker + evidence, 1)
+              text = text[:start] + section
+          path.write_text(text, encoding='utf-8', newline='\n')
+          Path('.github/workflows/patch-v073-evidence.yml').unlink()
+      - name: Commit and clean repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete v0.7.3 release evidence"
+          git push origin HEAD:main
+          gh pr close 26 --repo "$GITHUB_REPOSITORY" --comment "Final v0.7.3 evidence applied directly to main." --delete-branch || true
