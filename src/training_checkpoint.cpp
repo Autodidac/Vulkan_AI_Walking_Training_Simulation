@@ -56,6 +56,8 @@ namespace runner::rl
         {
             return write_value(output, value.update)
                 && write_value(output, value.environment_steps)
+                && write_value(output, value.total_updates)
+                && write_value(output, value.total_environment_steps)
                 && write_value(output, value.total_episodes)
                 && write_value(output, value.total_valid_episodes)
                 && write_value(output, value.total_invalid_episodes)
@@ -68,6 +70,7 @@ namespace runner::rl
                 && write_value(output, value.total_landed_flips)
                 && write_value(output, value.total_obstacles_passed)
                 && write_value(output, value.total_distance)
+                && write_value(output, value.total_training_seconds)
                 && write_value(output, value.mean_reward)
                 && write_value(output, value.mean_episode_distance)
                 && write_value(output, value.mean_speed)
@@ -111,6 +114,8 @@ namespace runner::rl
         {
             return read_value(input, value.update)
                 && read_value(input, value.environment_steps)
+                && read_value(input, value.total_updates)
+                && read_value(input, value.total_environment_steps)
                 && read_value(input, value.total_episodes)
                 && read_value(input, value.total_valid_episodes)
                 && read_value(input, value.total_invalid_episodes)
@@ -123,6 +128,7 @@ namespace runner::rl
                 && read_value(input, value.total_landed_flips)
                 && read_value(input, value.total_obstacles_passed)
                 && read_value(input, value.total_distance)
+                && read_value(input, value.total_training_seconds)
                 && read_value(input, value.mean_reward)
                 && read_value(input, value.mean_episode_distance)
                 && read_value(input, value.mean_speed)

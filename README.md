@@ -7,7 +7,7 @@ Training now advances through stand, duck/recover, jump/land, walk/run, moving d
 Walking convergence now uses phase observations, temporally smoothed actions, and a decaying early gait guide. A step counts only after real swing airtime and clearance, so foot-contact wiggles and double-supported skating cannot masquerade as gait. PPO updates are less destructive, exploration is bounded, and every substantial or invalid regression restores the best valid champion immediately instead of allowing late training to degrade beyond it.
 
 
-Runner is a C++23 Vulkan locomotion laboratory built with SDL3, RunnerGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.5 completes the guided sand-simulation enemy pass: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
+Runner is a C++23 Vulkan locomotion laboratory built with SDL3, Vulkan, vcpkg manifest mode, a built-in bitmap UI, and a compact PPO controller. Version 0.7.4 completes the compression-first ducking, rig-integrity, telemetry, and packaging pass while preserving the guided simulation-enemy curriculum: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
 
 ## Guided multi-leg training release
 

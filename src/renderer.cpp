@@ -360,7 +360,7 @@ namespace runner::render
             VkApplicationInfo application{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
             application.pApplicationName = "Runner";
             application.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-            application.pEngineName = "RunnerGui";
+            application.pEngineName = "built-in bitmap UI";
             application.engineVersion = VK_MAKE_API_VERSION(0, 0, 88, 70);
             application.apiVersion = VK_API_VERSION_1_3;
             VkInstanceCreateInfo instance_info{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };

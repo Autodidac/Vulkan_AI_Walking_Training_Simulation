@@ -205,6 +205,8 @@ namespace runner::rl
     {
         std::uint64_t update{};
         std::uint64_t environment_steps{};
+        std::uint64_t total_updates{};
+        std::uint64_t total_environment_steps{};
         std::uint64_t total_episodes{};
         std::uint64_t total_valid_episodes{};
         std::uint64_t total_invalid_episodes{};
@@ -217,6 +219,7 @@ namespace runner::rl
         std::uint64_t total_landed_flips{};
         std::uint64_t total_obstacles_passed{};
         double total_distance{};
+        double total_training_seconds{};
         float mean_reward{};
         float mean_episode_distance{};
         float mean_speed{};

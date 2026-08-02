@@ -327,7 +327,7 @@ MSBuild version 18.7.8+1ac568fee for .NET Framework
   image.cpp
   rounded_rect.cpp
   input.cpp
-  RunnerGui.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\runnergui-build\Release\RunnerGui.lib
+  built-in bitmap UI.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\runnergui-build\Release\built-in bitmap UI.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   shader_compiler.cpp

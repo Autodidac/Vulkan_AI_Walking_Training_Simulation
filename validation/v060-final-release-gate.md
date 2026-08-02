@@ -4,7 +4,7 @@ Candidate commit: `99e083c7e1e6b3d83c6ddd6cdab48f4c4d3f64e7`
 
 - vcpkg bootstrap: success
 - Visual Studio 2026 configure: success
-- Full SDL3/Vulkan/RunnerGui build: success
+- Full SDL3/Vulkan/built-in bitmap UI build: success
 - Course, recovery, rig, concurrency, and throughput tests: success
 - Executable version check: success
 - SDL3/Vulkan diagnostic: success
@@ -290,7 +290,7 @@ All requested installations completed successfully in: 17 min
 
 ```
 
-## Full SDL3/Vulkan/RunnerGui build
+## Full SDL3/Vulkan/built-in bitmap UI build
 
 ```text
 MSBuild version 18.8.2+ce25c0108 for .NET Framework
@@ -327,7 +327,7 @@ MSBuild version 18.8.2+ce25c0108 for .NET Framework
   image.cpp
   rounded_rect.cpp
   input.cpp
-  RunnerGui.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\runnergui-build\Release\RunnerGui.lib
+  built-in bitmap UI.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\runnergui-build\Release\built-in bitmap UI.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   shader_compiler.cpp

@@ -11,3 +11,8 @@
 - Moves low-bar traversal later and increases preparation distance for moving hazards.
 - Invalidates v0.7.3 policy and autonomy persistence with v0.7.4 semantics.
 - Carries forward and revalidates all open mission-ledger requirements before release.
+
+- Restored genuinely rounded local UI panels after removing the external GUI dependency.
+- Corrected PPO optimization-pass terminology that was accidentally changed during rebranding.
+- Split training results and complete lifetime totals into readable panel pages.
+- Added persisted cumulative training time plus complete per-rig, session, and all-time environment, episode, distance, step, fall, collision, jump, flip, obstacle, rig-change, reset, and rollback telemetry.

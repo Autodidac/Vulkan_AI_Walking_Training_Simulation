@@ -389,12 +389,12 @@ Hazard contact is allowed. Touching an obstacle applies physical response and a 
 - Straight double-supported skating and pivot rolling around planted semantic feet are invalid.
 - Policy actions are smoothed, early gait exploration receives a decaying periodic guide, and phase observations make repeatable cadence learnable before 10,000 updates.
 - The best valid policy is a protected champion: substantial or invalid evaluation regression immediately restores it, reduces learning rate/exploration, and prevents the 15,000-update collapse.
-- PPO uses a smaller clip range, fewer runners, lower gradient norm, decaying entropy, bounded exploration, and a light champion anchor.
+- PPO uses a smaller clip range, fewer optimization passes, lower gradient norm, decaying entropy, bounded exploration, and a light champion anchor.
 - The four-action controller remains intact for this pass. Independently controllable humanoid arms require a later controller/output and checkpoint-format expansion rather than stealing leg controls.
 
 ## v0.6.5 release closure
 
-All non-visual locomotion missions introduced or reopened after v0.6.3 have passing deterministic tests, full Windows SDL3/Vulkan/RunnerGui build evidence, and Vulkan diagnostics. The release includes true four-leg and six-leg support semantics, flat semantic feet, mature anti-rolling gates, a longer obstacle runway, zero-motion reset, automatic best-result imitation, relaxed joint-clearance guidance, and actual training picture-in-picture publication.
+All non-visual locomotion missions introduced or reopened after v0.6.3 have passing deterministic tests, full Windows SDL3/Vulkan/built-in bitmap UI build evidence, and Vulkan diagnostics. The release includes true four-leg and six-leg support semantics, flat semantic feet, mature anti-rolling gates, a longer obstacle runway, zero-motion reset, automatic best-result imitation, relaxed joint-clearance guidance, and actual training picture-in-picture publication.
 
 `WALK-UI-003` and `WALK-PIP-007` remain explicitly marked for user visual review because compilation cannot prove readability or preferred placement. They no longer conceal unfinished implementation work and do not block the requested v0.6.5 package.
 

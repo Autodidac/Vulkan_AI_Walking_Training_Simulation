@@ -1022,6 +1022,12 @@ int main()
         require(std::isfinite(metrics.mean_speed), "PPO mean speed is not finite");
         require(std::isfinite(metrics.policy_loss), "PPO policy loss is not finite");
         require(std::isfinite(metrics.value_loss), "PPO value loss is not finite");
+        require(metrics.total_updates == metrics.update,
+            "fresh cumulative update count does not track policy updates");
+        require(metrics.total_environment_steps == metrics.environment_steps,
+            "fresh cumulative environment count does not track policy steps");
+        require(metrics.total_training_seconds > 0.0,
+            "cumulative training time did not advance");
     }
 
     const std::filesystem::path temporary =
@@ -1032,6 +1038,12 @@ int main()
     require(resumed.load_checkpoint(temporary, error, false), "failed to resume checkpoint: " + error);
     require(resumed.policy().parameters() == trainer.policy().parameters(), "checkpoint policy mismatch");
     require(resumed.metrics().update == trainer.metrics().update, "checkpoint update count was not restored");
+    require(resumed.metrics().total_updates == trainer.metrics().total_updates
+            && resumed.metrics().total_environment_steps
+                == trainer.metrics().total_environment_steps,
+        "checkpoint cumulative update/environment totals were not restored");
+    require(resumed.metrics().total_training_seconds == trainer.metrics().total_training_seconds,
+        "checkpoint cumulative training time was not restored");
     require(resumed.optimizer_step() == trainer.optimizer_step(), "checkpoint optimizer state was not restored");
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
@@ -1085,6 +1097,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "Runner v0.6.2 obstacle observation, recovery, concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "Runner v0.7.4 obstacle, duck-press, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }

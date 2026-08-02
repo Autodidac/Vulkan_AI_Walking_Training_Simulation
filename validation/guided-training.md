@@ -1,7 +1,7 @@
 # Guided training mission validation
 
 - Exact tested source commit: 8eddb307ff6e8c1e3001a487b4c223546a2b97f1
-- Full SDL3/Vulkan/RunnerGui Windows build: passed
+- Full SDL3/Vulkan/built-in bitmap UI Windows build: passed
 - Core and concurrency tests: passed
 - Startup-only rolling gate relaxation tests: passed
 - Mature body and orange-foot rolling rejection tests: passed

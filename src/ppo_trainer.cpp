@@ -339,6 +339,8 @@ namespace runner::rl
         adam_.step = 0;
         const TrainingMetrics previous_metrics = metrics_;
         metrics_ = {};
+        metrics_.total_updates = previous_metrics.total_updates;
+        metrics_.total_environment_steps = previous_metrics.total_environment_steps;
         metrics_.total_episodes = previous_metrics.total_episodes;
         metrics_.total_valid_episodes = previous_metrics.total_valid_episodes;
         metrics_.total_invalid_episodes = previous_metrics.total_invalid_episodes;
@@ -351,6 +353,7 @@ namespace runner::rl
         metrics_.total_landed_flips = previous_metrics.total_landed_flips;
         metrics_.total_obstacles_passed = previous_metrics.total_obstacles_passed;
         metrics_.total_distance = previous_metrics.total_distance;
+        metrics_.total_training_seconds = previous_metrics.total_training_seconds;
         reward_history_.clear();
         speed_history_.clear();
         if (clear_best)
@@ -533,6 +536,8 @@ namespace runner::rl
             return;
         ++metrics_.update;
         metrics_.environment_steps += rollout_.size();
+        ++metrics_.total_updates;
+        metrics_.total_environment_steps += rollout_.size();
         metrics_.total_episodes += staged_totals_.completed_episodes;
         metrics_.total_valid_episodes += staged_totals_.valid_episodes;
         metrics_.total_invalid_episodes += staged_totals_.invalid_episodes;
@@ -545,6 +550,11 @@ namespace runner::rl
         metrics_.total_landed_flips += staged_totals_.landed_flips;
         metrics_.total_obstacles_passed += staged_totals_.obstacles_passed;
         metrics_.total_distance += staged_totals_.total_distance;
+        if (!environments_.empty())
+        {
+            metrics_.total_training_seconds += static_cast<double>(rollout_.size())
+                / static_cast<double>(environments_.size()) / 60.0;
+        }
         metrics_.mean_speed = staged_totals_.accumulated_speed
             / static_cast<float>(rollout_.size());
         if (staged_totals_.completed_episodes > 0)
@@ -602,7 +612,7 @@ namespace runner::rl
 
     void PpoTrainer::update_policy()
         {
-            constexpr std::size_t runners = 2;
+            constexpr std::size_t optimization_passes = 2;
             constexpr std::size_t minibatch_size = 256;
             constexpr float clip_range = 0.12f;
             constexpr float value_coefficient = 0.42f;
@@ -617,7 +627,8 @@ namespace runner::rl
             float total_entropy = 0.0f;
             std::size_t sample_count = 0;
 
-            for (std::size_t runner = 0; runner < runners; ++runner)
+            for (std::size_t optimization_pass = 0;
+                optimization_pass < optimization_passes; ++optimization_pass)
             {
                 for (std::size_t index = indices.size(); index > 1; --index)
                 {

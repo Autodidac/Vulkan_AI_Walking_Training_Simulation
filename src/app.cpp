@@ -71,19 +71,44 @@ namespace runner
         constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
         constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
 
+        void fill_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color color)
+        {
+            if (rect.size.x <= 0.0f || rect.size.y <= 0.0f)
+                return;
+            radius = std::clamp(radius, 0.0f,
+                std::min(rect.size.x, rect.size.y) * 0.5f);
+            if (radius <= 0.0f)
+            {
+                canvas.quad(rect.position, rect.position + rect.size, color);
+                return;
+            }
+            const Vec2 minimum = rect.position;
+            const Vec2 maximum = rect.position + rect.size;
+            canvas.quad({ minimum.x + radius, minimum.y },
+                { maximum.x - radius, maximum.y }, color);
+            canvas.quad({ minimum.x, minimum.y + radius },
+                { maximum.x, maximum.y - radius }, color);
+            canvas.circle({ minimum.x + radius, minimum.y + radius }, radius, color, 12);
+            canvas.circle({ maximum.x - radius, minimum.y + radius }, radius, color, 12);
+            canvas.circle({ minimum.x + radius, maximum.y - radius }, radius, color, 12);
+            canvas.circle({ maximum.x - radius, maximum.y - radius }, radius, color, 12);
+        }
+
         void add_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color fill,
             Color outline = {}, float border_width = 0.0f)
         {
-            static_cast<void>(radius);
-            canvas.quad(rect.position, rect.position + rect.size, fill);
             if (border_width <= 0.0f)
+            {
+                fill_rounded_rect(canvas, rect, radius, fill);
                 return;
-            const Vec2 minimum = rect.position;
-            const Vec2 maximum = rect.position + rect.size;
-            canvas.quad(minimum, { maximum.x, minimum.y + border_width }, outline);
-            canvas.quad({ minimum.x, maximum.y - border_width }, maximum, outline);
-            canvas.quad(minimum, { minimum.x + border_width, maximum.y }, outline);
-            canvas.quad({ maximum.x - border_width, minimum.y }, maximum, outline);
+            }
+            fill_rounded_rect(canvas, rect, radius, outline);
+            const float inset = std::clamp(border_width, 0.0f,
+                std::min(rect.size.x, rect.size.y) * 0.5f);
+            fill_rounded_rect(canvas,
+                { rect.position + Vec2{ inset, inset },
+                  rect.size - Vec2{ inset * 2.0f, inset * 2.0f } },
+                std::max(0.0f, radius - inset), fill);
         }
 
         void add_text(render::Canvas& canvas, Vec2 position, std::string_view text, float scale, Color color)
@@ -213,6 +238,7 @@ namespace runner
             humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
         };
         enum class RigPanelPage : std::uint8_t { body, motor };
+        enum class LivePanelPage : std::uint8_t { results, totals };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
         render::Canvas canvas{};
@@ -222,6 +248,7 @@ namespace runner
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
         RigPanelPage rig_panel_page{ RigPanelPage::body };
+        LivePanelPage live_panel_page{ LivePanelPage::results };
         int selected_node{ -1 };
         int selected_motor{};
         bool dragging_node{};
@@ -244,6 +271,11 @@ namespace runner
         std::uint64_t rig_start_flips{};
         std::uint64_t rig_start_obstacles{};
         double rig_start_distance{};
+        double rig_start_training_seconds{};
+        std::uint64_t rig_start_accepted_rigs{};
+        std::uint64_t rig_start_rejected_rigs{};
+        std::uint64_t rig_start_rollbacks{};
+        std::uint64_t session_start_environment_steps{};
         std::uint64_t session_start_episodes{};
         std::uint64_t session_start_invalid_episodes{};
         std::uint64_t session_start_resets{};
@@ -252,6 +284,10 @@ namespace runner
         std::uint64_t session_start_flips{};
         std::uint64_t session_start_obstacles{};
         double session_start_distance{};
+        double session_start_training_seconds{};
+        std::uint64_t session_start_accepted_rigs{};
+        std::uint64_t session_start_rejected_rigs{};
+        std::uint64_t session_start_rollbacks{};
         std::uint8_t rig_best_stage{};
         bool session_stats_initialized{};
         bool rig_edit_pending{};
@@ -777,112 +813,147 @@ namespace runner
                 distance_units = ui_layout::DistanceUnits::imperial;
             cursor.y += 53.0f;
 
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 247.0f } },
-                8.0f, panel_alt, border, 1.0f);
-            add_text(canvas, cursor, "TRAINING RESULTS", 1.18f, accent);
-            cursor.y += 31.0f;
-            add_text_fit(canvas, cursor, std::format("UPDATE {}   ENV STEPS {}",
-                metrics.update, metrics.environment_steps), 1.10f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("EVAL {:+.2f}   DIST {}",
-                metrics.evaluation_score, format_distance(metrics.evaluation_distance)), 1.10f,
-                metrics.evaluation_valid ? green : danger, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("BEST {:+.2f} @ UPDATE {}",
-                metrics.best_evaluation_score, metrics.best_update), 1.10f, accent, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("SURVIVAL {:.1f} S   STRIDES {:.1f}",
-                metrics.evaluation_survival, metrics.evaluation_stride_events), 1.08f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
-                metrics.evaluation_stable_stance, metrics.evaluation_longest_stance,
-                metrics.evaluation_duck_recoveries), 1.05f,
-                metrics.evaluation_valid ? green : danger, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
-                metrics.evaluation_quality_key,
-                rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
-                0.98f, metrics.evaluation_valid ? accent : danger, usable_width, 0.82f);
-            cursor.y += 45.0f;
+            if (button({ cursor, { half, 38.0f } }, "TRAINING RESULTS", input,
+                live_panel_page == LivePanelPage::results))
+                live_panel_page = LivePanelPage::results;
+            if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 38.0f } },
+                "LIFETIME TOTALS", input, live_panel_page == LivePanelPage::totals))
+                live_panel_page = LivePanelPage::totals;
+            cursor.y += 47.0f;
 
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 323.0f } },
-                8.0f, panel_alt, border, 1.0f);
-            add_text(canvas, cursor, "RUNTIME", 1.18f, accent);
-            cursor.y += 31.0f;
-            add_text_fit(canvas, cursor, std::format("{} ROLLOUT THREADS   {} ENVIRONMENTS",
-                autonomy.rollout_threads, autonomy.environment_count), 1.06f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("{:.2f} UPDATES/S   MODE {}",
-                autonomy.updates_per_second, autonomy.speed_mode), 1.06f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("COMMANDS {}   {}",
-                autonomy.pending_commands, autonomy.worker_busy ? "TRAINER BUSY" : "TRAINER IDLE"),
-                1.06f, autonomy.worker_busy ? yellow : green, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("PIPELINE {}   MASK {:02X}",
-                autonomy.pipeline_stage, autonomy.pipeline_stage_mask),
-                1.02f, autonomy.worker_busy ? yellow : green, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("RIG GEN {}   ACCEPTED {}   REJECTED {}",
-                autonomy.rig_generation, autonomy.accepted_rig_changes, autonomy.rejected_rig_changes),
-                1.02f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("RIG {}  UPD {}  ENV {}  BEST STAGE {}",
-                format_duration(rig_lifetime_seconds),
-                ui_layout::lifetime_delta(metrics.update, rig_start_update),
-                ui_layout::lifetime_delta(metrics.environment_steps, rig_start_environment_steps),
-                static_cast<unsigned>(rig_best_stage) + 1u), 0.94f, white, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("RIG EPS {}  VALID {}  INVALID {}  DIST {}",
-                ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
-                ui_layout::lifetime_delta(metrics.total_valid_episodes, rig_start_valid_episodes),
-                ui_layout::lifetime_delta(metrics.total_invalid_episodes, rig_start_invalid_episodes),
-                format_distance(static_cast<float>(std::max(0.0,
-                    metrics.total_distance - rig_start_distance)))), 0.90f, white, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("RIG STEPS {}  FALLS {}  COLL {}  OBS {}",
-                ui_layout::lifetime_delta(metrics.total_alternating_steps, rig_start_steps),
-                ui_layout::lifetime_delta(metrics.total_falls, rig_start_falls),
-                ui_layout::lifetime_delta(metrics.total_collisions, rig_start_collisions),
-                ui_layout::lifetime_delta(metrics.total_obstacles_passed, rig_start_obstacles)),
-                0.90f, white, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("RIG JUMP {} / LAND {}  FLIPS {}",
-                ui_layout::lifetime_delta(metrics.total_powered_jumps, rig_start_jumps),
-                ui_layout::lifetime_delta(metrics.total_landed_jumps, rig_start_landings),
-                ui_layout::lifetime_delta(metrics.total_landed_flips, rig_start_flips)),
-                0.90f, white, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("SESSION {}  EPS {}  BAD {}  DIST {}",
-                format_duration(session_runtime_seconds),
-                ui_layout::lifetime_delta(metrics.total_episodes, session_start_episodes),
-                ui_layout::lifetime_delta(metrics.total_invalid_episodes,
-                    session_start_invalid_episodes),
-                format_distance(static_cast<float>(std::max(0.0,
-                    metrics.total_distance - session_start_distance)))),
-                0.88f, muted, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("ALL UPD {} ENV {} EPS {} RESET {} ROLLBACK {}",
-                metrics.update, metrics.environment_steps, metrics.total_episodes,
-                metrics.total_resets, autonomy.rollback_count), 0.86f, muted, usable_width);
-            cursor.y += 25.0f;
-            add_text_fit(canvas, cursor, std::format("ALL DIST {} COLL {} JUMP {} FLIP {} OBS {}",
-                format_distance(static_cast<float>(metrics.total_distance)),
-                metrics.total_collisions, metrics.total_powered_jumps,
-                metrics.total_landed_flips, metrics.total_obstacles_passed),
-                0.84f, muted, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   POWERED AIR / <=3 SPINS / <50 KM/H",
-                autonomy.rollback_count), 1.00f, white, usable_width);
-            cursor.y += 45.0f;
-
-            cursor.y += add_wrapped_text(canvas, cursor,
-                "GROUND-CONTACT ENEMY / SOFT START / CHECKPOINTED RIG EVOLUTION",
-                1.06f, muted, usable_width, 4.0f);
-            cursor.y += 10.0f;
-            add_wrapped_text(canvas, cursor,
-                "NO GROUND ROLLING / HAZARD TOUCH ALLOWED / PASS THE GOAL",
-                1.06f, muted, usable_width, 4.0f);
+            if (live_panel_page == LivePanelPage::results)
+            {
+                add_rounded_rect(canvas,
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 247.0f } },
+                    8.0f, panel_alt, border, 1.0f);
+                add_text(canvas, cursor, "TRAINING RESULTS", 1.18f, accent);
+                cursor.y += 31.0f;
+                add_text_fit(canvas, cursor, std::format("UPDATE {}   ENV STEPS {}",
+                    metrics.update, metrics.environment_steps), 1.10f, white, usable_width);
+                cursor.y += 29.0f;
+                add_text_fit(canvas, cursor, std::format("EVAL {:+.2f}   DIST {}",
+                    metrics.evaluation_score, format_distance(metrics.evaluation_distance)),
+                    1.10f, metrics.evaluation_valid ? green : danger, usable_width);
+                cursor.y += 29.0f;
+                add_text_fit(canvas, cursor, std::format("BEST {:+.2f} @ UPDATE {}",
+                    metrics.best_evaluation_score, metrics.best_update),
+                    1.10f, accent, usable_width);
+                cursor.y += 29.0f;
+                add_text_fit(canvas, cursor, std::format("SURVIVAL {:.1f} S   STRIDES {:.1f}",
+                    metrics.evaluation_survival, metrics.evaluation_stride_events),
+                    1.08f, white, usable_width);
+                cursor.y += 29.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
+                        metrics.evaluation_stable_stance,
+                        metrics.evaluation_longest_stance,
+                        metrics.evaluation_duck_recoveries),
+                    1.05f, metrics.evaluation_valid ? green : danger, usable_width);
+                cursor.y += 29.0f;
+                add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
+                    metrics.evaluation_quality_key,
+                    rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
+                    0.98f, metrics.evaluation_valid ? accent : danger,
+                    usable_width, 0.82f);
+            }
+            else
+            {
+                add_rounded_rect(canvas,
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 318.0f } },
+                    8.0f, panel_alt, border, 1.0f);
+                add_text(canvas, cursor, "RIG / SESSION / ALL-TIME TOTALS", 1.08f, accent);
+                cursor.y += 27.0f;
+                add_text_fit(canvas, cursor, std::format("{} WORKERS {} ENV {:.2f} UPDATES/S {}",
+                    autonomy.rollout_threads, autonomy.environment_count,
+                    autonomy.updates_per_second, autonomy.speed_mode),
+                    0.76f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("RIG {} UPD {} ENV {} BEST STAGE {}",
+                    format_duration(rig_lifetime_seconds),
+                    ui_layout::lifetime_delta(metrics.update, rig_start_update),
+                    ui_layout::lifetime_delta(metrics.environment_steps,
+                        rig_start_environment_steps),
+                    static_cast<unsigned>(rig_best_stage) + 1u),
+                    0.78f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("RIG EPS {} VALID {} BAD {} DIST {}",
+                    ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
+                    ui_layout::lifetime_delta(metrics.total_valid_episodes,
+                        rig_start_valid_episodes),
+                    ui_layout::lifetime_delta(metrics.total_invalid_episodes,
+                        rig_start_invalid_episodes),
+                    format_distance(static_cast<float>(std::max(0.0,
+                        metrics.total_distance - rig_start_distance)))),
+                    0.76f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("RIG STEP {} FALL {} COLL {} OBS {}",
+                    ui_layout::lifetime_delta(metrics.total_alternating_steps, rig_start_steps),
+                    ui_layout::lifetime_delta(metrics.total_falls, rig_start_falls),
+                    ui_layout::lifetime_delta(metrics.total_collisions, rig_start_collisions),
+                    ui_layout::lifetime_delta(metrics.total_obstacles_passed,
+                        rig_start_obstacles)), 0.76f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("RIG JUMP {} LAND {} FLIP {} TRAIN {}",
+                    ui_layout::lifetime_delta(metrics.total_powered_jumps, rig_start_jumps),
+                    ui_layout::lifetime_delta(metrics.total_landed_jumps, rig_start_landings),
+                    ui_layout::lifetime_delta(metrics.total_landed_flips, rig_start_flips),
+                    format_duration(static_cast<float>(std::max(0.0,
+                        metrics.total_training_seconds - rig_start_training_seconds)))),
+                    0.74f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("RIG ACCEPT {} REJECT {} ROLLBACK {}",
+                    ui_layout::lifetime_delta(autonomy.accepted_rig_changes,
+                        rig_start_accepted_rigs),
+                    ui_layout::lifetime_delta(autonomy.rejected_rig_changes,
+                        rig_start_rejected_rigs),
+                    ui_layout::lifetime_delta(autonomy.rollback_count, rig_start_rollbacks)),
+                    0.74f, white, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("SESSION {} TRAIN {} ENV {} EPS {} BAD {}",
+                    format_duration(session_runtime_seconds),
+                    format_duration(static_cast<float>(std::max(0.0,
+                        metrics.total_training_seconds - session_start_training_seconds))),
+                    ui_layout::lifetime_delta(metrics.total_environment_steps,
+                        session_start_environment_steps),
+                    ui_layout::lifetime_delta(metrics.total_episodes, session_start_episodes),
+                    ui_layout::lifetime_delta(metrics.total_invalid_episodes,
+                        session_start_invalid_episodes)), 0.70f, muted, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("SESSION DIST {} COLL {} JUMP {} FLIP {} OBS {}",
+                    format_distance(static_cast<float>(std::max(0.0,
+                        metrics.total_distance - session_start_distance))),
+                    ui_layout::lifetime_delta(metrics.total_collisions,
+                        session_start_collisions),
+                    ui_layout::lifetime_delta(metrics.total_powered_jumps, session_start_jumps),
+                    ui_layout::lifetime_delta(metrics.total_landed_flips, session_start_flips),
+                    ui_layout::lifetime_delta(metrics.total_obstacles_passed,
+                        session_start_obstacles)), 0.70f, muted, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("SESSION ACCEPT {} REJECT {} RESET {} RB {}",
+                    ui_layout::lifetime_delta(autonomy.accepted_rig_changes,
+                        session_start_accepted_rigs),
+                    ui_layout::lifetime_delta(autonomy.rejected_rig_changes,
+                        session_start_rejected_rigs),
+                    ui_layout::lifetime_delta(metrics.total_resets, session_start_resets),
+                    ui_layout::lifetime_delta(autonomy.rollback_count,
+                        session_start_rollbacks)), 0.70f, muted, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("ALL TRAIN {} UPD {} ENV {} EPS {} RESET {}",
+                    format_duration(static_cast<float>(metrics.total_training_seconds)),
+                    metrics.total_updates, metrics.total_environment_steps,
+                    metrics.total_episodes, metrics.total_resets),
+                    0.70f, muted, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("ALL DIST {} COLL {} JUMP {} FLIP {} OBS {}",
+                    format_distance(static_cast<float>(metrics.total_distance)),
+                    metrics.total_collisions, metrics.total_powered_jumps,
+                    metrics.total_landed_flips, metrics.total_obstacles_passed),
+                    0.70f, muted, usable_width);
+                cursor.y += 22.0f;
+                add_text_fit(canvas, cursor, std::format("ALL ACCEPT {} REJECT {} ROLLBACK {}",
+                    autonomy.accepted_rig_changes, autonomy.rejected_rig_changes,
+                    autonomy.rollback_count), 0.70f, muted, usable_width);
+            }
         }
 
         void draw_live_world(Rect viewport, float dt)
@@ -1463,9 +1534,11 @@ namespace runner
             status_time = std::max(0.0f, status_time - dt);
             session_runtime_seconds += std::max(0.0f, dt);
             const rl::TrainingMetrics& current_metrics = trainer.metrics();
+            const rl::AutonomyStatus& current_autonomy = trainer.autonomy_status();
             if (!session_stats_initialized)
             {
                 session_stats_initialized = true;
+                session_start_environment_steps = current_metrics.total_environment_steps;
                 session_start_episodes = current_metrics.total_episodes;
                 session_start_invalid_episodes = current_metrics.total_invalid_episodes;
                 session_start_resets = current_metrics.total_resets;
@@ -1474,6 +1547,10 @@ namespace runner
                 session_start_flips = current_metrics.total_landed_flips;
                 session_start_obstacles = current_metrics.total_obstacles_passed;
                 session_start_distance = current_metrics.total_distance;
+                session_start_training_seconds = current_metrics.total_training_seconds;
+                session_start_accepted_rigs = current_autonomy.accepted_rig_changes;
+                session_start_rejected_rigs = current_autonomy.rejected_rig_changes;
+                session_start_rollbacks = current_autonomy.rollback_count;
             }
             const std::uint64_t current_signature = trainer.rig_signature();
             if (tracked_rig_signature == 0u || tracked_rig_signature != current_signature)
@@ -1493,13 +1570,17 @@ namespace runner
                 rig_start_flips = current_metrics.total_landed_flips;
                 rig_start_obstacles = current_metrics.total_obstacles_passed;
                 rig_start_distance = current_metrics.total_distance;
-                rig_best_stage = static_cast<std::uint8_t>(trainer.autonomy_status().stage);
+                rig_start_training_seconds = current_metrics.total_training_seconds;
+                rig_start_accepted_rigs = current_autonomy.accepted_rig_changes;
+                rig_start_rejected_rigs = current_autonomy.rejected_rig_changes;
+                rig_start_rollbacks = current_autonomy.rollback_count;
+                rig_best_stage = static_cast<std::uint8_t>(current_autonomy.stage);
             }
             else
             {
                 rig_lifetime_seconds += std::max(0.0f, dt);
                 rig_best_stage = std::max(rig_best_stage,
-                    static_cast<std::uint8_t>(trainer.autonomy_status().stage));
+                    static_cast<std::uint8_t>(current_autonomy.stage));
             }
             if (joint_auto_sweep)
             {
