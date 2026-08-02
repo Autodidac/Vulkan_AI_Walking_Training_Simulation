@@ -6,6 +6,7 @@ import runpy
 root = Path(__file__).resolve().parents[1]
 applicator = Path(__file__).with_name("apply_v073_runtime_fix.py")
 feedback = Path(__file__).with_name("apply_v073_feedback_fix.py")
+integrity_tune = Path(__file__).with_name("apply_v073_integrity_tune.py")
 original = applicator.read_text(encoding="utf-8")
 text = original
 
@@ -63,10 +64,11 @@ try:
 finally:
     applicator.write_text(original, encoding="utf-8", newline="\n")
 
-try:
-    runpy.run_path(str(feedback), run_name="__main__")
-except SystemExit as exit_signal:
-    if exit_signal.code not in (None, 0):
-        raise
+for script in (feedback, integrity_tune):
+    try:
+        runpy.run_path(str(script), run_name="__main__")
+    except SystemExit as exit_signal:
+        if exit_signal.code not in (None, 0):
+            raise
 
 print("materialized v0.7.3 runtime and live-feedback source cleanly")
