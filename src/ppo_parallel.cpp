@@ -40,6 +40,12 @@ namespace epochrunner::rl
             float spin_turns{};
             float spin_landings{};
             float obstacles_passed{};
+            float stable_stance{};
+            float longest_stance{};
+            float duck_recoveries{};
+            float maximum_joint_speed{};
+            std::uint64_t minimum_quality{ std::numeric_limits<std::uint64_t>::max() };
+            std::uint32_t rejection_mask{};
             std::size_t speed_samples{};
             std::uint32_t invalid_runs{};
         };
@@ -162,21 +168,34 @@ namespace epochrunner::rl
                             float episode_reward{};
                             for (int step = 0; step < maximum_steps; ++step)
                             {
-                                const auto action = local.deterministic_action(environment.observation());
+                                const auto raw_action = local.deterministic_action(
+                                    environment.observation());
+                                const auto action = effective_policy_action(
+                                    environment, raw_action, current_stage);
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;
                                 ++totals.speed_samples;
+                                if (current_stage == sim::CourseStage::balance
+                                    && environment.valid_motion()
+                                    && environment.longest_stable_stance_seconds() >= 3.0f)
+                                    break;
                                 if (result.terminated)
                                     break;
                             }
 
-                            const bool skill_valid = sim::stage_skill_evidence(current_stage,
-                                environment.alternating_steps(), environment.duck_seconds(),
-                                environment.landed_jumps(), environment.maximum_spin_turns(),
-                                environment.spin_landings(), environment.obstacles_passed());
-                            if (!environment.valid_motion() || !skill_valid)
+                            const StageMotionQualification qualification =
+                                stage_motion_qualification(current_stage, environment);
+                            if (!qualification.valid)
+                            {
                                 ++totals.invalid_runs;
+                                totals.rejection_mask |= qualification.rejection_mask;
+                            }
+                            else
+                            {
+                                totals.minimum_quality = std::min(
+                                    totals.minimum_quality, qualification.quality_key);
+                            }
                             totals.reward += episode_reward;
                             totals.distance += environment.distance_travelled();
                             totals.survival += environment.elapsed_seconds();
@@ -189,6 +208,11 @@ namespace epochrunner::rl
                             totals.spin_turns += environment.maximum_spin_turns();
                             totals.spin_landings += static_cast<float>(environment.spin_landings());
                             totals.obstacles_passed += static_cast<float>(environment.obstacles_passed());
+                            totals.stable_stance += environment.stable_stance_seconds();
+                            totals.longest_stance += environment.longest_stable_stance_seconds();
+                            totals.duck_recoveries += static_cast<float>(environment.duck_recoveries());
+                            totals.maximum_joint_speed = std::max(
+                                totals.maximum_joint_speed, environment.maximum_joint_speed());
                         }
                     }
                     evaluation_totals[worker_index] = totals;
@@ -365,6 +389,13 @@ namespace epochrunner::rl
             totals.spin_turns += local.spin_turns;
             totals.spin_landings += local.spin_landings;
             totals.obstacles_passed += local.obstacles_passed;
+            totals.stable_stance += local.stable_stance;
+            totals.longest_stance += local.longest_stance;
+            totals.duck_recoveries += local.duck_recoveries;
+            totals.maximum_joint_speed = std::max(
+                totals.maximum_joint_speed, local.maximum_joint_speed);
+            totals.minimum_quality = std::min(totals.minimum_quality, local.minimum_quality);
+            totals.rejection_mask |= local.rejection_mask;
             totals.speed_samples += local.speed_samples;
             totals.invalid_runs += local.invalid_runs;
         }
@@ -385,8 +416,20 @@ namespace epochrunner::rl
         metrics_.evaluation_spin_turns = totals.spin_turns * inverse_agents;
         metrics_.evaluation_spin_landings = totals.spin_landings * inverse_agents;
         metrics_.evaluation_obstacles_passed = totals.obstacles_passed * inverse_agents;
+        metrics_.evaluation_stable_stance = totals.stable_stance * inverse_agents;
+        metrics_.evaluation_longest_stance = totals.longest_stance * inverse_agents;
+        metrics_.evaluation_duck_recoveries = totals.duck_recoveries * inverse_agents;
+        metrics_.evaluation_max_joint_speed = totals.maximum_joint_speed;
+        constexpr std::uint32_t robust_balance_failures_allowed = 2u;
+        const std::uint32_t allowed_invalid_runs = course_stage_ == sim::CourseStage::balance
+            ? robust_balance_failures_allowed : 0u;
         metrics_.evaluation_invalid_runs = totals.invalid_runs;
-        metrics_.evaluation_valid = totals.invalid_runs == 0;
+        metrics_.evaluation_valid = totals.invalid_runs <= allowed_invalid_runs
+            && totals.minimum_quality != std::numeric_limits<std::uint64_t>::max();
+        metrics_.evaluation_rejection_mask = metrics_.evaluation_valid
+            ? 0u : totals.rejection_mask;
+        metrics_.evaluation_quality_key = metrics_.evaluation_valid
+            ? totals.minimum_quality : 0u;
 
         if (!metrics_.evaluation_valid)
         {
@@ -398,8 +441,11 @@ namespace epochrunner::rl
             switch (course_stage_)
             {
             case sim::CourseStage::balance:
-                metrics_.evaluation_score = metrics_.evaluation_survival * 0.10f
-                    + metrics_.evaluation_reward
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_stable_stance * 0.30f
+                    + metrics_.evaluation_longest_stance * 0.12f
+                    + metrics_.evaluation_survival * 0.04f
+                    - metrics_.evaluation_max_joint_speed * 0.015f
                     - std::abs(metrics_.evaluation_distance) * 0.20f;
                 break;
             case sim::CourseStage::walk:
@@ -448,10 +494,15 @@ namespace epochrunner::rl
         }
         ++metrics_.evaluation_count;
 
-        const bool regressed = !best_parameters_.empty()
+        const bool has_best = !best_parameters_.empty();
+        const bool quality_regressed = has_best
+            && (!metrics_.evaluation_valid
+                || metrics_.evaluation_quality_key < metrics_.best_quality_key);
+        const bool score_regressed = has_best && metrics_.evaluation_valid
+            && metrics_.evaluation_quality_key == metrics_.best_quality_key
             && policy_regression_guard(metrics_.best_evaluation_score,
-                metrics_.evaluation_score, metrics_.evaluation_valid);
-        if (regressed)
+                metrics_.evaluation_score, true);
+        if (quality_regressed || score_regressed)
         {
             policy_.parameters() = best_parameters_;
             adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
@@ -462,20 +513,17 @@ namespace epochrunner::rl
             preview_.reset(0xDEADBEEFu + metrics_.update);
             controller_state_ = ControllerState::resumed;
         }
-        else
+        else if (metrics_.evaluation_valid
+            && policy_candidate_better(metrics_.evaluation_quality_key,
+                metrics_.evaluation_score, metrics_.best_quality_key,
+                metrics_.best_evaluation_score, has_best))
         {
-            const float improvement_margin = best_parameters_.empty() ? 0.0f
-                : std::max(0.015f, std::abs(metrics_.best_evaluation_score) * 0.004f);
-            if (metrics_.evaluation_valid
-                && (best_parameters_.empty()
-                    || metrics_.evaluation_score > metrics_.best_evaluation_score + improvement_margin))
-            {
-                best_parameters_ = policy_.parameters();
-                metrics_.best_evaluation_distance = metrics_.evaluation_distance;
-                metrics_.best_evaluation_score = metrics_.evaluation_score;
-                metrics_.best_update = metrics_.update;
-                refresh_self_imitation_prior();
-            }
+            best_parameters_ = policy_.parameters();
+            metrics_.best_evaluation_distance = metrics_.evaluation_distance;
+            metrics_.best_evaluation_score = metrics_.evaluation_score;
+            metrics_.best_quality_key = metrics_.evaluation_quality_key;
+            metrics_.best_update = metrics_.update;
+            refresh_self_imitation_prior();
         }
     }
 }

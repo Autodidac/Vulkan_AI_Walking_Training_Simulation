@@ -262,9 +262,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v070-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v070-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v070-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v071-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v071-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v071-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -606,11 +606,11 @@ namespace epochrunner
         {
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.98f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 13.0f, 10.0f },
-                "RAW TRAINING SAMPLE", 1.03f, accent);
+                "STAGE-VALID TRAINING SAMPLE", 1.03f, accent);
             if (!trainer.has_training_preview())
             {
                 add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
-                    "WAITING FOR FIRST ROLLOUT", 1.02f, muted, rect.size.x - 26.0f);
+                    "NO STAGE-VALID ROLLOUT YET", 1.02f, muted, rect.size.x - 26.0f);
                 return;
             }
 
@@ -725,13 +725,15 @@ namespace epochrunner
             add_text_fit(canvas, cursor, std::format("SURVIVAL {:.1f} S   STRIDES {:.1f}",
                 metrics.evaluation_survival, metrics.evaluation_stride_events), 1.08f, white, usable_width);
             cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("COLLISIONS {:.1f}   AIRBORNE {:.0f}%",
-                metrics.evaluation_collisions, metrics.evaluation_airborne_ratio * 100.0f),
-                1.08f, white, usable_width);
+            add_text_fit(canvas, cursor, std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
+                metrics.evaluation_stable_stance, metrics.evaluation_longest_stance,
+                metrics.evaluation_duck_recoveries), 1.05f,
+                metrics.evaluation_valid ? green : danger, usable_width);
             cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("BEST-RESULT GUIDE {} FRAMES   WEIGHT {:.0f}%",
-                metrics.imitation_samples, metrics.imitation_weight * 100.0f),
-                1.04f, metrics.imitation_samples > 0 ? accent : muted, usable_width);
+            add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
+                metrics.evaluation_quality_key,
+                rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
+                0.98f, metrics.evaluation_valid ? accent : danger, usable_width, 0.82f);
             cursor.y += 45.0f;
 
             add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 259.0f } },
@@ -803,8 +805,10 @@ namespace epochrunner
                     environment.maximum_spin_turns(), environment.obstacles_passed()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
-                "LIVE SAND-SIM ENEMY CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE",
-                1.05f, muted, overlay_width, 1.00f);
+                trainer.has_best_policy()
+                    ? "BEST STAGE-VALID CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
+                    : "CURRENT POLICY UNVERIFIED   v" EPOCHRUNNER_VERSION "   SEARCHING FOR VALID STANCE",
+                1.05f, trainer.has_best_policy() ? muted : danger, overlay_width, 1.00f);
 
             const ui_layout::Box pip = ui_layout::training_pip_box({
                 viewport.position.x, viewport.position.y, viewport.size.x, viewport.size.y });

@@ -29,9 +29,25 @@ namespace epochrunner::rl
             return std::sqrt(-2.0f * std::log(u1)) * std::cos(2.0f * pi * u2);
         }
 
-        [[nodiscard]] float gait_bootstrap_weight(std::uint64_t update,
+        [[nodiscard]] float skill_bootstrap_weight(std::uint64_t update,
             sim::CourseStage stage) noexcept
         {
+            if (stage == sim::CourseStage::balance)
+            {
+                if (update < 500u)
+                    return 0.92f;
+                if (update < 2500u)
+                {
+                    const float t = static_cast<float>(update - 500u) / 2000.0f;
+                    return lerp(0.92f, 0.45f, t);
+                }
+                if (update < 8000u)
+                {
+                    const float t = static_cast<float>(update - 2500u) / 5500.0f;
+                    return lerp(0.45f, 0.08f, t);
+                }
+                return 0.05f;
+            }
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
             if (update < 400u)
@@ -49,9 +65,11 @@ namespace epochrunner::rl
             return 0.0f;
         }
 
-        [[nodiscard]] std::array<float, sim::action_count> gait_bootstrap_action(
-            const sim::Environment& environment) noexcept
+        [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
+            const sim::Environment& environment, sim::CourseStage stage) noexcept
         {
+            if (stage == sim::CourseStage::balance)
+                return balance_teacher_action(environment);
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
             const float swing = std::sin(phase);
             const float lift_left = std::max(0.0f, swing);
@@ -140,8 +158,8 @@ namespace epochrunner::rl
                 transition.value = evaluation.value;
                 transition.action = sample_action(evaluation, local_random, transition.log_probability);
 
-                const float bootstrap = gait_bootstrap_weight(metrics_.update, course_stage_);
-                const auto guided = gait_bootstrap_action(environment);
+                const float bootstrap = skill_bootstrap_weight(metrics_.update, course_stage_);
+                const auto guided = skill_bootstrap_action(environment, course_stage_);
                 std::array<float, sim::action_count>& previous_action
                     = rollout_previous_actions_[environment_index];
                 for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
@@ -261,6 +279,12 @@ namespace epochrunner::rl
         metrics_.evaluation_spin_turns = 0.0f;
         metrics_.evaluation_spin_landings = 0.0f;
         metrics_.evaluation_obstacles_passed = 0.0f;
+        metrics_.evaluation_stable_stance = 0.0f;
+        metrics_.evaluation_longest_stance = 0.0f;
+        metrics_.evaluation_duck_recoveries = 0.0f;
+        metrics_.evaluation_max_joint_speed = 0.0f;
+        metrics_.evaluation_quality_key = 0u;
+        metrics_.evaluation_rejection_mask = 0u;
         metrics_.evaluation_invalid_runs = 0;
         metrics_.evaluation_valid = false;
         metrics_.learning_rate = 3.0e-4f;
@@ -270,6 +294,7 @@ namespace epochrunner::rl
             clear_self_imitation_prior();
             metrics_.best_evaluation_distance = -std::numeric_limits<float>::infinity();
             metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
+            metrics_.best_quality_key = 0u;
             metrics_.best_update = 0;
         }
     }
@@ -601,7 +626,8 @@ namespace epochrunner::rl
 
     void PpoTrainer::step_preview(float dt)
     {
-        const auto action = policy_.deterministic_action(preview_.observation());
+        const auto raw_action = policy_.deterministic_action(preview_.observation());
+        const auto action = effective_policy_action(preview_, raw_action, course_stage_);
         if (preview_.step(action, dt).terminated)
             preview_.reset(0xDEADBEEFu + metrics_.update);
     }

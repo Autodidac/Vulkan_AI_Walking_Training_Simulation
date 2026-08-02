@@ -115,6 +115,12 @@ The humanoid proportions and asymmetric hip/knee ranges are based on a user-trai
 
 ## Build
 
+
+### One-click Windows launcher
+
+Double-click `run.bat`. In an extracted release it launches the packaged executable. In a source checkout it uses an existing Release build or configures and builds `windows-release` before launching. Command-line arguments are forwarded, including `run.bat --diagnose-package`.
+
+
 Windows:
 
 ```powershell

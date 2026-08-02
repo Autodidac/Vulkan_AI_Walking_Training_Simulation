@@ -2,10 +2,12 @@
 #include "renderer.hpp"
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -45,6 +47,56 @@ namespace
             && std::string_view(argv[1]) == "--diagnose-vulkan";
     }
 
+    [[nodiscard]] bool wants_package_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-package";
+    }
+
+    [[nodiscard]] std::filesystem::path executable_directory()
+    {
+        const char* const base_path = SDL_GetBasePath();
+        if (base_path == nullptr || *base_path == '\0')
+            return std::filesystem::current_path();
+        return std::filesystem::path{ std::u8string{ reinterpret_cast<const char8_t*>(base_path) } };
+    }
+
+    [[nodiscard]] bool validate_runtime_layout(const std::filesystem::path& base_directory,
+        std::string& error)
+    {
+        const std::array required_files{
+            std::filesystem::path{ EPOCHRUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
+            std::filesystem::path{ EPOCHRUNNER_SHADER_DIRECTORY } / "flat.frag.spv"
+        };
+        std::error_code filesystem_error{};
+        for (const std::filesystem::path& relative : required_files)
+        {
+            const std::filesystem::path absolute = base_directory / relative;
+            if (!std::filesystem::is_regular_file(absolute, filesystem_error))
+            {
+                error = "Missing packaged runtime file: " + absolute.string();
+                if (filesystem_error)
+                    error += " (" + filesystem_error.message() + ")";
+                return false;
+            }
+            filesystem_error.clear();
+        }
+
+        const std::filesystem::path asset_directory =
+            base_directory / EPOCHRUNNER_ASSET_DIRECTORY;
+        if (!std::filesystem::is_directory(asset_directory, filesystem_error))
+        {
+            error = "Missing packaged asset directory: " + asset_directory.string();
+            if (filesystem_error)
+                error += " (" + filesystem_error.message() + ")";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     [[nodiscard]] bool is_headless_surface_error(std::string_view error) noexcept
     {
         return error.find("VK_KHR_surface") != std::string_view::npos
@@ -59,12 +111,30 @@ int main(int argc, char** argv)
         std::printf("EpochRunner %s\n", EPOCHRUNNER_VERSION);
         return 0;
     }
-    const bool diagnostic = wants_vulkan_diagnostic(argc, argv);
+    const bool package_diagnostic = wants_package_diagnostic(argc, argv);
+    const bool diagnostic = wants_vulkan_diagnostic(argc, argv) || package_diagnostic;
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
+    }
+
+    const std::filesystem::path base_directory = executable_directory();
+    const std::filesystem::path shader_directory =
+        base_directory / EPOCHRUNNER_SHADER_DIRECTORY;
+    const std::filesystem::path asset_directory =
+        base_directory / EPOCHRUNNER_ASSET_DIRECTORY;
+    if (package_diagnostic)
+    {
+        std::string layout_error{};
+        if (!validate_runtime_layout(base_directory, layout_error))
+        {
+            std::fprintf(stderr, "EpochRunner package diagnostic failed: %s\n",
+                layout_error.c_str());
+            SDL_Quit();
+            return 1;
+        }
     }
 
     if (!SDL_Vulkan_LoadLibrary(nullptr))
@@ -74,8 +144,9 @@ int main(int argc, char** argv)
         {
             const char* video_driver = SDL_GetCurrentVideoDriver();
             std::printf(
-                "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; "
-                "the CI runner has no Vulkan presentation surface (%s)\n",
+                package_diagnostic
+                    ? "EpochRunner " EPOCHRUNNER_VERSION " package diagnostic passed: runtime files present, backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n"
+                    : "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n",
                 video_driver != nullptr ? video_driver : "unknown",
                 vulkan_error.c_str());
             SDL_Quit();
@@ -105,7 +176,9 @@ int main(int argc, char** argv)
     {
         const char* video_driver = SDL_GetCurrentVideoDriver();
         std::printf(
-            "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
+            package_diagnostic
+                ? "EpochRunner " EPOCHRUNNER_VERSION " package diagnostic passed: runtime files present, video_driver=%s, instance_extensions=%u\n"
+                : "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
             video_driver != nullptr ? video_driver : "unknown",
             static_cast<unsigned int>(instance_extension_count));
         SDL_Vulkan_UnloadLibrary();
@@ -129,7 +202,7 @@ int main(int argc, char** argv)
 
     epochrunner::render::VulkanRenderer renderer{};
     std::string error{};
-    if (!renderer.initialize(window, std::filesystem::path(EPOCHRUNNER_SHADER_DIRECTORY), error))
+    if (!renderer.initialize(window, shader_directory, error))
     {
         std::fprintf(stderr, "Vulkan initialization failed: %s\n", error.c_str());
         SDL_DestroyWindow(window);
@@ -139,7 +212,7 @@ int main(int argc, char** argv)
     }
 
     epochrunner::Application application{};
-    if (!application.initialize(std::filesystem::path(EPOCHRUNNER_ASSET_DIRECTORY), error))
+    if (!application.initialize(asset_directory, error))
     {
         std::fprintf(stderr, "Application initialization failed: %s\n", error.c_str());
         renderer.shutdown();

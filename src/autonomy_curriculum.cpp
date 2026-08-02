@@ -12,14 +12,18 @@ namespace epochrunner::rl
     bool AutonomousTrainer::stage_mastered_locked() const noexcept
     {
         const TrainingMetrics& metrics = worker_.metrics();
-        if (!metrics.evaluation_valid)
+        if (!metrics.evaluation_valid || metrics.evaluation_quality_key == 0u)
             return false;
         switch (stage_)
         {
         case sim::CourseStage::balance:
-            return metrics.evaluation_survival >= 10.0f && metrics.evaluation_score >= 0.55f;
+            return metrics.evaluation_longest_stance >= 3.0f
+                && metrics.evaluation_survival >= 3.0f
+                && metrics.evaluation_max_joint_speed <= 12.0f;
         case sim::CourseStage::walk:
-            return metrics.evaluation_duck_seconds >= 2.0f
+            return metrics.evaluation_duck_recoveries >= 1.0f
+                && metrics.evaluation_stable_stance >= 1.0f
+                && metrics.evaluation_duck_seconds >= 2.0f
                 && metrics.evaluation_survival >= 8.0f;
         case sim::CourseStage::ramps:
             return metrics.evaluation_jump_landings >= 2.0f
@@ -74,8 +78,9 @@ namespace epochrunner::rl
 
         if (!metrics.evaluation_valid)
         {
-            worker_message_ = std::format("INVALID RUN REJECTED - {} FAILED GROUNDED-ENEMY GATES",
-                metrics.evaluation_invalid_runs);
+            worker_message_ = std::format("INVALID RUN REJECTED - {} / {}",
+                metrics.evaluation_invalid_runs,
+                primary_motion_rejection_name(metrics.evaluation_rejection_mask));
         }
         else if (mastery_streak_ >= 3)
         {
@@ -139,11 +144,9 @@ namespace epochrunner::rl
                     if (result.terminated)
                         break;
                 }
-                const bool skill_valid = sim::stage_skill_evidence(stage,
-                    environment.alternating_steps(), environment.duck_seconds(),
-                    environment.landed_jumps(), environment.maximum_spin_turns(),
-                    environment.spin_landings(), environment.obstacles_passed());
-                if (!environment.valid_motion() || !skill_valid)
+                const StageMotionQualification qualification =
+                    stage_motion_qualification(stage, environment);
+                if (!qualification.valid)
                 {
                     scores[agent] = -std::numeric_limits<float>::infinity();
                     return;

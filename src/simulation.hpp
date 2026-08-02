@@ -14,7 +14,7 @@
 namespace epochrunner::sim
 {
     inline constexpr std::size_t action_count = 8;
-    inline constexpr std::size_t observation_count = 32;
+    inline constexpr std::size_t observation_count = 40;
 
     enum class CourseStage : std::uint8_t
     {
@@ -353,6 +353,7 @@ namespace epochrunner::sim
         body_rolling,
         foot_pivot_rolling,
         zero_progress,
+        collapsed_posture,
         excessive_spins,
         hazard_quiver
     };
@@ -372,6 +373,7 @@ namespace epochrunner::sim
         case InvalidMotion::body_rolling: return "HEAD / TAIL / BODY ROLLING";
         case InvalidMotion::foot_pivot_rolling: return "FOOT-NODE SKATING / ROLLING";
         case InvalidMotion::zero_progress: return "ZERO MOVEMENT - RESET";
+        case InvalidMotion::collapsed_posture: return "COLLAPSED / UNSUPPORTED POSTURE";
         case InvalidMotion::excessive_spins: return "MORE THAN 3 SPINS";
         case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
         }
@@ -603,6 +605,8 @@ namespace epochrunner::sim
         InvalidMotion invalid_reason{ InvalidMotion::none };
     };
 
+    struct EnvironmentTestAccess;
+
     class Environment
     {
     public:
@@ -661,6 +665,20 @@ namespace epochrunner::sim
         [[nodiscard]] float zero_progress_seconds() const noexcept { return zero_progress_seconds_; }
         [[nodiscard]] float hazard_stall_seconds() const noexcept { return hazard_stall_seconds_; }
         [[nodiscard]] float obstacle_lift_clearance() const noexcept { return obstacle_lift_clearance_; }
+        [[nodiscard]] float stable_stance_seconds() const noexcept { return stable_stance_seconds_; }
+        [[nodiscard]] float longest_stable_stance_seconds() const noexcept
+        {
+            return longest_stable_stance_seconds_;
+        }
+        [[nodiscard]] std::uint32_t duck_recoveries() const noexcept
+        {
+            return duck_recovery_count_;
+        }
+        [[nodiscard]] float maximum_joint_speed() const noexcept { return maximum_joint_speed_; }
+        [[nodiscard]] float posture_failure_seconds() const noexcept
+        {
+            return posture_failure_seconds_;
+        }
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
@@ -674,6 +692,8 @@ namespace epochrunner::sim
         }
 
     private:
+        friend struct EnvironmentTestAccess;
+
         void solve_distance(const DistanceConstraint& constraint) noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
@@ -719,6 +739,14 @@ namespace epochrunner::sim
         float cumulative_airborne_{};
         float duck_seconds_{};
         float duck_depth_{};
+        float current_duck_hold_seconds_{};
+        float stable_stance_seconds_{};
+        float longest_stable_stance_seconds_{};
+        float stance_failure_grace_seconds_{};
+        float posture_failure_seconds_{};
+        float maximum_joint_speed_{};
+        std::uint32_t duck_recovery_count_{};
+        bool duck_cycle_qualified_{};
         float current_airborne_rotation_{};
         float maximum_spin_turns_{};
         std::uint32_t powered_jump_count_{};

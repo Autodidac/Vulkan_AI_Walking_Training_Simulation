@@ -20,6 +20,50 @@
 
 namespace epochrunner::rl
 {
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0103u;
+
+    [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        constexpr std::size_t joint_angle_begin = 4;
+        constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::action_count;
+        static_assert(sim::observation_count == 40);
+        const auto observation = environment.observation();
+        std::array<float, sim::action_count> action{};
+        for (std::size_t index = 0; index < action.size(); ++index)
+        {
+            const float joint_speed = observation[joint_velocity_begin + index];
+            action[index] = clamp(-0.10f * joint_speed, -0.28f, 0.28f);
+        }
+
+        action[0] = clamp(action[0] - 0.03f, -0.42f, 0.42f);
+        action[1] = clamp(action[1] + 0.03f, -0.42f, 0.42f);
+        action[2] = clamp(action[2] + 0.03f, -0.42f, 0.42f);
+        action[3] = clamp(action[3] - 0.03f, -0.42f, 0.42f);
+
+        const float correction = clamp(observation[0] * 0.38f
+            + observation[2] * 0.06f, -0.18f, 0.18f);
+        action[0] = clamp(action[0] - correction, -0.42f, 0.42f);
+        action[2] = clamp(action[2] - correction, -0.42f, 0.42f);
+        action[4] = clamp(action[4] + correction * 0.35f, -0.42f, 0.42f);
+        action[6] = clamp(action[6] + correction * 0.35f, -0.42f, 0.42f);
+        return action;
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
+        const sim::Environment& environment,
+        std::array<float, sim::action_count> policy_action,
+        sim::CourseStage stage) noexcept
+    {
+        if (stage != sim::CourseStage::balance)
+            return policy_action;
+        const auto teacher = balance_teacher_action(environment);
+        constexpr float assist = 1.00f;
+        for (std::size_t index = 0; index < policy_action.size(); ++index)
+            policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+        return policy_action;
+    }
+
     struct TrainingMetrics
     {
         std::uint64_t update{};
@@ -46,11 +90,18 @@ namespace epochrunner::rl
         float evaluation_spin_turns{};
         float evaluation_spin_landings{};
         float evaluation_obstacles_passed{};
+        float evaluation_stable_stance{};
+        float evaluation_longest_stance{};
+        float evaluation_duck_recoveries{};
+        float evaluation_max_joint_speed{};
+        std::uint64_t evaluation_quality_key{};
+        std::uint32_t evaluation_rejection_mask{};
         std::uint32_t evaluation_invalid_runs{};
         bool evaluation_valid{};
 
         float best_evaluation_distance{ -std::numeric_limits<float>::infinity() };
         float best_evaluation_score{ -std::numeric_limits<float>::infinity() };
+        std::uint64_t best_quality_key{};
         std::uint64_t best_update{};
         std::uint64_t evaluation_count{};
         std::uint32_t imitation_samples{};
@@ -76,6 +127,209 @@ namespace epochrunner::rl
             return true;
         const float allowed_drop = std::max(0.12f, std::abs(best_score) * 0.08f);
         return current_score < best_score - allowed_drop;
+    }
+
+    enum class MotionEvidenceFailure : std::uint32_t
+    {
+        none = 0,
+        invalid_motion = 1u << 0u,
+        no_stable_stance = 1u << 1u,
+        missing_recovery = 1u << 2u,
+        missing_skill = 1u << 3u,
+        missing_progress = 1u << 4u,
+        unstable_joints = 1u << 5u,
+        body_contact = 1u << 6u
+    };
+
+    struct StageMotionQualification
+    {
+        bool valid{};
+        std::uint32_t rejection_mask{};
+        std::uint64_t quality_key{};
+    };
+
+    [[nodiscard]] inline std::uint32_t evidence_bit(MotionEvidenceFailure failure) noexcept
+    {
+        return static_cast<std::uint32_t>(failure);
+    }
+
+    [[nodiscard]] inline std::string_view primary_motion_rejection_name(
+        std::uint32_t mask) noexcept
+    {
+        if ((mask & evidence_bit(MotionEvidenceFailure::invalid_motion)) != 0u)
+            return "INVALID MOTION";
+        if ((mask & evidence_bit(MotionEvidenceFailure::body_contact)) != 0u)
+            return "BODY CONTACT";
+        if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
+            return "NO SUSTAINED STANCE";
+        if ((mask & evidence_bit(MotionEvidenceFailure::missing_recovery)) != 0u)
+            return "NO CONTROLLED RECOVERY";
+        if ((mask & evidence_bit(MotionEvidenceFailure::missing_skill)) != 0u)
+            return "MISSING SKILL EVIDENCE";
+        if ((mask & evidence_bit(MotionEvidenceFailure::missing_progress)) != 0u)
+            return "NO REAL PROGRESS";
+        if ((mask & evidence_bit(MotionEvidenceFailure::unstable_joints)) != 0u)
+            return "VIOLENT JOINT MOTION";
+        return "STAGE VALID";
+    }
+
+    [[nodiscard]] inline std::uint16_t quality_bucket(float value,
+        float scale = 10.0f) noexcept
+    {
+        return static_cast<std::uint16_t>(clamp(value * scale, 0.0f, 65535.0f));
+    }
+
+    [[nodiscard]] inline std::uint64_t pack_quality(std::uint16_t primary,
+        std::uint16_t secondary, std::uint16_t tertiary, std::uint16_t quaternary) noexcept
+    {
+        return (static_cast<std::uint64_t>(primary) << 48u)
+            | (static_cast<std::uint64_t>(secondary) << 32u)
+            | (static_cast<std::uint64_t>(tertiary) << 16u)
+            | static_cast<std::uint64_t>(quaternary);
+    }
+
+    [[nodiscard]] inline StageMotionQualification stage_motion_qualification(
+        sim::CourseStage stage, const sim::Environment& environment) noexcept
+    {
+        std::uint32_t rejection = 0u;
+        if (!environment.valid_motion())
+            rejection |= evidence_bit(MotionEvidenceFailure::invalid_motion);
+        if (environment.non_foot_grounded())
+            rejection |= evidence_bit(MotionEvidenceFailure::body_contact);
+
+        switch (stage)
+        {
+        case sim::CourseStage::balance:
+            if (environment.longest_stable_stance_seconds() < 3.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.maximum_joint_speed() > 12.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
+            break;
+        case sim::CourseStage::walk:
+            if (environment.longest_stable_stance_seconds() < 2.0f
+                || environment.stable_stance_seconds() < 0.75f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
+            if (environment.maximum_joint_speed() > 12.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
+            break;
+        case sim::CourseStage::ramps:
+            if (environment.longest_stable_stance_seconds() < 1.50f
+                || environment.stable_stance_seconds() < 0.35f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.powered_jumps() < 1u || environment.landed_jumps() < 1u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            break;
+        case sim::CourseStage::uneven:
+            if (environment.longest_stable_stance_seconds() < 1.25f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.alternating_steps() < 3u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            break;
+        case sim::CourseStage::hurdles:
+            if (environment.longest_stable_stance_seconds() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.alternating_steps() < 3u
+                || environment.obstacles_passed() < 1u
+                || (environment.duck_recoveries() < 1u && environment.landed_jumps() < 1u))
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 1.5f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            break;
+        case sim::CourseStage::duck_bars:
+            if (environment.longest_stable_stance_seconds() < 1.0f
+                || environment.stable_stance_seconds() < 0.25f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.spin_landings() < 1u
+                || environment.maximum_spin_turns() < 0.75f
+                || environment.maximum_spin_turns() > 3.05f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            break;
+        case sim::CourseStage::moving_hazards:
+            if (environment.longest_stable_stance_seconds() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.alternating_steps() < 3u || environment.obstacles_passed() < 1u
+                || (environment.duck_recoveries() < 1u && environment.landed_jumps() < 1u
+                    && environment.spin_landings() < 1u))
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 2.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            break;
+        }
+
+        if (rejection != 0u)
+            return { false, rejection, 0u };
+
+        std::uint64_t quality = 0u;
+        switch (stage)
+        {
+        case sim::CourseStage::balance:
+            quality = pack_quality(
+                quality_bucket(environment.longest_stable_stance_seconds()),
+                quality_bucket(environment.stable_stance_seconds()),
+                quality_bucket(environment.elapsed_seconds()),
+                static_cast<std::uint16_t>(65535u
+                    - quality_bucket(environment.maximum_joint_speed(), 100.0f)));
+            break;
+        case sim::CourseStage::walk:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.duck_recoveries(), 65535u)),
+                quality_bucket(environment.stable_stance_seconds()),
+                quality_bucket(environment.duck_seconds()),
+                quality_bucket(environment.elapsed_seconds()));
+            break;
+        case sim::CourseStage::ramps:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.landed_jumps(), 65535u)),
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.powered_jumps(), 65535u)),
+                quality_bucket(environment.stable_stance_seconds()),
+                quality_bucket(environment.elapsed_seconds()));
+            break;
+        case sim::CourseStage::uneven:
+        case sim::CourseStage::hurdles:
+        case sim::CourseStage::moving_hazards:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.alternating_steps(), 65535u)),
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.obstacles_passed(), 65535u)),
+                quality_bucket(std::max(0.0f, environment.distance_travelled())),
+                quality_bucket(environment.elapsed_seconds()));
+            break;
+        case sim::CourseStage::duck_bars:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.spin_landings(), 65535u)),
+                quality_bucket(std::min(environment.maximum_spin_turns(), 3.0f), 100.0f),
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.landed_jumps(), 65535u)),
+                quality_bucket(environment.elapsed_seconds()));
+            break;
+        }
+        return { true, 0u, quality };
+    }
+
+    [[nodiscard]] inline bool policy_candidate_better(std::uint64_t quality,
+        float score, std::uint64_t best_quality, float best_score, bool has_best) noexcept
+    {
+        if (!has_best)
+            return quality != 0u && std::isfinite(score);
+        if (quality != best_quality)
+            return quality > best_quality;
+        const float improvement_margin = std::max(0.015f, std::abs(best_score) * 0.004f);
+        return std::isfinite(score) && score > best_score + improvement_margin;
+    }
+
+    [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage,
+        const sim::Environment& environment) noexcept
+    {
+        return stage_motion_qualification(stage, environment).valid;
     }
 
     [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,
@@ -194,6 +448,7 @@ namespace epochrunner::rl
     public:
         struct CheckpointData
         {
+            std::uint32_t training_semantics{ training_semantics_version };
             std::uint64_t rig_signature{};
             std::vector<float> parameters{};
             std::vector<float> first_moment{};

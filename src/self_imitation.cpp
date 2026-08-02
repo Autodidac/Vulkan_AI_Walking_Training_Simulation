@@ -33,6 +33,7 @@ namespace epochrunner::rl
         teacher.parameters() = best_parameters_;
         std::vector<ImitationSample> best_trajectory{};
         float best_score = -std::numeric_limits<float>::infinity();
+        std::uint64_t best_quality = 0u;
 
         for (std::size_t agent = 0; agent < candidate_agents; ++agent)
         {
@@ -45,11 +46,15 @@ namespace epochrunner::rl
             {
                 ImitationSample sample{};
                 sample.observation = environment.observation();
-                sample.action = teacher.deterministic_action(sample.observation);
+                const auto raw_action = teacher.deterministic_action(sample.observation);
+                sample.action = effective_policy_action(
+                    environment, raw_action, course_stage_);
                 const sim::StepResult result = environment.step(sample.action);
                 reward += result.reward;
                 const bool clean_demonstration_frame = environment.valid_motion()
                     && !environment.non_foot_grounded()
+                    && environment.uprightness() > 0.70f
+                    && environment.body_rolling_seconds() < 0.08f
                     && environment.foot_pivot_rolling_seconds() < 0.08f;
                 if (clean_demonstration_frame)
                     trajectory.push_back(sample);
@@ -57,11 +62,9 @@ namespace epochrunner::rl
                     break;
             }
 
-            if (!elite_motion_eligible(course_stage_, environment.valid_motion(),
-                environment.alternating_steps(), environment.distance_travelled(),
-                environment.elapsed_seconds(), environment.duck_seconds(),
-                environment.landed_jumps(), environment.maximum_spin_turns(),
-                environment.spin_landings(), environment.obstacles_passed()))
+            const StageMotionQualification qualification =
+                stage_motion_qualification(course_stage_, environment);
+            if (!qualification.valid)
                 continue;
 
             const float score = reward + environment.distance_travelled() * 0.75f
@@ -73,8 +76,11 @@ namespace epochrunner::rl
                 + static_cast<float>(environment.obstacles_passed()) * 0.35f
                 - environment.collision_count() * 0.10f
                 - environment.airborne_ratio() * 0.20f;
-            if (score > best_score && !trajectory.empty())
+            if (!trajectory.empty()
+                && (qualification.quality_key > best_quality
+                    || (qualification.quality_key == best_quality && score > best_score)))
             {
+                best_quality = qualification.quality_key;
                 best_score = score;
                 best_trajectory = std::move(trajectory);
             }

@@ -6,7 +6,7 @@ else()
     set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 endif()
 
-project(EpochRunner VERSION 0.7.0 LANGUAGES CXX)
+project(EpochRunner VERSION 0.7.1 LANGUAGES CXX)
 
 option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
 option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -151,7 +151,7 @@ if(EPOCHRUNNER_BUILD_APP)
         CXX_STANDARD 23
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
-        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:EpochRunner>"
     )
     epochrunner_enable_warnings(EpochRunner)
 
@@ -166,6 +166,7 @@ if(EPOCHRUNNER_BUILD_APP)
     )
 
     install(TARGETS EpochRunner RUNTIME DESTINATION .)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION .)
     install(DIRECTORY "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
 endif()
@@ -212,4 +213,10 @@ if(EPOCHRUNNER_BUILD_TESTS)
     endif()
     add_test(NAME EpochRunner.RuntimePipeline COMMAND EpochRunnerRuntimePipelineTests)
     set_tests_properties(EpochRunner.RuntimePipeline PROPERTIES TIMEOUT 90)
+
+    if(TARGET EpochRunner)
+        add_test(NAME EpochRunner.PackageLayout
+            COMMAND $<TARGET_FILE:EpochRunner> --diagnose-package)
+        set_tests_properties(EpochRunner.PackageLayout PROPERTIES TIMEOUT 30)
+    endif()
 endif()

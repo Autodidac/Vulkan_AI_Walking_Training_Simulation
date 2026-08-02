@@ -9,7 +9,7 @@ namespace epochrunner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '7', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '8', '\0', '\1' };
 
         template <typename T>
         bool write_value(std::ofstream& output, const T& value)
@@ -77,10 +77,17 @@ namespace epochrunner::rl
                 && write_value(output, value.evaluation_spin_turns)
                 && write_value(output, value.evaluation_spin_landings)
                 && write_value(output, value.evaluation_obstacles_passed)
+                && write_value(output, value.evaluation_stable_stance)
+                && write_value(output, value.evaluation_longest_stance)
+                && write_value(output, value.evaluation_duck_recoveries)
+                && write_value(output, value.evaluation_max_joint_speed)
+                && write_value(output, value.evaluation_quality_key)
+                && write_value(output, value.evaluation_rejection_mask)
                 && write_value(output, value.evaluation_invalid_runs)
                 && write_value(output, value.evaluation_valid)
                 && write_value(output, value.best_evaluation_distance)
                 && write_value(output, value.best_evaluation_score)
+                && write_value(output, value.best_quality_key)
                 && write_value(output, value.best_update)
                 && write_value(output, value.evaluation_count)
                 && write_value(output, value.imitation_samples)
@@ -113,10 +120,17 @@ namespace epochrunner::rl
                 && read_value(input, value.evaluation_spin_turns)
                 && read_value(input, value.evaluation_spin_landings)
                 && read_value(input, value.evaluation_obstacles_passed)
+                && read_value(input, value.evaluation_stable_stance)
+                && read_value(input, value.evaluation_longest_stance)
+                && read_value(input, value.evaluation_duck_recoveries)
+                && read_value(input, value.evaluation_max_joint_speed)
+                && read_value(input, value.evaluation_quality_key)
+                && read_value(input, value.evaluation_rejection_mask)
                 && read_value(input, value.evaluation_invalid_runs)
                 && read_value(input, value.evaluation_valid)
                 && read_value(input, value.best_evaluation_distance)
                 && read_value(input, value.best_evaluation_score)
+                && read_value(input, value.best_quality_key)
                 && read_value(input, value.best_update)
                 && read_value(input, value.evaluation_count)
                 && read_value(input, value.imitation_samples)
@@ -128,6 +142,7 @@ namespace epochrunner::rl
     PpoTrainer::CheckpointData PpoTrainer::checkpoint_data() const
     {
         CheckpointData data{};
+        data.training_semantics = training_semantics_version;
         data.rig_signature = blueprint_.signature();
         data.parameters = policy_.parameters();
         data.first_moment = adam_.first_moment;
@@ -155,7 +170,8 @@ namespace epochrunner::rl
         }
         const auto stage = static_cast<std::uint8_t>(data.stage);
         output.write(checkpoint_magic.data(), static_cast<std::streamsize>(checkpoint_magic.size()));
-        const bool ok = write_value(output, data.rig_signature)
+        const bool ok = write_value(output, data.training_semantics)
+            && write_value(output, data.rig_signature)
             && write_value(output, data.optimizer_step)
             && write_value(output, data.random_state)
             && write_value(output, stage)
@@ -199,6 +215,8 @@ namespace epochrunner::rl
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
         if (!input || magic != checkpoint_magic
+            || !read_value(input, data.training_semantics)
+            || data.training_semantics != training_semantics_version
             || !read_value(input, data.rig_signature)
             || !read_value(input, data.optimizer_step)
             || !read_value(input, data.random_state)
@@ -214,7 +232,7 @@ namespace epochrunner::rl
             || stage >= sim::course_stage_count
             || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
-            error = "Invalid or incompatible EpochRunner v0.7 checkpoint.";
+            error = "Invalid or incompatible EpochRunner v0.7.1 training-semantics checkpoint.";
             return false;
         }
         data.stage = static_cast<sim::CourseStage>(stage);
@@ -225,6 +243,11 @@ namespace epochrunner::rl
     bool PpoTrainer::apply_checkpoint_data(CheckpointData data, std::string& error,
         bool transfer_only)
     {
+        if (data.training_semantics != training_semantics_version)
+        {
+            error = "INCOMPATIBLE TRAINING SEMANTICS - START FRESH OR IMPORT WEIGHTS EXPLICITLY";
+            return false;
+        }
         const std::size_t expected = policy_.parameter_count();
         if (data.parameters.size() != expected
             || data.first_moment.size() != expected

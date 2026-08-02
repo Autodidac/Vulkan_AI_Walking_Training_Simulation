@@ -22,7 +22,7 @@ namespace epochrunner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHAUTONOMY 3\n";
+            output << "EPOCHAUTONOMY 4\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace epochrunner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "EPOCHAUTONOMY" || version != 3
+            if (!input || magic != "EPOCHAUTONOMY" || version != 4
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
@@ -78,20 +78,29 @@ namespace epochrunner::rl
         snapshot.optimizer_step = worker_.optimizer_step();
         snapshot.has_best = worker_.has_best_policy();
         const std::span<const sim::Environment> environments = worker_.environments();
-        if (!environments.empty())
+        const sim::Environment* representative = nullptr;
+        std::uint64_t representative_quality = 0u;
+        float representative_tiebreak = -std::numeric_limits<float>::infinity();
+        for (const sim::Environment& environment : environments)
         {
-            const sim::Environment* representative = &environments.front();
-            float representative_score = -1.0e9f;
-            for (const sim::Environment& environment : environments)
+            const StageMotionQualification qualification =
+                stage_motion_qualification(stage_, environment);
+            if (!qualification.valid)
+                continue;
+            const float tiebreak = environment.distance_travelled() * 10.0f
+                + environment.elapsed_seconds();
+            if (representative == nullptr
+                || qualification.quality_key > representative_quality
+                || (qualification.quality_key == representative_quality
+                    && tiebreak > representative_tiebreak))
             {
-                const float score = (environment.valid_motion() ? 1000.0f : 0.0f)
-                    + environment.distance_travelled() * 10.0f + environment.elapsed_seconds();
-                if (score > representative_score)
-                {
-                    representative = &environment;
-                    representative_score = score;
-                }
+                representative = &environment;
+                representative_quality = qualification.quality_key;
+                representative_tiebreak = tiebreak;
             }
+        }
+        if (representative != nullptr)
+        {
             snapshot.training_preview = *representative;
             snapshot.has_training_preview = true;
         }

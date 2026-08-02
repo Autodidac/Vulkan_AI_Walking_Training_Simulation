@@ -881,6 +881,14 @@ namespace epochrunner::sim
         cumulative_airborne_ = 0.0f;
         duck_seconds_ = 0.0f;
         duck_depth_ = 0.0f;
+        current_duck_hold_seconds_ = 0.0f;
+        stable_stance_seconds_ = 0.0f;
+        longest_stable_stance_seconds_ = 0.0f;
+        stance_failure_grace_seconds_ = 0.0f;
+        posture_failure_seconds_ = 0.0f;
+        maximum_joint_speed_ = 0.0f;
+        duck_recovery_count_ = 0;
+        duck_cycle_qualified_ = false;
         current_airborne_rotation_ = 0.0f;
         maximum_spin_turns_ = 0.0f;
         powered_jump_count_ = 0;
@@ -973,12 +981,17 @@ namespace epochrunner::sim
         const float error = wrap_angle(current - target);
         const float correction = clamp(error, -0.24f, 0.24f) * motor.strength;
 
+        // Cutting the pivot-to-driven connection divides the rig into the driven
+        // limb subtree and the complete remaining body. The complete parent side
+        // must react; rotating only A's local chain leaves the pelvis and sibling
+        // limbs numerically anchored against the motor.
+        std::array<bool, 128> driven_component{};
         std::array<bool, 128> visited{};
         std::array<std::uint16_t, 128> stack{};
         std::size_t stack_size = 0;
         visited[motor.pivot] = true;
-        visited[motor.a] = true;
         visited[motor.c] = true;
+        driven_component[motor.c] = true;
         stack[stack_size++] = motor.c;
         while (stack_size > 0)
         {
@@ -993,15 +1006,78 @@ namespace epochrunner::sim
                 if (next < particles_.size() && !visited[next])
                 {
                     visited[next] = true;
+                    driven_component[next] = true;
                     stack[stack_size++] = next;
                 }
             }
         }
+
+        std::array<bool, 128> reference_component{};
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+            reference_component[index] = !driven_component[index];
+
+        auto inverse_rotational_inertia = [&](const std::array<bool, 128>& component) noexcept
+        {
+            double inertia = 0.0;
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+            {
+                if (!component[index])
+                    continue;
+                const Particle& particle = particles_[index];
+                const Vec2 arm = particle.position - pivot;
+                const double radius_squared = static_cast<double>(dot(arm, arm));
+                const double mass = 1.0 / static_cast<double>(
+                    std::max(particle.inverse_mass, 1.0e-5f));
+                inertia += mass * std::max(radius_squared, 1.0e-6);
+            }
+            return inertia > 1.0e-9 ? static_cast<float>(1.0 / inertia) : 0.0f;
+        };
+
+        auto center_of_mass = [&]() noexcept
+        {
+            double weighted_x = 0.0;
+            double weighted_y = 0.0;
+            double total_mass = 0.0;
+            for (const Particle& particle : particles_)
+            {
+                const double mass = 1.0 / static_cast<double>(
+                    std::max(particle.inverse_mass, 1.0e-5f));
+                weighted_x += static_cast<double>(particle.position.x) * mass;
+                weighted_y += static_cast<double>(particle.position.y) * mass;
+                total_mass += mass;
+            }
+            if (total_mass <= 1.0e-9)
+                return pivot;
+            return Vec2{
+                static_cast<float>(weighted_x / total_mass),
+                static_cast<float>(weighted_y / total_mass)
+            };
+        };
+
+        const float driven_inverse_inertia = inverse_rotational_inertia(driven_component);
+        const float reference_inverse_inertia = inverse_rotational_inertia(reference_component);
+        const float total_inverse_inertia = driven_inverse_inertia + reference_inverse_inertia;
+        float driven_rotation = -correction;
+        float reference_rotation = 0.0f;
+        if (total_inverse_inertia > 1.0e-8f)
+        {
+            driven_rotation = -correction * driven_inverse_inertia / total_inverse_inertia;
+            reference_rotation = correction * reference_inverse_inertia / total_inverse_inertia;
+        }
+
+        const Vec2 center_before = center_of_mass();
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
-            if (visited[index] && index != motor.a && index != motor.pivot)
-                particles_[index].position = pivot + rotate(particles_[index].position - pivot, -correction);
+            if (driven_component[index])
+                particles_[index].position = pivot
+                    + rotate(particles_[index].position - pivot, driven_rotation);
+            else if (index != motor.pivot)
+                particles_[index].position = pivot
+                    + rotate(particles_[index].position - pivot, reference_rotation);
         }
+        const Vec2 center_correction = center_before - center_of_mass();
+        for (Particle& particle : particles_)
+            particle.position += center_correction;
     }
 
     bool Environment::contact_cluster_contains(std::uint16_t contact_node,
@@ -1391,9 +1467,75 @@ namespace epochrunner::sim
         const float rest_head_clearance = valid_node(blueprint_.head_node)
             ? blueprint_.nodes[blueprint_.head_node].y : 0.0f;
         duck_depth_ = std::max(0.0f, rest_head_clearance - head_clearance);
-        duck_active_ = feet_supported && torso_uprightness() > 0.60f && duck_depth_ >= 0.48f;
+        const float current_uprightness = torso_uprightness();
+        duck_active_ = feet_supported && current_uprightness > 0.60f && duck_depth_ >= 0.48f;
         if (duck_active_)
             duck_seconds_ += dt;
+
+        float current_joint_speed = 0.0f;
+        for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
+            current_joint_speed = std::max(current_joint_speed, std::abs(angular_velocities_[index]));
+        if (elapsed_seconds_ >= 1.0f)
+            maximum_joint_speed_ = std::max(maximum_joint_speed_, current_joint_speed);
+        const float head_height_ratio = rest_head_clearance > 1.0e-5f
+            ? head_clearance / rest_head_clearance : 0.0f;
+        const bool catastrophic_stance_failure = non_foot_grounded_
+            || current_uprightness < 0.70f
+            || head_height_ratio < 0.52f;
+        const bool stable_stance_frame = feet_supported
+            && current_uprightness >= 0.84f
+            && head_height_ratio >= 0.62f
+            && stance_slip_speed_ <= 0.10f
+            && std::abs(torso_turn_speed_) <= 2.00f
+            && current_joint_speed <= 12.0f
+            && std::abs(root_vertical_speed) <= 1.50f;
+        if (stable_stance_frame)
+        {
+            stance_failure_grace_seconds_ = std::max(
+                0.0f, stance_failure_grace_seconds_ - dt * 2.0f);
+            stable_stance_seconds_ += dt;
+        }
+        else if (!catastrophic_stance_failure
+            && stance_failure_grace_seconds_ < 0.60f)
+        {
+            stance_failure_grace_seconds_ += dt;
+            stable_stance_seconds_ = std::max(
+                0.0f, stable_stance_seconds_ - dt * 0.10f);
+        }
+        else
+        {
+            stance_failure_grace_seconds_ = 0.0f;
+            stable_stance_seconds_ = 0.0f;
+        }
+        longest_stable_stance_seconds_ = std::max(
+            longest_stable_stance_seconds_, stable_stance_seconds_);
+
+        if (duck_active_)
+        {
+            current_duck_hold_seconds_ += dt;
+            duck_cycle_qualified_ = duck_cycle_qualified_
+                || current_duck_hold_seconds_ >= 0.30f;
+        }
+        else if (duck_cycle_qualified_ && stable_stance_seconds_ >= 0.40f)
+        {
+            ++duck_recovery_count_;
+            current_duck_hold_seconds_ = 0.0f;
+            duck_cycle_qualified_ = false;
+        }
+        else if (!duck_cycle_qualified_)
+        {
+            current_duck_hold_seconds_ = 0.0f;
+        }
+
+        const bool collapsed_balance_posture = course_stage_ == CourseStage::balance
+            && elapsed_seconds_ >= 1.50f
+            && (!feet_supported || non_foot_grounded_
+                || current_uprightness < 0.62f || head_height_ratio < 0.64f);
+        posture_failure_seconds_ = collapsed_balance_posture
+            ? posture_failure_seconds_ + dt
+            : std::max(0.0f, posture_failure_seconds_ - dt * 2.0f);
+        if (posture_failure_seconds_ >= 1.50f)
+            invalidate(InvalidMotion::collapsed_posture);
 
         if (was_supported && airborne
             && powered_joint_launch(course_stage_, root_vertical_speed, action_energy))
@@ -1744,13 +1886,21 @@ namespace epochrunner::sim
         switch (course_stage_)
         {
         case CourseStage::balance:
-            last_reward_ = std::max(0.0f, upright) * 0.030f
-                + contact * 0.0030f
-                - std::abs(forward_speed_) * 0.0040f
-                - std::abs(distance_travelled_) * 0.0015f
-                - action_energy * 0.0012f
+        {
+            const float stance_reward = stable_stance_seconds_ > 0.0f
+                ? 0.048f + std::min(stable_stance_seconds_, 4.0f) * 0.004f
+                : -0.012f;
+            last_reward_ = stance_reward
+                + std::max(0.0f, upright) * 0.008f
+                + contact * 0.0010f
+                - std::abs(forward_speed_) * 0.0070f
+                - std::abs(distance_travelled_) * 0.0030f
+                - action_energy * 0.0018f
+                - stance_slip_speed_ * 0.010f
+                - posture_failure_seconds_ * 0.020f
                 - body_contact_penalty;
             break;
+        }
         case CourseStage::walk:
             last_reward_ = std::max(0.0f, upright) * 0.016f
                 + contact * 0.0015f + duck_reward
@@ -1822,9 +1972,17 @@ namespace epochrunner::sim
             || !valid_node(blueprint_.left_contact_node) || !valid_node(blueprint_.right_contact_node))
             return result;
 
+        constexpr std::size_t joint_angle_begin = 4;
+        constexpr std::size_t joint_velocity_begin = joint_angle_begin + action_count;
+        constexpr std::size_t contact_begin = joint_velocity_begin + action_count;
+        static_assert(contact_begin == 20);
+        static_assert(observation_count == 40);
+
         const Vec2 root = particles_[blueprint_.root_node].position;
-        const Vec2 torso = normalized(particles_[blueprint_.torso_node].position - root, { 0.0f, 1.0f });
-        const Vec2 pelvis_velocity = particles_[blueprint_.root_node].position - particles_[blueprint_.root_node].previous;
+        const Vec2 torso = normalized(
+            particles_[blueprint_.torso_node].position - root, { 0.0f, 1.0f });
+        const Vec2 pelvis_velocity = particles_[blueprint_.root_node].position
+            - particles_[blueprint_.root_node].previous;
         result[0] = torso.x;
         result[1] = torso.y;
         result[2] = clamp(pelvis_velocity.x * 60.0f / 6.0f, -3.0f, 3.0f);
@@ -1838,19 +1996,25 @@ namespace epochrunner::sim
             const float span = delta < 0.0f
                 ? std::max(0.001f, motor.neutral_angle - motor.minimum_angle)
                 : std::max(0.001f, motor.maximum_angle - motor.neutral_angle);
-            result[4 + index] = clamp(delta / span, -2.0f, 2.0f);
-            result[8 + index] = clamp(angular_velocities_[index] / 18.0f, -3.0f, 3.0f);
+            result[joint_angle_begin + index] = clamp(delta / span, -2.0f, 2.0f);
+            result[joint_velocity_begin + index] = clamp(
+                angular_velocities_[index] / 18.0f, -3.0f, 3.0f);
         }
-        result[12] = contact_supported(blueprint_.left_contact_node) ? 1.0f : 0.0f;
-        result[13] = contact_supported(blueprint_.right_contact_node) ? 1.0f : 0.0f;
-        result[14] = clamp((particles_[blueprint_.left_contact_node].position.x - root.x) / 2.0f, -2.0f, 2.0f);
-        result[15] = clamp((particles_[blueprint_.right_contact_node].position.x - root.x) / 2.0f, -2.0f, 2.0f);
-        result[16] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
-        result[17] = non_foot_grounded_ ? -1.0f
+        result[20] = contact_supported(blueprint_.left_contact_node) ? 1.0f : 0.0f;
+        result[21] = contact_supported(blueprint_.right_contact_node) ? 1.0f : 0.0f;
+        result[22] = clamp((particles_[blueprint_.left_contact_node].position.x - root.x) / 2.0f,
+            -2.0f, 2.0f);
+        result[23] = clamp((particles_[blueprint_.right_contact_node].position.x - root.x) / 2.0f,
+            -2.0f, 2.0f);
+        result[24] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
+        result[25] = non_foot_grounded_ ? -1.0f
             : recovery_active_ ? clamp(torso.y, -1.0f, 1.0f) : 1.0f;
-        result[18] = clamp((ground_height_at(root.x + 0.65f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
-        result[19] = clamp((ground_height_at(root.x + 1.50f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
-        result[20] = clamp((ground_height_at(root.x + 3.00f) - ground_height_at(root.x)) / 1.0f, -1.0f, 1.0f);
+        result[26] = clamp(ground_height_at(root.x + 0.65f) - ground_height_at(root.x),
+            -1.0f, 1.0f);
+        result[27] = clamp(ground_height_at(root.x + 1.50f) - ground_height_at(root.x),
+            -1.0f, 1.0f);
+        result[28] = clamp(ground_height_at(root.x + 3.00f) - ground_height_at(root.x),
+            -1.0f, 1.0f);
 
         const CourseFeature* nearest = nullptr;
         float nearest_dx = std::numeric_limits<float>::max();
@@ -1865,26 +2029,27 @@ namespace epochrunner::sim
         }
         if (nearest != nullptr)
         {
-            result[21] = clamp(nearest_dx / 6.0f, -1.0f, 2.0f);
+            result[29] = clamp(nearest_dx / 6.0f, -1.0f, 2.0f);
             switch (nearest->kind)
             {
-            case CourseFeatureKind::hurdle: result[22] = -1.0f; break;
-            case CourseFeatureKind::rock: result[22] = -0.5f; break;
-            case CourseFeatureKind::overhead_bar: result[22] = 0.0f; break;
-            case CourseFeatureKind::moving_hazard: result[22] = 0.5f; break;
-            case CourseFeatureKind::projectile: result[22] = 1.0f; break;
+            case CourseFeatureKind::hurdle: result[30] = -1.0f; break;
+            case CourseFeatureKind::rock: result[30] = -0.5f; break;
+            case CourseFeatureKind::overhead_bar: result[30] = 0.0f; break;
+            case CourseFeatureKind::moving_hazard: result[30] = 0.5f; break;
+            case CourseFeatureKind::projectile: result[30] = 1.0f; break;
             }
-            result[23] = clamp((nearest->center.y - root.y) / 4.0f, -2.0f, 2.0f);
-            result[24] = course_feature_observation_size(*nearest);
-            result[25] = clamp(nearest->velocity.x / 5.0f, -1.0f, 1.0f);
+            result[31] = clamp((nearest->center.y - root.y) / 4.0f, -2.0f, 2.0f);
+            result[32] = course_feature_observation_size(*nearest);
+            result[33] = clamp(nearest->velocity.x / 5.0f, -1.0f, 1.0f);
         }
-        result[26] = airborne_ratio();
-        result[27] = clamp(static_cast<float>(alternating_steps_) / 10.0f, 0.0f, 2.0f);
-        result[28] = static_cast<float>(course_stage_) / static_cast<float>(course_stage_count - 1);
-        result[29] = course_difficulty_;
+        result[34] = airborne_ratio();
+        result[35] = clamp(static_cast<float>(alternating_steps_) / 10.0f, 0.0f, 2.0f);
+        result[36] = static_cast<float>(course_stage_)
+            / static_cast<float>(course_stage_count - 1);
+        result[37] = course_difficulty_;
         const float gait_phase = elapsed_seconds_ * 2.0f * pi * 1.25f;
-        result[30] = std::sin(gait_phase);
-        result[31] = std::cos(gait_phase);
+        result[38] = std::sin(gait_phase);
+        result[39] = std::cos(gait_phase);
         return result;
     }
 }

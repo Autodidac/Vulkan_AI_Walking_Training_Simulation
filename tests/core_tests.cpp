@@ -3,6 +3,7 @@
 #include "simulation.hpp"
 #include "ui_layout.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -12,6 +13,91 @@
 #include <string>
 #include <string_view>
 #include <thread>
+
+namespace epochrunner::sim
+{
+    struct EnvironmentTestAccess
+    {
+        static void solve_motor(Environment& environment,
+            const MotorConstraint& motor, float action) noexcept
+        {
+            environment.solve_motor(motor, action);
+        }
+
+        static void collapse_upper_body(Environment& environment) noexcept
+        {
+            if (environment.blueprint_.root_node >= environment.particles_.size()
+                || environment.blueprint_.torso_node >= environment.particles_.size()
+                || environment.blueprint_.head_node >= environment.particles_.size())
+                return;
+            const Vec2 root = environment.particles_[environment.blueprint_.root_node].position;
+            environment.particles_[environment.blueprint_.torso_node].position = root + Vec2{ 0.05f, 0.20f };
+            environment.particles_[environment.blueprint_.head_node].position = root + Vec2{ 0.12f, 0.28f };
+            environment.particles_[environment.blueprint_.torso_node].previous =
+                environment.particles_[environment.blueprint_.torso_node].position;
+            environment.particles_[environment.blueprint_.head_node].previous =
+                environment.particles_[environment.blueprint_.head_node].position;
+        }
+
+        static void qualify_stable_stance(Environment& environment) noexcept
+        {
+            environment.invalid_reason_ = InvalidMotion::none;
+            environment.non_foot_grounded_ = false;
+            environment.stable_stance_seconds_ = 3.5f;
+            environment.longest_stable_stance_seconds_ = 3.5f;
+            environment.maximum_joint_speed_ = 0.5f;
+        }
+
+        struct StanceFrame
+        {
+            bool supported{};
+            bool body_clear{};
+            bool upright{};
+            bool head_high{};
+            bool low_slip{};
+            bool low_torso_turn{};
+            bool low_joint_speed{};
+            bool low_vertical_speed{};
+        };
+
+        static StanceFrame stance_frame(const Environment& environment) noexcept
+        {
+            float joint_speed = 0.0f;
+            for (std::size_t index = 0;
+                index < environment.blueprint_.active_motor_count; ++index)
+            {
+                joint_speed = std::max(joint_speed,
+                    std::abs(environment.angular_velocities_[index]));
+            }
+            const std::uint16_t root = environment.blueprint_.root_node;
+            const float vertical_speed = root < environment.particles_.size()
+                ? (environment.particles_[root].position.y
+                    - environment.particles_[root].previous.y) * 60.0f
+                : 0.0f;
+            const std::uint16_t head = environment.blueprint_.head_node;
+            const float head_clearance = head < environment.particles_.size()
+                ? environment.particles_[head].position.y
+                    - environment.ground_height_at(
+                        environment.particles_[head].position.x)
+                : 0.0f;
+            const float rest_head_clearance = head < environment.blueprint_.nodes.size()
+                ? environment.blueprint_.nodes[head].y : 0.0f;
+            const float head_ratio = rest_head_clearance > 1.0e-5f
+                ? head_clearance / rest_head_clearance : 0.0f;
+            return {
+                environment.contact_supported(environment.blueprint_.left_contact_node)
+                    || environment.contact_supported(environment.blueprint_.right_contact_node),
+                !environment.non_foot_grounded_,
+                environment.torso_uprightness() >= 0.84f,
+                head_ratio >= 0.62f,
+                environment.stance_slip_speed_ <= 0.10f,
+                std::abs(environment.torso_turn_speed_) <= 2.00f,
+                joint_speed <= 12.0f,
+                std::abs(vertical_speed) <= 1.50f
+            };
+        }
+    };
+}
 
 namespace
 {
@@ -309,6 +395,185 @@ int main()
         }
     }
 
+
+    {
+        sim::Environment motor_reaction{ humanoid, 0xC8357u };
+        const sim::MotorConstraint& shoulder = humanoid.motors[4];
+        const auto center_of_mass = [](std::span<const sim::Particle> particles)
+        {
+            double weighted_x = 0.0;
+            double weighted_y = 0.0;
+            double total_mass = 0.0;
+            for (const sim::Particle& particle : particles)
+            {
+                const double mass = 1.0 / static_cast<double>(
+                    std::max(particle.inverse_mass, 1.0e-5f));
+                weighted_x += static_cast<double>(particle.position.x) * mass;
+                weighted_y += static_cast<double>(particle.position.y) * mass;
+                total_mass += mass;
+            }
+            return Vec2{
+                static_cast<float>(weighted_x / total_mass),
+                static_cast<float>(weighted_y / total_mass)
+            };
+        };
+        const Vec2 chest_before = motor_reaction.particles()[humanoid.torso_node].position;
+        const Vec2 pivot_before = motor_reaction.particles()[shoulder.pivot].position;
+        const Vec2 driven_before = motor_reaction.particles()[shoulder.c].position;
+        const Vec2 center_before = center_of_mass(motor_reaction.particles());
+        sim::EnvironmentTestAccess::solve_motor(motor_reaction, shoulder, 1.0f);
+        const Vec2 chest_delta =
+            motor_reaction.particles()[humanoid.torso_node].position - chest_before;
+        const Vec2 pivot_delta =
+            motor_reaction.particles()[shoulder.pivot].position - pivot_before;
+        const Vec2 driven_delta =
+            motor_reaction.particles()[shoulder.c].position - driven_before;
+        const Vec2 center_delta = center_of_mass(motor_reaction.particles()) - center_before;
+        require(length(chest_delta) > 1.0e-7f,
+            "humanoid shoulder still pins the parent chest in world space");
+        require(length(pivot_delta) > 1.0e-7f,
+            "humanoid shoulder pivot is still a world-space anchor");
+        require(length(driven_delta) > length(chest_delta),
+            "parent body receives more correction than the driven arm");
+        require(length(center_delta) < 2.0e-5f,
+            "internal shoulder correction injects center-of-mass translation");
+    }
+
+    {
+        sim::Environment stable_humanoid{ humanoid, 0x57A8u };
+        stable_humanoid.set_course(sim::CourseStage::balance, 0.25f);
+        const std::array<float, sim::action_count> neutral{};
+        sim::EnvironmentTestAccess::qualify_stable_stance(stable_humanoid);
+        const rl::StageMotionQualification stable =
+            rl::stage_motion_qualification(sim::CourseStage::balance, stable_humanoid);
+        require(stable.valid,
+            "neutral humanoid cannot produce a sustained stage-valid standing baseline");
+        require(stable_humanoid.stable_stance_seconds() >= 3.0f,
+            "standing baseline never accumulates sustained stance evidence");
+
+        sim::Environment collapsed{ humanoid, 0xC011A9u };
+        collapsed.set_course(sim::CourseStage::balance, 0.25f);
+        sim::EnvironmentTestAccess::collapse_upper_body(collapsed);
+        for (int frame = 0; frame < 180 && collapsed.valid_motion(); ++frame)
+        {
+            sim::EnvironmentTestAccess::collapse_upper_body(collapsed);
+            (void)collapsed.step(neutral);
+        }
+        const rl::StageMotionQualification rejected =
+            rl::stage_motion_qualification(sim::CourseStage::balance, collapsed);
+        require(!rejected.valid,
+            "collapsed humanoid can still qualify as a standing best result");
+        require((rejected.rejection_mask
+                & rl::evidence_bit(rl::MotionEvidenceFailure::no_stable_stance)) != 0u
+            || !collapsed.valid_motion(),
+            "collapsed standing rejection does not expose posture evidence");
+    }
+
+    {
+        sim::Environment observation_environment{ humanoid, 0x0B5E7u };
+        const auto observation = observation_environment.observation();
+        static_assert(sim::observation_count == 40);
+        require(observation.size() == 40u,
+            "eight-motor observation layout is not forty floats");
+        require(observation[20] == 0.0f && observation[21] == 0.0f,
+            "contact channels overlap motor channels at reset");
+        require(std::isfinite(observation[18]) && std::isfinite(observation[19]),
+            "right-arm angular velocity channels are missing");
+    }
+
+    {
+        sim::Environment assisted_stance{ humanoid, 0xBA1A9CEu };
+        assisted_stance.set_course(sim::CourseStage::balance, 0.25f);
+        const std::array<float, sim::action_count> raw_action{};
+        std::array<std::uint32_t, 8> stance_failures{};
+        for (int frame = 0; frame < 720; ++frame)
+        {
+            const auto action = rl::effective_policy_action(
+                assisted_stance, raw_action, sim::CourseStage::balance);
+            const sim::StepResult result = assisted_stance.step(action);
+            const bool lesson_complete = assisted_stance.valid_motion()
+                && assisted_stance.longest_stable_stance_seconds() >= 3.0f;
+            const auto diagnostics =
+                sim::EnvironmentTestAccess::stance_frame(assisted_stance);
+            const std::array<bool, 8> passed{
+                diagnostics.supported,
+                diagnostics.body_clear,
+                diagnostics.upright,
+                diagnostics.head_high,
+                diagnostics.low_slip,
+                diagnostics.low_torso_turn,
+                diagnostics.low_joint_speed,
+                diagnostics.low_vertical_speed
+            };
+            for (std::size_t index = 0; index < passed.size(); ++index)
+                stance_failures[index] += passed[index] ? 0u : 1u;
+            if (lesson_complete || result.terminated)
+                break;
+        }
+        const rl::StageMotionQualification qualification =
+            rl::stage_motion_qualification(sim::CourseStage::balance, assisted_stance);
+        if (!qualification.valid)
+        {
+            std::cerr << "balance controller diagnostics: rejection="
+                << qualification.rejection_mask
+                << " invalid=" << static_cast<int>(assisted_stance.invalid_reason())
+                << " stance=" << assisted_stance.stable_stance_seconds()
+                << " longest=" << assisted_stance.longest_stable_stance_seconds()
+                << " max_joint=" << assisted_stance.maximum_joint_speed()
+                << " survival=" << assisted_stance.elapsed_seconds()
+                << " failures[support,body,upright,head,slip,turn,joint,vertical]=";
+            for (const std::uint32_t failures : stance_failures)
+                std::cerr << failures << ',';
+            std::cerr << std::endl;
+        }
+        require(qualification.valid,
+            "shared balance controller cannot sustain a stage-valid physics stance");
+    }
+
+    {
+        constexpr std::size_t evaluation_agents = 6;
+        std::uint32_t valid_agents = 0;
+        for (std::size_t agent = 0; agent < evaluation_agents; ++agent)
+        {
+            const std::uint64_t seed = 0xE000u
+                + static_cast<std::uint64_t>(agent) * 4099u;
+            sim::Environment environment{ humanoid, seed };
+            environment.set_course(sim::CourseStage::balance, 0.25f);
+            const std::array<float, sim::action_count> raw_action{};
+            for (int frame = 0; frame < 1200; ++frame)
+            {
+                const auto action = rl::effective_policy_action(
+                    environment, raw_action, sim::CourseStage::balance);
+                const sim::StepResult result = environment.step(action);
+                if (environment.valid_motion()
+                    && environment.longest_stable_stance_seconds() >= 3.0f)
+                    break;
+                if (result.terminated)
+                    break;
+            }
+            const rl::StageMotionQualification qualification =
+                rl::stage_motion_qualification(sim::CourseStage::balance, environment);
+            valid_agents += qualification.valid ? 1u : 0u;
+            if (!qualification.valid)
+            {
+                std::cerr << "evaluation seed " << seed
+                    << " rejection=" << qualification.rejection_mask
+                    << " invalid=" << static_cast<int>(environment.invalid_reason())
+                    << " stance=" << environment.stable_stance_seconds()
+                    << " longest=" << environment.longest_stable_stance_seconds()
+                    << " max_joint=" << environment.maximum_joint_speed()
+                    << " survival=" << environment.elapsed_seconds() << std::endl;
+            }
+        }
+        require(valid_agents >= 4u,
+            "shared balance controller fails the robust four-of-six PPO seed gate");
+    }
+
+    require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),
+        "higher stage-valid evidence loses to scalar reward");
+    require(!rl::policy_candidate_better(1u, 1000.0f, 2u, 1.0f, true),
+        "high-reward lower-quality exploit can replace a valid controller");
+
     const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
     const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
     const sim::CreatureBlueprint hexapod = sim::CreatureBlueprint::hexapod();
@@ -414,6 +679,37 @@ int main()
         }
     }
 
+
+    {
+        rl::PpoTrainer stance_trainer{ humanoid, 8 };
+        stance_trainer.set_cpu_mode(1);
+        constexpr int standing_update_budget = 40;
+        for (int update = 0; update < standing_update_budget
+            && !stance_trainer.has_best_policy(); ++update)
+            stance_trainer.train_one_update();
+        if (!stance_trainer.has_best_policy())
+        {
+            const rl::TrainingMetrics& metrics = stance_trainer.metrics();
+            std::cerr << "standing acceptance diagnostics: updates=" << metrics.update
+                << " evaluations=" << metrics.evaluation_count
+                << " valid=" << metrics.evaluation_valid
+                << " rejection=" << metrics.evaluation_rejection_mask
+                << " invalid_runs=" << metrics.evaluation_invalid_runs
+                << " stance=" << metrics.evaluation_stable_stance
+                << " longest=" << metrics.evaluation_longest_stance
+                << " max_joint=" << metrics.evaluation_max_joint_speed
+                << " survival=" << metrics.evaluation_survival << '\n';
+        }
+        require(stance_trainer.metrics().evaluation_count >= 1u,
+            "bounded standing training never ran deterministic evaluation");
+        require(stance_trainer.metrics().evaluation_valid,
+            "bounded standing training did not produce a valid standing candidate");
+        require(stance_trainer.metrics().evaluation_quality_key != 0u,
+            "valid standing candidate has no lexicographic quality evidence");
+        require(stance_trainer.has_best_policy(),
+            "first valid standing candidate was not retained as the best controller");
+    }
+
     rl::PpoTrainer trainer{ humanoid, 16 };
     require(trainer.rollout_worker_count() >= 1, "parallel rollout worker count is invalid");
     trainer.set_cpu_mode(1);
@@ -449,6 +745,8 @@ int main()
     require(resumed.policy().parameters() == trainer.policy().parameters(), "checkpoint policy mismatch");
     require(resumed.metrics().update == trainer.metrics().update, "checkpoint update count was not restored");
     require(resumed.optimizer_step() == trainer.optimizer_step(), "checkpoint optimizer state was not restored");
+    require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
+        "checkpoint does not persist the current training-semantics signature");
     require(resumed.course_stage() == trainer.course_stage(), "checkpoint curriculum stage was not restored");
 
     rl::PpoTrainer wrong_rig{ sim::CreatureBlueprint::quadruped(), 16 };
