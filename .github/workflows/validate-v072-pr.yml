@@ -30,9 +30,48 @@ jobs:
           if ! grep -q 'project(EpochRunner VERSION 0.7.2' CMakeLists.txt; then
             python3 - <<'PY'
           from pathlib import Path
+
           path = Path('tools/apply_v072_sim_regression.py')
           text = path.read_text(encoding='utf-8')
-          text = text.replace('notes = """# EpochRunner v0.7.2\\n\\n"', 'notes = "# EpochRunner v0.7.2\\n\\n"')
+          text = text.replace(
+              'notes = """# EpochRunner v0.7.2\\n\\n"',
+              'notes = "# EpochRunner v0.7.2\\n\\n"',
+          )
+
+          misplaced = '''    text = replace_once(
+                  text,
+                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
+                  "            return CourseFeatureKind::rock;",
+                  "        if (stage == CourseStage::walk)\\n"
+                  "            return CourseFeatureKind::overhead_bar;\\n"
+                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
+                  "            return CourseFeatureKind::rock;",
+                  "walk stage obstacle schedule",
+              )
+          '''
+          if misplaced not in text:
+              raise RuntimeError('could not locate misplaced course schedule patch')
+          text = text.replace(misplaced, '', 1)
+
+          schedule = '''    text = replace_once(
+                  text,
+                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
+                  "            return CourseFeatureKind::rock;",
+                  "        if (stage == CourseStage::walk)\\n"
+                  "            return CourseFeatureKind::overhead_bar;\\n"
+                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
+                  "            return CourseFeatureKind::rock;",
+                  "walk stage obstacle schedule",
+              )
+          '''
+          marker = '    write(path, text)\n\n\ndef patch_simulation_source() -> None:'
+          if marker not in text:
+              raise RuntimeError('could not locate simulation header publication point')
+          text = text.replace(
+              marker,
+              schedule + '    write(path, text)\n\n\ndef patch_simulation_source() -> None:',
+              1,
+          )
           path.write_text(text, encoding='utf-8')
           PY
             python3 -m py_compile tools/apply_v072_sim_regression.py
