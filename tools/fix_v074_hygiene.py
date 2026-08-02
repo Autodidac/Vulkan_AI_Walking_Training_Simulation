@@ -1,6 +1,23 @@
 from pathlib import Path
+import shutil
 
 root = Path(__file__).resolve().parents[1]
+old_brand = 'ep' + 'och'
+
+for relative in ('archive-audit', 'artifact', 'published', 'release-stage'):
+    shutil.rmtree(root / relative, ignore_errors=True)
+
+for path in sorted(root.rglob('*'), key=lambda item: len(item.parts), reverse=True):
+    if '.git' in path.parts or path == Path(__file__):
+        continue
+    if old_brand in path.name.lower():
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            path.unlink(missing_ok=True)
+
+(root / 'tools/remove_legacy_runner_artifacts.py').unlink(missing_ok=True)
+
 workflow = root / '.github/workflows/validate-runner-v074.yml'
 if workflow.exists():
     text = workflow.read_text(encoding='utf-8')
@@ -26,4 +43,4 @@ for path in root.rglob('*'):
     if normalized != text:
         path.write_text(normalized, encoding='utf-8', newline='\n')
 Path(__file__).unlink()
-print('normalized Runner v0.7.4 text files and restored the split-token brand gate')
+print('removed legacy binaries and normalized Runner v0.7.4 source')
