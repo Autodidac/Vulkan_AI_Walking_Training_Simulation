@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** EpochRunner v0.7.1
 
-**Release state:** VALIDATED — EpochRunner v0.7.1 publication pending
+**Release state:** VERIFIED — EpochRunner v0.7.1 published
 
 ## Training-quality correction
 
@@ -175,16 +175,20 @@ The PIP displays only a stage-qualified representative worker rollout. It shows 
 
 The v0.7.0 build and test evidence remains historical, but its training-quality conclusion was superseded by Adam's August 1, 2026 packaged-runtime screenshot and corrected in v0.7.1.
 
-### WALK-REL-013 — v0.7.1 validation
+### WALK-REL-013 — Verified v0.7.1 training-quality hotfix
 **Status:** VERIFIED
 
-- Linux validation workflow: `30718528145`; Windows package and release workflow: `30724619700`;
-- Linux GCC 14 C++23 core build and deterministic tests: passed;
-- Windows 2025 full SDL3, Vulkan, and EpochGui Release build and tests: passed;
-- executable version, Vulkan diagnostic, and unrelated-working-directory package launch: passed;
+- Exact tested source commit: `843d387bc0cf5660af9414cf408f5054eb88654f`;
+- workflow run: `30724619700`;
+- Linux GCC 14 C++23 build and tests: passed;
+- Windows 2025 full SDL3, Vulkan, and EpochGui build and tests: passed;
 - forty-channel eight-motor observation layout: passed;
 - robust four-of-six perturbed standing evaluation: passed;
 - bounded forty-update stage-valid champion acquisition: passed;
 - adversarial collapsed-pose rejection: passed;
-- reciprocal complete-body motor reaction and center-of-mass preservation: passed;
-- publication and package checksum: pending final release step.
+- complete-body reciprocal motor reaction and center-of-mass preservation: passed;
+- executable version, Vulkan diagnostic, and unrelated-working-directory package launch: passed;
+- Windows package, including `run.bat`: `EpochRunner-v0.7.1-windows-x64.zip`;
+- package SHA-256: `00B093F0794777F8BE8624A69DBB8F257986E6522BD2819AE5745257FF974562`;
+- remaining branches: `main`;
+- open pull requests: `0`.
