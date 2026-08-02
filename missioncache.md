@@ -6,9 +6,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** EpochRunner v0.7.2
 
-**Release state:** PACKAGE VERIFIED — release publication and published-asset audit pending
+**Release state:** VERIFIED — EpochRunner v0.7.2 published and independently audited
 
-There are no open implementation missions. Publication, final release-asset re-download, and repository cleanup remain before the release state can become published.
+All implementation, validation, publication, release-asset audit, pull-request cleanup, and branch cleanup missions are complete.
 
 ## v0.7.2 packaged-runtime regression correction
 
@@ -221,7 +221,7 @@ The v0.7.0 evidence remains historical and was superseded by the later runtime s
 The v0.7.1 package and build evidence remain valid for that artifact, but its simulation-quality conclusion was superseded by Adam's August 1 screenshots and corrected in v0.7.2.
 
 ### WALK-REL-028 — v0.7.2 simulation-quality correction
-**Status:** PACKAGE VERIFIED — RELEASE PUBLICATION PENDING
+**Status:** VERIFIED
 
 - Exact Windows-tested and packaged source: `3c4b815678fda0b2651136bba90b4d64a6cc9a27`;
 - clean implementation source before evidence-only commits: `38134978a08ef59d793fbc82c45bbe4090bebacb`;
@@ -235,7 +235,12 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 - independently extracted executable and `run.bat` diagnostics from unrelated CWD: passed;
 - package: `EpochRunner-v0.7.2-windows-x64.zip`;
 - package file count: `11`;
-- package SHA-256: `E74F5BFFEAE2ADFCD53D45C84D63364772BEE33066452D43433D1BF803873AD7`;
+- published package SHA-256: `910FDE5A87995BAC6D0E8F2B6B674BBD35C8B638C96E307E0BE95F1027AD013D`;
 - Actions artifact ID: `8828973915`;
 - Actions artifact digest: `632316E2ECD7419E7E471F7AF8D2BFD7C0490F7E24B7459D0CE1D0559C50DBE0`;
 - assistant-side re-download and per-file manifest verification: passed.
+- publication workflow run: `30734413835`;
+- published package file count: `11`;
+- published release asset re-download, hash, manifest, executable, and run.bat audit: passed;
+- open pull requests after merge: `0`;
+- remaining branches after cleanup: `main`.
