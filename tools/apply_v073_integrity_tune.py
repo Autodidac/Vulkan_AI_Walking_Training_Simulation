@@ -25,8 +25,30 @@ replacements = (
         "if (current_radius > std::max(1.80f, rest_radius * 3.00f + 0.80f))",
     ),
     (
-        "return torso_ratio >= 0.68f && torso_ratio <= 1.32f\n            && head_ratio >= 0.68f && head_ratio <= 1.32f\n            && alignment >= 0.18f;",
-        "return torso_uprightness() >= 0.60f\n            && head.y > root.y + 0.20f;",
+        "        const Vec2 root = particles_[blueprint_.root_node].position;\n"
+        "        const Vec2 torso = particles_[blueprint_.torso_node].position;\n"
+        "        const Vec2 head = particles_[blueprint_.head_node].position;\n"
+        "        const Vec2 torso_segment = torso - root;\n"
+        "        const Vec2 head_segment = head - torso;\n"
+        "        const float rest_torso_segment = length(\n"
+        "            blueprint_.nodes[blueprint_.torso_node]\n"
+        "                - blueprint_.nodes[blueprint_.root_node]);\n"
+        "        const float rest_head_segment = length(\n"
+        "            blueprint_.nodes[blueprint_.head_node]\n"
+        "                - blueprint_.nodes[blueprint_.torso_node]);\n"
+        "        const float torso_ratio = length(torso_segment)\n"
+        "            / std::max(rest_torso_segment, 1.0e-5f);\n"
+        "        const float head_ratio = length(head_segment)\n"
+        "            / std::max(rest_head_segment, 1.0e-5f);\n"
+        "        const float alignment = dot(normalized(torso_segment, { 0.0f, 1.0f }),\n"
+        "            normalized(head_segment, { 0.0f, 1.0f }));\n"
+        "        return torso_ratio >= 0.68f && torso_ratio <= 1.32f\n"
+        "            && head_ratio >= 0.68f && head_ratio <= 1.32f\n"
+        "            && alignment >= 0.18f;",
+        "        const Vec2 root = particles_[blueprint_.root_node].position;\n"
+        "        const Vec2 head = particles_[blueprint_.head_node].position;\n"
+        "        return torso_uprightness() >= 0.60f\n"
+        "            && head.y > root.y + 0.20f;",
     ),
 )
 changed = False
