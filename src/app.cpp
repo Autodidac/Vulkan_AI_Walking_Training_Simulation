@@ -300,9 +300,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v075-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v075-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v075-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v076-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v076-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v076-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -704,16 +704,13 @@ namespace runner
                 rl::stage_motion_qualification(environment.course_stage(), environment);
             const bool foot_only = !environment.non_foot_grounded();
             const bool intact = environment.body_integrity_valid();
-            const bool moving_crouch = environment.duck_active()
-                && environment.crouch_walk_seconds() > 0.0f;
             const Color state_color = qualification.valid ? green
-                : intact && foot_only && moving_crouch ? yellow : danger;
+                : intact && foot_only ? yellow : danger;
             const std::string_view state_text = qualification.valid
-                ? "QUALIFIED"
+                ? "STAGE VALID"
                 : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY TOUCHED GROUND"
-                : !environment.duck_active() ? "NOT CROUCHING"
-                : "LEARNING";
+                : rl::primary_motion_rejection_name(qualification.rejection_mask);
             add_text_fit(canvas, rect.position + Vec2{ rect.size.x - 154.0f, 9.0f },
                 state_text, 0.82f, state_color, 141.0f, 0.68f);
 
@@ -821,12 +818,19 @@ namespace runner
                     0.78f, white, inner.size.x - 22.0f, 0.62f);
             }
 
-            add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
-                std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
+            const std::string pip_metrics = environment.course_stage() == sim::CourseStage::balance
+                ? std::format("UPDATE {}  STANCE {:.1f}/{:.1f}S  SPIN {:.2f}  ARMS {:.0f} DEG",
+                    trainer.metrics().update,
+                    environment.longest_stable_stance_seconds(),
+                    rl::standing_mastery_seconds,
+                    environment.uncontrolled_spin_turns(),
+                    environment.maximum_upper_body_motor_deviation() * 180.0f / pi)
+                : std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
                     trainer.metrics().update,
                     environment.crouch_walk_seconds(), environment.crouch_walk_distance(),
-                    environment.gait_cycles(), environment.obstacles_passed()),
-                0.72f, state_color, rect.size.x - 24.0f, 0.58f);
+                    environment.gait_cycles(), environment.obstacles_passed());
+            add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
+                pip_metrics, 0.72f, state_color, rect.size.x - 24.0f, 0.58f);
         }
 
         void draw_live_panel(Rect rect, const InputState& input)
@@ -912,18 +916,39 @@ namespace runner
                     metrics.evaluation_survival, metrics.evaluation_stride_events),
                     1.08f, white, usable_width);
                 cursor.y += 29.0f;
-                add_text_fit(canvas, cursor,
-                    std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
-                        metrics.evaluation_stable_stance,
-                        metrics.evaluation_longest_stance,
-                        metrics.evaluation_duck_recoveries),
-                    1.05f, metrics.evaluation_valid ? green : danger, usable_width);
-                cursor.y += 29.0f;
-                add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
-                    metrics.evaluation_quality_key,
-                    rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
-                    0.98f, metrics.evaluation_valid ? accent : danger,
-                    usable_width, 0.82f);
+                if (autonomy.stage == sim::CourseStage::balance)
+                {
+                    add_text_fit(canvas, cursor,
+                        std::format("STANCE CUR {:.1f} LONG {:.1f} TARGET {:.1f} S",
+                            metrics.evaluation_stable_stance,
+                            metrics.evaluation_longest_stance,
+                            rl::standing_mastery_seconds),
+                        1.00f, metrics.evaluation_valid ? green : danger, usable_width);
+                    cursor.y += 29.0f;
+                    const std::uint32_t valid_seeds = 6u
+                        - std::min<std::uint32_t>(metrics.evaluation_invalid_runs, 6u);
+                    add_text_fit(canvas, cursor,
+                        std::format("SPIN {:.2f}/{:.2f}   VALID SEEDS {}/6",
+                            metrics.evaluation_spin_turns,
+                            rl::standing_mastery_spin_limit, valid_seeds),
+                        0.98f, rl::strict_balance_mastery(metrics) ? green : yellow,
+                        usable_width, 0.82f);
+                }
+                else
+                {
+                    add_text_fit(canvas, cursor,
+                        std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
+                            metrics.evaluation_stable_stance,
+                            metrics.evaluation_longest_stance,
+                            metrics.evaluation_duck_recoveries),
+                        1.05f, metrics.evaluation_valid ? green : danger, usable_width);
+                    cursor.y += 29.0f;
+                    add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
+                        metrics.evaluation_quality_key,
+                        rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
+                        0.98f, metrics.evaluation_valid ? accent : danger,
+                        usable_width, 0.82f);
+                }
             }
             else
             {

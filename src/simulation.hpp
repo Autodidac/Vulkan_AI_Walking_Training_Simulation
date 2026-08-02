@@ -808,6 +808,7 @@ namespace runner::sim
             return duck_recovery_count_;
         }
         [[nodiscard]] float maximum_joint_speed() const noexcept { return maximum_joint_speed_; }
+        [[nodiscard]] float maximum_upper_body_motor_deviation() const noexcept;
         [[nodiscard]] float posture_failure_seconds() const noexcept
         {
             return posture_failure_seconds_;

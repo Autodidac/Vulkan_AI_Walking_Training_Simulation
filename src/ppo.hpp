@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0502u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0600u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -40,8 +40,10 @@ namespace runner::rl
         }
         for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
         {
+            const float joint_offset = observation[joint_angle_begin + index];
             const float joint_speed = observation[joint_velocity_begin + index];
-            action[index] = clamp(-0.035f * joint_speed, -0.08f, 0.08f);
+            action[index] = clamp(-0.18f * joint_offset - 0.045f * joint_speed,
+                -0.22f, 0.22f);
         }
 
         // Plant and load the feet through the leg chains before granting the
@@ -324,6 +326,12 @@ namespace runner::rl
         return current_score < best_score - allowed_drop;
     }
 
+    inline constexpr float standing_qualification_seconds = 4.0f;
+    inline constexpr float standing_mastery_seconds = 6.0f;
+    inline constexpr float standing_neutral_arm_limit = 38.0f * pi / 180.0f;
+    inline constexpr float standing_qualification_spin_limit = 0.16f;
+    inline constexpr float standing_mastery_spin_limit = 0.08f;
+
     enum class MotionEvidenceFailure : std::uint32_t
     {
         none = 0,
@@ -333,7 +341,9 @@ namespace runner::rl
         missing_skill = 1u << 3u,
         missing_progress = 1u << 4u,
         unstable_joints = 1u << 5u,
-        body_contact = 1u << 6u
+        body_contact = 1u << 6u,
+        non_neutral_posture = 1u << 7u,
+        excessive_rotation = 1u << 8u
     };
 
     struct StageMotionQualification
@@ -355,6 +365,10 @@ namespace runner::rl
             return "INVALID MOTION";
         if ((mask & evidence_bit(MotionEvidenceFailure::body_contact)) != 0u)
             return "BODY CONTACT";
+        if ((mask & evidence_bit(MotionEvidenceFailure::non_neutral_posture)) != 0u)
+            return "ARMS NOT NEUTRAL";
+        if ((mask & evidence_bit(MotionEvidenceFailure::excessive_rotation)) != 0u)
+            return "UNCONTROLLED STANDING SPIN";
         if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
             return "NO SUSTAINED STANCE";
         if ((mask & evidence_bit(MotionEvidenceFailure::missing_recovery)) != 0u)
@@ -395,9 +409,15 @@ namespace runner::rl
         switch (stage)
         {
         case sim::CourseStage::balance:
-            if (environment.longest_stable_stance_seconds() < 3.0f)
+            if (environment.longest_stable_stance_seconds() < standing_qualification_seconds)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.maximum_joint_speed() > 12.0f)
+            if (environment.maximum_upper_body_motor_deviation()
+                > standing_neutral_arm_limit)
+                rejection |= evidence_bit(MotionEvidenceFailure::non_neutral_posture);
+            if (environment.uncontrolled_spin_turns()
+                > standing_qualification_spin_limit)
+                rejection |= evidence_bit(MotionEvidenceFailure::excessive_rotation);
+            if (environment.maximum_joint_speed() > 10.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
             break;
         case sim::CourseStage::duck_press:
@@ -478,9 +498,10 @@ namespace runner::rl
             quality = pack_quality(
                 quality_bucket(environment.longest_stable_stance_seconds()),
                 quality_bucket(environment.stable_stance_seconds()),
-                quality_bucket(environment.elapsed_seconds()),
                 static_cast<std::uint16_t>(65535u
-                    - quality_bucket(environment.maximum_joint_speed(), 100.0f)));
+                    - quality_bucket(environment.maximum_upper_body_motor_deviation(), 1000.0f)),
+                static_cast<std::uint16_t>(65535u
+                    - quality_bucket(environment.uncontrolled_spin_turns(), 1000.0f)));
             break;
         case sim::CourseStage::duck_press:
             quality = pack_quality(
@@ -538,14 +559,18 @@ namespace runner::rl
     {
         const StageMotionQualification qualification =
             stage_motion_qualification(stage, environment);
-        if (!qualification.valid
-            || !environment.current_display_posture_valid())
+        if (!qualification.valid || !environment.body_integrity_valid())
             return false;
         if (stage == sim::CourseStage::balance)
         {
-            return environment.stable_stance_seconds() >= 1.0f
-                && environment.uprightness() >= 0.82f
-                && (environment.left_supported() || environment.right_supported());
+            // Qualification proves sustained support. Keep the current sample
+            // visible through one solver-frame contact flicker while still
+            // rejecting collapsed, arms-up, spinning, or broken frames.
+            return environment.uprightness() >= 0.60f
+                && environment.maximum_upper_body_motor_deviation()
+                    <= standing_neutral_arm_limit
+                && environment.uncontrolled_spin_turns()
+                    <= standing_qualification_spin_limit;
         }
         if (stage == sim::CourseStage::duck_press)
         {
@@ -566,6 +591,37 @@ namespace runner::rl
                 && (environment.left_supported() || environment.right_supported());
         }
         return environment.valid_motion() && environment.uprightness() >= 0.45f;
+    }
+
+    [[nodiscard]] inline bool training_preview_frame_renderable(
+        const sim::Environment& environment) noexcept
+    {
+        const auto particles = environment.particles();
+        if (!environment.blueprint().valid() || particles.empty()
+            || particles.size() != environment.blueprint().nodes.size())
+            return false;
+        for (const sim::Particle& particle : particles)
+        {
+            if (!std::isfinite(particle.position.x) || !std::isfinite(particle.position.y)
+                || !std::isfinite(particle.previous.x) || !std::isfinite(particle.previous.y))
+                return false;
+        }
+        return true;
+    }
+
+    [[nodiscard]] inline int training_preview_priority(sim::CourseStage stage,
+        const sim::Environment& environment) noexcept
+    {
+        if (!training_preview_frame_renderable(environment))
+            return 0;
+        if (stage_display_sample_eligible(stage, environment))
+            return 4;
+        if (environment.body_integrity_valid()
+            && stage_motion_qualification(stage, environment).valid)
+            return 3;
+        if (environment.body_integrity_valid())
+            return 2;
+        return 1;
     }
 
     [[nodiscard]] inline bool policy_candidate_better(std::uint64_t quality,

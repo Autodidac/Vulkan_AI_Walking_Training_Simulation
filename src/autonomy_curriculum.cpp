@@ -17,9 +17,7 @@ namespace runner::rl
         switch (stage_)
         {
         case sim::CourseStage::balance:
-            return metrics.evaluation_longest_stance >= 5.0f
-                && metrics.evaluation_survival >= 6.0f
-                && metrics.evaluation_max_joint_speed <= 10.0f;
+            return strict_balance_mastery(metrics);
         case sim::CourseStage::duck_press:
             return metrics.evaluation_duck_recoveries >= 2.0f
                 && metrics.evaluation_duck_seconds >= 1.25f
@@ -108,8 +106,23 @@ namespace runner::rl
         }
         else
         {
-            worker_message_ = std::format("{} - STRICT MASTERY {}/{}",
-                sim::course_stage_name(stage_), mastery_streak_, mastery_lock_confirmations);
+            if (stage_ == sim::CourseStage::balance)
+            {
+                const std::uint32_t valid_seeds = 6u
+                    - std::min<std::uint32_t>(metrics.evaluation_invalid_runs, 6u);
+                worker_message_ = std::format(
+                    "STAGE VALID {}/6 SEEDS - STRICT STAND {:.1f}/{:.1f}S  SPIN {:.2f}/{:.2f}  MASTERY {}/{}",
+                    valid_seeds, metrics.evaluation_longest_stance,
+                    standing_mastery_seconds, metrics.evaluation_spin_turns,
+                    standing_mastery_spin_limit, mastery_streak_,
+                    mastery_lock_confirmations);
+            }
+            else
+            {
+                worker_message_ = std::format("{} - STRICT MASTERY {}/{}",
+                    sim::course_stage_name(stage_), mastery_streak_,
+                    mastery_lock_confirmations);
+            }
         }
     }
 
