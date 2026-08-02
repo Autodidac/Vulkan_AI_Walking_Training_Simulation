@@ -6,7 +6,7 @@ else()
     set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 endif()
 
-project(Runner VERSION 0.7.4 LANGUAGES CXX)
+project(Runner VERSION 0.7.5 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)

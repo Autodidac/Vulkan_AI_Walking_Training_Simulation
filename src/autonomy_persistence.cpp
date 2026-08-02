@@ -22,7 +22,7 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 7\n";
+            output << "RUNAUTONOMY 8\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace runner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "RUNAUTONOMY" || version != 7
+            if (!input || magic != "RUNAUTONOMY" || version != 8
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
@@ -85,18 +85,29 @@ namespace runner::rl
         {
             const StageMotionQualification qualification =
                 stage_motion_qualification(stage_, environment);
-            if (!qualification.valid
-                || !stage_display_sample_eligible(stage_, environment))
+            const bool stage_eligible = stage_display_sample_eligible(stage_, environment);
+            const bool structurally_renderable = !environment.particles().empty()
+                && environment.body_integrity_valid();
+            if (!structurally_renderable)
                 continue;
-            const float tiebreak = environment.distance_travelled() * 10.0f
+            const std::uint64_t display_quality = qualification.valid
+                ? qualification.quality_key
+                : pack_quality(
+                    static_cast<std::uint16_t>(stage_eligible ? 2u : 1u),
+                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                        environment.alternating_steps(), 65535u)),
+                    quality_bucket(environment.crouch_walk_distance(), 100.0f),
+                    quality_bucket(environment.elapsed_seconds(), 10.0f));
+            const float tiebreak = environment.crouch_walk_distance() * 20.0f
+                + environment.distance_travelled() * 10.0f
                 + environment.elapsed_seconds();
             if (representative == nullptr
-                || qualification.quality_key > representative_quality
-                || (qualification.quality_key == representative_quality
+                || display_quality > representative_quality
+                || (display_quality == representative_quality
                     && tiebreak > representative_tiebreak))
             {
                 representative = &environment;
-                representative_quality = qualification.quality_key;
+                representative_quality = display_quality;
                 representative_tiebreak = tiebreak;
             }
         }

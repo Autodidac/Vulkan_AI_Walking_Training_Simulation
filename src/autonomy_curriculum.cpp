@@ -22,10 +22,11 @@ namespace runner::rl
                 && metrics.evaluation_max_joint_speed <= 12.0f;
         case sim::CourseStage::duck_press:
             return metrics.evaluation_duck_recoveries >= 1.0f
-                && metrics.evaluation_stable_stance >= 1.0f
-                && metrics.evaluation_duck_seconds >= 1.0f
-                && metrics.evaluation_obstacles_passed >= 1.0f
-                && metrics.evaluation_survival >= 8.0f;
+                && metrics.evaluation_stride_events >= 4.0f
+                && metrics.evaluation_duck_seconds >= 2.0f
+                && metrics.evaluation_distance >= 0.75f
+                && metrics.evaluation_obstacles_passed >= 3.0f
+                && metrics.evaluation_survival >= 12.0f;
         case sim::CourseStage::ramps:
             return metrics.evaluation_jump_landings >= 2.0f
                 && metrics.evaluation_powered_jumps >= 2.0f;

@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0400u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0500u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -148,11 +148,25 @@ namespace runner::rl
         const sim::Environment& environment) noexcept
     {
         auto action = balance_teacher_action(environment);
-        const float pressure = environment.duck_obstacle_weight();
-        action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
-        action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
-        action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
-        action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+        const float pressure = environment.duck_press_completed()
+            ? std::max(0.72f, environment.duck_obstacle_weight())
+            : environment.duck_obstacle_weight();
+        if (!environment.duck_press_completed())
+        {
+            action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
+            action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
+            action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
+            action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+        }
+        else
+        {
+            const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.05f;
+            const float swing = std::sin(phase);
+            action[0] = clamp(action[0] - 0.24f * pressure + 0.34f * swing, -0.82f, 0.82f);
+            action[1] = clamp(action[1] + 0.50f * pressure + 0.34f * std::max(0.0f, swing), -0.90f, 0.90f);
+            action[2] = clamp(action[2] + 0.24f * pressure - 0.34f * swing, -0.82f, 0.82f);
+            action[3] = clamp(action[3] - 0.50f * pressure - 0.34f * std::max(0.0f, -swing), -0.90f, 0.90f);
+        }
         for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
             action[index] = 0.0f;
         return bilateral_joint_synergy_action(environment, action, sim::CourseStage::duck_press);
@@ -361,9 +375,12 @@ namespace runner::rl
             if (environment.longest_stable_stance_seconds() < 2.0f
                 || environment.stable_stance_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
+            if (environment.duck_recoveries() < 1u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
-            if (environment.obstacles_passed() < 2u)
+            if (environment.alternating_steps() < 4u
+                || environment.crouch_walk_seconds() < 2.0f
+                || environment.crouch_walk_distance() < 0.75f
+                || environment.obstacles_passed() < 3u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
@@ -486,9 +503,12 @@ namespace runner::rl
         }
         if (stage == sim::CourseStage::duck_press)
         {
-            return environment.uprightness() >= 0.60f
-                && (environment.duck_active()
-                    || environment.stable_stance_seconds() >= 0.50f)
+            return environment.duck_press_completed()
+                && environment.duck_active()
+                && !environment.non_foot_grounded()
+                && environment.uprightness() >= 0.60f
+                && environment.crouch_walk_seconds() >= 0.35f
+                && environment.alternating_steps() >= 1u
                 && (environment.left_supported() || environment.right_supported());
         }
         return environment.valid_motion() && environment.uprightness() >= 0.45f;

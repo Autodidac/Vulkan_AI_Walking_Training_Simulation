@@ -490,3 +490,36 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 - published release asset re-download, byte comparison, SHA-256, manifest, extraction, and branding audit: passed;
 - open pull requests after cleanup: `0`;
 - remaining branches after cleanup: `main`.
+
+
+## v0.7.5 crouch-walk and training-PIP correction
+
+### WALK-DUCK-067 — Foot-only duck contact
+**Status:** IN PROGRESS
+
+Whenever a rig is in a recognised duck, only semantic foot/support nodes may touch terrain. Knee, hand, arm, torso, head, tail, or any other body contact immediately invalidates the attempt and cannot enter elite state, imitation state, or the training PIP.
+
+### WALK-DUCK-068 — Replace static folding with crouch walking
+**Status:** IN PROGRESS
+
+The compression platen remains only the introductory lesson. Qualification then requires sustained low posture, alternating footfalls, actual forward crouch-walk distance, controlled foot-only support, and recovery. Ten thousand updates spent folding in place are not progress.
+
+### WALK-TERRAIN-069 — Crouch obstacle avoidance on unstable ground
+**Status:** IN PROGRESS
+
+After compression and recovery, the rig must crouch-walk over uneven terrain while passing low bars and small ground hazards. Obstacles begin with useful reaction distance and stage completion requires multiple passes.
+
+### WALK-PIP-070 — Show the real full crouch-walk attempt
+**Status:** IN PROGRESS
+
+The training PIP publishes a current intact training environment every completed update, never goes blank merely because the attempt is failing, keeps the complete rig large, shows uneven terrain and nearby obstacles, labels farther obstacles without zooming the rig into a dot, and overlays the exact foot-contact or integrity failure while displaying update, crouch time, distance, alternating steps, and passes.
+
+### WALK-CHECKPOINT-071 — Invalidate the failed 10,000-update duck policy
+**Status:** IN PROGRESS
+
+The v0.7.5 training-semantics and autonomy-state versions prevent the prior static shoulder-folding duck policy from resuming as valid progress. New autosave paths start the corrected lesson cleanly.
+
+### WALK-CHICKEN-072 — Preserve the working chicken
+**Status:** IN PROGRESS
+
+The current chicken anatomy and behavior are intentionally preserved in this pass. Crouch-walk and PIP changes must not regress the chicken preset.

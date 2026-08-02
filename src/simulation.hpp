@@ -84,7 +84,8 @@ namespace runner::sim
         case CourseStage::balance:
             return true;
         case CourseStage::duck_press:
-            return duck_seconds >= 0.50f && obstacles_passed >= 2u;
+            return alternating_steps >= 4u && duck_seconds >= 2.0f
+                && obstacles_passed >= 3u;
         case CourseStage::ramps:
             return landed_jumps >= 1u;
         case CourseStage::uneven:
@@ -106,7 +107,7 @@ namespace runner::sim
         switch (stage)
         {
         case CourseStage::balance: return "1. STAND";
-        case CourseStage::duck_press: return "2. PRESS DUCK / HOLD / RECOVER";
+        case CourseStage::duck_press: return "2. CROUCH WALK / UNEVEN AVOID";
         case CourseStage::ramps: return "3. JUMP / LAND";
         case CourseStage::uneven: return "4. WALK / RUN";
         case CourseStage::hurdles: return "5. MOVING LOW BAR / HURDLE";
@@ -219,6 +220,12 @@ namespace runner::sim
     {
         return left_supported && right_supported
             && std::abs(root_speed) > 0.22f && stance_slip_speed > 0.18f;
+    }
+
+    [[nodiscard]] inline bool duck_ground_contact_allowed(bool duck_active,
+        bool non_foot_grounded) noexcept
+    {
+        return !duck_active || !non_foot_grounded;
     }
 
     [[nodiscard]] inline bool rolling_body_motion(float root_speed, float torso_turn_speed,
@@ -414,7 +421,8 @@ namespace runner::sim
         excessive_spins,
         hazard_quiver,
         robotic_torso_swing,
-        press_penetration
+        press_penetration,
+        duck_body_contact
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -437,6 +445,7 @@ namespace runner::sim
         case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
         case InvalidMotion::robotic_torso_swing: return "ROBOTIC TORSO / SHOULDER SWING";
         case InvalidMotion::press_penetration: return "DUCK PRESS PENETRATION";
+        case InvalidMotion::duck_body_contact: return "DUCK CONTACT - FEET ONLY";
         }
         return "INVALID";
     }
@@ -707,7 +716,13 @@ namespace runner::sim
                 return 1.05f + course_difficulty_ * 0.95f;
             return 1.20f + course_difficulty_ * 1.05f;
         }
-        [[nodiscard]] float course_progress() const noexcept { return elapsed_seconds_ * course_speed(); }
+        [[nodiscard]] float course_progress() const noexcept
+        {
+            if (course_stage_ == CourseStage::duck_press && duck_press_completed_)
+                return std::max(0.0f, elapsed_seconds_ - duck_walk_started_seconds_)
+                    * course_speed();
+            return elapsed_seconds_ * course_speed();
+        }
         [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
         [[nodiscard]] std::uint32_t recovery_events() const noexcept { return recovery_events_; }
         [[nodiscard]] std::uint32_t recovery_successes() const noexcept { return recovery_successes_; }
@@ -715,6 +730,8 @@ namespace runner::sim
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
         [[nodiscard]] float duck_seconds() const noexcept { return duck_seconds_; }
+        [[nodiscard]] float crouch_walk_seconds() const noexcept { return crouch_walk_seconds_; }
+        [[nodiscard]] float crouch_walk_distance() const noexcept { return crouch_walk_distance_; }
         [[nodiscard]] bool duck_active() const noexcept { return duck_active_; }
         [[nodiscard]] float duck_obstacle_weight() const noexcept
         {
@@ -826,6 +843,9 @@ namespace runner::sim
         float duck_clearance_margin_{};
         float duck_press_hold_seconds_{};
         float duck_press_max_penetration_{};
+        float duck_walk_started_seconds_{};
+        float crouch_walk_seconds_{};
+        float crouch_walk_distance_{};
         float torso_swing_seconds_{};
         float current_duck_hold_seconds_{};
         float stable_stance_seconds_{};
