@@ -1,0 +1,34 @@
+name: Clean Runner v0.7.6 Release Source
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - tools/cleanup_v076_release.py
+      - .github/workflows/cleanup-v076-release.yml
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: cleanup-runner-v076-release
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRIGGER_PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Remove staging files, repair tag, and audit release
+        run: python3 tools/cleanup_v076_release.py
