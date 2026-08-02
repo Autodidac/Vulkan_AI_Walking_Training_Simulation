@@ -16,6 +16,7 @@ if start_marker in text:
 for old, new in (
     ("ankle_position.y - 0.155f", "ankle_position.y - 0.185f"),
     ("ankle_position.y - 0.165f", "ankle_position.y - 0.195f"),
+    ("constexpr float chain_strength = 0.14f", "constexpr float chain_strength = 0.08f"),
 ):
     if old in text:
         text = text.replace(old, new)
