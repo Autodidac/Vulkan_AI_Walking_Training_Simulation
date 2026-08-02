@@ -16,7 +16,7 @@ concurrency:
 jobs:
   linux-source:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,13 +28,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Materialize v0.7.4 source
-        run: python3 tools/apply_runner_v074.py
+      - name: Materialize complete v0.7.4 source and mission ledger
+        run: |
+          python3 tools/apply_runner_v074.py
+          python3 tools/fix_v074_live_failures.py
+          python3 tools/complete_v074_missions.py
+          python3 tools/reconcile_runner_missions.py
+          python3 tools/fix_v074_hygiene.py
 
-      - name: Enforce clean branding and patch hygiene
+      - name: Enforce branding, ledger, and patch hygiene
+        shell: bash
         run: |
           git diff --check
-          if git grep -in 'epoch' -- .; then
+          old_brand="$(printf '%s%s' 'ep' 'och')"
+          if git grep -in "$old_brand" -- .; then
             echo "Former project brand remains in owned source."
             exit 1
           fi
@@ -42,6 +49,24 @@ jobs:
             echo "Obsolete trainer title remains."
             exit 1
           fi
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('missioncache.md').read_text(encoding='utf-8')
+          required = [
+              'WALK-BRAND-040', 'WALK-TITLE-041', 'WALK-DUCK-042',
+              'WALK-COLLIDE-043', 'WALK-CONTROL-044', 'WALK-HAZARD-045',
+              'WALK-CARRY-046', 'WALK-FEET-047', 'WALK-CHICKEN-048',
+              'WALK-DUCK-049', 'WALK-OBSERVE-050', 'WALK-AUDIT-051',
+              'WALK-RIGLAB-052', 'WALK-PRESETS-053', 'WALK-PIPELINE-054',
+              'WALK-COURSE-055', 'WALK-HAZARDS-056', 'WALK-CURRICULUM-057',
+              'WALK-GATES-058', 'WALK-AIRTIME-059', 'WALK-CONTROL-060',
+              'WALK-PIPUI-061', 'WALK-STATS-062', 'WALK-LEARNING-063',
+              'WALK-LAUNCH-064', 'WALK-RELEASE-065', 'WALK-LIVE-066',
+          ]
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f'missing reconciled missions: {missing}')
+          PY
 
       - name: Configure deterministic C++23 suite
         env:
@@ -63,13 +88,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Complete Runner v0.7.4 rebrand and duck-press lesson"
+          git commit -m "Complete all Runner v0.7.4 missions"
           git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
     needs: linux-source
     runs-on: windows-2025
-    timeout-minutes: 80
+    timeout-minutes: 90
     env:
       VCPKG_ROOT: ${{ github.workspace }}\vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
@@ -82,8 +107,16 @@ jobs:
       - name: Confirm clean materialized source
         shell: pwsh
         run: |
-          if (Test-Path tools/apply_runner_v074.py) { throw "One-shot applicator was not removed" }
-          $matches = git grep -in epoch -- .
+          foreach ($script in @(
+            'tools/apply_runner_v074.py',
+            'tools/fix_v074_live_failures.py',
+            'tools/complete_v074_missions.py',
+            'tools/reconcile_runner_missions.py',
+            'tools/fix_v074_hygiene.py')) {
+            if (Test-Path $script) { throw "One-shot tool remains: $script" }
+          }
+          $oldBrandToken = 'ep' + 'och'
+          $matches = git grep -in $oldBrandToken -- .
           if ($LASTEXITCODE -eq 0) { $matches; throw "Former project brand remains" }
           git diff --quiet
           if ($LASTEXITCODE -ne 0) { throw "Windows did not receive the Linux-tested source" }
@@ -152,8 +185,10 @@ jobs:
           foreach ($required in @('Runner.exe','run.bat','shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
             if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
           }
-          $oldBrand = Get-ChildItem $stage -Recurse -File | Select-String -Pattern 'epoch' -SimpleMatch -CaseSensitive:$false
-          if ($oldBrand) { $oldBrand; throw "Former project brand found in package text" }
+          $oldBrandToken = 'ep' + 'och'
+          $oldBrand = Get-ChildItem $stage -Recurse -File |
+            Select-String -Pattern $oldBrandToken -SimpleMatch -CaseSensitive:$false
+          if ($oldBrand) { $oldBrand; throw "Former project brand found in package" }
 
       - name: Verify installed executable and launcher
         shell: pwsh
