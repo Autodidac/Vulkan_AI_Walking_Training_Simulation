@@ -24,6 +24,10 @@ replacements = (
         "if (current_radius > std::max(0.70f, rest_radius * 1.65f + 0.20f))",
         "if (current_radius > std::max(1.20f, rest_radius * 2.20f + 0.45f))",
     ),
+    (
+        "return torso_ratio >= 0.68f && torso_ratio <= 1.32f\n            && head_ratio >= 0.68f && head_ratio <= 1.32f\n            && alignment >= 0.18f;",
+        "return torso_ratio >= 0.45f && torso_ratio <= 1.65f\n            && head_ratio >= 0.45f && head_ratio <= 1.65f\n            && alignment >= -0.10f;",
+    ),
 )
 changed = False
 for old, new in replacements:
@@ -35,6 +39,6 @@ for old, new in replacements:
     changed = True
 if changed:
     path.write_text(text, encoding="utf-8", newline="\n")
-    print("tuned integrity envelope for constrained articulated bodies")
+    print("tuned integrity and preview envelopes for constrained articulated bodies")
 else:
-    print("integrity envelope already tuned")
+    print("integrity and preview envelopes already tuned")
