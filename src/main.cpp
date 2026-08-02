@@ -297,8 +297,6 @@ int main(int argc, char** argv)
             1.0f / 240.0f, 1.0f / 15.0f);
         previous_ticks = current_ticks;
 
-        int drawable_width{};
-        int drawable_height{};
         SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
         application.frame(input, dt, drawable_width, drawable_height);
         if (!renderer.render(application.vertices(), drawable_width, drawable_height, error))

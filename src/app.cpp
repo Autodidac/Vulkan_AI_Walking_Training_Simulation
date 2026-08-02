@@ -680,17 +680,18 @@ namespace epochrunner
             const float scale = std::clamp(
                 std::min(horizontal_scale, vertical_scale), 16.0f, 43.0f);
 
-            std::vector<Vec2> ground{};
-            ground.reserve(65);
+            std::vector<Vec2> ground_points{};
+            ground_points.reserve(65);
             for (int sample = 0; sample <= 64; ++sample)
             {
                 const float screen_fraction = static_cast<float>(sample) / 64.0f;
                 const float world_x = camera
                     + (screen_fraction - 0.5f) * inner.size.x / scale;
-                ground.push_back(world_to_screen({ world_x, environment.ground_height_at(world_x) },
+                ground_points.push_back(world_to_screen(
+                    { world_x, environment.ground_height_at(world_x) },
                     inner, camera, scale, 0.82f));
             }
-            canvas.polyline(ground, 3.0f, rgb(0x51606c));
+            canvas.polyline(ground_points, 3.0f, rgb(0x51606c));
 
             for (const sim::CourseFeature& feature : environment.course_features())
             {
