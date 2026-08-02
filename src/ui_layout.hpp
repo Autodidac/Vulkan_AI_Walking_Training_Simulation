@@ -21,6 +21,25 @@ namespace epochrunner::ui_layout
     inline constexpr float pip_top_padding = 162.0f;
     inline constexpr float bottom_telemetry_height = 52.0f;
 
+    enum class DistanceUnits { metric, imperial };
+
+    [[nodiscard]] constexpr Box top_bar_box(float window_width) noexcept
+    {
+        return { 0.0f, 0.0f, std::max(0.0f, window_width), top_bar_height };
+    }
+
+    [[nodiscard]] constexpr float course_reference_marker_spacing_m(
+        DistanceUnits units) noexcept
+    {
+        return units == DistanceUnits::metric ? 250.0f : 1609.344f * 0.25f;
+    }
+
+    [[nodiscard]] constexpr std::uint64_t lifetime_delta(
+        std::uint64_t total, std::uint64_t start) noexcept
+    {
+        return total >= start ? total - start : 0u;
+    }
+
     [[nodiscard]] constexpr bool overlaps(Box a, Box b) noexcept
     {
         return a.x < b.x + b.width && a.x + a.width > b.x

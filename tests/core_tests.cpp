@@ -39,6 +39,17 @@ namespace epochrunner::sim
                 environment.particles_[environment.blueprint_.head_node].position;
         }
 
+        static void detach_left_support_cluster(Environment& environment) noexcept
+        {
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (!environment.blueprint_.is_left_support_seed(index))
+                    continue;
+                environment.particles_[index].position.x += 4.0f;
+                environment.particles_[index].previous = environment.particles_[index].position;
+            }
+        }
+
         static void qualify_stable_stance(Environment& environment) noexcept
         {
             environment.invalid_reason_ = InvalidMotion::none;
@@ -114,6 +125,17 @@ int main()
 {
     using namespace epochrunner;
 
+    require(ui_layout::top_bar_box(1970.0f).width == 1970.0f,
+        "top GUI background does not span the full drawable width");
+    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+            ui_layout::DistanceUnits::metric) - 250.0f) < 0.001f,
+        "metric markers are not quarter-kilometre spaced");
+    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+            ui_layout::DistanceUnits::imperial) - 402.336f) < 0.001f,
+        "imperial markers are not quarter-mile spaced");
+    require(ui_layout::lifetime_delta(120u, 20u) == 100u
+            && ui_layout::lifetime_delta(20u, 120u) == 0u,
+        "rig lifetime counters can underflow");
     require(ui_layout::live_layout_valid(1100.0f, 902.0f),
         "supported minimum live layout overlaps its panel, telemetry, or PIP");
     require(!ui_layout::supported_window(1099.0f, 902.0f)
@@ -367,19 +389,19 @@ int main()
     require(!disconnected.valid(), "enabled motor without direct A-pivot-C bones was accepted");
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
-    require(humanoid.nodes.size() >= 19,
+    require(humanoid.nodes.size() >= 17,
         "human-calibrated rig should include passive heel/toe feet and articulated arms");
     require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
         "uploaded humanoid pelvis calibration not applied");
-    require(humanoid.bones.size() >= 21,
+    require(humanoid.bones.size() >= 19,
         "humanoid feet or arms are not structurally connected");
     require(humanoid.active_motor_count == sim::action_count,
         "humanoid does not expose independent shoulder and elbow motors");
     require(humanoid.left_contact_node != humanoid.motors[1].c
             && humanoid.right_contact_node != humanoid.motors[3].c,
         "semantic feet are still the lower-leg motor endpoints");
-    require(humanoid.additional_left_contact_nodes.size() == 2u
-            && humanoid.additional_right_contact_nodes.size() == 2u,
+    require(humanoid.additional_left_contact_nodes.size() == 1u
+            && humanoid.additional_right_contact_nodes.size() == 1u,
         "dedicated foot plates do not include heel and toe contacts");
     require(humanoid.nodes[humanoid.motors[1].c].y
             - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
@@ -626,6 +648,76 @@ int main()
         }
         require(valid_agents >= 4u,
             "shared balance controller fails the robust four-of-six PPO seed gate");
+    }
+
+    {
+        require(humanoid.support_seed_count() == 4u,
+            "humanoid feet are not two rigid heel-toe contact plates");
+        sim::Environment intact{ humanoid, 0x1A7E6u };
+        require(intact.body_integrity_valid(),
+            "fresh humanoid body fails the full skeleton integrity gate");
+        sim::EnvironmentTestAccess::qualify_stable_stance(intact);
+        sim::EnvironmentTestAccess::detach_left_support_cluster(intact);
+        require(!intact.body_integrity_valid(),
+            "detached foot cluster passes the full skeleton integrity gate");
+        require(!rl::stage_display_sample_eligible(sim::CourseStage::balance, intact),
+            "detached feet can still publish into the training preview");
+    }
+
+    {
+        sim::Environment authority{ humanoid, 0xA4710u };
+        authority.set_course(sim::CourseStage::balance, 0.25f);
+        const auto teacher = rl::balance_teacher_action(authority);
+        float leg_energy = 0.0f;
+        float arm_energy = 0.0f;
+        for (std::size_t index = 0; index < 4; ++index)
+            leg_energy += std::abs(teacher[index]);
+        for (std::size_t index = 4; index < 8; ++index)
+            arm_energy += std::abs(teacher[index]);
+        require(leg_energy > arm_energy * 4.0f + 0.02f,
+            "balance teacher still reaches for the arms before loading the feet");
+
+        std::array<float, sim::action_count> arm_heavy{};
+        arm_heavy.fill(1.0f);
+        const auto effective = rl::effective_policy_action(
+            authority, arm_heavy, sim::CourseStage::balance);
+        float effective_legs = 0.0f;
+        float effective_arms = 0.0f;
+        for (std::size_t index = 0; index < 4; ++index)
+            effective_legs += std::abs(effective[index]);
+        for (std::size_t index = 4; index < 8; ++index)
+            effective_arms += std::abs(effective[index]);
+        require(effective_arms < effective_legs * 0.40f + 0.02f,
+            "early balance still grants more authority to arms than legs");
+    }
+
+    {
+        const std::array<sim::CreatureBlueprint, 4> passive_rigs{
+            sim::CreatureBlueprint::chicken(),
+            sim::CreatureBlueprint::quadruped(),
+            sim::CreatureBlueprint::crawler4(),
+            sim::CreatureBlueprint::hexapod()
+        };
+        for (std::size_t index = 0; index < passive_rigs.size(); ++index)
+        {
+            sim::Environment environment{ passive_rigs[index], 0x7000u + index };
+            const std::array<float, sim::action_count> zero{};
+            for (int frame = 0; frame < 180; ++frame)
+            {
+                (void)environment.step(zero);
+                require(environment.body_integrity_valid(),
+                    "head or passive tail escaped the articulated body");
+                if (!environment.valid_motion())
+                    environment.reset(0x7100u + index * 257u + static_cast<std::size_t>(frame));
+            }
+        }
+    }
+
+    {
+        sim::Environment flip_semantics{ humanoid, 0xF11Fu };
+        require(flip_semantics.maximum_flip_turns() == 0.0f
+                && flip_semantics.uncontrolled_spin_turns() == 0.0f,
+            "fresh rig does not separate flip and spin counters");
     }
 
     require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),

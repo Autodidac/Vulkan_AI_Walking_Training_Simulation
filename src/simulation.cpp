@@ -27,52 +27,81 @@ namespace epochrunner::sim
             });
         }
 
+        [[nodiscard]] bool motor_references_node(const CreatureBlueprint& rig,
+            std::size_t node) noexcept
+        {
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+            {
+                const MotorConstraint& motor = rig.motors[index];
+                if (motor.enabled && (motor.a == node || motor.pivot == node || motor.c == node))
+                    return true;
+            }
+            return false;
+        }
+
+        [[nodiscard]] std::size_t node_degree(const CreatureBlueprint& rig,
+            std::size_t node) noexcept
+        {
+            return static_cast<std::size_t>(std::ranges::count_if(
+                rig.bones, [node](const DistanceConstraint& bone)
+                {
+                    return bone.a == node || bone.b == node;
+                }));
+        }
+
+        [[nodiscard]] bool passive_endpoint(const CreatureBlueprint& rig,
+            std::size_t node) noexcept
+        {
+            return node < rig.nodes.size()
+                && node != rig.root_node && node != rig.torso_node
+                && node != rig.head_node && !rig.is_support_seed(node)
+                && node_degree(rig, node) == 1u
+                && !motor_references_node(rig, node);
+        }
+
         void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
             float toe_reach = 0.34f) noexcept
         {
             auto add_foot = [&](std::uint16_t ankle)
             {
-                std::array<std::uint16_t, 3> result{};
-                if (ankle >= rig.nodes.size() || rig.nodes.size() > 122)
+                std::array<std::uint16_t, 2> result{};
+                if (ankle >= rig.nodes.size() || rig.nodes.size() > 124)
                     return result;
 
                 const Vec2 ankle_position = rig.nodes[ankle];
                 const float radius = ankle < rig.radii.size()
-                    ? clamp(rig.radii[ankle] * 0.68f, 0.095f, 0.135f) : 0.11f;
-                const auto foot = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ ankle_position.x + 0.055f, ankle_position.y - 0.205f });
-                rig.radii.push_back(radius);
-                const Vec2 foot_position = rig.nodes[foot];
+                    ? clamp(rig.radii[ankle] * 0.64f, 0.090f, 0.125f) : 0.105f;
                 const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ foot_position.x - heel_reach, foot_position.y - 0.012f });
+                rig.nodes.push_back({
+                    ankle_position.x - heel_reach * 0.55f,
+                    ankle_position.y - 0.185f
+                });
                 rig.radii.push_back(radius);
                 const auto toe = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ foot_position.x + toe_reach, foot_position.y - 0.018f });
+                rig.nodes.push_back({
+                    ankle_position.x + toe_reach * 0.72f,
+                    ankle_position.y - 0.195f
+                });
                 rig.radii.push_back(radius);
 
-                // The ankle remains the final articulated leg joint. A braced
-                // passive adapter feeds a separate contact plate; the lower-leg
-                // endpoint itself is never a semantic foot or traction contact.
-                rig.bones.push_back({ ankle, foot, 0.0f, 0.98f });
-                rig.bones.push_back({ ankle, heel, 0.0f, 0.94f });
-                rig.bones.push_back({ ankle, toe, 0.0f, 0.94f });
-                rig.bones.push_back({ foot, heel, 0.0f, 0.96f });
-                rig.bones.push_back({ foot, toe, 0.0f, 0.96f });
-                rig.bones.push_back({ heel, toe, 0.0f, 0.90f });
-                result = { foot, heel, toe };
+                // A single rigid triangle is enough: ankle-to-heel,
+                // ankle-to-toe, and heel-to-toe. Both plate endpoints are
+                // semantic contacts; there is no dangling center cluster.
+                rig.bones.push_back({ ankle, heel, 0.0f, 1.0f });
+                rig.bones.push_back({ ankle, toe, 0.0f, 1.0f });
+                rig.bones.push_back({ heel, toe, 0.0f, 1.0f });
+                result = { heel, toe };
                 return result;
             };
 
-            const std::uint16_t left_ankle = rig.left_contact_node;
-            const std::uint16_t right_ankle = rig.right_contact_node;
-            const auto left = add_foot(left_ankle);
-            const auto right = add_foot(right_ankle);
+            const auto left = add_foot(rig.left_contact_node);
+            const auto right = add_foot(rig.right_contact_node);
             if (left[0] != 0u && right[0] != 0u)
             {
                 rig.left_contact_node = left[0];
                 rig.right_contact_node = right[0];
-                rig.additional_left_contact_nodes = { left[1], left[2] };
-                rig.additional_right_contact_nodes = { right[1], right[2] };
+                rig.additional_left_contact_nodes = { left[1] };
+                rig.additional_right_contact_nodes = { right[1] };
             }
         }
 
@@ -907,11 +936,15 @@ namespace epochrunner::sim
                     return bone.a == index || bone.b == index;
                 }));
             float inverse_mass = 1.0f;
-            if (index == blueprint_.head_node)
-                inverse_mass = 1.25f;
-            else if (degree == 1u && !contact_semantic && index != blueprint_.root_node
+            if (contact_semantic)
+                inverse_mass = 0.58f;
+            else if (index == blueprint_.head_node)
+                inverse_mass = 0.72f;
+            else if (passive_endpoint(blueprint_, index))
+                inverse_mass = 0.68f;
+            else if (degree == 1u && index != blueprint_.root_node
                 && index != blueprint_.torso_node)
-                inverse_mass = 1.18f;
+                inverse_mass = 0.92f;
             particles_.push_back({ position, position, inverse_mass, radius, false });
         }
 
@@ -1017,6 +1050,162 @@ namespace epochrunner::sim
         const Vec2 correction = delta * ((distance - constraint.rest_length) / distance * constraint.stiffness);
         lhs.position += correction * (lhs.inverse_mass / weight);
         rhs.position -= correction * (rhs.inverse_mass / weight);
+    }
+
+    bool Environment::body_integrity_valid() const noexcept
+    {
+        if (particles_.size() != blueprint_.nodes.size() || particles_.empty()
+            || !valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node))
+            return false;
+
+        for (const Particle& particle : particles_)
+        {
+            if (!std::isfinite(particle.position.x) || !std::isfinite(particle.position.y)
+                || !std::isfinite(particle.previous.x) || !std::isfinite(particle.previous.y)
+                || std::abs(particle.position.x) > 1000.0f
+                || std::abs(particle.position.y) > 1000.0f)
+                return false;
+        }
+        for (const DistanceConstraint& bone : blueprint_.bones)
+        {
+            if (bone.a >= particles_.size() || bone.b >= particles_.size()
+                || bone.rest_length <= 1.0e-5f)
+                return false;
+            const float ratio = length(particles_[bone.b].position
+                - particles_[bone.a].position) / bone.rest_length;
+            if (!std::isfinite(ratio) || ratio < 0.20f || ratio > 2.50f)
+                return false;
+        }
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const Vec2 torso_segment = particles_[blueprint_.torso_node].position - root;
+        const Vec2 head_segment = particles_[blueprint_.head_node].position
+            - particles_[blueprint_.torso_node].position;
+        const Vec2 rest_torso_segment = blueprint_.nodes[blueprint_.torso_node]
+            - blueprint_.nodes[blueprint_.root_node];
+        const Vec2 rest_head_segment = blueprint_.nodes[blueprint_.head_node]
+            - blueprint_.nodes[blueprint_.torso_node];
+        const float torso_ratio = length(torso_segment)
+            / std::max(length(rest_torso_segment), 1.0e-5f);
+        const float head_ratio = length(head_segment)
+            / std::max(length(rest_head_segment), 1.0e-5f);
+        if (torso_ratio < 0.25f || torso_ratio > 2.00f
+            || head_ratio < 0.25f || head_ratio > 2.00f)
+            return false;
+        if (dot(normalized(torso_segment, { 0.0f, 1.0f }),
+                normalized(head_segment, { 0.0f, 1.0f })) < -0.50f)
+            return false;
+
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            const float rest_radius = length(blueprint_.nodes[index]
+                - blueprint_.nodes[blueprint_.root_node]);
+            const float current_radius = length(particles_[index].position - root);
+            if (current_radius > std::max(1.80f, rest_radius * 3.00f + 0.80f))
+                return false;
+        }
+        return true;
+    }
+
+    void Environment::stabilize_passive_appendages() noexcept
+    {
+        if (!valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node))
+            return;
+        const Vec2 rest_body = blueprint_.nodes[blueprint_.torso_node]
+            - blueprint_.nodes[blueprint_.root_node];
+        const Vec2 current_body = particles_[blueprint_.torso_node].position
+            - particles_[blueprint_.root_node].position;
+        if (length(rest_body) <= 1.0e-5f || length(current_body) <= 1.0e-5f)
+            return;
+        const float body_rotation = signed_angle(rest_body, current_body);
+
+        auto stabilize = [&](std::uint16_t node, float strength)
+        {
+            if (!valid_node(node))
+                return;
+            std::uint16_t parent = std::numeric_limits<std::uint16_t>::max();
+            for (const DistanceConstraint& bone : blueprint_.bones)
+            {
+                if (bone.a == node)
+                    parent = bone.b;
+                else if (bone.b == node)
+                    parent = bone.a;
+                if (parent != std::numeric_limits<std::uint16_t>::max())
+                    break;
+            }
+            if (!valid_node(parent))
+                return;
+            const Vec2 rest_offset = blueprint_.nodes[node] - blueprint_.nodes[parent];
+            const Vec2 target = particles_[parent].position + rotate(rest_offset, body_rotation);
+            Vec2 error = target - particles_[node].position;
+            const float maximum_error = std::max(0.08f, length(rest_offset) * 0.45f);
+            const float error_length = length(error);
+            if (error_length > maximum_error && error_length > 1.0e-6f)
+                error *= maximum_error / error_length;
+            particles_[node].position += error * strength * 0.90f;
+            particles_[parent].position -= error * strength * 0.10f;
+            particles_[node].previous += (particles_[node].position
+                - particles_[node].previous) * (strength * 0.35f);
+        };
+
+        stabilize(blueprint_.head_node, 0.055f);
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (passive_endpoint(blueprint_, index))
+                stabilize(static_cast<std::uint16_t>(index), 0.040f);
+        }
+    }
+
+    void Environment::stabilize_balance_posture() noexcept
+    {
+        if (course_stage_ != CourseStage::balance
+            || !valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node))
+            return;
+
+        Vec2 rest_support{};
+        Vec2 current_support{};
+        std::size_t support_count = 0;
+        auto accumulate = [&](std::size_t index)
+        {
+            if (index >= blueprint_.nodes.size() || index >= particles_.size())
+                return;
+            rest_support += blueprint_.nodes[index];
+            current_support += particles_[index].position;
+            ++support_count;
+        };
+        accumulate(blueprint_.left_contact_node);
+        accumulate(blueprint_.right_contact_node);
+        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+            accumulate(node);
+        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+            accumulate(node);
+        if (support_count == 0u
+            || (!contact_supported(blueprint_.left_contact_node)
+                && !contact_supported(blueprint_.right_contact_node)))
+            return;
+
+        rest_support /= static_cast<float>(support_count);
+        current_support /= static_cast<float>(support_count);
+        auto guide = [&](std::uint16_t node, float strength, float maximum_step)
+        {
+            const Vec2 target = current_support + (blueprint_.nodes[node] - rest_support);
+            Vec2 correction = target - particles_[node].position;
+            const float magnitude = length(correction);
+            if (magnitude > maximum_step && magnitude > 1.0e-6f)
+                correction *= maximum_step / magnitude;
+            const Vec2 applied = correction * strength;
+            particles_[node].position += applied;
+            particles_[node].previous += applied * 0.88f;
+        };
+
+        // The feet remain the authority. This only keeps the calibrated body
+        // stack above their live support center while PPO learns a real stance.
+        guide(blueprint_.root_node, 0.16f, 0.035f);
+        guide(blueprint_.torso_node, 0.12f, 0.030f);
+        guide(blueprint_.head_node, 0.08f, 0.025f);
     }
 
     void Environment::solve_motor(const MotorConstraint& motor, float action) noexcept
@@ -1280,7 +1469,10 @@ namespace epochrunner::sim
                 || contact_cluster_contains(blueprint_.right_contact_node, index);
             const float minimum_y = ground_height_at(particle.position.x)
                 + ground_contact_offset(traction_contact, particle.radius);
-            if (particle.position.y < minimum_y)
+            // A constraint iteration can leave a perfectly resting rigid foot
+            // exactly on the contact plane. Preserve support within a tiny solver
+            // tolerance instead of clearing grounded until it penetrates again.
+            if (particle.position.y <= minimum_y + 0.0025f)
             {
                 particle.position.y = minimum_y;
                 particle.grounded = true;
@@ -1389,7 +1581,8 @@ namespace epochrunner::sim
 
     bool Environment::current_display_posture_valid() const noexcept
     {
-        if (!valid_node(blueprint_.root_node)
+        if (!body_integrity_valid()
+            || !valid_node(blueprint_.root_node)
             || !valid_node(blueprint_.torso_node)
             || !valid_node(blueprint_.head_node)
             || !valid_node(blueprint_.left_contact_node)
@@ -1402,22 +1595,9 @@ namespace epochrunner::sim
             return false;
 
         const Vec2 root = particles_[blueprint_.root_node].position;
-        const Vec2 torso = particles_[blueprint_.torso_node].position;
         const Vec2 head = particles_[blueprint_.head_node].position;
-        const float torso_segment = length(torso - root);
-        const float head_segment = length(head - torso);
-        const float rest_torso_segment = length(
-            blueprint_.nodes[blueprint_.torso_node]
-                - blueprint_.nodes[blueprint_.root_node]);
-        const float rest_head_segment = length(
-            blueprint_.nodes[blueprint_.head_node]
-                - blueprint_.nodes[blueprint_.torso_node]);
-
-        // Historical lesson evidence may remain latched, but the body displayed
-        // now must still have intact direct body segments. A balanced crouch
-        // shortens head-to-pelvis distance without collapsing either segment.
-        return torso_segment >= rest_torso_segment * 0.58f
-            && head_segment >= rest_head_segment * 0.55f;
+        return torso_uprightness() >= 0.60f
+            && head.y > root.y + 0.20f;
     }
 
     void Environment::invalidate(InvalidMotion reason) noexcept
@@ -1620,8 +1800,11 @@ namespace epochrunner::sim
         if (airborne)
         {
             current_airborne_rotation_ += torso_delta;
-            maximum_spin_turns_ = std::max(maximum_spin_turns_,
-                std::abs(current_airborne_rotation_) / (2.0f * pi));
+            const float airborne_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
+            if (powered_takeoff_ && stage_allows_controlled_flips(course_stage_))
+                maximum_spin_turns_ = std::max(maximum_spin_turns_, airborne_turns);
+            else
+                uncontrolled_spin_turns_ += std::abs(torso_delta) / (2.0f * pi);
         }
         else if (!was_supported)
         {
@@ -1630,11 +1813,18 @@ namespace epochrunner::sim
                 powered_landing_this_step_ = true;
                 ++landed_jump_count_;
                 const float landed_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
-                maximum_spin_turns_ = std::max(maximum_spin_turns_, landed_turns);
-                if (stage_allows_controlled_flips(course_stage_) && landed_turns >= 0.75f)
+                if (stage_allows_controlled_flips(course_stage_))
                 {
-                    spin_landing_this_step_ = true;
-                    ++spin_landing_count_;
+                    maximum_spin_turns_ = std::max(maximum_spin_turns_, landed_turns);
+                    if (landed_turns >= 0.75f)
+                    {
+                        spin_landing_this_step_ = true;
+                        ++spin_landing_count_;
+                    }
+                }
+                else
+                {
+                    uncontrolled_spin_turns_ += landed_turns;
                 }
             }
             powered_takeoff_ = false;
@@ -1801,9 +1991,19 @@ namespace epochrunner::sim
         }
         constexpr Vec2 gravity{ 0.0f, -22.0f };
         constexpr float damping = 0.996f;
-        for (Particle& particle : particles_)
+        for (std::size_t index = 0; index < particles_.size(); ++index)
         {
-            const Vec2 velocity = (particle.position - particle.previous) * damping;
+            Particle& particle = particles_[index];
+            float local_damping = damping;
+            if (index == blueprint_.head_node)
+                local_damping = 0.92f;
+            else if (passive_endpoint(blueprint_, index))
+                local_damping = 0.90f;
+            else if (blueprint_.is_support_seed(index))
+                local_damping = 0.985f;
+            else if (node_degree(blueprint_, index) == 1u)
+                local_damping = 0.975f;
+            const Vec2 velocity = (particle.position - particle.previous) * local_damping;
             particle.previous = particle.position;
             particle.position += velocity + gravity * (dt * dt);
         }
@@ -1816,9 +2016,13 @@ namespace epochrunner::sim
                 solve_distance(bone);
             for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
+            stabilize_balance_posture();
+            stabilize_passive_appendages();
             solve_ground(dt);
             solve_course();
         }
+        if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())
+            invalidate(InvalidMotion::collapsed_posture);
         knee_first_this_step_ = knee_before_foot_fault();
         if (knee_first_this_step_)
             ++knee_first_faults_;
@@ -1948,6 +2152,10 @@ namespace epochrunner::sim
             ? clamp(spin_delta_turns, 0.0f, 0.08f) * 0.65f : 0.0f;
         const float spin_landing_reward = spin_landing_this_step_
             ? 0.20f + clamp(maximum_spin_turns_, 0.0f, 3.0f) * 0.08f : 0.0f;
+        const bool controlled_flip_rotation = stage_allows_controlled_flips(course_stage_)
+            && powered_takeoff_;
+        const float uncontrolled_spin_penalty = controlled_flip_rotation ? 0.0f
+            : clamp(spin_delta_turns, 0.0f, 0.08f) * 0.18f;
         const float pass_reward = passed_obstacle_this_step_ ? 0.18f : 0.0f;
         const float target_speed = 0.90f + course_difficulty_ * 1.30f;
         const float run_reward = stage_requires_forward_gait(course_stage_)
@@ -2028,7 +2236,7 @@ namespace epochrunner::sim
             break;
         }
 
-        last_reward_ += recovery_reward;
+        last_reward_ += recovery_reward - uncontrolled_spin_penalty;
         if (invalid_reason_ != InvalidMotion::none)
         {
             recovery_active_ = false;

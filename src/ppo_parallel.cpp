@@ -186,10 +186,13 @@ namespace epochrunner::rl
 
                             const StageMotionQualification qualification =
                                 stage_motion_qualification(current_stage, environment);
-                            if (!qualification.valid)
+                            if (!qualification.valid || !environment.body_integrity_valid())
                             {
                                 ++totals.invalid_runs;
                                 totals.rejection_mask |= qualification.rejection_mask;
+                                if (!environment.body_integrity_valid())
+                                    totals.rejection_mask |= evidence_bit(
+                                        MotionEvidenceFailure::invalid_motion);
                             }
                             else
                             {
@@ -205,7 +208,7 @@ namespace epochrunner::rl
                             totals.duck_seconds += environment.duck_seconds();
                             totals.powered_jumps += static_cast<float>(environment.powered_jumps());
                             totals.jump_landings += static_cast<float>(environment.landed_jumps());
-                            totals.spin_turns += environment.maximum_spin_turns();
+                            totals.spin_turns += environment.maximum_flip_turns();
                             totals.spin_landings += static_cast<float>(environment.spin_landings());
                             totals.obstacles_passed += static_cast<float>(environment.obstacles_passed());
                             totals.stable_stance += environment.stable_stance_seconds();
