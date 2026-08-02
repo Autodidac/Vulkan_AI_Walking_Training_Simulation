@@ -80,6 +80,7 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           test_path = Path('tests/core_tests.cpp')
           tests = test_path.read_text(encoding='utf-8')
@@ -100,9 +101,6 @@ jobs:
 
           policy_path = Path('src/ppo.hpp')
           policy = policy_path.read_text(encoding='utf-8')
-          old_gate = '''        if (environment.blueprint().support_seed_count() > 2u)
-                  return action;
-          '''
           new_gate = '''        const sim::CreatureBlueprint& rig = environment.blueprint();
               const bool paired_leg_chains = rig.active_motor_count >= 4u
                   && rig.motors[0].enabled && rig.motors[1].enabled
@@ -113,9 +111,12 @@ jobs:
               if (!paired_leg_chains)
                   return action;
           '''
-          if old_gate in policy:
-              policy = policy.replace(old_gate, new_gate, 1)
-          elif 'const bool paired_leg_chains' not in policy:
+          pattern = (
+              r'        if \(environment\.blueprint\(\)\.support_seed_count\(\) > 2u\)\n'
+              r'\s+return action;\n'
+          )
+          policy, count = re.subn(pattern, new_gate, policy, count=1)
+          if count != 1 and 'const bool paired_leg_chains' not in policy:
               raise RuntimeError('could not replace support-count coordination heuristic')
           policy_path.write_text(policy, encoding='utf-8')
           PY
