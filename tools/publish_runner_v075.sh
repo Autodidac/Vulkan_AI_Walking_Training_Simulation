@@ -70,9 +70,6 @@ cat > validation/v0.7.5.md <<'EOF'
 - Windows full build, tests, diagnostics, install, launcher, ZIP, checksum, manifest, and published-asset byte audit: passed
 EOF
 
-git rm -f --ignore-unmatch .github/workflows/validate-runner-v075.yml
-git rm -f --ignore-unmatch .github/workflows/publish-runner-v075.yml
-git rm -f --ignore-unmatch .github/workflows/publish-runner-v075-rescue.yml
 git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 git add missioncache.md validation/v0.7.5.md
