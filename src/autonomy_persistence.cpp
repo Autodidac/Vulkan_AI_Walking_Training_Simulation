@@ -22,7 +22,7 @@ namespace epochrunner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHAUTONOMY 4\n";
+            output << "EPOCHAUTONOMY 5\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace epochrunner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "EPOCHAUTONOMY" || version != 4
+            if (!input || magic != "EPOCHAUTONOMY" || version != 5
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
@@ -85,7 +85,8 @@ namespace epochrunner::rl
         {
             const StageMotionQualification qualification =
                 stage_motion_qualification(stage_, environment);
-            if (!qualification.valid)
+            if (!qualification.valid
+                || !stage_display_sample_eligible(stage_, environment))
                 continue;
             const float tiebreak = environment.distance_travelled() * 10.0f
                 + environment.elapsed_seconds();

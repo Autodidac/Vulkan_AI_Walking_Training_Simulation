@@ -102,6 +102,16 @@ def patch_simulation_header() -> None:
         "        float current_duck_hold_seconds_{};",
         "duck obstacle state",
     )
+    text = replace_once(
+        text,
+        "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\n"
+        "            return CourseFeatureKind::rock;",
+        "        if (stage == CourseStage::walk)\n"
+        "            return CourseFeatureKind::overhead_bar;\n"
+        "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\n"
+        "            return CourseFeatureKind::rock;",
+        "walk stage obstacle schedule",
+    )
     write(path, text)
 
 
@@ -163,16 +173,6 @@ def patch_simulation_source() -> None:
         r"        \{.*?\n        \}\n\n(?=        void calibrate_grounded_defaults)",
         feet,
         "passive foot topology",
-    )
-    text = replace_once(
-        text,
-        "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\n"
-        "            return CourseFeatureKind::rock;",
-        "        if (stage == CourseStage::walk)\n"
-        "            return CourseFeatureKind::overhead_bar;\n"
-        "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\n"
-        "            return CourseFeatureKind::rock;",
-        "walk stage obstacle schedule",
     )
     text = replace_once(
         text,
@@ -759,7 +759,7 @@ def patch_versions_and_ledger() -> None:
     text = read(path).replace('"version-semver": "0.7.1"', '"version-semver": "0.7.2"')
     write(path, text)
 
-    notes = """# EpochRunner v0.7.2\n\n"
+    notes = "# EpochRunner v0.7.2\n\n"
     notes += "- Reopens the simulation-quality missions after packaged runtime screenshots contradicted v0.7.1 validation.\n"
     notes += "- Adds coordinated bilateral joint synergies while preserving learned residual control.\n"
     notes += "- Replaces lower-leg endpoint feet with dedicated passive foot plates, heel contacts, and toe contacts.\n"

@@ -262,9 +262,9 @@ namespace epochrunner
         bool quit{};
         std::filesystem::path rig_path{ "creature.epochrig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v071-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v071-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v071-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "epochrunner-v072-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "epochrunner-v072-evolved.epochrig" };
+        std::filesystem::path autosave_state_path{ "epochrunner-v072-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -606,7 +606,7 @@ namespace epochrunner
         {
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.98f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 13.0f, 10.0f },
-                "STAGE-VALID TRAINING SAMPLE", 1.03f, accent);
+                "CURRENT-STAGE VERIFIED SAMPLE", 1.03f, accent);
             if (!trainer.has_training_preview())
             {
                 add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },

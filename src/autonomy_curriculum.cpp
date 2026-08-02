@@ -23,7 +23,8 @@ namespace epochrunner::rl
         case sim::CourseStage::walk:
             return metrics.evaluation_duck_recoveries >= 1.0f
                 && metrics.evaluation_stable_stance >= 1.0f
-                && metrics.evaluation_duck_seconds >= 2.0f
+                && metrics.evaluation_duck_seconds >= 1.0f
+                && metrics.evaluation_obstacles_passed >= 1.0f
                 && metrics.evaluation_survival >= 8.0f;
         case sim::CourseStage::ramps:
             return metrics.evaluation_jump_landings >= 2.0f
@@ -138,7 +139,10 @@ namespace epochrunner::rl
                 float reward = 0.0f;
                 for (int step = 0; step < maximum_steps; ++step)
                 {
-                    const auto action = worker_.policy().deterministic_action(environment.observation());
+                    const auto raw_action = worker_.policy().deterministic_action(
+                        environment.observation());
+                    const auto action = effective_policy_action(
+                        environment, raw_action, stage);
                     const sim::StepResult result = environment.step(action);
                     reward += result.reward;
                     if (result.terminated)

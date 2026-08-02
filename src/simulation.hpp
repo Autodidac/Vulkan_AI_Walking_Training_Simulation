@@ -84,7 +84,7 @@ namespace epochrunner::sim
         case CourseStage::balance:
             return true;
         case CourseStage::walk:
-            return duck_seconds >= 0.50f;
+            return duck_seconds >= 0.50f && obstacles_passed >= 1u;
         case CourseStage::ramps:
             return landed_jumps >= 1u;
         case CourseStage::uneven:
@@ -106,7 +106,7 @@ namespace epochrunner::sim
         switch (stage)
         {
         case CourseStage::balance: return "1. STAND";
-        case CourseStage::walk: return "2. DUCK / RECOVER";
+        case CourseStage::walk: return "2. LOW BAR DUCK / RECOVER";
         case CourseStage::ramps: return "3. JUMP / LAND";
         case CourseStage::uneven: return "4. WALK / RUN";
         case CourseStage::hurdles: return "5. MOVING DUCK / JUMP";
@@ -299,6 +299,15 @@ namespace epochrunner::sim
         return clamp((2.60f - distance_ahead) / 2.15f, 0.0f, 1.0f);
     }
 
+    [[nodiscard]] inline float duck_obstacle_approach_weight(float distance_ahead) noexcept
+    {
+        if (distance_ahead <= -1.25f || distance_ahead >= 4.0f)
+            return 0.0f;
+        if (distance_ahead <= 1.0f)
+            return 1.0f;
+        return clamp((4.0f - distance_ahead) / 3.0f, 0.0f, 1.0f);
+    }
+
     [[nodiscard]] inline bool hazard_quiver_motion(float distance_ahead, float root_speed,
         float lifted_foot_clearance, float target_clearance, float action_energy) noexcept
     {
@@ -470,6 +479,8 @@ namespace epochrunner::sim
     {
         const int relative = std::max(0, marker_sequence - course_safe_runway_markers);
         const int selector = relative % course_feature_cycle_length;
+        if (stage == CourseStage::walk)
+            return CourseFeatureKind::overhead_bar;
         if (stage == CourseStage::ramps || stage == CourseStage::uneven)
             return CourseFeatureKind::rock;
         if (stage == CourseStage::hurdles)
@@ -633,10 +644,11 @@ namespace epochrunner::sim
         [[nodiscard]] float course_speed() const noexcept
         {
             if (course_stage_ == CourseStage::balance
-                || course_stage_ == CourseStage::walk
                 || course_stage_ == CourseStage::ramps
                 || course_stage_ == CourseStage::duck_bars)
                 return 0.0f;
+            if (course_stage_ == CourseStage::walk)
+                return 0.52f + course_difficulty_ * 0.28f;
             if (course_stage_ == CourseStage::uneven)
                 return 0.82f + course_difficulty_ * 0.88f;
             if (course_stage_ == CourseStage::hurdles)
@@ -652,6 +664,14 @@ namespace epochrunner::sim
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
         [[nodiscard]] float duck_seconds() const noexcept { return duck_seconds_; }
         [[nodiscard]] bool duck_active() const noexcept { return duck_active_; }
+        [[nodiscard]] float duck_obstacle_weight() const noexcept
+        {
+            return duck_obstacle_weight_;
+        }
+        [[nodiscard]] float duck_clearance_margin() const noexcept
+        {
+            return duck_clearance_margin_;
+        }
         [[nodiscard]] std::uint32_t powered_jumps() const noexcept { return powered_jump_count_; }
         [[nodiscard]] std::uint32_t landed_jumps() const noexcept { return landed_jump_count_; }
         [[nodiscard]] float maximum_spin_turns() const noexcept { return maximum_spin_turns_; }
@@ -739,6 +759,8 @@ namespace epochrunner::sim
         float cumulative_airborne_{};
         float duck_seconds_{};
         float duck_depth_{};
+        float duck_obstacle_weight_{};
+        float duck_clearance_margin_{};
         float current_duck_hold_seconds_{};
         float stable_stance_seconds_{};
         float longest_stable_stance_seconds_{};
