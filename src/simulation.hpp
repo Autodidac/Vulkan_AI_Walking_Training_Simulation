@@ -20,18 +20,20 @@ namespace runner::sim
     {
         balance,
         duck_press,
-        ramps,
         uneven,
+        crouch_walk,
+        ramps,
         hurdles,
         duck_bars,
         moving_hazards
     };
 
-    inline constexpr std::size_t course_stage_count = 7;
+    inline constexpr std::size_t course_stage_count = 8;
 
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven
+            || stage == CourseStage::crouch_walk
             || stage == CourseStage::hurdles
             || stage == CourseStage::moving_hazards;
     }
@@ -84,12 +86,14 @@ namespace runner::sim
         case CourseStage::balance:
             return true;
         case CourseStage::duck_press:
+            return duck_seconds >= 0.75f && obstacles_passed >= 1u;
+        case CourseStage::uneven:
+            return alternating_steps >= 4u;
+        case CourseStage::crouch_walk:
             return alternating_steps >= 4u && duck_seconds >= 2.0f
                 && obstacles_passed >= 3u;
         case CourseStage::ramps:
             return landed_jumps >= 1u;
-        case CourseStage::uneven:
-            return alternating_steps >= 2u;
         case CourseStage::hurdles:
             return alternating_steps >= 2u && obstacles_passed >= 1u
                 && (duck_seconds >= 0.25f || landed_jumps >= 1u);
@@ -107,12 +111,13 @@ namespace runner::sim
         switch (stage)
         {
         case CourseStage::balance: return "1. STAND";
-        case CourseStage::duck_press: return "2. CROUCH WALK / UNEVEN AVOID";
-        case CourseStage::ramps: return "3. JUMP / LAND";
-        case CourseStage::uneven: return "4. WALK / RUN";
-        case CourseStage::hurdles: return "5. MOVING LOW BAR / HURDLE";
-        case CourseStage::duck_bars: return "6. CONTROLLED FLIPS";
-        case CourseStage::moving_hazards: return "7. MIXED GOAL COURSE";
+        case CourseStage::duck_press: return "2. STATIC CROUCH / HOLD / RECOVER";
+        case CourseStage::uneven: return "3. WALK / RUN";
+        case CourseStage::crouch_walk: return "4. CROUCH WALK / UNEVEN AVOID";
+        case CourseStage::ramps: return "5. JUMP / LAND";
+        case CourseStage::hurdles: return "6. MOVING LOW BAR / HURDLE";
+        case CourseStage::duck_bars: return "7. CONTROLLED FLIPS";
+        case CourseStage::moving_hazards: return "8. MIXED GOAL COURSE";
         }
         return "UNKNOWN";
     }
@@ -226,6 +231,28 @@ namespace runner::sim
         bool non_foot_grounded) noexcept
     {
         return !duck_active || !non_foot_grounded;
+    }
+
+    [[nodiscard]] inline bool controlled_somersault_allowed(CourseStage stage,
+        float spin_turns, float torso_turn_speed, bool airborne_or_landing) noexcept
+    {
+        return stage_allows_controlled_flips(stage)
+            && airborne_or_landing
+            && std::abs(torso_turn_speed) >= 0.45f
+            && std::abs(spin_turns) <= 3.0f;
+    }
+
+    [[nodiscard]] inline bool forward_prone_allowed(CourseStage stage,
+        bool non_foot_grounded, bool head_faces_forward, float uprightness,
+        float forward_speed) noexcept
+    {
+        const bool recovery_stage = stage == CourseStage::uneven
+            || stage == CourseStage::ramps
+            || stage == CourseStage::hurdles
+            || stage == CourseStage::duck_bars
+            || stage == CourseStage::moving_hazards;
+        return recovery_stage && non_foot_grounded && head_faces_forward
+            && uprightness <= 0.42f && forward_speed >= -0.15f;
     }
 
     [[nodiscard]] inline bool rolling_body_motion(float root_speed, float torso_turn_speed,
@@ -649,6 +676,13 @@ namespace runner::sim
             return 2u + additional_left_contact_nodes.size()
                 + additional_right_contact_nodes.size();
         }
+        [[nodiscard]] bool monopedal_gait() const noexcept
+        {
+            return active_motor_count >= 4u
+                && motors[2].enabled && motors[3].enabled
+                && motors[2].a == motors[3].a
+                && motors[2].pivot == motors[3].pivot;
+        }
 
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();
@@ -705,11 +739,12 @@ namespace runner::sim
         [[nodiscard]] float course_speed() const noexcept
         {
             if (course_stage_ == CourseStage::balance
+                || course_stage_ == CourseStage::duck_press
                 || course_stage_ == CourseStage::ramps
                 || course_stage_ == CourseStage::duck_bars)
                 return 0.0f;
-            if (course_stage_ == CourseStage::duck_press)
-                return duck_press_completed_ ? 0.58f + course_difficulty_ * 0.12f : 0.0f;
+            if (course_stage_ == CourseStage::crouch_walk)
+                return 0.58f + course_difficulty_ * 0.18f;
             if (course_stage_ == CourseStage::uneven)
                 return 0.82f + course_difficulty_ * 0.88f;
             if (course_stage_ == CourseStage::hurdles)
@@ -718,9 +753,6 @@ namespace runner::sim
         }
         [[nodiscard]] float course_progress() const noexcept
         {
-            if (course_stage_ == CourseStage::duck_press && duck_press_completed_)
-                return std::max(0.0f, elapsed_seconds_ - duck_walk_started_seconds_)
-                    * course_speed();
             return elapsed_seconds_ * course_speed();
         }
         [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
@@ -729,6 +761,12 @@ namespace runner::sim
         [[nodiscard]] float collision_count() const noexcept { return collision_count_; }
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
+        [[nodiscard]] std::uint32_t gait_cycles() const noexcept
+        {
+            return blueprint_.monopedal_gait()
+                ? std::max(alternating_steps_, single_leg_cycles_)
+                : alternating_steps_;
+        }
         [[nodiscard]] float duck_seconds() const noexcept { return duck_seconds_; }
         [[nodiscard]] float crouch_walk_seconds() const noexcept { return crouch_walk_seconds_; }
         [[nodiscard]] float crouch_walk_distance() const noexcept { return crouch_walk_distance_; }
@@ -891,6 +929,8 @@ namespace runner::sim
         bool alternating_step_this_step_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
+        std::uint32_t single_leg_cycles_{};
+        float last_single_leg_landing_x_{};
         std::uint32_t progress_window_start_steps_{};
         std::uint32_t knee_first_faults_{};
         float wheel_sliding_seconds_{};

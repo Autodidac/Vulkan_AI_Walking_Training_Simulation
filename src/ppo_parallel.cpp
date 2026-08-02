@@ -204,7 +204,7 @@ namespace runner::rl
                             totals.survival += environment.elapsed_seconds();
                             totals.collisions += environment.collision_count();
                             totals.airborne += environment.airborne_ratio();
-                            totals.strides += static_cast<float>(environment.alternating_steps());
+                            totals.strides += static_cast<float>(environment.gait_cycles());
                             totals.duck_seconds += environment.duck_seconds();
                             totals.powered_jumps += static_cast<float>(environment.powered_jumps());
                             totals.jump_landings += static_cast<float>(environment.landed_jumps());
@@ -468,6 +468,14 @@ namespace runner::rl
                     + metrics_.evaluation_distance * 0.75f
                     + metrics_.evaluation_stride_events * 0.04f
                     + metrics_.evaluation_speed * 0.12f;
+                break;
+            case sim::CourseStage::crouch_walk:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_distance * 0.72f
+                    + metrics_.evaluation_stride_events * 0.06f
+                    + metrics_.evaluation_duck_seconds * 0.24f
+                    + metrics_.evaluation_obstacles_passed * 0.42f
+                    - metrics_.evaluation_collisions * 0.14f;
                 break;
             case sim::CourseStage::hurdles:
                 metrics_.evaluation_score = metrics_.evaluation_reward

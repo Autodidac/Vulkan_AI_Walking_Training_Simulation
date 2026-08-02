@@ -825,7 +825,7 @@ namespace runner
                 std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
                     trainer.metrics().update,
                     environment.crouch_walk_seconds(), environment.crouch_walk_distance(),
-                    environment.alternating_steps(), environment.obstacles_passed()),
+                    environment.gait_cycles(), environment.obstacles_passed()),
                 0.72f, state_color, rect.size.x - 24.0f, 0.58f);
         }
 
@@ -853,8 +853,9 @@ namespace runner
             add_text_fit(canvas, cursor, sim::course_stage_name(autonomy.stage), 2.05f,
                 accent, usable_width, 1.30f);
             cursor.y += 38.0f;
-            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   MASTERY {}/3",
-                autonomy.difficulty * 100.0f, autonomy.mastery_streak), 1.16f, white, usable_width);
+            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   STRICT MASTERY {}/{}",
+                autonomy.difficulty * 100.0f, autonomy.mastery_streak,
+                rl::mastery_lock_confirmations), 1.12f, white, usable_width);
             cursor.y += 29.0f;
             cursor.y += add_wrapped_text(canvas, cursor, autonomy.message, 1.00f,
                 metrics.evaluation_valid || metrics.evaluation_count == 0 ? muted : danger,

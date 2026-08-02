@@ -17,36 +17,50 @@ namespace runner::rl
         switch (stage_)
         {
         case sim::CourseStage::balance:
-            return metrics.evaluation_longest_stance >= 3.0f
-                && metrics.evaluation_survival >= 3.0f
-                && metrics.evaluation_max_joint_speed <= 12.0f;
+            return metrics.evaluation_longest_stance >= 5.0f
+                && metrics.evaluation_survival >= 6.0f
+                && metrics.evaluation_max_joint_speed <= 10.0f;
         case sim::CourseStage::duck_press:
-            return metrics.evaluation_duck_recoveries >= 1.0f
-                && metrics.evaluation_stride_events >= 4.0f
-                && metrics.evaluation_duck_seconds >= 2.0f
-                && metrics.evaluation_distance >= 0.75f
-                && metrics.evaluation_obstacles_passed >= 3.0f
-                && metrics.evaluation_survival >= 12.0f;
-        case sim::CourseStage::ramps:
-            return metrics.evaluation_jump_landings >= 2.0f
-                && metrics.evaluation_powered_jumps >= 2.0f;
+            return metrics.evaluation_duck_recoveries >= 2.0f
+                && metrics.evaluation_duck_seconds >= 1.25f
+                && metrics.evaluation_longest_stance >= 2.5f
+                && metrics.evaluation_survival >= 9.0f
+                && metrics.evaluation_max_joint_speed <= 10.0f;
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 5.0f
-                && metrics.evaluation_stride_events >= 4.0f
-                && metrics.evaluation_speed >= 0.65f;
-        case sim::CourseStage::hurdles:
             return metrics.evaluation_distance >= 7.0f
-                && metrics.evaluation_obstacles_passed >= 2.0f
+                && metrics.evaluation_stride_events >= 8.0f
+                && metrics.evaluation_speed >= 0.70f
+                && metrics.evaluation_collisions <= 1.0f;
+        case sim::CourseStage::crouch_walk:
+            return metrics.evaluation_duck_recoveries >= 1.0f
+                && metrics.evaluation_stride_events >= 8.0f
+                && metrics.evaluation_duck_seconds >= 3.5f
+                && metrics.evaluation_distance >= 1.50f
+                && metrics.evaluation_obstacles_passed >= 4.0f
+                && metrics.evaluation_collisions <= 1.0f
+                && metrics.evaluation_survival >= 14.0f;
+        case sim::CourseStage::ramps:
+            return metrics.evaluation_jump_landings >= 3.0f
+                && metrics.evaluation_powered_jumps >= 3.0f
+                && metrics.evaluation_stride_events >= 4.0f
+                && metrics.evaluation_distance >= 3.0f;
+        case sim::CourseStage::hurdles:
+            return metrics.evaluation_distance >= 8.0f
+                && metrics.evaluation_stride_events >= 6.0f
+                && metrics.evaluation_obstacles_passed >= 3.0f
+                && metrics.evaluation_collisions <= 2.0f
                 && (metrics.evaluation_jump_landings >= 1.0f
-                    || metrics.evaluation_duck_seconds >= 0.75f);
+                    || metrics.evaluation_duck_seconds >= 1.0f);
         case sim::CourseStage::duck_bars:
-            return metrics.evaluation_spin_landings >= 1.0f
+            return metrics.evaluation_spin_landings >= 2.0f
+                && metrics.evaluation_powered_jumps >= 2.0f
                 && metrics.evaluation_spin_turns >= 0.85f
-                && metrics.evaluation_spin_turns <= 3.05f;
+                && metrics.evaluation_spin_turns <= 3.00f;
         case sim::CourseStage::moving_hazards:
-            return metrics.evaluation_distance >= 9.0f
-                && metrics.evaluation_obstacles_passed >= 2.0f
-                && metrics.evaluation_collisions <= 4.0f;
+            return metrics.evaluation_distance >= 11.0f
+                && metrics.evaluation_stride_events >= 8.0f
+                && metrics.evaluation_obstacles_passed >= 4.0f
+                && metrics.evaluation_collisions <= 3.0f;
         }
         return false;
     }
@@ -84,7 +98,7 @@ namespace runner::rl
                 metrics.evaluation_invalid_runs,
                 primary_motion_rejection_name(metrics.evaluation_rejection_mask));
         }
-        else if (mastery_streak_ >= 3)
+        else if (mastery_streak_ >= mastery_lock_confirmations)
         {
             advance_stage_locked();
         }
@@ -94,19 +108,23 @@ namespace runner::rl
         }
         else
         {
-            worker_message_ = std::format("{} - MASTERY {}/3", sim::course_stage_name(stage_), mastery_streak_);
+            worker_message_ = std::format("{} - STRICT MASTERY {}/{}",
+                sim::course_stage_name(stage_), mastery_streak_, mastery_lock_confirmations);
         }
     }
 
     void AutonomousTrainer::advance_stage_locked()
     {
+        if (worker_.has_best_policy())
+            (void)worker_.restore_best_policy();
         mastery_streak_ = 0;
         degradation_streak_ = 0;
         if (stage_ != sim::CourseStage::moving_hazards)
         {
             stage_ = static_cast<sim::CourseStage>(static_cast<std::uint8_t>(stage_) + 1u);
             difficulty_ = 0.30f;
-            worker_message_ = std::format("LESSON COMPLETE - ADVANCING TO {}", sim::course_stage_name(stage_));
+            worker_message_ = std::format("SKILL LOCKED - ADVANCING TO {}",
+                sim::course_stage_name(stage_));
         }
         else
         {
@@ -158,7 +176,7 @@ namespace runner::rl
                 }
                 scores[agent] = reward + environment.distance_travelled() * 0.75f
                     + environment.elapsed_seconds() * 0.03f
-                    + static_cast<float>(environment.alternating_steps()) * 0.03f
+                    + static_cast<float>(environment.gait_cycles()) * 0.03f
                     + environment.duck_seconds() * 0.06f
                     + static_cast<float>(environment.landed_jumps()) * 0.16f
                     + std::min(environment.maximum_spin_turns(), 3.0f) * 0.18f

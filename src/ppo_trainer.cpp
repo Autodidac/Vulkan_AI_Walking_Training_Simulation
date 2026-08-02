@@ -48,7 +48,8 @@ namespace runner::rl
                 }
                 return 0.05f;
             }
-            if (stage == sim::CourseStage::duck_press)
+            if (stage == sim::CourseStage::duck_press
+                || stage == sim::CourseStage::crouch_walk)
             {
                 if (update < 600u)
                     return 0.88f;
@@ -84,6 +85,8 @@ namespace runner::rl
                 return balance_teacher_action(environment);
             if (stage == sim::CourseStage::duck_press)
                 return duck_teacher_action(environment);
+            if (stage == sim::CourseStage::crouch_walk)
+                return crouch_walk_teacher_action(environment);
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
             const float swing = std::sin(phase);
             const float lift_left = std::max(0.0f, swing);
@@ -204,7 +207,7 @@ namespace runner::rl
                         ++totals.invalid_episodes;
                     totals.total_distance += static_cast<double>(
                         std::max(0.0f, environment.distance_travelled()));
-                    totals.alternating_steps += environment.alternating_steps();
+                    totals.alternating_steps += environment.gait_cycles();
                     totals.collisions += static_cast<std::uint64_t>(
                         std::max(0.0f, environment.collision_count()));
                     totals.powered_jumps += environment.powered_jumps();
