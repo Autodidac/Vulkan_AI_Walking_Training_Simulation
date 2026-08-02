@@ -16,3 +16,4 @@
 - Corrected PPO optimization-pass terminology that was accidentally changed during rebranding.
 - Split training results and complete lifetime totals into readable panel pages.
 - Added persisted cumulative training time plus complete per-rig, session, and all-time environment, episode, distance, step, fall, collision, jump, flip, obstacle, rig-change, reset, and rollback telemetry.
+- Passed Linux GCC 14 and full Windows Server 2025 MSVC build, test, Vulkan/package diagnostics, installed launcher, checksum, and independent extraction audit.
