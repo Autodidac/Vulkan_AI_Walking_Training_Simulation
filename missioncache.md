@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.4
+**Target:** Runner v0.7.5
 
-**Release state:** PUBLISHED — v0.7.4 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+**Release state:** PUBLISHED - v0.7.5 assets independently audited; awaiting Adam's live packaged-runtime confirmation
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -495,60 +495,60 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 ## v0.7.5 crouch-walk and training-PIP correction
 
 ### WALK-DUCK-067 — Foot-only duck contact
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 Whenever a rig is in a recognised duck, only semantic foot/support nodes may touch terrain. Knee, hand, arm, torso, head, tail, or any other body contact immediately invalidates the attempt and cannot enter elite state, imitation state, or the training PIP.
 
 ### WALK-DUCK-068 — Replace static folding with crouch walking
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The compression platen remains only the introductory lesson. Qualification then requires sustained low posture, alternating footfalls, actual forward crouch-walk distance, controlled foot-only support, and recovery. Ten thousand updates spent folding in place are not progress.
 
 ### WALK-TERRAIN-069 — Crouch obstacle avoidance on unstable ground
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 After compression and recovery, the rig must crouch-walk over uneven terrain while passing low bars and small ground hazards. Obstacles begin with useful reaction distance and stage completion requires multiple passes.
 
 ### WALK-PIP-070 — Show the real full crouch-walk attempt
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The training PIP publishes a current intact training environment every completed update, never goes blank merely because the attempt is failing, keeps the complete rig large, shows uneven terrain and nearby obstacles, labels farther obstacles without zooming the rig into a dot, and overlays the exact foot-contact or integrity failure while displaying update, crouch time, distance, alternating steps, and passes.
 
 ### WALK-CHECKPOINT-071 — Invalidate the failed 10,000-update duck policy
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 The v0.7.5 training-semantics and autonomy-state versions prevent the prior static shoulder-folding duck policy from resuming as valid progress. New autosave paths start the corrected lesson cleanly.
 
 ### WALK-CHICKEN-072 — Preserve the working chicken
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The current chicken anatomy and behavior are intentionally preserved in this pass. Crouch-walk and PIP changes must not regress the chicken preset.
 
 
 ### WALK-CURRICULUM-073 — Walking and running before crouch walking
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The prerequisite order is now stand, then ordinary walking/running, then foot-only crouch walking and low-obstacle avoidance. A rig such as the chicken may not use successful static ducking to skip gait mastery. The learned walking controller carries into the crouch lesson, where it is extended rather than replaced by shoulder-folding behavior. The reordered stage encoding invalidates unreleased duck-first checkpoints and autonomy state.
 
 
 ### WALK-MASTERY-074 — Strict staged skill locking
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 Training remains sequential rather than mixed replay. A lesson must pass eight consecutive stricter evaluations before its best verified controller is restored and locked as the starting point for the next lesson. Later lessons reinforce earlier skills by requiring them as prerequisites; they do not randomly switch back to old lesson types. Repeatedly solved tasks therefore stop consuming the main training focus while remaining embedded in the succeeding skill.
 
 ### WALK-FLIP-075 — Controlled somersault and prone recovery rules
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 A recognized somersault may rotate without requiring a separate powered-launch flag, but it must occur in a flip-capable stage, maintain meaningful directed rotation, and remain at or below three turns. Forward-facing prone posture is permitted as a recoverable state during locomotion, jump, hurdle, flip, and mixed stages. Backward-facing collapse and uncontrolled tumbling remain invalid. Static crouch and crouch-walk retain the stricter rule that only feet may touch terrain.
 
 
 ### WALK-STAGES-076 — Correct stage-specific qualification values
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 Standing passes on sustained stable foot support without distance. Static crouching passes on a foot-only compressed hold and controlled recovery without walking. Ordinary walking/running then requires real gait cycles, distance, and speed. Only after that controller is locked does crouch walking require inherited gait, sustained crouch, unstable-ground progress, and obstacle passes. Jumping, hurdles, flips, and mixed traversal retain their own separate evidence.
 
 ### WALK-MONOPED-077 — Restore single-leg gait progression
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The monoped is no longer forced to fake alternating biped steps. A forward single-leg landing cycle counts as its gait cycle, while multi-leg rigs still require alternating support. The same stage thresholds remain strict about distance, speed, stability, and later crouch or obstacle evidence.
 
@@ -565,3 +565,20 @@ Replace the current fixed analytic uneven-ground waves with a deterministic defo
 Add dynamic overhead hazards driven by the same terrain/material simulation: falling sand, collapsing loose slopes, rocks, debris, and thrown objects. Observations must include incoming direction, velocity, estimated impact time, material density, local burial depth, free-space direction, and whether the head, torso, or support limbs are obstructed. The rig must learn to evade when possible, brace when avoidance is impossible, remain oriented after impact, dig or push toward free space, recover from forward-prone or partially buried states, regain foot support, and continue the assigned stage.
 
 Acceptance requires seeded scenarios covering glancing hits, direct hits, accumulating sand, partial burial, full-body obstruction with an escape path, and repeated impacts. Success cannot be credited for tunnelling, teleporting, deleting material, remaining motionless under debris, or exploiting detached limbs. Suffocation or complete burial without an escape route terminates the attempt honestly. This mission is paired with WALK-SAND-078 and is intentionally carried to the next release rather than delaying the v0.7.5 PIP/curriculum correction.
+
+
+## v0.7.5 immutable release evidence
+
+- Pull request: `#28`
+- Linux validation job: `91501086187` - passed
+- Windows application/package job: `91501178733` - passed
+- Validation workflow run: `30749571655`
+- Validated workflow artifact: `8834215522`
+- Workflow artifact digest: `sha256:d4a6565322e7d672e2a4d9d9fe7b12e7d9cb9c519f624c40f482a4a9e3e6ace3`
+- Release tag: `v0.7.5`
+- Release page: `https://github.com/Autodidac/Vulkan_AI_Walking_Training_Simulation/releases/tag/v0.7.5`
+- Full Windows build and all three test suites: passed
+- Build-tree Vulkan/package diagnostics: passed
+- Installed executable and executable-relative `run.bat`: passed from an unrelated working directory
+- ZIP extraction, per-file manifest comparison, release-asset re-download, and byte comparison: passed by the publisher
+- Live screenshot-level behavior remains explicitly pending Adam's released-package confirmation. Any contradictory result reopens its exact mission.
