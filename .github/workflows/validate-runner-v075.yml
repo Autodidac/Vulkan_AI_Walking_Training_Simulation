@@ -37,28 +37,55 @@ jobs:
             python3 tools/fix_v075_compile.py
             python3 tools/fix_v075_tests.py
           fi
+          for tool in \
+            tools/apply_v075_curriculum_order.py \
+            tools/apply_v075_staged_mastery.py \
+            tools/apply_v075_stage_values.py
+          do
+            if test -f "$tool"; then
+              python3 "$tool"
+            fi
+          done
 
       - name: Verify mission and source hygiene
         shell: bash
         run: |
           git diff --check
-          test ! -f tools/apply_v075_core.py
-          test ! -f tools/apply_v075_pip_tests.py
-          test ! -f tools/fix_v075_compile.py
-          test ! -f tools/fix_v075_tests.py
+          for tool in \
+            tools/apply_v075_core.py \
+            tools/apply_v075_pip_tests.py \
+            tools/fix_v075_compile.py \
+            tools/fix_v075_tests.py \
+            tools/apply_v075_curriculum_order.py \
+            tools/apply_v075_staged_mastery.py \
+            tools/apply_v075_stage_values.py
+          do
+            test ! -f "$tool"
+          done
           python3 - <<'PY'
           from pathlib import Path
           mission = Path('missioncache.md').read_text(encoding='utf-8')
           required = [
               'WALK-DUCK-067', 'WALK-DUCK-068', 'WALK-TERRAIN-069',
               'WALK-PIP-070', 'WALK-CHECKPOINT-071', 'WALK-CHICKEN-072',
+              'WALK-CURRICULUM-073', 'WALK-MASTERY-074', 'WALK-FLIP-075',
+              'WALK-STAGES-076', 'WALK-MONOPED-077',
           ]
           missing = [item for item in required if item not in mission]
           if missing:
               raise SystemExit(f'missing v0.7.5 missions: {missing}')
           source = Path('src/simulation.cpp').read_text(encoding='utf-8')
+          header = Path('src/simulation.hpp').read_text(encoding='utf-8')
           if 'CreatureBlueprint CreatureBlueprint::chicken()' not in source:
               raise SystemExit('chicken preset was removed')
+          required_order = [
+              'balance,', 'duck_press,', 'uneven,', 'crouch_walk,',
+              'ramps,', 'hurdles,', 'duck_bars,', 'moving_hazards'
+          ]
+          enum_block = header.split('enum class CourseStage', 1)[1].split('};', 1)[0]
+          positions = [enum_block.find(item) for item in required_order]
+          if any(position < 0 for position in positions) or positions != sorted(positions):
+              raise SystemExit('stage order is not stand -> crouch -> walk -> crouch-walk')
           PY
 
       - name: Configure deterministic C++23 suite
@@ -86,7 +113,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Implement foot-only crouch walk and fix training PIP"
+          git commit -m "Correct staged skill values and restore monoped gait"
           git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
@@ -105,7 +132,14 @@ jobs:
       - name: Confirm exact clean tested source
         shell: pwsh
         run: |
-          foreach ($script in @('tools/apply_v075_core.py','tools/apply_v075_pip_tests.py','tools/fix_v075_compile.py','tools/fix_v075_tests.py')) {
+          foreach ($script in @(
+            'tools/apply_v075_core.py',
+            'tools/apply_v075_pip_tests.py',
+            'tools/fix_v075_compile.py',
+            'tools/fix_v075_tests.py',
+            'tools/apply_v075_curriculum_order.py',
+            'tools/apply_v075_staged_mastery.py',
+            'tools/apply_v075_stage_values.py')) {
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           git diff --quiet
