@@ -29,6 +29,9 @@ jobs:
           set -euo pipefail
           test -f tools/fix_v072_materialized.py
           python3 tools/fix_v072_materialized.py
+          if [ -f tools/fix_v072_display_segments.py ]; then
+            python3 tools/fix_v072_display_segments.py
+          fi
           git diff --check
 
       - name: Install GCC 14 and Ninja
