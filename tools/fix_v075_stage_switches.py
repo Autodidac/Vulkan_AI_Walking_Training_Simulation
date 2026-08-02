@@ -103,5 +103,13 @@ replace_once('src/simulation.cpp',
         case CourseStage::ramps:
             last_reward_ = std::max(0.0f, upright) * 0.010f''')
 
+# Strict walking qualification requires four real gait cycles. Keep the helper
+# test aligned with the same evidence used by the runtime gate.
+replace_once('tests/core_tests.cpp',
+'''    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
+        "valid stepped best result cannot seed self-imitation");''',
+'''    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 4, 1.2f, 4.0f),
+        "valid stepped best result cannot seed self-imitation");''')
+
 Path(__file__).unlink()
-print('completed all split-stage qualification, score, and reward switches')
+print('completed split-stage switches and aligned strict gait tests')
