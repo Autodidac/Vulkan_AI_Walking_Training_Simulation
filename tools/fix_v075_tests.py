@@ -50,5 +50,11 @@ for old, new in replacements:
         raise SystemExit(f'legacy duck test target not found: {old[:80]}')
     text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8', newline='\n')
+
+pip_fix = Path(__file__).with_name('fix_v075_pip_live.py')
+if pip_fix.exists():
+    code = compile(pip_fix.read_text(encoding='utf-8'), str(pip_fix), 'exec')
+    exec(code, {'__name__': '__main__', '__file__': str(pip_fix)})
+
 Path(__file__).unlink()
-print('aligned legacy tests with foot-only crouch walking')
+print('aligned duck tests and applied the live readable training PIP')
