@@ -28,24 +28,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Materialize complete v0.7.4 source and mission ledger
+      - name: Materialize complete source when needed
+        shell: bash
         run: |
-          python3 tools/apply_runner_v074.py
-          python3 tools/fix_v074_live_failures.py
-          python3 tools/complete_v074_missions.py
-          python3 tools/reconcile_runner_missions.py
-          python3 tools/fix_v074_hygiene.py
+          if test -f tools/apply_runner_v074.py; then
+            python3 tools/apply_runner_v074.py
+            python3 tools/fix_v074_live_failures.py
+            python3 tools/complete_v074_missions.py
+            python3 tools/reconcile_runner_missions.py
+            python3 tools/fix_v074_hygiene.py
+          fi
 
       - name: Enforce branding, ledger, and patch hygiene
         shell: bash
         run: |
           git diff --check
           old_brand="$(printf '%s%s' 'ep' 'och')"
+          old_title="$(printf '%s%s' 'sand-sim ' 'enemy')"
           if git grep -in "$old_brand" -- .; then
             echo "Former project brand remains in owned source."
             exit 1
           fi
-          if git grep -in 'sand-sim enemy' -- .; then
+          if git grep -in "$old_title" -- .; then
             echo "Obsolete trainer title remains."
             exit 1
           fi
@@ -68,23 +72,25 @@ jobs:
               raise SystemExit(f'missing reconciled missions: {missing}')
           PY
 
-      - name: Configure deterministic C++23 suite
+      - name: Configure, build, and test deterministic C++23 suite
         env:
           CC: gcc-14
           CXX: g++-14
-        run: >-
-          cmake -S . -B build/linux-v074 -G Ninja
-          -DRUNNER_BUILD_APP=OFF
-          -DRUNNER_BUILD_TESTS=ON
-          -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build and test deterministic suite
         run: |
+          cmake -S . -B build/linux-v074 -G Ninja \
+            -DRUNNER_BUILD_APP=OFF \
+            -DRUNNER_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Release
           cmake --build build/linux-v074 --parallel
           ctest --test-dir build/linux-v074 --output-on-failure -V --timeout 1200
 
-      - name: Commit tested source to PR branch
+      - name: Commit tested materialized source
+        shell: bash
         run: |
+          if git diff --quiet && test -z "$(git ls-files --others --exclude-standard)"; then
+            echo "Source is already materialized and committed."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -116,10 +122,13 @@ jobs:
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           $oldBrandToken = 'ep' + 'och'
+          $oldTitleToken = 'sand-sim ' + 'enemy'
           $matches = git grep -in $oldBrandToken -- .
           if ($LASTEXITCODE -eq 0) { $matches; throw "Former project brand remains" }
+          $matches = git grep -in $oldTitleToken -- .
+          if ($LASTEXITCODE -eq 0) { $matches; throw "Obsolete trainer title remains" }
           git diff --quiet
-          if ($LASTEXITCODE -ne 0) { throw "Windows did not receive the Linux-tested source" }
+          if ($LASTEXITCODE -ne 0) { throw "Windows source tree is dirty" }
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
