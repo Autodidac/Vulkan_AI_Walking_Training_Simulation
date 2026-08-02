@@ -1420,6 +1420,39 @@ namespace epochrunner::sim
             && head_segment >= rest_head_segment * 0.55f;
     }
 
+    bool Environment::current_display_posture_valid() const noexcept
+    {
+        if (!valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node)
+            || !valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node))
+            return false;
+
+        const bool supported = contact_supported(blueprint_.left_contact_node)
+            || contact_supported(blueprint_.right_contact_node);
+        if (!supported || non_foot_grounded_)
+            return false;
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const float torso_length = length(
+            particles_[blueprint_.torso_node].position - root);
+        const float head_length = length(
+            particles_[blueprint_.head_node].position - root);
+        const float rest_torso_length = length(
+            blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float rest_head_length = length(
+            blueprint_.nodes[blueprint_.head_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+
+        // Historical lesson evidence may remain latched, but the body displayed
+        // now must still have intact torso and head geometry. Ducking preserves
+        // these segment lengths; the collapsed screenshot pose does not.
+        return torso_length >= rest_torso_length * 0.58f
+            && head_length >= rest_head_length * 0.55f;
+    }
+
     void Environment::invalidate(InvalidMotion reason) noexcept
     {
         if (invalid_reason_ == InvalidMotion::none)
