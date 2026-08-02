@@ -1,19 +1,41 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-path = root / 'src/ppo.hpp'
-text = path.read_text(encoding='utf-8')
 
+# Prevent the raised central shoulder triangle from reflecting through the
+# upper spine. Head-to-shoulder braces preserve the intended central-above-
+# lateral geometry while retaining articulated shoulder and elbow motors.
+simulation_path = root / 'src/simulation.cpp'
+simulation = simulation_path.read_text(encoding='utf-8')
+old_bones = '''            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f }, { 8, 9, 0.0f, 0.96f },
+            { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f }, { 11, 12, 0.0f, 0.96f },
+            { 7, 10, 0.0f, 0.72f }
+        };'''
+new_bones = '''            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f }, { 8, 9, 0.0f, 0.96f },
+            { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f }, { 11, 12, 0.0f, 0.96f },
+            { 7, 10, 0.0f, 0.72f },
+            { 2, 7, 0.0f, 0.94f }, { 2, 10, 0.0f, 0.94f }
+        };'''
+if new_bones not in simulation:
+    if old_bones not in simulation:
+        raise SystemExit('humanoid shoulder-girdle bone block was not found')
+    simulation = simulation.replace(old_bones, new_bones, 1)
+simulation_path.write_text(simulation, encoding='utf-8', newline='\n')
+
+# Align display priority with the honest PIP contract. Qualified environments
+# remain visible through a momentary contact flicker; finite rejected attempts
+# are still published at a lower priority rather than producing a blank PIP.
+ppo_path = root / 'src/ppo.hpp'
+ppo = ppo_path.read_text(encoding='utf-8')
 old_gate = '''        if (!qualification.valid
             || !environment.current_display_posture_valid())
             return false;'''
 new_gate = '''        if (!qualification.valid || !environment.body_integrity_valid())
             return false;'''
-if new_gate not in text:
-    if old_gate not in text:
+if new_gate not in ppo:
+    if old_gate not in ppo:
         raise SystemExit('stage display gate target was not found')
-    text = text.replace(old_gate, new_gate, 1)
-
+    ppo = ppo.replace(old_gate, new_gate, 1)
 old_balance = '''        if (stage == sim::CourseStage::balance)
         {
             return environment.stable_stance_seconds() >= 1.0f
@@ -26,22 +48,25 @@ old_balance = '''        if (stage == sim::CourseStage::balance)
         }'''
 new_balance = '''        if (stage == sim::CourseStage::balance)
         {
-            // Qualification already proves a sustained neutral supported stance.
-            // Keep the current training frame visible through a single solver-frame
-            // foot-contact flicker or small raised-shoulder posture oscillation.
+            // Qualification proves sustained support. Keep the current sample
+            // visible through one solver-frame contact flicker while still
+            // rejecting collapsed, arms-up, spinning, or broken frames.
             return environment.uprightness() >= 0.60f
                 && environment.maximum_upper_body_motor_deviation()
                     <= standing_neutral_arm_limit
                 && environment.uncontrolled_spin_turns()
                     <= standing_qualification_spin_limit;
         }'''
-if new_balance not in text:
-    if old_balance not in text:
+if new_balance not in ppo:
+    if old_balance not in ppo:
         raise SystemExit('balance PIP block was not found')
-    text = text.replace(old_balance, new_balance, 1)
+    ppo = ppo.replace(old_balance, new_balance, 1)
+ppo_path.write_text(ppo, encoding='utf-8', newline='\n')
 
-path.write_text(text, encoding='utf-8', newline='\n')
-
+# Keep acceptance coverage focused on both priorities: a current neutral frame
+# earns top priority, while a historically qualified finite environment can
+# never disappear from the PIP. The robust seed gate also checks full skeleton
+# integrity, matching the real PPO evaluator.
 test_path = root / 'tests/core_tests.cpp'
 tests = test_path.read_text(encoding='utf-8')
 old_expectation = '''        require(rl::stage_display_sample_eligible(
@@ -69,62 +94,7 @@ if new_neutral not in tests:
         raise SystemExit('neutral stance test anchor was not found')
     tests = tests.replace(old_neutral, new_neutral, 1)
 
-diagnostic_anchor = '''        struct StanceFrame
-        {'''
-diagnostic_method = '''        static void print_integrity_diagnostics(const Environment& environment) noexcept
-        {
-            float minimum_bone_ratio = 1000.0f;
-            float maximum_bone_ratio = 0.0f;
-            std::size_t minimum_bone = 0u;
-            std::size_t maximum_bone = 0u;
-            for (std::size_t index = 0; index < environment.blueprint_.bones.size(); ++index)
-            {
-                const DistanceConstraint& bone = environment.blueprint_.bones[index];
-                const float ratio = length(environment.particles_[bone.b].position
-                    - environment.particles_[bone.a].position)
-                    / std::max(bone.rest_length, 1.0e-5f);
-                if (ratio < minimum_bone_ratio)
-                {
-                    minimum_bone_ratio = ratio;
-                    minimum_bone = index;
-                }
-                if (ratio > maximum_bone_ratio)
-                {
-                    maximum_bone_ratio = ratio;
-                    maximum_bone = index;
-                }
-            }
-            const Vec2 root = environment.particles_[environment.blueprint_.root_node].position;
-            const Vec2 torso_segment = environment.particles_[environment.blueprint_.torso_node].position - root;
-            const Vec2 head_segment = environment.particles_[environment.blueprint_.head_node].position
-                - environment.particles_[environment.blueprint_.torso_node].position;
-            const Vec2 rest_torso = environment.blueprint_.nodes[environment.blueprint_.torso_node]
-                - environment.blueprint_.nodes[environment.blueprint_.root_node];
-            const Vec2 rest_head = environment.blueprint_.nodes[environment.blueprint_.head_node]
-                - environment.blueprint_.nodes[environment.blueprint_.torso_node];
-            const float torso_ratio = length(torso_segment) / std::max(length(rest_torso), 1.0e-5f);
-            const float head_ratio = length(head_segment) / std::max(length(rest_head), 1.0e-5f);
-            const float alignment = dot(normalized(torso_segment, { 0.0f, 1.0f }),
-                normalized(head_segment, { 0.0f, 1.0f }));
-            std::cerr << " integrity=" << environment.body_integrity_valid()
-                << " bone_min=" << minimum_bone_ratio << '@' << minimum_bone
-                << " bone_max=" << maximum_bone_ratio << '@' << maximum_bone
-                << " torso_ratio=" << torso_ratio
-                << " head_ratio=" << head_ratio
-                << " alignment=" << alignment
-                << " head_above_torso=" << head_segment.y
-                << " upper_dev=" << environment.maximum_upper_body_motor_deviation()
-                << std::endl;
-        }
-
-        struct StanceFrame
-        {'''
-if diagnostic_method not in tests:
-    if diagnostic_anchor not in tests:
-        raise SystemExit('stance diagnostic insertion anchor was not found')
-    tests = tests.replace(diagnostic_anchor, diagnostic_method, 1)
-
-old_seed_result = '''            const rl::StageMotionQualification qualification =
+old_seed = '''            const rl::StageMotionQualification qualification =
                 rl::stage_motion_qualification(sim::CourseStage::balance, environment);
             valid_agents += qualification.valid ? 1u : 0u;
             if (!qualification.valid)
@@ -137,7 +107,7 @@ old_seed_result = '''            const rl::StageMotionQualification qualificatio
                     << " max_joint=" << environment.maximum_joint_speed()
                     << " survival=" << environment.elapsed_seconds() << std::endl;
             }'''
-new_seed_result = '''            const rl::StageMotionQualification qualification =
+new_seed = '''            const rl::StageMotionQualification qualification =
                 rl::stage_motion_qualification(sim::CourseStage::balance, environment);
             const bool integrity = environment.body_integrity_valid();
             valid_agents += qualification.valid && integrity ? 1u : 0u;
@@ -146,17 +116,31 @@ new_seed_result = '''            const rl::StageMotionQualification qualificatio
                 std::cerr << "evaluation seed " << seed
                     << " rejection=" << qualification.rejection_mask
                     << " invalid=" << static_cast<int>(environment.invalid_reason())
+                    << " integrity=" << integrity
                     << " stance=" << environment.stable_stance_seconds()
                     << " longest=" << environment.longest_stable_stance_seconds()
                     << " max_joint=" << environment.maximum_joint_speed()
-                    << " survival=" << environment.elapsed_seconds();
-                sim::EnvironmentTestAccess::print_integrity_diagnostics(environment);
+                    << " survival=" << environment.elapsed_seconds() << std::endl;
             }'''
-if new_seed_result not in tests:
-    if old_seed_result not in tests:
-        raise SystemExit('evaluation seed diagnostics block was not found')
-    tests = tests.replace(old_seed_result, new_seed_result, 1)
+if new_seed not in tests:
+    if old_seed not in tests:
+        raise SystemExit('evaluation seed gate was not found')
+    tests = tests.replace(old_seed, new_seed, 1)
+
+brace_anchor = '''    require(humanoid.nodes[8].y < humanoid.nodes[7].y
+            && humanoid.nodes[11].y < humanoid.nodes[10].y,
+        "humanoid rest arms do not hang below the shoulder pivots");'''
+brace_test = brace_anchor + '''
+    require(std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
+            { return (bone.a == 2u && bone.b == 7u) || (bone.a == 7u && bone.b == 2u); })
+            && std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
+            { return (bone.a == 2u && bone.b == 10u) || (bone.a == 10u && bone.b == 2u); }),
+        "raised humanoid shoulder girdle can still invert through the upper spine");'''
+if brace_test not in tests:
+    if brace_anchor not in tests:
+        raise SystemExit('humanoid geometry test anchor was not found')
+    tests = tests.replace(brace_anchor, brace_test, 1)
 
 test_path.write_text(tests, encoding='utf-8', newline='\n')
 Path(__file__).unlink()
-print('aligned standing PIP tests and added raised-shoulder integrity diagnostics')
+print('braced raised humanoid shoulder girdle and finalized standing PIP gates')
