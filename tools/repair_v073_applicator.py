@@ -1,8 +1,13 @@
-from pathlib import Path
+from __future__ import annotations
 
-path = Path(__file__).with_name("apply_v073_runtime_fix.py")
-text = path.read_text(encoding="utf-8")
-changed = False
+from pathlib import Path
+import runpy
+
+root = Path(__file__).resolve().parents[1]
+applicator = Path(__file__).with_name("apply_v073_runtime_fix.py")
+feedback = Path(__file__).with_name("apply_v073_feedback_fix.py")
+original = applicator.read_text(encoding="utf-8")
+text = original
 
 start_marker = '''replace_text(
     "tests/core_tests.cpp",
@@ -11,16 +16,13 @@ if start_marker in text:
     start = text.index(start_marker)
     end = text.index("\n\ninsert_before(", start)
     text = text[:start] + text[end + 2:]
-    changed = True
 
 for old, new in (
     ("ankle_position.y - 0.155f", "ankle_position.y - 0.185f"),
     ("ankle_position.y - 0.165f", "ankle_position.y - 0.195f"),
     ("constexpr float chain_strength = 0.14f", "constexpr float chain_strength = 0.08f"),
 ):
-    if old in text:
-        text = text.replace(old, new)
-        changed = True
+    text = text.replace(old, new)
 
 anchor = '''
 insert_before(
@@ -50,10 +52,21 @@ if "humanoid.nodes.size() >= 17" not in text:
     if anchor not in text:
         raise RuntimeError("Could not locate test compatibility insertion point")
     text = text.replace(anchor, compatibility + anchor, 1)
-    changed = True
 
-if changed:
-    path.write_text(text, encoding="utf-8", newline="\n")
-    print("updated v0.7.3 applicator compatibility")
-else:
-    print("applicator compatibility repair already applied")
+try:
+    applicator.write_text(text, encoding="utf-8", newline="\n")
+    try:
+        runpy.run_path(str(applicator), run_name="__main__")
+    except SystemExit as exit_signal:
+        if exit_signal.code not in (None, 0):
+            raise
+finally:
+    applicator.write_text(original, encoding="utf-8", newline="\n")
+
+try:
+    runpy.run_path(str(feedback), run_name="__main__")
+except SystemExit as exit_signal:
+    if exit_signal.code not in (None, 0):
+        raise
+
+print("materialized v0.7.3 runtime and live-feedback source cleanly")
