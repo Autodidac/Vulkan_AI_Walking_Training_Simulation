@@ -1065,6 +1065,7 @@ namespace runner::sim
         duck_press_completed_ = false;
         current_airborne_rotation_ = 0.0f;
         maximum_spin_turns_ = 0.0f;
+        uncontrolled_spin_turns_ = 0.0f;
         powered_jump_count_ = 0;
         landed_jump_count_ = 0;
         spin_landing_count_ = 0;
@@ -1870,6 +1871,14 @@ namespace runner::sim
         const float torso_delta = wrap_angle(torso_angle - previous_torso_angle_);
         torso_turn_speed_ = torso_delta / std::max(dt, 1.0e-5f);
         previous_torso_angle_ = torso_angle;
+        if (course_stage_ == CourseStage::balance)
+        {
+            // Standing rotation is a posture failure even while both feet remain
+            // planted. Track the maximum wrapped torso turn instead of counting
+            // only airborne flips, so upright spinning cannot pass mastery.
+            uncontrolled_spin_turns_ = std::max(uncontrolled_spin_turns_,
+                std::abs(torso_angle) / (2.0f * pi));
+        }
         non_foot_grounded_ = non_foot_ground_contact();
         const bool feet_supported = left || right;
         const bool airborne = !feet_supported;
@@ -2039,7 +2048,7 @@ namespace runner::sim
             const float airborne_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
             if (powered_takeoff_ && stage_allows_controlled_flips(course_stage_))
                 maximum_spin_turns_ = std::max(maximum_spin_turns_, airborne_turns);
-            else
+            else if (course_stage_ != CourseStage::balance)
                 uncontrolled_spin_turns_ += std::abs(torso_delta) / (2.0f * pi);
         }
         else if (!was_supported)

@@ -1036,6 +1036,12 @@ int main()
         require(flip_semantics.maximum_flip_turns() == 0.0f
                 && flip_semantics.uncontrolled_spin_turns() == 0.0f,
             "fresh rig does not separate flip and spin counters");
+        sim::EnvironmentTestAccess::force_standing_spin(flip_semantics, 0.25f);
+        require(flip_semantics.uncontrolled_spin_turns() == 0.25f,
+            "grounded standing rotation cannot be represented by the strict gate");
+        flip_semantics.reset(0xF120u);
+        require(flip_semantics.uncontrolled_spin_turns() == 0.0f,
+            "standing spin evidence leaks across episode resets");
     }
 
     require(rl::policy_candidate_better(2u, 1.0f, 1u, 1000.0f, true),
