@@ -13,6 +13,21 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 def main() -> None:
+    header_path = Path("src/simulation.hpp")
+    header = header_path.read_text(encoding="utf-8")
+    header = replace_once(
+        header,
+        """        [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
+        [[nodiscard]] bool left_supported() const noexcept
+""",
+        """        [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
+        [[nodiscard]] bool current_display_posture_valid() const noexcept;
+        [[nodiscard]] bool left_supported() const noexcept
+""",
+        "current display-posture declaration",
+    )
+    header_path.write_text(header, encoding="utf-8")
+
     simulation_path = Path("src/simulation.cpp")
     simulation = simulation_path.read_text(encoding="utf-8")
     simulation = replace_once(
@@ -43,6 +58,51 @@ def main() -> None:
 """,
         "braced passive foot",
     )
+    simulation = replace_once(
+        simulation,
+        """    void Environment::invalidate(InvalidMotion reason) noexcept
+    {
+""",
+        """    bool Environment::current_display_posture_valid() const noexcept
+    {
+        if (!valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node)
+            || !valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node))
+            return false;
+
+        const bool supported = contact_supported(blueprint_.left_contact_node)
+            || contact_supported(blueprint_.right_contact_node);
+        if (!supported || non_foot_ground_contact())
+            return false;
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const Vec2 torso = particles_[blueprint_.torso_node].position;
+        const Vec2 head = particles_[blueprint_.head_node].position;
+        const float rest_torso_length = length(
+            blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float rest_head_length = length(
+            blueprint_.nodes[blueprint_.head_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float torso_length = length(torso - root);
+        const float head_length = length(head - root);
+        const float torso_ground = ground_height_at(torso.x);
+        const float head_ground = ground_height_at(head.x);
+
+        return torso_uprightness() >= 0.55f
+            && torso_length >= rest_torso_length * 0.58f
+            && head_length >= rest_head_length * 0.55f
+            && torso.y - torso_ground >= 0.55f
+            && head.y - head_ground >= 0.80f;
+    }
+
+    void Environment::invalidate(InvalidMotion reason) noexcept
+    {
+""",
+        "fresh current display-posture implementation",
+    )
     simulation_path.write_text(simulation, encoding="utf-8")
 
     policy_path = Path("src/ppo.hpp")
@@ -69,6 +129,17 @@ def main() -> None:
 """,
         "duck-assistance formatting",
     )
+    policy = replace_once(
+        policy,
+        """        if (!qualification.valid || environment.non_foot_grounded())
+            return false;
+""",
+        """        if (!qualification.valid
+            || !environment.current_display_posture_valid())
+            return false;
+""",
+        "fresh display-sample posture gate",
+    )
     policy_path.write_text(policy, encoding="utf-8")
 
     tests_path = Path("tests/core_tests.cpp")
@@ -89,6 +160,22 @@ def main() -> None:
         \"passive foot adapter leaves an ankle on the contact plane\");
 """,
         "ankle-clearance regression test",
+    )
+    tests = replace_once(
+        tests,
+        """        sim::EnvironmentTestAccess::collapse_upper_body(assisted_stance);
+        require(!rl::stage_display_sample_eligible(
+                sim::CourseStage::balance, assisted_stance),
+            \"collapsed current frame is still published as a valid sample\");
+""",
+        """        sim::EnvironmentTestAccess::collapse_upper_body(assisted_stance);
+        require(!assisted_stance.current_display_posture_valid(),
+            \"fresh geometric posture check accepts a collapsed current body\");
+        require(!rl::stage_display_sample_eligible(
+                sim::CourseStage::balance, assisted_stance),
+            \"collapsed current frame is still published as a valid sample\");
+""",
+        "fresh collapsed-frame regression assertion",
     )
     tests_path.write_text(tests, encoding="utf-8")
 
