@@ -103,8 +103,9 @@ jobs:
             Copy-Item -Destination $stage -Force
           if (-not (Test-Path "$stage/EpochRunner.exe")) { throw "Packaged executable missing" }
           if (-not (Test-Path "$stage/run.bat")) { throw "Packaged run.bat missing" }
-          if (-not (Test-Path "$stage/shaders/flat.vert.spv")
-              -or -not (Test-Path "$stage/shaders/flat.frag.spv")) {
+          $vertexShaderPresent = Test-Path "$stage/shaders/flat.vert.spv"
+          $fragmentShaderPresent = Test-Path "$stage/shaders/flat.frag.spv"
+          if (-not $vertexShaderPresent -or -not $fragmentShaderPresent) {
             throw "Packaged shaders missing"
           }
           if (-not (Test-Path "$stage/assets/chicken.ppm")) { throw "Packaged assets missing" }
