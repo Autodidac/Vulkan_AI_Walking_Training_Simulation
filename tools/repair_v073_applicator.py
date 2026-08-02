@@ -9,6 +9,7 @@ feedback = Path(__file__).with_name("apply_v073_feedback_fix.py")
 integrity_tune = Path(__file__).with_name("apply_v073_integrity_tune.py")
 balance_tune = Path(__file__).with_name("apply_v073_balance_tune.py")
 contact_tune = Path(__file__).with_name("apply_v073_contact_tune.py")
+stance_tutor = Path(__file__).with_name("apply_v073_stance_tutor.py")
 original = applicator.read_text(encoding="utf-8")
 text = original
 
@@ -66,7 +67,7 @@ try:
 finally:
     applicator.write_text(original, encoding="utf-8", newline="\n")
 
-for script in (feedback, integrity_tune, balance_tune, contact_tune):
+for script in (feedback, integrity_tune, balance_tune, contact_tune, stance_tutor):
     try:
         runpy.run_path(str(script), run_name="__main__")
     except SystemExit as exit_signal:
