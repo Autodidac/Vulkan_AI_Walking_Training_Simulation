@@ -101,16 +101,19 @@ jobs:
 
           policy_path = Path('src/ppo.hpp')
           policy = policy_path.read_text(encoding='utf-8')
-          new_gate = '''        const sim::CreatureBlueprint& rig = environment.blueprint();
-              const bool paired_leg_chains = rig.active_motor_count >= 4u
-                  && rig.motors[0].enabled && rig.motors[1].enabled
-                  && rig.motors[2].enabled && rig.motors[3].enabled
-                  && rig.motors[0].pivot == rig.motors[2].pivot
-                  && rig.motors[1].a == rig.motors[0].pivot
-                  && rig.motors[3].a == rig.motors[2].pivot;
-              if (!paired_leg_chains)
-                  return action;
-          '''
+          new_gate = (
+              "        const sim::CreatureBlueprint& rig = environment.blueprint();\n"
+              "        const bool paired_leg_chains = rig.active_motor_count >= 4u\n"
+              "            && rig.motors[0].enabled && rig.motors[1].enabled\n"
+              "            && rig.motors[2].enabled && rig.motors[3].enabled\n"
+              "            && rig.motors[0].pivot == rig.motors[2].pivot\n"
+              "            && rig.motors[1].a == rig.motors[0].pivot\n"
+              "            && rig.motors[3].a == rig.motors[2].pivot;\n"
+              "        if (!paired_leg_chains)\n"
+              "        {\n"
+              "            return action;\n"
+              "        }\n"
+          )
           pattern = (
               r'        if \(environment\.blueprint\(\)\.support_seed_count\(\) > 2u\)\n'
               r'\s+return action;\n'
