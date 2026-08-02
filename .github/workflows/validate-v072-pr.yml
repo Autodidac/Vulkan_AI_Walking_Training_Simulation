@@ -81,22 +81,43 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path('tests/core_tests.cpp')
-          text = path.read_text(encoding='utf-8')
-          old = '''    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+          test_path = Path('tests/core_tests.cpp')
+          tests = test_path.read_text(encoding='utf-8')
+          old_test = '''    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
                   "valid duck result cannot seed self-imitation");
           '''
-          new = '''    require(!rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+          new_test = '''    require(!rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
                   "ducking without clearing a low bar can still seed self-imitation");
               require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f,
                       0.8f, 0u, 0.0f, 0u, 1u),
                   "valid duck-and-clear result cannot seed self-imitation");
           '''
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'ducking without clearing a low bar can still seed self-imitation' not in text:
+          if old_test in tests:
+              tests = tests.replace(old_test, new_test, 1)
+          elif 'ducking without clearing a low bar can still seed self-imitation' not in tests:
               raise RuntimeError('could not update duck imitation acceptance test')
-          path.write_text(text, encoding='utf-8')
+          test_path.write_text(tests, encoding='utf-8')
+
+          policy_path = Path('src/ppo.hpp')
+          policy = policy_path.read_text(encoding='utf-8')
+          old_gate = '''        if (environment.blueprint().support_seed_count() > 2u)
+                  return action;
+          '''
+          new_gate = '''        const sim::CreatureBlueprint& rig = environment.blueprint();
+              const bool paired_leg_chains = rig.active_motor_count >= 4u
+                  && rig.motors[0].enabled && rig.motors[1].enabled
+                  && rig.motors[2].enabled && rig.motors[3].enabled
+                  && rig.motors[0].pivot == rig.motors[2].pivot
+                  && rig.motors[1].a == rig.motors[0].pivot
+                  && rig.motors[3].a == rig.motors[2].pivot;
+              if (!paired_leg_chains)
+                  return action;
+          '''
+          if old_gate in policy:
+              policy = policy.replace(old_gate, new_gate, 1)
+          elif 'const bool paired_leg_chains' not in policy:
+              raise RuntimeError('could not replace support-count coordination heuristic')
+          policy_path.write_text(policy, encoding='utf-8')
           PY
           git diff --check
 
