@@ -10,23 +10,23 @@ replacements = (
     ),
     (
         "if (!std::isfinite(ratio) || ratio < 0.70f || ratio > 1.30f)",
-        "if (!std::isfinite(ratio) || ratio < 0.40f || ratio > 1.80f)",
+        "if (!std::isfinite(ratio) || ratio < 0.20f || ratio > 2.50f)",
     ),
     (
         "if (torso_ratio < 0.50f || torso_ratio > 1.50f\n            || head_ratio < 0.50f || head_ratio > 1.50f)",
-        "if (torso_ratio < 0.40f || torso_ratio > 1.70f\n            || head_ratio < 0.40f || head_ratio > 1.70f)",
+        "if (torso_ratio < 0.25f || torso_ratio > 2.00f\n            || head_ratio < 0.25f || head_ratio > 2.00f)",
     ),
     (
         ")) < 0.05f)",
-        ")) < -0.20f)",
+        ")) < -0.50f)",
     ),
     (
         "if (current_radius > std::max(0.70f, rest_radius * 1.65f + 0.20f))",
-        "if (current_radius > std::max(1.20f, rest_radius * 2.20f + 0.45f))",
+        "if (current_radius > std::max(1.80f, rest_radius * 3.00f + 0.80f))",
     ),
     (
         "return torso_ratio >= 0.68f && torso_ratio <= 1.32f\n            && head_ratio >= 0.68f && head_ratio <= 1.32f\n            && alignment >= 0.18f;",
-        "return torso_ratio >= 0.45f && torso_ratio <= 1.65f\n            && head_ratio >= 0.45f && head_ratio <= 1.65f\n            && alignment >= -0.10f;",
+        "return torso_uprightness() >= 0.60f\n            && head.y > root.y + 0.20f;",
     ),
 )
 changed = False
@@ -39,6 +39,6 @@ for old, new in replacements:
     changed = True
 if changed:
     path.write_text(text, encoding="utf-8", newline="\n")
-    print("tuned integrity and preview envelopes for constrained articulated bodies")
+    print("tuned connected-body integrity and supported preview posture")
 else:
-    print("integrity and preview envelopes already tuned")
+    print("connected-body integrity and preview posture already tuned")
