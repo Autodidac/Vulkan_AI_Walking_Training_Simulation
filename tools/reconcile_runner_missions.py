@@ -1,6 +1,29 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
+
+simulation = root / 'src/simulation.cpp'
+simulation_text = simulation.read_text(encoding='utf-8')
+old_bones = '''            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
+            { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.94f },
+            { 0, 5, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.88f },
+            { 0, 11, 0.0f, 0.82f }, { 1, 11, 0.0f, 0.82f },
+            { 0, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
+            { 0, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }'''
+new_bones = '''            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
+            { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.94f },
+            { 0, 2, 0.0f, 0.94f }, { 1, 3, 0.0f, 0.94f },
+            { 0, 5, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.88f },
+            { 0, 6, 0.0f, 0.86f }, { 1, 5, 0.0f, 0.82f },
+            { 0, 11, 0.0f, 0.82f }, { 1, 11, 0.0f, 0.82f },
+            { 0, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
+            { 0, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }'''
+if new_bones not in simulation_text:
+    if old_bones not in simulation_text:
+        raise SystemExit('chicken bone layout was not found for stabilization')
+    simulation.write_text(simulation_text.replace(old_bones, new_bones, 1),
+                          encoding='utf-8', newline='\n')
+
 path = root / 'missioncache.md'
 text = path.read_text(encoding='utf-8')
 
@@ -95,8 +118,6 @@ if '### WALK-AUDIT-051' not in text:
     anchor = text.index('## v0.7.3 live-runtime correction')
     text = text[:anchor] + section + '\n' + text[anchor:]
 
-# Strengthen the prior narrow statistics mission so it cannot be mistaken for the
-# complete lifetime/session/all-time request.
 old = '''### WALK-STATS-038 — Rig lifetime and cumulative runtime totals
 **Status:** PACKAGE VERIFIED
 
@@ -109,4 +130,4 @@ text = text.replace(old, new)
 
 path.write_text(text, encoding='utf-8', newline='\n')
 Path(__file__).unlink()
-print('reconciled complete Runner conversation trail into missioncache.md')
+print('stabilized the chicken and reconciled the complete Runner conversation trail')
