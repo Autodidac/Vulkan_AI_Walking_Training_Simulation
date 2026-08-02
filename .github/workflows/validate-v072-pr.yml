@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-materialize-test:
+  linux-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -23,149 +23,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      - name: Materialize v0.7.2 source when required
+      - name: Apply idempotent materialized-source corrections
         shell: bash
         run: |
           set -euo pipefail
-          if ! grep -q 'project(EpochRunner VERSION 0.7.2' CMakeLists.txt; then
-            python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('tools/apply_v072_sim_regression.py')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              'notes = """# EpochRunner v0.7.2\\n\\n"',
-              'notes = "# EpochRunner v0.7.2\\n\\n"',
-          )
-
-          misplaced = '''    text = replace_once(
-                  text,
-                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
-                  "            return CourseFeatureKind::rock;",
-                  "        if (stage == CourseStage::walk)\\n"
-                  "            return CourseFeatureKind::overhead_bar;\\n"
-                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
-                  "            return CourseFeatureKind::rock;",
-                  "walk stage obstacle schedule",
-              )
-          '''
-          if misplaced not in text:
-              raise RuntimeError('could not locate misplaced course schedule patch')
-          text = text.replace(misplaced, '', 1)
-
-          schedule = '''    text = replace_once(
-                  text,
-                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
-                  "            return CourseFeatureKind::rock;",
-                  "        if (stage == CourseStage::walk)\\n"
-                  "            return CourseFeatureKind::overhead_bar;\\n"
-                  "        if (stage == CourseStage::ramps || stage == CourseStage::uneven)\\n"
-                  "            return CourseFeatureKind::rock;",
-                  "walk stage obstacle schedule",
-              )
-          '''
-          marker = '    write(path, text)\n\n\ndef patch_simulation_source() -> None:'
-          if marker not in text:
-              raise RuntimeError('could not locate simulation header publication point')
-          text = text.replace(
-              marker,
-              schedule + '    write(path, text)\n\n\ndef patch_simulation_source() -> None:',
-              1,
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-            python3 -m py_compile tools/apply_v072_sim_regression.py
-            python3 tools/apply_v072_sim_regression.py
-          fi
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          test_path = Path('tests/core_tests.cpp')
-          tests = test_path.read_text(encoding='utf-8')
-          old_test = '''    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
-                  "valid duck result cannot seed self-imitation");
-          '''
-          new_test = '''    require(!rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
-                  "ducking without clearing a low bar can still seed self-imitation");
-              require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f,
-                      0.8f, 0u, 0.0f, 0u, 1u),
-                  "valid duck-and-clear result cannot seed self-imitation");
-          '''
-          if old_test in tests:
-              tests = tests.replace(old_test, new_test, 1)
-          elif 'ducking without clearing a low bar can still seed self-imitation' not in tests:
-              raise RuntimeError('could not update duck imitation acceptance test')
-          test_path.write_text(tests, encoding='utf-8')
-
-          policy_path = Path('src/ppo.hpp')
-          policy = policy_path.read_text(encoding='utf-8')
-          new_gate = (
-              "        const sim::CreatureBlueprint& rig = environment.blueprint();\n"
-              "        const bool paired_leg_chains = rig.active_motor_count >= 4u\n"
-              "            && rig.motors[0].enabled && rig.motors[1].enabled\n"
-              "            && rig.motors[2].enabled && rig.motors[3].enabled\n"
-              "            && rig.motors[0].pivot == rig.motors[2].pivot\n"
-              "            && rig.motors[1].a == rig.motors[0].pivot\n"
-              "            && rig.motors[3].a == rig.motors[2].pivot;\n"
-              "        if (!paired_leg_chains)\n"
-              "        {\n"
-              "            return action;\n"
-              "        }\n"
-          )
-          pattern = (
-              r'        if \(environment\.blueprint\(\)\.support_seed_count\(\) > 2u\)\n'
-              r'\s+return action;\n'
-          )
-          policy, count = re.subn(pattern, new_gate, policy, count=1)
-          if count != 1 and 'const bool paired_leg_chains' not in policy:
-              raise RuntimeError('could not replace support-count coordination heuristic')
-
-          old_assist = '''            const float assist = 0.48f + environment.duck_obstacle_weight() * 0.38f;
-          '''
-          new_assist = '''            const auto observation = environment.observation();
-              const bool overhead_bar = std::abs(observation[30]) < 0.05f
-                  && observation[32] > 0.01f;
-              const float observed_weight = overhead_bar
-                  ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
-              const float obstacle_weight = std::max(
-                  environment.duck_obstacle_weight(), observed_weight);
-              const float assist = 0.56f + obstacle_weight * 0.34f;
-          '''
-          if old_assist in policy:
-              policy = policy.replace(old_assist, new_assist, 1)
-          elif 'const float observed_weight = overhead_bar' not in policy:
-              raise RuntimeError('could not replace cached-only duck assistance')
-          policy_path.write_text(policy, encoding='utf-8')
-
-          simulation_path = Path('src/simulation.cpp')
-          simulation = simulation_path.read_text(encoding='utf-8')
-          old_foot = '{ ankle_position.x + 0.055f, ankle_position.y - 0.095f }'
-          new_foot = '{ ankle_position.x + 0.055f, ankle_position.y - 0.205f }'
-          if old_foot in simulation:
-              simulation = simulation.replace(old_foot, new_foot, 1)
-          elif new_foot not in simulation:
-              raise RuntimeError('could not lengthen passive ankle-to-foot separation')
-
-          old_bracket = '''                rig.bones.push_back({ ankle, foot, 0.0f, 0.98f });
-                  rig.bones.push_back({ foot, heel, 0.0f, 0.96f });
-                  rig.bones.push_back({ foot, toe, 0.0f, 0.96f });
-                  rig.bones.push_back({ heel, toe, 0.0f, 0.90f });
-          '''
-          new_bracket = '''                rig.bones.push_back({ ankle, foot, 0.0f, 0.98f });
-                  rig.bones.push_back({ ankle, heel, 0.0f, 0.94f });
-                  rig.bones.push_back({ ankle, toe, 0.0f, 0.94f });
-                  rig.bones.push_back({ foot, heel, 0.0f, 0.96f });
-                  rig.bones.push_back({ foot, toe, 0.0f, 0.96f });
-                  rig.bones.push_back({ heel, toe, 0.0f, 0.90f });
-          '''
-          if old_bracket in simulation:
-              simulation = simulation.replace(old_bracket, new_bracket, 1)
-          elif 'rig.bones.push_back({ ankle, heel, 0.0f, 0.94f });' not in simulation:
-              raise RuntimeError('could not brace passive foot orientation')
-          simulation_path.write_text(simulation, encoding='utf-8')
-          PY
+          test -f tools/fix_v072_materialized.py
+          python3 tools/fix_v072_materialized.py
           git diff --check
 
       - name: Install GCC 14 and Ninja
@@ -187,22 +50,18 @@ jobs:
       - name: Run full deterministic suite
         run: ctest --test-dir build/linux-v072 --output-on-failure -V --timeout 1200
 
-      - name: Publish materialized correction source
+      - name: Publish tested source state
         if: always()
         shell: bash
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          if ! grep -q 'project(EpochRunner VERSION 0.7.2' CMakeLists.txt; then
-            exit 0
-          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f .github/workflows/v072-linux-materialize.yml
           git add -A
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m 'Materialize coordinated locomotion and dedicated-foot correction'
+          git commit -m 'Refine stable coordinated locomotion correction'
           git push origin HEAD:"$HEAD_BRANCH"
