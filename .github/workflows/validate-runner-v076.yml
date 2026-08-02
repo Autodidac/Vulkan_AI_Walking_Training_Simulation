@@ -34,12 +34,16 @@ jobs:
           if test -f tools/apply_v076_standing_pip.py; then
             python3 tools/apply_v076_standing_pip.py
           fi
+          if test -f tools/fix_v076_display_gate.py; then
+            python3 tools/fix_v076_display_gate.py
+          fi
 
       - name: Verify v0.7.6 source and mission ledger
         shell: bash
         run: |
           git diff --check
           test ! -f tools/apply_v076_standing_pip.py
+          test ! -f tools/fix_v076_display_gate.py
           python3 - <<'PY'
           from pathlib import Path
           cmake = Path('CMakeLists.txt').read_text(encoding='utf-8')
@@ -56,6 +60,8 @@ jobs:
               raise SystemExit('standing semantics version was not bumped')
           if '{ -0.0060f, 4.2000f }' not in simulation:
               raise SystemExit('raised central shoulder pivot is missing')
+          if 'training_preview_priority' not in ppo:
+              raise SystemExit('honest PIP priority logic is missing')
           PY
 
       - name: Configure deterministic C++23 suite
@@ -102,8 +108,8 @@ jobs:
       - name: Confirm exact clean tested source
         shell: pwsh
         run: |
-          if (Test-Path 'tools/apply_v076_standing_pip.py') {
-            throw 'One-shot v0.7.6 applicator remains in the tested source'
+          foreach ($script in @('tools/apply_v076_standing_pip.py','tools/fix_v076_display_gate.py')) {
+            if (Test-Path $script) { throw "One-shot v0.7.6 tool remains: $script" }
           }
           git diff --quiet
           if ($LASTEXITCODE -ne 0) { throw 'Windows source tree is dirty' }
