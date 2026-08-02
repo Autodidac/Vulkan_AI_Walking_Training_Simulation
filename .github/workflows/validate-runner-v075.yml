@@ -34,6 +34,7 @@ jobs:
           if test -f tools/apply_v075_core.py; then
             python3 tools/apply_v075_core.py
             python3 tools/apply_v075_pip_tests.py
+            python3 tools/fix_v075_compile.py
           fi
 
       - name: Verify mission and source hygiene
@@ -42,6 +43,7 @@ jobs:
           git diff --check
           test ! -f tools/apply_v075_core.py
           test ! -f tools/apply_v075_pip_tests.py
+          test ! -f tools/fix_v075_compile.py
           python3 - <<'PY'
           from pathlib import Path
           mission = Path('missioncache.md').read_text(encoding='utf-8')
@@ -101,7 +103,7 @@ jobs:
       - name: Confirm exact clean tested source
         shell: pwsh
         run: |
-          foreach ($script in @('tools/apply_v075_core.py','tools/apply_v075_pip_tests.py')) {
+          foreach ($script in @('tools/apply_v075_core.py','tools/apply_v075_pip_tests.py','tools/fix_v075_compile.py')) {
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           git diff --quiet
