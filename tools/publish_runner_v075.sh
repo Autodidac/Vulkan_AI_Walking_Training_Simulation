@@ -82,27 +82,29 @@ git fetch origin main --tags
 source_sha="$(git rev-parse HEAD)"
 test "$(git rev-parse origin/main)" = "$source_sha"
 
+rm -rf validation-artifact.zip release-artifact release-package release-audit published
+rm -f "$RELEASE_ARCHIVE" "$RELEASE_ARCHIVE.sha256" Runner-v0.7.5-windows-x64.manifest.sha256 audit.manifest.sha256
 gh api "repos/$GH_REPO/actions/artifacts/$VALIDATION_ARTIFACT_ID/zip" > validation-artifact.zip
-mkdir artifact package audit
-unzip -q validation-artifact.zip -d artifact
-unzip -q "artifact/$RELEASE_ARCHIVE" -d package
-cp missioncache.md package/missioncache.md
-cp RELEASE_NOTES_v0.7.5.md package/RELEASE_NOTES_v0.7.5.md
-(cd package && zip -q -X -r "../$RELEASE_ARCHIVE" .)
+mkdir release-artifact release-package release-audit
+unzip -q validation-artifact.zip -d release-artifact
+unzip -q "release-artifact/$RELEASE_ARCHIVE" -d release-package
+cp missioncache.md release-package/missioncache.md
+cp RELEASE_NOTES_v0.7.5.md release-package/RELEASE_NOTES_v0.7.5.md
+(cd release-package && zip -q -X -r "../$RELEASE_ARCHIVE" .)
 sha256sum "$RELEASE_ARCHIVE" | awk '{print toupper($1)}' > "$RELEASE_ARCHIVE.sha256"
-find package -type f -print0 | sort -z | while IFS= read -r -d '' file; do
+find release-package -type f -print0 | sort -z | while IFS= read -r -d '' file; do
   hash="$(sha256sum "$file" | awk '{print toupper($1)}')"
-  printf '%s  %s\n' "$hash" "${file#package/}"
+  printf '%s  %s\n' "$hash" "${file#release-package/}"
 done > Runner-v0.7.5-windows-x64.manifest.sha256
-unzip -q "$RELEASE_ARCHIVE" -d audit
-find audit -type f -print0 | sort -z | while IFS= read -r -d '' file; do
+unzip -q "$RELEASE_ARCHIVE" -d release-audit
+find release-audit -type f -print0 | sort -z | while IFS= read -r -d '' file; do
   hash="$(sha256sum "$file" | awk '{print toupper($1)}')"
-  printf '%s  %s\n' "$hash" "${file#audit/}"
+  printf '%s  %s\n' "$hash" "${file#release-audit/}"
 done > audit.manifest.sha256
 cmp Runner-v0.7.5-windows-x64.manifest.sha256 audit.manifest.sha256
 test "$(sha256sum "$RELEASE_ARCHIVE" | awk '{print toupper($1)}')" = "$(cat "$RELEASE_ARCHIVE.sha256")"
-grep -q 'WALK-SAND-078' audit/missioncache.md
-grep -q 'WALK-HAZARD-079' audit/missioncache.md
+grep -q 'WALK-SAND-078' release-audit/missioncache.md
+grep -q 'WALK-HAZARD-079' release-audit/missioncache.md
 
 if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
   echo 'Release already exists; verifying it instead of duplicating it.'
