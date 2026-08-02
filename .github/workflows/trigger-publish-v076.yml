@@ -30,5 +30,22 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
+      - name: Prepare publisher with normalized ledger ending
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('tools/publish_v076.py').read_text(encoding='utf-8')
+          old = '''    mission_path.write_text(mission.rstrip() + evidence + "\\n", encoding="utf-8", newline="\\n")'''
+          new = '''    mission_path.write_text(
+              mission.rstrip() + "\\n\\n" + evidence.strip() + "\\n",
+              encoding="utf-8", newline="\\n")'''
+          if old not in source:
+              raise SystemExit('publisher newline target was not found')
+          Path('/tmp/publish_v076.py').write_text(
+              source.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+
       - name: Publish and audit Runner v0.7.6
-        run: python3 tools/publish_v076.py
+        run: python3 /tmp/publish_v076.py
