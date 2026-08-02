@@ -60,6 +60,36 @@ for path in root.rglob('*'):
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);''')
     text = text.replace('const gui::Vec2 measured = font::measure_text(status, scale);',
                         'const Vec2 measured = font::measure_text(status, scale);')
+    text = text.replace(
+        '''        require(std::ranges::any_of(duck_lesson.course_features(),
+                [](const sim::CourseFeature& feature)
+                {
+                    return feature.kind == sim::CourseFeatureKind::overhead_bar;
+                }),
+            "duck lesson has no explicit low-bar obstacle");''',
+        '''        require(std::ranges::any_of(duck_lesson.course_features(),
+                [](const sim::CourseFeature& feature)
+                {
+                    return feature.kind == sim::CourseFeatureKind::duck_press;
+                }),
+            "duck lesson has no explicit compression platen");''')
+    text = text.replace(
+        '''        const std::array<float, sim::action_count> neutral{};
+        const auto duck = rl::effective_policy_action(
+            duck_lesson, neutral, sim::CourseStage::duck_press);
+        require(duck[0] < -0.05f && duck[1] > 0.10f
+                && duck[2] > 0.05f && duck[3] < -0.10f,
+            "low-bar obstacle does not trigger a coordinated duck primitive");''',
+        '''        sim::EnvironmentTestAccess::set_duck_pressure(duck_lesson, 1.0f);
+        const std::array<float, sim::action_count> neutral{};
+        const auto duck = rl::effective_policy_action(
+            duck_lesson, neutral, sim::CourseStage::duck_press);
+        require(duck[0] < -0.05f && duck[1] > 0.10f
+                && duck[2] > 0.05f && duck[3] < -0.10f,
+            "compression pressure does not trigger a coordinated leg-driven duck primitive");
+        require(std::abs(duck[4]) < 0.01f && std::abs(duck[5]) < 0.01f
+                && std::abs(duck[6]) < 0.01f && std::abs(duck[7]) < 0.01f,
+            "compression lesson still drives shoulders or elbows");''')
     normalized = '\n'.join(line.rstrip() for line in text.splitlines()).rstrip() + '\n'
     if normalized != original:
         path.write_text(normalized, encoding='utf-8', newline='\n')
@@ -82,4 +112,4 @@ if workflow.exists():
     workflow.write_text(text, encoding='utf-8', newline='\n')
 
 Path(__file__).unlink()
-print('aligned two-part duck qualification and preempted Windows app namespace failures')
+print('aligned all legacy duck tests with the compression-first two-part lesson')
