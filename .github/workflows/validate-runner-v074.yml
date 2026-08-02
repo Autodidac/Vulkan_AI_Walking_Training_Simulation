@@ -41,6 +41,9 @@ jobs:
             python3 tools/reconcile_runner_missions.py
             python3 tools/fix_v074_hygiene.py
           fi
+          if test -f tools/finalize_v074_quality.py; then
+            python3 tools/finalize_v074_quality.py
+          fi
 
       - name: Enforce branding, ledger, and patch hygiene
         shell: bash
@@ -122,7 +125,8 @@ jobs:
             'tools/fix_v074_live_failures.py',
             'tools/complete_v074_missions.py',
             'tools/reconcile_runner_missions.py',
-            'tools/fix_v074_hygiene.py')) {
+            'tools/fix_v074_hygiene.py',
+            'tools/finalize_v074_quality.py')) {
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           $oldBrandToken = 'ep' + 'och'
