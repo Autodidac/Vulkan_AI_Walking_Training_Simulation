@@ -1,0 +1,216 @@
+name: Validate EpochRunner v0.7.3 runtime correction
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: epochrunner-v073-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  materialize-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install GCC 14 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Materialize runtime correction
+        run: python3 tools/apply_v073_runtime_fix.py
+
+      - name: Validate patch hygiene
+        run: git diff --check
+
+      - name: Configure deterministic C++23 suite
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/linux-v073 -G Ninja
+          -DEPOCHRUNNER_BUILD_APP=OFF
+          -DEPOCHRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build deterministic suite
+        run: cmake --build build/linux-v073 --parallel
+
+      - name: Run deterministic suite
+        run: ctest --test-dir build/linux-v073 --output-on-failure -V --timeout 1200
+
+      - name: Commit tested source to PR branch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Source already materialized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt vcpkg.json missioncache.md RELEASE_NOTES_v0.7.3.md \
+            src tests
+          git commit -m "Fix body integrity and feet-first control for v0.7.3"
+          git push origin HEAD:${{ github.head_ref }}
+
+  windows-package:
+    needs: materialize-linux
+    runs-on: windows-2025
+    timeout-minutes: 75
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Confirm exact materialized source
+        shell: pwsh
+        run: |
+          python tools/apply_v073_runtime_fix.py
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.3 applicator failed" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "Source contains whitespace errors" }
+          git diff --quiet
+          if ($LASTEXITCODE -ne 0) { throw "Windows did not receive the Linux-tested source" }
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: epochrunner-v073-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            epochrunner-v072-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure and build full Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+          if ($LASTEXITCODE -ne 0) { throw "Windows configure failed" }
+          cmake --build --preset windows-release --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Windows build failed" }
+
+      - name: Run full Windows test suite
+        shell: pwsh
+        run: |
+          ctest --preset windows-release --output-on-failure -V --timeout 1200
+          if ($LASTEXITCODE -ne 0) { throw "Windows tests failed" }
+
+      - name: Verify build-tree runtime from unrelated directory
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'build/windows-release/Release/EpochRunner.exe').Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& $exe --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.3') { throw "Unexpected version: $version" }
+            & $exe --diagnose-vulkan
+            if ($LASTEXITCODE -ne 0) { throw "Vulkan diagnostic failed" }
+            & $exe --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Build-tree package diagnostic failed" }
+          }
+          finally { Pop-Location }
+
+      - name: Install and assemble release candidate
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.3-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { throw "Install failed" }
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.3.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          if (-not (Test-Path "$stage/EpochRunner.exe")) { throw "Packaged executable missing" }
+          if (-not (Test-Path "$stage/run.bat")) { throw "Packaged run.bat missing" }
+          $vertexShader = Test-Path "$stage/shaders/flat.vert.spv"
+          $fragmentShader = Test-Path "$stage/shaders/flat.frag.spv"
+          if (-not $vertexShader -or -not $fragmentShader) { throw "Packaged shaders missing" }
+          if (-not (Test-Path "$stage/assets/chicken.ppm")) { throw "Packaged assets missing" }
+
+      - name: Verify installed executable and launcher
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.3-windows-x64"
+          $outside = "$env:RUNNER_TEMP/v073-unrelated-launch"
+          New-Item -ItemType Directory -Force $outside | Out-Null
+          Push-Location $outside
+          try {
+            $version = (& "$stage/EpochRunner.exe" --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.3') { throw "Installed version mismatch: $version" }
+            & "$stage/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Installed package diagnostic failed" }
+            $batchVersion = (& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim()
+            if ($batchVersion -ne 'EpochRunner 0.7.3') { throw "run.bat version mismatch: $batchVersion" }
+            & cmd.exe /d /c "call `"$stage\run.bat`" --diagnose-package"
+            if ($LASTEXITCODE -ne 0) { throw "run.bat package diagnostic failed" }
+          }
+          finally { Pop-Location }
+
+      - name: Create archive, checksum, and manifest
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.3-windows-x64"
+          $archive = "$env:GITHUB_WORKSPACE/EpochRunner-v0.7.3-windows-x64.zip"
+          Remove-Item $archive -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          } | Set-Content 'EpochRunner-v0.7.3-windows-x64.manifest.sha256'
+
+      - name: Independently audit archive
+        shell: pwsh
+        run: |
+          $archive = "$env:GITHUB_WORKSPACE/EpochRunner-v0.7.3-windows-x64.zip"
+          $audit = "$env:RUNNER_TEMP/v073-independent-audit"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content 'EpochRunner-v0.7.3-windows-x64.manifest.sha256'
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw "Extracted archive differs from manifest" }
+          $version = (& "$audit/EpochRunner.exe" --version | Out-String).Trim()
+          if ($version -ne 'EpochRunner 0.7.3') { throw "Audited executable version mismatch: $version" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EpochRunner-v0.7.3-windows-x64
+          path: |
+            EpochRunner-v0.7.3-windows-x64.zip
+            EpochRunner-v0.7.3-windows-x64.zip.sha256
+            EpochRunner-v0.7.3-windows-x64.manifest.sha256
+          if-no-files-found: error
+          retention-days: 14
