@@ -1,0 +1,172 @@
+name: Audit EpochRunner v0.7.1 release artifact
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/audit-v071-artifact.yml]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download, inventory, and launch published artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = 'EpochRunner-v0.7.1-windows-x64.zip'
+          $checksumFile = "$archive.sha256"
+          $recordedHash = '00B093F0794777F8BE8624A69DBB8F257986E6522BD2819AE5745257FF974562'
+
+          gh release download v0.7.1 --repo $env:GH_REPO --pattern $archive --pattern $checksumFile --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download both v0.7.1 release assets' }
+          if (-not (Test-Path $archive) -or -not (Test-Path $checksumFile)) {
+            throw 'Release ZIP or checksum asset is missing'
+          }
+
+          $expectedHash = ((Get-Content -Raw $checksumFile).Trim().Split()[0]).ToUpperInvariant()
+          $actualHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($expectedHash -ne $actualHash) { throw "Checksum asset mismatch: $expectedHash != $actualHash" }
+          if ($actualHash -ne $recordedHash) { throw "Published archive differs from mission cache: $actualHash" }
+
+          $stage = Join-Path $env:RUNNER_TEMP 'EpochRunner-v0.7.1-audit'
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $archive -DestinationPath $stage -Force
+
+          $required = @(
+            'EpochRunner.exe',
+            'run.bat',
+            'README.md',
+            'LICENSE',
+            'missioncache.md',
+            'RELEASE_NOTES_v0.7.1.md',
+            'shaders/flat.vert.spv',
+            'shaders/flat.frag.spv'
+          )
+          foreach ($relative in $required) {
+            $path = Join-Path $stage ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Missing packaged file: $relative" }
+          }
+          if (-not (Test-Path (Join-Path $stage 'assets') -PathType Container)) {
+            throw 'Missing packaged assets directory'
+          }
+
+          $dlls = @(Get-ChildItem $stage -Filter *.dll -File)
+          if ($dlls.Count -lt 1) { throw 'No runtime DLLs were packaged' }
+
+          $unfinishedRepo = Select-String -Path missioncache.md -Pattern '\*\*Status:\*\* (OPEN|PARTIAL|REGRESSION|BLOCKED)'
+          $unfinishedPackage = Select-String -Path (Join-Path $stage 'missioncache.md') -Pattern '\*\*Status:\*\* (OPEN|PARTIAL|REGRESSION|BLOCKED)'
+          if ($unfinishedRepo -or $unfinishedPackage) { throw 'An unfinished mission remains in a mission cache' }
+
+          git fetch --tags --force
+          $tagSha = (git rev-list -n 1 v0.7.1).Trim()
+          if ($tagSha -ne '843d387bc0cf5660af9414cf408f5054eb88654f') {
+            throw "v0.7.1 tag points to unexpected source: $tagSha"
+          }
+
+          $assetNames = @(gh release view v0.7.1 --repo $env:GH_REPO --json assets --jq '.assets[].name')
+          if ($assetNames -notcontains $archive -or $assetNames -notcontains $checksumFile) {
+            throw "Release assets incomplete: $($assetNames -join ', ')"
+          }
+
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& (Join-Path $stage 'EpochRunner.exe') --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.1') { throw "Unexpected executable version: $version" }
+
+            & (Join-Path $stage 'EpochRunner.exe') --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted executable package diagnostic failed' }
+
+            cmd /d /c "`"$(Join-Path $stage 'run.bat')`" --version"
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted run.bat version launch failed' }
+
+            cmd /d /c "`"$(Join-Path $stage 'run.bat')`" --diagnose-package"
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted run.bat package diagnostic failed' }
+          } finally {
+            Pop-Location
+          }
+
+          $openPrs = (gh pr list --repo $env:GH_REPO --state open --limit 100 --json number --jq 'length').Trim()
+          if ($openPrs -ne '0') { throw "$openPrs open pull requests remain" }
+          $branches = @(gh api "repos/$env:GH_REPO/branches" --paginate --jq '.[].name')
+          if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') {
+            throw "Unexpected branches remain: $($branches -join ', ')"
+          }
+
+          New-Item -ItemType Directory -Force validation | Out-Null
+          $files = @(Get-ChildItem $stage -Recurse -File | Sort-Object FullName)
+          $manifest = foreach ($file in $files) {
+            $relative = [IO.Path]::GetRelativePath($stage, $file.FullName).Replace('\', '/')
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          }
+          $manifest | Set-Content -Encoding UTF8 validation/v0.7.1-artifact-manifest.txt
+
+          $archiveSize = (Get-Item $archive).Length
+          $assetFileCount = @(Get-ChildItem (Join-Path $stage 'assets') -Recurse -File).Count
+          @"
+          # EpochRunner v0.7.1 independent artifact audit
+
+          - Audit workflow run: `$env:RUN_ID`
+          - Release tag source: `$tagSha`
+          - Archive: `$archive`
+          - Archive size: `$archiveSize bytes`
+          - SHA-256 asset: `$expectedHash`
+          - Recomputed SHA-256: `$actualHash`
+          - Packaged files: `$($files.Count)`
+          - Runtime DLLs: `$($dlls.Count)`
+          - Asset files: `$assetFileCount`
+          - Required executable, launcher, documentation, shaders, and assets: present
+          - `EpochRunner.exe --version`: passed
+          - `EpochRunner.exe --diagnose-package` from an unrelated directory: passed
+          - `run.bat --version` from an unrelated directory: passed
+          - `run.bat --diagnose-package` from an unrelated directory: passed
+          - Mission cache unfinished entries: `0`
+          - Remaining branches: `main`
+          - Open pull requests: `0`
+          "@ | Set-Content -Encoding UTF8 validation/v0.7.1-artifact-audit.md
+
+      - name: Publish audit evidence and remove temporary workflow
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/audit-v071-artifact.yml
+          git add validation/v0.7.1-artifact-audit.md validation/v0.7.1-artifact-manifest.txt
+          git commit -m 'Record independent v0.7.1 artifact audit'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish artifact audit evidence' }
+
+      - name: Record audit failure
+        if: failure()
+        shell: pwsh
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          New-Item -ItemType Directory -Force validation | Out-Null
+          @"
+          # EpochRunner v0.7.1 artifact audit failure
+
+          - Workflow run: `$env:RUN_ID`
+          - Result: failed before complete artifact verification
+          "@ | Set-Content -Encoding UTF8 validation/v0.7.1-artifact-audit-failure.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add validation/v0.7.1-artifact-audit-failure.md
+          git commit -m 'Record v0.7.1 artifact audit failure'
+          git pull --rebase origin main
+          git push origin HEAD:main
