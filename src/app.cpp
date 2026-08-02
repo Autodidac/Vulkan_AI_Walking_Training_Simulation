@@ -1,8 +1,11 @@
 #include "app.hpp"
+
 #include "autonomy.hpp"
-#include "simulation.hpp"
-#include "ui_layout.hpp"
+#include "font.hpp"
 #include "ui_font.hpp"
+#include "ui_layout.hpp"
+
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -12,32 +15,32 @@
 #include <filesystem>
 #include <format>
 #include <limits>
-#include <memory>
+#include <numbers>
 #include <ranges>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-
 #ifndef RUNNER_VERSION
-#define RUNNER_VERSION "development"
+#define RUNNER_VERSION "0.7.4"
 #endif
 
 namespace runner
 {
-    namespace font = ui_font;
-
     namespace
     {
-        constexpr float ui_font_scale = 2.05f;
+        constexpr float pi = std::numbers::pi_v<float>;
 
-        struct Rect
+        [[nodiscard]] Color rgb(std::uint32_t hex, float alpha = 1.0f) noexcept
         {
-            Vec2 position{};
-            Vec2 size{};
-        };
+            return {
+                static_cast<float>((hex >> 16u) & 0xffu) / 255.0f,
+                static_cast<float>((hex >> 8u) & 0xffu) / 255.0f,
+                static_cast<float>(hex & 0xffu) / 255.0f,
+                alpha
+            };
+        }
 
         [[nodiscard]] bool contains(Rect rect, Vec2 point) noexcept
         {
@@ -46,187 +49,110 @@ namespace runner
                 && point.y <= rect.position.y + rect.size.y;
         }
 
+        [[nodiscard]] float clamp(float value, float minimum, float maximum) noexcept
+        {
+            return std::clamp(value, minimum, maximum);
+        }
 
-        [[nodiscard]] Color rgb(std::uint32_t hex, float alpha = 1.0f) noexcept
+        [[nodiscard]] float lerp(float a, float b, float t) noexcept
+        {
+            return a + (b - a) * t;
+        }
+
+        [[nodiscard]] Vec2 world_to_screen(Vec2 world, Rect viewport, float camera,
+            float scale, float vertical_anchor = 0.82f) noexcept
         {
             return {
-                static_cast<float>((hex >> 16) & 0xffu) / 255.0f,
-                static_cast<float>((hex >> 8) & 0xffu) / 255.0f,
-                static_cast<float>(hex & 0xffu) / 255.0f,
-                alpha
+                viewport.position.x + viewport.size.x * 0.5f + (world.x - camera) * scale,
+                viewport.position.y + viewport.size.y * vertical_anchor - world.y * scale
             };
         }
 
-        constexpr Color white{ 0.95f, 0.96f, 0.98f, 1.0f };
-        constexpr Color muted{ 0.61f, 0.66f, 0.73f, 1.0f };
-        constexpr Color panel{ 0.064f, 0.076f, 0.098f, 0.98f };
-        constexpr Color panel_alt{ 0.085f, 0.100f, 0.126f, 1.0f };
-        constexpr Color border{ 0.16f, 0.19f, 0.24f, 1.0f };
-        constexpr Color accent{ 0.20f, 0.72f, 0.92f, 1.0f };
-        constexpr Color accent_dim{ 0.12f, 0.35f, 0.48f, 1.0f };
-        constexpr Color danger{ 0.93f, 0.28f, 0.30f, 1.0f };
-        constexpr Color yellow{ 0.95f, 0.74f, 0.18f, 1.0f };
-        constexpr Color green{ 0.28f, 0.82f, 0.48f, 1.0f };
-        constexpr Color body{ 0.82f, 0.59f, 0.24f, 1.0f };
-        constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
-        constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
-
-        void add_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color fill,
-            Color outline = {}, float border_width = 0.0f)
+        [[nodiscard]] Rect inset(Rect rect, float amount) noexcept
         {
-            static_cast<void>(radius);
-            canvas.quad(rect.position, rect.position + rect.size, fill);
-            if (border_width <= 0.0f)
-                return;
-            const Vec2 minimum = rect.position;
-            const Vec2 maximum = rect.position + rect.size;
-            canvas.quad(minimum, { maximum.x, minimum.y + border_width }, outline);
-            canvas.quad({ minimum.x, maximum.y - border_width }, maximum, outline);
-            canvas.quad(minimum, { minimum.x + border_width, maximum.y }, outline);
-            canvas.quad({ maximum.x - border_width, minimum.y }, maximum, outline);
-        }
-
-        void add_text(render::Canvas& canvas, Vec2 position, std::string_view text, float scale, Color color)
-        {
-            scale *= ui_font_scale;
-            Vec2 cursor = position;
-            const float start_x = position.x;
-            for (const char character : text)
-            {
-                if (character == '\n')
-                {
-                    cursor.x = start_x;
-                    cursor.y += static_cast<float>(font::line_advance) * scale;
-                    continue;
-                }
-                const font::BitmapGlyph glyph = font::default_glyph(character);
-                for (std::uint32_t row = 0; row < font::glyph_height; ++row)
-                {
-                    for (std::uint32_t column = 0; column < font::glyph_width; ++column)
-                    {
-                        if (!font::pixel_on(glyph, column, row))
-                            continue;
-                        const Vec2 minimum{
-                            cursor.x + static_cast<float>(column) * scale,
-                            cursor.y + static_cast<float>(row) * scale
-                        };
-                        canvas.quad(minimum, minimum + Vec2{ scale, scale }, color);
-                    }
-                }
-                cursor.x += static_cast<float>(font::glyph_advance) * scale;
-            }
-        }
-
-        [[nodiscard]] float fit_text_scale(std::string_view text, float requested_scale,
-            float maximum_width, float minimum_scale = 1.05f) noexcept
-        {
-            float scale = requested_scale;
-            while (scale > minimum_scale
-                && font::measure_text(text, scale * ui_font_scale).x > maximum_width)
-                scale -= 0.05f;
-            return std::max(scale, minimum_scale);
-        }
-
-        void add_text_fit(render::Canvas& canvas, Vec2 position, std::string_view text,
-            float scale, Color color, float maximum_width, float minimum_scale = 1.05f)
-        {
-            add_text(canvas, position, text,
-                fit_text_scale(text, scale, maximum_width, minimum_scale), color);
-        }
-
-        float add_wrapped_text(render::Canvas& canvas, Vec2 position, std::string_view text,
-            float scale, Color color, float maximum_width, float line_gap = 5.0f)
-        {
-            const float advance = static_cast<float>(font::line_advance) * scale * ui_font_scale + line_gap;
-            float y = position.y;
-            std::string line{};
-            std::size_t cursor = 0;
-            auto flush = [&]()
-            {
-                if (line.empty())
-                    return;
-                add_text(canvas, { position.x, y }, line, scale, color);
-                line.clear();
-                y += advance;
-            };
-
-            while (cursor < text.size())
-            {
-                if (text[cursor] == '\n')
-                {
-                    flush();
-                    ++cursor;
-                    continue;
-                }
-                while (cursor < text.size() && text[cursor] == ' ')
-                    ++cursor;
-                if (cursor >= text.size())
-                    break;
-                const std::size_t end = text.find_first_of(" \n", cursor);
-                const std::size_t word_end = end == std::string_view::npos ? text.size() : end;
-                const std::string_view word = text.substr(cursor, word_end - cursor);
-                std::string candidate = line;
-                if (!candidate.empty())
-                    candidate.push_back(' ');
-                candidate.append(word);
-                if (!line.empty()
-                    && font::measure_text(candidate, scale * ui_font_scale).x > maximum_width)
-                {
-                    flush();
-                    line.assign(word);
-                }
-                else
-                {
-                    line = std::move(candidate);
-                }
-                cursor = word_end;
-            }
-            flush();
-            return y - position.y;
-        }
-
-        [[nodiscard]] Vec2 world_to_screen(Vec2 world, Rect viewport, float camera_x,
-            float pixels_per_meter, float ground_fraction = 0.84f) noexcept
-        {
-            const float ground_y = viewport.position.y + viewport.size.y * ground_fraction;
             return {
-                viewport.position.x + viewport.size.x * 0.50f + (world.x - camera_x) * pixels_per_meter,
-                ground_y - world.y * pixels_per_meter
+                rect.position + Vec2{ amount, amount },
+                rect.size - Vec2{ amount * 2.0f, amount * 2.0f }
             };
         }
 
-        [[nodiscard]] Vec2 screen_to_world(Vec2 screen, Rect viewport, float camera_x,
-            float pixels_per_meter) noexcept
+        [[nodiscard]] std::string format_duration(float seconds)
         {
-            const float ground_y = viewport.position.y + viewport.size.y * 0.84f;
-            return {
-                camera_x + (screen.x - (viewport.position.x + viewport.size.x * 0.50f)) / pixels_per_meter,
-                (ground_y - screen.y) / pixels_per_meter
-            };
+            const int total = std::max(0, static_cast<int>(seconds));
+            return std::format("{:02}:{:02}:{:02}", total / 3600,
+                (total / 60) % 60, total % 60);
+        }
+
+        [[nodiscard]] std::string format_distance(float metres,
+            ui_layout::DistanceUnits units = ui_layout::DistanceUnits::metric)
+        {
+            if (units == ui_layout::DistanceUnits::imperial)
+                return std::format("{:.2f} MI", metres / 1609.344f);
+            if (metres >= 1000.0f)
+                return std::format("{:.2f} KM", metres / 1000.0f);
+            return std::format("{:.1f} M", metres);
+        }
+
+        void add_rounded_rect(Canvas& canvas, Rect rect, float radius, Color fill,
+            Color outline = {}, float outline_width = 0.0f)
+        {
+            canvas.rounded_rect(rect, radius, fill, outline, outline_width);
+        }
+
+        void add_text(Canvas& canvas, Vec2 position, std::string_view text,
+            float scale, Color color)
+        {
+            font::draw_text(canvas, position, text, scale * ui_font::scale(), color);
+        }
+
+        void add_text_fit(Canvas& canvas, Vec2 position, std::string_view text,
+            float scale, Color color, float available_width)
+        {
+            float adjusted = scale;
+            while (font::measure_text(text, adjusted * ui_font::scale()).x > available_width
+                && adjusted > 0.68f)
+                adjusted -= 0.04f;
+            add_text(canvas, position, text, adjusted, color);
         }
     }
 
     struct Application::Impl
     {
-        enum class Mode : std::uint8_t { live, rig_lab };
-        enum class RigPreset : std::uint8_t {
-            humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
+        enum class Mode
+        {
+            live,
+            rig_lab
         };
-        enum class RigPanelPage : std::uint8_t { body, motor };
-        enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
-        render::Canvas canvas{};
-        sim::CreatureBlueprint blueprint{ sim::CreatureBlueprint::humanoid() };
-        rl::AutonomousTrainer trainer{ blueprint, 64 };
+        enum class RigPreset
+        {
+            humanoid,
+            biped,
+            chicken,
+            quadruped,
+            crawler4,
+            hexapod,
+            monoped,
+            custom
+        };
+
+        enum class JointTestGroup
+        {
+            selected,
+            pair_a,
+            pair_b,
+            all
+        };
+
+        Canvas& canvas;
+        rl::PpoTrainer trainer;
+        sim::Environment live_environment;
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
-        JointTestGroup joint_test_group{ JointTestGroup::selected };
-        RigPanelPage rig_panel_page{ RigPanelPage::body };
-        int selected_node{ -1 };
-        int selected_motor{};
-        bool dragging_node{};
-        bool joint_auto_sweep{};
-        bool run_paused{};
+        sim::CreatureBlueprint blueprint;
+        std::string status{ "AUTONOMOUS TRAINING ACTIVE" };
+        float status_time{};
+        float ui_font_scale{ 1.0f };
         ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::metric };
         float session_runtime_seconds{};
         float rig_lifetime_seconds{};
@@ -255,88 +181,61 @@ namespace runner
         std::uint8_t rig_best_stage{};
         bool session_stats_initialized{};
         bool rig_edit_pending{};
-        std::string rig_edit_reason{};
-        float joint_test_input{};
-        float joint_test_phase{};
+        int selected_node{ -1 };
+        int selected_motor{};
+        bool dragging_node{};
+        bool joint_auto_sweep{};
+        float joint_sweep_phase{};
+        JointTestGroup joint_test_group{ JointTestGroup::selected };
+        rl::SpeedMode speed_mode{ rl::SpeedMode::normal };
+        bool camera_follow{ true };
         float camera_x{};
-        std::string status{ "AUTOPILOT STARTING" };
-        float status_time{ 4.0f };
-        bool quit{};
-        std::filesystem::path rig_path{ "creature.rig" };
-        std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v074-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v074-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v074-autonomy.state" };
+        float zoom{ 95.0f };
+        float training_preview_camera{};
+        float training_preview_zoom{ 82.0f };
 
-        [[nodiscard]] std::string_view preset_name() const noexcept
+        explicit Impl(Canvas& canvas_reference)
+            : canvas(canvas_reference),
+              trainer(sim::CreatureBlueprint::humanoid()),
+              live_environment(sim::CreatureBlueprint::humanoid(), 0x1234u),
+              blueprint(sim::CreatureBlueprint::humanoid())
+        {
+            trainer.start();
+            tracked_rig_signature = trainer.rig_signature();
+        }
+
+        ~Impl()
+        {
+            trainer.stop();
+        }
+
+        [[nodiscard]] const char* preset_name() const noexcept
         {
             switch (rig_preset)
             {
             case RigPreset::humanoid: return "HUMANOID";
-            case RigPreset::biped: return "BASIC BIPED";
-            case RigPreset::chicken: return "CHICKEN BIPED";
+            case RigPreset::biped: return "BIPED";
+            case RigPreset::chicken: return "CHICKEN";
             case RigPreset::quadruped: return "QUADRUPED";
             case RigPreset::crawler4: return "FOUR-LEG CRAWLER";
-            case RigPreset::hexapod: return "SIX-LEG HEXAPOD";
+            case RigPreset::hexapod: return "SIX-LEG RIG";
             case RigPreset::monoped: return "MONOPED";
-            case RigPreset::custom: return "CUSTOM / EVOLVED";
+            case RigPreset::custom: return "CUSTOM";
             }
-            return "CUSTOM / EVOLVED";
+            return "CUSTOM";
         }
 
-        [[nodiscard]] std::string format_speed(float meters_per_second) const
-        {
-            if (distance_units == ui_layout::DistanceUnits::metric)
-                return std::format("{:.1f} KM/H", meters_per_second * 3.6f);
-            return std::format("{:.1f} MPH", meters_per_second * 2.23693629f);
-        }
-
-        [[nodiscard]] std::string format_distance(float meters) const
-        {
-            if (distance_units == ui_layout::DistanceUnits::metric)
-                return meters >= 1000.0f ? std::format("{:.2f} KM", meters / 1000.0f)
-                    : std::format("{:.1f} M", meters);
-            const float feet = meters * 3.2808399f;
-            return feet >= 5280.0f ? std::format("{:.2f} MI", feet / 5280.0f)
-                : std::format("{:.0f} FT", feet);
-        }
-
-        [[nodiscard]] static std::string format_duration(float seconds)
-        {
-            const auto total = static_cast<std::uint64_t>(std::max(0.0f, seconds));
-            const std::uint64_t hours = total / 3600u;
-            const std::uint64_t minutes = (total / 60u) % 60u;
-            const std::uint64_t remaining = total % 60u;
-            return std::format("{:02}:{:02}:{:02}", hours, minutes, remaining);
-        }
-
-        [[nodiscard]] bool has_direct_bone(std::uint16_t a, std::uint16_t b) const noexcept
-        {
-            return std::ranges::any_of(blueprint.bones, [a, b](const sim::DistanceConstraint& bone)
-            {
-                return (bone.a == a && bone.b == b) || (bone.a == b && bone.b == a);
-            });
-        }
-
-        void queue_rig_change(std::string_view reason)
-        {
-            rig_edit_pending = true;
-            rig_edit_reason = reason;
-        }
-
-        [[nodiscard]] std::array<std::string_view, sim::action_count> motor_names() const noexcept
+        [[nodiscard]] std::array<const char*, sim::action_count> motor_names() const noexcept
         {
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
             case RigPreset::crawler4:
-                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "FRONT LEFT HIP", "FRONT LEFT KNEE", "FRONT RIGHT HIP", "FRONT RIGHT KNEE",
+                    "REAR LEFT HIP", "REAR LEFT KNEE", "REAR RIGHT HIP", "REAR RIGHT KNEE" };
             case RigPreset::hexapod:
-                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "FRONT LEFT", "FRONT RIGHT", "MID LEFT", "MID RIGHT",
+                    "REAR LEFT", "REAR RIGHT", "UNUSED 7", "UNUSED 8" };
             case RigPreset::monoped:
                 return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
                     "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
@@ -373,7 +272,7 @@ namespace runner
             add_rounded_rect(canvas, rect, 8.0f, fill, active ? accent : border, 1.0f);
 
             float scale = 1.55f;
-            gui::Vec2 measured = font::measure_text(label, scale * ui_font_scale);
+            Vec2 measured = font::measure_text(label, scale * ui_font_scale);
             while (measured.x > rect.size.x - 12.0f && scale > 1.05f)
             {
                 scale -= 0.08f;
@@ -585,10 +484,11 @@ namespace runner
                         feature_fill, feature_outline, 1.0f);
                 }
 
+                const std::string feature_label = feature.kind == sim::CourseFeatureKind::duck_press
+                    ? std::format("TRAINER: {}", sim::course_feature_name(feature.kind))
+                    : std::format("HAZARD: {}", sim::course_feature_name(feature.kind));
                 add_text(canvas, feature_screen + Vec2{ -58.0f, -42.0f },
-                    std::format(feature.kind == sim::CourseFeatureKind::duck_press
-                        ? std::format("TRAINER: {}", sim::course_feature_name(feature.kind))
-                        : std::format("HAZARD: {}", sim::course_feature_name(feature.kind))), 1.00f,
+                    feature_label, 1.00f,
                     feature.kind == sim::CourseFeatureKind::projectile ? yellow : danger);
             }
         }
@@ -608,224 +508,126 @@ namespace runner
             {
                 if (bone.a >= particles.size() || bone.b >= particles.size())
                     continue;
-                const float radius_a = bone.a < rig.radii.size() ? rig.radii[bone.a] : 0.15f;
-                const float radius_b = bone.b < rig.radii.size() ? rig.radii[bone.b] : 0.15f;
-                const float radius = std::max(0.055f, std::min(radius_a, radius_b) * 0.55f) * scale;
-                canvas.capsule(point(bone.a), point(bone.b), radius, body, 16);
+                canvas.line(point(bone.a), point(bone.b), 5.0f, rgb(0xb8c0c8));
             }
             for (std::size_t index = 0; index < particles.size(); ++index)
             {
-                const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f) * scale;
-                Color color = index == rig.head_node ? body_light : body;
-                const bool primary_foot = rig.is_support_seed(index);
-                if (primary_foot)
-                {
-                    color = leg;
-                    const Vec2 center = point(index);
-                    canvas.capsule(center - Vec2{ radius * 0.82f, 0.0f },
-                        center + Vec2{ radius * 0.82f, 0.0f }, radius * 0.44f, color, 16);
-                }
-                else
-                {
-                    canvas.circle(point(index), radius, color, 22);
-                }
+                const sim::Particle& particle = particles[index];
+                Color fill = rgb(0x8fc4d7);
+                if (rig.is_support_seed(index))
+                    fill = rgb(0xe8c76c);
+                else if (index == rig.head_node)
+                    fill = rgb(0xd8a1a8);
+                else if (index == rig.torso_node || index == rig.root_node)
+                    fill = rgb(0x84a6b8);
+                canvas.circle(point(index), particle.radius * scale, fill, 24);
                 if (show_nodes)
-                {
-                    canvas.circle(point(index), 7.0f,
-                        index == static_cast<std::size_t>(selected_node) ? accent : white, 18);
-                    add_text(canvas, point(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
-                }
+                    add_text(canvas, point(index) + Vec2{ 8.0f, -9.0f },
+                        std::format("{}", index), 0.84f, white);
             }
         }
 
-        void draw_training_pip(Rect rect)
+        void draw_training_preview(Rect viewport)
         {
-            add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.98f), accent_dim, 1.5f);
-            add_text(canvas, rect.position + Vec2{ 13.0f, 10.0f },
-                "CURRENT-STAGE VERIFIED SAMPLE", 1.03f, accent);
-            if (!trainer.has_training_preview())
+            const auto publication = trainer.publication();
+            if (!publication || publication->particles.empty()
+                || publication->particles.size() != publication->blueprint.nodes.size()
+                || !publication->body_integrity_valid)
             {
-                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
-                    "NO STAGE-VALID ROLLOUT YET", 1.02f, muted, rect.size.x - 26.0f);
+                add_rounded_rect(canvas, viewport, 8.0f, panel_alt, border, 1.0f);
+                add_text(canvas, viewport.position + Vec2{ 18.0f, 18.0f },
+                    "TRAINING PREVIEW WAITING FOR A CONNECTED FULL RIG", 0.92f, muted);
                 return;
             }
 
-            const sim::Environment& environment = trainer.training_preview();
-            const Rect inner{ rect.position + Vec2{ 9.0f, 35.0f },
-                { rect.size.x - 18.0f, rect.size.y - 44.0f } };
-            const auto& particles = environment.particles();
-            const auto& rig = environment.blueprint();
-            if (particles.empty() || rig.root_node >= particles.size())
-                return;
-            if (!environment.body_integrity_valid())
+            float minimum_x = std::numeric_limits<float>::max();
+            float maximum_x = std::numeric_limits<float>::lowest();
+            float minimum_y = std::numeric_limits<float>::max();
+            float maximum_y = std::numeric_limits<float>::lowest();
+            for (std::size_t index = 0; index < publication->particles.size(); ++index)
             {
-                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
-                    "SAMPLE REJECTED - BODY DISCONNECTED", 1.02f, danger,
-                    rect.size.x - 26.0f);
-                return;
-            }
-            float minimum_x = std::numeric_limits<float>::infinity();
-            float maximum_x = -std::numeric_limits<float>::infinity();
-            float maximum_y = -std::numeric_limits<float>::infinity();
-            for (const sim::Particle& particle : particles)
-            {
+                const sim::Particle& particle = publication->particles[index];
+                if (!std::isfinite(particle.position.x) || !std::isfinite(particle.position.y))
+                    return;
                 minimum_x = std::min(minimum_x, particle.position.x - particle.radius);
                 maximum_x = std::max(maximum_x, particle.position.x + particle.radius);
+                minimum_y = std::min(minimum_y, particle.position.y - particle.radius);
                 maximum_y = std::max(maximum_y, particle.position.y + particle.radius);
             }
-            const float camera = (minimum_x + maximum_x) * 0.5f;
-            const float ground = environment.ground_height_at(camera);
-            const float body_width = std::max(0.50f, maximum_x - minimum_x);
-            const float body_height = std::max(0.50f, maximum_y - ground);
-            const float horizontal_scale = (inner.size.x - 28.0f) / (body_width + 0.70f);
-            const float vertical_scale = (inner.size.y * 0.76f) / (body_height + 0.30f);
-            const float scale = std::clamp(
-                std::min(horizontal_scale, vertical_scale), 16.0f, 43.0f);
+            const float world_width = std::max(0.8f, maximum_x - minimum_x);
+            const float world_height = std::max(0.8f, maximum_y - minimum_y);
+            training_preview_camera = 0.5f * (minimum_x + maximum_x);
+            training_preview_zoom = std::min(
+                (viewport.size.x - 38.0f) / world_width,
+                (viewport.size.y - 46.0f) / world_height);
+            training_preview_zoom = clamp(training_preview_zoom, 32.0f, 112.0f);
 
-            std::vector<Vec2> ground_points{};
-            ground_points.reserve(65);
-            for (int sample = 0; sample <= 64; ++sample)
-            {
-                const float screen_fraction = static_cast<float>(sample) / 64.0f;
-                const float world_x = camera
-                    + (screen_fraction - 0.5f) * inner.size.x / scale;
-                ground_points.push_back(world_to_screen(
-                    { world_x, environment.ground_height_at(world_x) },
-                    inner, camera, scale, 0.82f));
-            }
-            canvas.polyline(ground_points, 3.0f, rgb(0x51606c));
-
-            for (const sim::CourseFeature& feature : environment.course_features())
-            {
-                const Vec2 point = world_to_screen(feature.center, inner, camera, scale, 0.82f);
-                if (point.x < inner.position.x - 20.0f
-                    || point.x > inner.position.x + inner.size.x + 20.0f)
-                    continue;
-                if (feature.kind == sim::CourseFeatureKind::rock
-                    || feature.kind == sim::CourseFeatureKind::moving_hazard
-                    || feature.kind == sim::CourseFeatureKind::projectile)
-                {
-                    canvas.circle(point, feature.radius * scale,
-                        feature.kind == sim::CourseFeatureKind::projectile ? danger : yellow, 18);
-                }
-                else
-                {
-                    const Vec2 minimum = world_to_screen(feature.center - feature.half_extent,
-                        inner, camera, scale, 0.82f);
-                    const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
-                        inner, camera, scale, 0.82f);
-                    canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y }, yellow);
-                }
-            }
-            draw_creature(environment, inner, camera, scale);
-            add_text_fit(canvas, rect.position + Vec2{ 13.0f, rect.size.y - 25.0f },
-                std::format("{:.2f} M  /  {}", environment.distance_travelled(),
-                    sim::invalid_motion_name(environment.invalid_reason())),
-                0.88f, environment.valid_motion() ? green : danger, rect.size.x - 26.0f, 0.72f);
+            add_rounded_rect(canvas, viewport, 8.0f, panel_alt, border, 1.0f);
+            sim::Environment preview(publication->blueprint, 0x66u);
+            preview.apply_publication(*publication);
+            draw_course_ground(preview, inset(viewport, 8.0f),
+                training_preview_camera, training_preview_zoom);
+            draw_creature(preview, inset(viewport, 8.0f),
+                training_preview_camera, training_preview_zoom);
         }
 
-        void draw_live_panel(Rect rect, const InputState& input)
+        void draw_live_panel(const InputState& input, Rect panel)
         {
-            add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
-            const float usable_width = rect.size.x - 36.0f;
-            Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
-            const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
+            add_rounded_rect(canvas, panel, 10.0f, panel, border, 1.0f);
+            Vec2 cursor = panel.position + Vec2{ 18.0f, 18.0f };
+            const float usable_width = panel.size.x - 36.0f;
             const rl::TrainingMetrics& metrics = trainer.metrics();
+            const rl::AutonomyStatus autonomy = trainer.autonomy_status();
 
-            add_text(canvas, cursor, "AUTONOMOUS RIG TRAINER", 1.72f, white);
-            cursor.y += 42.0f;
-            if (button({ cursor, { usable_width, 48.0f } },
-                trainer.background_enabled() ? "AUTOPILOT ON - CLICK TO PAUSE" : "AUTOPILOT PAUSED - CLICK TO RUN",
-                input, trainer.background_enabled()))
+            add_text(canvas, cursor, "AUTONOMOUS RIG TRAINER", 1.34f, white);
+            cursor.y += 31.0f;
+            add_text_fit(canvas, cursor,
+                std::format("STAGE {}  {}", static_cast<unsigned>(autonomy.stage) + 1u,
+                    sim::course_stage_name(autonomy.stage)),
+                0.98f, accent, usable_width);
+            cursor.y += 27.0f;
+            add_text_fit(canvas, cursor,
+                std::format("REWARD {:.3f}  SPEED {:.2f} M/S",
+                    metrics.mean_reward, metrics.mean_speed),
+                0.94f, white, usable_width);
+            cursor.y += 26.0f;
+            add_text_fit(canvas, cursor,
+                std::format("VALID {:.0f}%  QUALITY {:.3f}",
+                    metrics.valid_ratio * 100.0f, metrics.mean_quality),
+                0.94f, white, usable_width);
+            cursor.y += 30.0f;
+
+            const float button_width = (usable_width - 12.0f) / 3.0f;
+            if (button({ cursor, { button_width, 42.0f } }, "NORMAL", input,
+                    speed_mode == rl::SpeedMode::normal))
             {
-                trainer.set_background_enabled(!trainer.background_enabled());
-                set_status(trainer.background_enabled() ? "BACKGROUND TRAINING RESUMED" : "BACKGROUND TRAINING PAUSED");
+                speed_mode = rl::SpeedMode::normal;
+                trainer.set_speed_mode(speed_mode);
             }
-            cursor.y += 64.0f;
+            if (button({ cursor + Vec2{ button_width + 6.0f, 0.0f },
+                    { button_width, 42.0f } }, "FASTER", input,
+                    speed_mode == rl::SpeedMode::faster))
+            {
+                speed_mode = rl::SpeedMode::faster;
+                trainer.set_speed_mode(speed_mode);
+            }
+            if (button({ cursor + Vec2{ (button_width + 6.0f) * 2.0f, 0.0f },
+                    { button_width, 42.0f } }, "MAX", input,
+                    speed_mode == rl::SpeedMode::maximum))
+            {
+                speed_mode = rl::SpeedMode::maximum;
+                trainer.set_speed_mode(speed_mode);
+            }
+            cursor.y += 56.0f;
 
-            add_text(canvas, cursor, "CURRENT LESSON", 1.05f, muted);
-            cursor.y += 23.0f;
-            add_text_fit(canvas, cursor, sim::course_stage_name(autonomy.stage), 2.05f,
-                accent, usable_width, 1.30f);
-            cursor.y += 38.0f;
-            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   MASTERY {}/3",
-                autonomy.difficulty * 100.0f, autonomy.mastery_streak), 1.16f, white, usable_width);
-            cursor.y += 29.0f;
-            cursor.y += add_wrapped_text(canvas, cursor, autonomy.message, 1.00f,
-                metrics.evaluation_valid || metrics.evaluation_count == 0 ? muted : danger,
-                usable_width, 4.0f);
-            cursor.y += 15.0f;
-
-            const float third = (usable_width - 12.0f) / 3.0f;
-            if (button({ cursor, { third, 40.0f } }, "NORMAL", input, trainer.updates_per_cycle() == 1))
-                trainer.set_updates_per_cycle(1);
-            if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 40.0f } },
-                "FASTER", input, trainer.updates_per_cycle() == 2))
-                trainer.set_updates_per_cycle(2);
-            if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 40.0f } },
-                "MAX CPU", input, trainer.updates_per_cycle() == 4))
-                trainer.set_updates_per_cycle(4);
-            cursor.y += 48.0f;
-            const float half = (usable_width - 6.0f) * 0.5f;
-            if (button({ cursor, { half, 36.0f } }, "METRIC / 0.25 KM", input,
-                distance_units == ui_layout::DistanceUnits::metric))
-                distance_units = ui_layout::DistanceUnits::metric;
-            if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 36.0f } },
-                "IMPERIAL / 0.25 MI", input,
-                distance_units == ui_layout::DistanceUnits::imperial))
-                distance_units = ui_layout::DistanceUnits::imperial;
+            const std::string unit_button = distance_units == ui_layout::DistanceUnits::metric
+                ? "METRIC 0.25 KM" : "IMPERIAL 0.25 MI";
+            if (button({ cursor, { usable_width, 40.0f } }, unit_button, input, true))
+                distance_units = distance_units == ui_layout::DistanceUnits::metric
+                    ? ui_layout::DistanceUnits::imperial
+                    : ui_layout::DistanceUnits::metric;
             cursor.y += 53.0f;
 
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 247.0f } },
-                8.0f, panel_alt, border, 1.0f);
-            add_text(canvas, cursor, "TRAINING RESULTS", 1.18f, accent);
-            cursor.y += 31.0f;
-            add_text_fit(canvas, cursor, std::format("UPDATE {}   ENV STEPS {}",
-                metrics.update, metrics.environment_steps), 1.10f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("EVAL {:+.2f}   DIST {}",
-                metrics.evaluation_score, format_distance(metrics.evaluation_distance)), 1.10f,
-                metrics.evaluation_valid ? green : danger, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("BEST {:+.2f} @ UPDATE {}",
-                metrics.best_evaluation_score, metrics.best_update), 1.10f, accent, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("SURVIVAL {:.1f} S   STRIDES {:.1f}",
-                metrics.evaluation_survival, metrics.evaluation_stride_events), 1.08f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
-                metrics.evaluation_stable_stance, metrics.evaluation_longest_stance,
-                metrics.evaluation_duck_recoveries), 1.05f,
-                metrics.evaluation_valid ? green : danger, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
-                metrics.evaluation_quality_key,
-                rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
-                0.98f, metrics.evaluation_valid ? accent : danger, usable_width, 0.82f);
-            cursor.y += 45.0f;
-
-            add_rounded_rect(canvas, { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 323.0f } },
-                8.0f, panel_alt, border, 1.0f);
-            add_text(canvas, cursor, "RUNTIME", 1.18f, accent);
-            cursor.y += 31.0f;
-            add_text_fit(canvas, cursor, std::format("{} ROLLOUT THREADS   {} ENVIRONMENTS",
-                autonomy.rollout_threads, autonomy.environment_count), 1.06f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("{:.2f} UPDATES/S   MODE {}",
-                autonomy.updates_per_second, autonomy.speed_mode), 1.06f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("COMMANDS {}   {}",
-                autonomy.pending_commands, autonomy.worker_busy ? "TRAINER BUSY" : "TRAINER IDLE"),
-                1.06f, autonomy.worker_busy ? yellow : green, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("PIPELINE {}   MASK {:02X}",
-                autonomy.pipeline_stage, autonomy.pipeline_stage_mask),
-                1.02f, autonomy.worker_busy ? yellow : green, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("RIG GEN {}   ACCEPTED {}   REJECTED {}",
-                autonomy.rig_generation, autonomy.accepted_rig_changes, autonomy.rejected_rig_changes),
-                1.02f, white, usable_width);
-            cursor.y += 29.0f;
             add_text_fit(canvas, cursor, std::format("RIG {}  UPD {}  ENV {}  BEST STAGE {}",
                 format_duration(rig_lifetime_seconds),
                 ui_layout::lifetime_delta(metrics.update, rig_start_update),
@@ -837,7 +639,8 @@ namespace runner
                 ui_layout::lifetime_delta(metrics.total_valid_episodes, rig_start_valid_episodes),
                 ui_layout::lifetime_delta(metrics.total_invalid_episodes, rig_start_invalid_episodes),
                 format_distance(static_cast<float>(std::max(0.0,
-                    metrics.total_distance - rig_start_distance)))), 0.90f, white, usable_width);
+                    metrics.total_distance - rig_start_distance)), distance_units)),
+                0.90f, white, usable_width);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor, std::format("RIG STEPS {}  FALLS {}  COLL {}  OBS {}",
                 ui_layout::lifetime_delta(metrics.total_alternating_steps, rig_start_steps),
@@ -858,7 +661,7 @@ namespace runner
                 ui_layout::lifetime_delta(metrics.total_invalid_episodes,
                     session_start_invalid_episodes),
                 format_distance(static_cast<float>(std::max(0.0,
-                    metrics.total_distance - session_start_distance)))),
+                    metrics.total_distance - session_start_distance)), distance_units)),
                 0.88f, muted, usable_width);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor, std::format("ALL UPD {} ENV {} EPS {} RESET {} ROLLBACK {}",
@@ -866,291 +669,119 @@ namespace runner
                 metrics.total_resets, autonomy.rollback_count), 0.86f, muted, usable_width);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor, std::format("ALL DIST {} COLL {} JUMP {} FLIP {} OBS {}",
-                format_distance(static_cast<float>(metrics.total_distance)),
+                format_distance(static_cast<float>(metrics.total_distance), distance_units),
                 metrics.total_collisions, metrics.total_powered_jumps,
                 metrics.total_landed_flips, metrics.total_obstacles_passed),
                 0.84f, muted, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   POWERED AIR / <=3 SPINS / <50 KM/H",
-                autonomy.rollback_count), 1.00f, white, usable_width);
-            cursor.y += 45.0f;
+            cursor.y += 34.0f;
 
-            cursor.y += add_wrapped_text(canvas, cursor,
-                "GROUND-CONTACT ENEMY / SOFT START / CHECKPOINTED RIG EVOLUTION",
-                1.06f, muted, usable_width, 4.0f);
-            cursor.y += 10.0f;
-            add_wrapped_text(canvas, cursor,
-                "NO GROUND ROLLING / HAZARD TOUCH ALLOWED / PASS THE GOAL",
-                1.06f, muted, usable_width, 4.0f);
+            add_text_fit(canvas, cursor,
+                std::format("IMI {:.2f}  PERT {:.2f}  ROLLBACKS {}",
+                    autonomy.imitation_weight, autonomy.perturbation_scale,
+                    autonomy.rollback_count), 0.88f, muted, usable_width);
+            cursor.y += 26.0f;
+            add_text_fit(canvas, cursor,
+                std::format("ACCEPT {}  REJECT {}  INVALID {}",
+                    autonomy.accepted_rig_changes, autonomy.rejected_rig_changes,
+                    autonomy.invalid_episode_count), 0.88f, muted, usable_width);
+            cursor.y += 30.0f;
+
+            if (status_time > 0.0f)
+                add_text_fit(canvas, cursor, status, 0.88f, yellow, usable_width);
         }
 
-        void draw_live_world(Rect viewport, float dt)
+        void draw_rig_lab(const InputState& input, Rect viewport, Rect panel)
         {
-            if (!run_paused)
-                trainer.step_preview(dt);
-            const sim::Environment& environment = trainer.preview();
-            if (!environment.particles().empty())
-                camera_x = lerp(camera_x,
-                    environment.particles()[environment.blueprint().root_node].position.x + 1.8f, 0.045f);
-            add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
-            draw_course_ground(environment, viewport, camera_x, 90.0f);
-            draw_course_reference(environment, viewport, camera_x, 90.0f);
-            draw_course_features(environment, viewport, camera_x, 90.0f);
-            draw_creature(environment, viewport, camera_x, 90.0f);
+            add_rounded_rect(canvas, panel, 10.0f, panel_alt, border, 1.0f);
+            Vec2 cursor = panel.position + Vec2{ 18.0f, 18.0f };
+            const float usable_width = panel.size.x - 36.0f;
 
-            const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
-            const float overlay_width = std::max(260.0f, viewport.size.x - 48.0f);
-            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 22.0f },
-                std::format("{}  /  {:.0f}%", sim::course_stage_name(autonomy.stage), autonomy.difficulty * 100.0f),
-                1.95f, white, overlay_width, 1.25f);
-            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 61.0f },
-                std::format("{}   ACTUAL {}",
-                    format_speed(environment.forward_speed()),
-                    format_distance(environment.distance_travelled())),
-                1.22f, environment.valid_motion() ? green : danger, overlay_width);
-            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 90.0f },
-                std::format("COURSE {}   {}", format_distance(environment.course_progress()),
-                    sim::invalid_motion_name(environment.invalid_reason())),
-                1.16f, environment.valid_motion() ? green : danger, overlay_width);
-            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("STEPS {}  DUCK {:.1f} S  JUMP {}/{}  FLIP {:.1f}  SPIN {:.1f}  PASSED {}",
-                    environment.alternating_steps(), environment.duck_seconds(),
-                    environment.powered_jumps(), environment.landed_jumps(),
-                    environment.maximum_flip_turns(), environment.uncontrolled_spin_turns(),
-                    environment.obstacles_passed()),
-                1.02f, environment.recovering() ? yellow : muted, overlay_width);
-            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
-                trainer.has_best_policy()
-                    ? "BEST STAGE-VALID CONTROLLER   v" RUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
-                    : "CURRENT POLICY UNVERIFIED   v" RUNNER_VERSION "   SEARCHING FOR VALID STANCE",
-                1.05f, trainer.has_best_policy() ? muted : danger, overlay_width, 1.00f);
+            add_text(canvas, cursor, "RIG PRESETS", 1.30f, white);
+            cursor.y += 35.0f;
+            const std::array<std::pair<RigPreset, const char*>, 7> presets = {
+                std::pair{ RigPreset::humanoid, "HUMANOID" },
+                std::pair{ RigPreset::biped, "BIPED" },
+                std::pair{ RigPreset::chicken, "CHICKEN" },
+                std::pair{ RigPreset::quadruped, "QUADRUPED" },
+                std::pair{ RigPreset::crawler4, "CRAWLER 4" },
+                std::pair{ RigPreset::hexapod, "HEXAPOD" },
+                std::pair{ RigPreset::monoped, "MONOPED" }
+            };
+            for (const auto& [preset, label] : presets)
+            {
+                if (button({ cursor, { usable_width, 38.0f } }, label, input,
+                        rig_preset == preset))
+                    use_preset(preset);
+                cursor.y += 45.0f;
+            }
 
-            const ui_layout::Box pip = ui_layout::training_pip_box({
-                viewport.position.x, viewport.position.y, viewport.size.x, viewport.size.y });
-            draw_training_pip({ { pip.x, pip.y }, { pip.width, pip.height } });
-        }
-
-        void draw_joint_lab(Rect rect, const InputState& input)
-        {
-            add_rounded_rect(canvas, rect, 10.0f, rgb(0x0b1721, 0.98f), accent_dim, 1.0f);
+            cursor.y += 8.0f;
+            add_text(canvas, cursor, "JOINT TEST", 1.24f, white);
+            cursor.y += 32.0f;
             const auto names = motor_names();
-            add_text(canvas, rect.position + Vec2{ 14.0f, 10.0f },
-                std::format("JOINT TEST - {}", names[static_cast<std::size_t>(selected_motor)]), 1.45f, white);
-            const float group_width = (rect.size.x - 28.0f) * 0.25f;
-            Vec2 row = rect.position + Vec2{ 14.0f, 39.0f };
-            if (button({ row, { group_width - 4.0f, 31.0f } }, "SELECTED", input,
-                joint_test_group == JointTestGroup::selected))
+            selected_motor = std::clamp(selected_motor, 0,
+                static_cast<int>(sim::action_count - 1));
+            if (button({ cursor, { usable_width, 38.0f } }, names[selected_motor], input, true))
+                selected_motor = (selected_motor + 1) % static_cast<int>(sim::action_count);
+            cursor.y += 48.0f;
+
+            const float half = (usable_width - 8.0f) * 0.5f;
+            if (button({ cursor, { half, 38.0f } }, "SELECTED", input,
+                    joint_test_group == JointTestGroup::selected))
                 joint_test_group = JointTestGroup::selected;
-            if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "LEGS 1-4", input,
-                joint_test_group == JointTestGroup::pair_a))
+            if (button({ cursor + Vec2{ half + 8.0f, 0.0f }, { half, 38.0f } },
+                    "PAIR A", input, joint_test_group == JointTestGroup::pair_a))
                 joint_test_group = JointTestGroup::pair_a;
-            if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "ARMS 5-8", input,
-                joint_test_group == JointTestGroup::pair_b))
+            cursor.y += 46.0f;
+            if (button({ cursor, { half, 38.0f } }, "PAIR B", input,
+                    joint_test_group == JointTestGroup::pair_b))
                 joint_test_group = JointTestGroup::pair_b;
-            if (button({ row + Vec2{ group_width * 3.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "ALL", input,
-                joint_test_group == JointTestGroup::all))
+            if (button({ cursor + Vec2{ half + 8.0f, 0.0f }, { half, 38.0f } },
+                    "ALL", input, joint_test_group == JointTestGroup::all))
                 joint_test_group = JointTestGroup::all;
+            cursor.y += 52.0f;
 
-            row.y += 39.0f;
-            if (button({ row, { group_width - 4.0f, 31.0f } }, "MIN", input))
-            {
-                joint_auto_sweep = false;
-                joint_test_input = -1.0f;
-            }
-            if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "REST", input))
-            {
-                joint_auto_sweep = false;
-                joint_test_input = 0.0f;
-            }
-            if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "MAX", input))
-            {
-                joint_auto_sweep = false;
-                joint_test_input = 1.0f;
-            }
-            if (button({ row + Vec2{ group_width * 3.0f, 0.0f }, { group_width - 4.0f, 31.0f } },
-                joint_auto_sweep ? "STOP" : "SWEEP", input, joint_auto_sweep))
-                joint_auto_sweep = !joint_auto_sweep;
-            joint_test_input = slider({ rect.position + Vec2{ 14.0f, 119.0f }, { rect.size.x - 28.0f, 36.0f } },
-                "TEST INPUT  -1 MIN / 0 REST / +1 MAX", joint_test_input, -1.0f, 1.0f, input);
-        }
-
-        void draw_blueprint(Rect viewport, const InputState& input)
-        {
-            constexpr float scale = 86.0f;
-            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport, 0.0f, scale).y;
-            canvas.quad({ viewport.position.x, ground_y }, viewport.position + viewport.size, rgb(0x111820));
-            canvas.line({ viewport.position.x, ground_y }, { viewport.position.x + viewport.size.x, ground_y },
-                3.0f, rgb(0x475762));
-
-            auto screen = [&](std::size_t index)
-            {
-                return world_to_screen(blueprint.nodes[index], viewport, 0.0f, scale);
-            };
-            std::vector<Vec2> preview = blueprint.nodes;
-            for (int motor_index = 0; motor_index < static_cast<int>(sim::action_count); ++motor_index)
-            {
-                if (!test_motor_active(motor_index))
-                    continue;
-                const sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(motor_index)];
-                if (!motor.enabled || motor.a >= preview.size() || motor.pivot >= preview.size() || motor.c >= preview.size())
-                    continue;
-                const Vec2 pivot = preview[motor.pivot];
-                const float current = signed_angle(preview[motor.a] - pivot, preview[motor.c] - pivot);
-                const float delta = wrap_angle(sim::motor_target_angle(motor, joint_test_input) - current);
-                std::vector<std::uint16_t> stack{ motor.c };
-                std::vector<bool> visited(preview.size(), false);
-                visited[motor.pivot] = true;
-                visited[motor.c] = true;
-                while (!stack.empty())
-                {
-                    const std::uint16_t node = stack.back();
-                    stack.pop_back();
-                    for (const sim::DistanceConstraint& bone : blueprint.bones)
-                    {
-                        std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
-                        if (bone.a == node) next = bone.b;
-                        else if (bone.b == node) next = bone.a;
-                        if (next < visited.size() && !visited[next])
-                        {
-                            visited[next] = true;
-                            stack.push_back(next);
-                        }
-                    }
-                }
-                for (std::size_t index = 0; index < preview.size(); ++index)
-                {
-                    if (visited[index] && index != motor.pivot)
-                        preview[index] = pivot + rotate(preview[index] - pivot, delta);
-                }
-            }
-            auto preview_screen = [&](std::size_t index)
-            {
-                return world_to_screen(preview[index], viewport, 0.0f, scale);
-            };
-            for (const sim::DistanceConstraint& bone : blueprint.bones)
-            {
-                if (bone.a < preview.size() && bone.b < preview.size())
-                    canvas.line(preview_screen(bone.a), preview_screen(bone.b), 9.0f, with_alpha(accent, 0.34f));
-            }
-
-            for (const sim::DistanceConstraint& bone : blueprint.bones)
-            {
-                if (bone.a < blueprint.nodes.size() && bone.b < blueprint.nodes.size())
-                    canvas.line(screen(bone.a), screen(bone.b), 17.0f, rgb(0x835927));
-            }
-            for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
-            {
-                const float radius = (index < blueprint.radii.size() ? blueprint.radii[index] : 0.15f) * scale;
-                Color color = index == blueprint.head_node ? body_light : body;
-                if (blueprint.is_support_seed(index))
-                    color = leg;
-                canvas.circle(screen(index), radius, color, 24);
-                canvas.circle(screen(index), 7.0f,
-                    index == static_cast<std::size_t>(selected_node) ? accent : white, 18);
-                add_text(canvas, screen(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
-            }
+            joint_auto_sweep = button({ cursor, { usable_width, 40.0f } },
+                joint_auto_sweep ? "STOP JOINT SWEEP" : "START JOINT SWEEP",
+                input, joint_auto_sweep) ? !joint_auto_sweep : joint_auto_sweep;
+            cursor.y += 52.0f;
 
             const sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
-            if (motor.enabled && motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
-                && motor.c < blueprint.nodes.size())
+            add_text_fit(canvas, cursor,
+                std::format("LIMIT {:.0f}..{:.0f} DEG  STRENGTH {:.2f}",
+                    motor.minimum_angle * 180.0f / pi,
+                    motor.maximum_angle * 180.0f / pi,
+                    motor.strength), 0.88f, muted, usable_width);
+            cursor.y += 28.0f;
+            add_text_fit(canvas, cursor,
+                std::format("NODE {} / PIVOT {} / NODE {}",
+                    motor.a, motor.pivot, motor.c), 0.88f, muted, usable_width);
+            cursor.y += 34.0f;
+
+            if (button({ cursor, { usable_width, 38.0f } },
+                    "TEST JOINT LIMITS", input, false,
+                    blueprint.active_motor_count > 0))
             {
-                const Vec2 pivot_world = blueprint.nodes[motor.pivot];
-                const Vec2 reference = normalized(blueprint.nodes[motor.a] - pivot_world, { 0.0f, 1.0f });
-                const float arm_length = std::max(0.25f,
-                    std::min(length(blueprint.nodes[motor.a] - pivot_world),
-                        length(blueprint.nodes[motor.c] - pivot_world)) * 0.72f);
-                std::vector<Vec2> arc{};
-                for (int segment = 0; segment <= 32; ++segment)
-                {
-                    const float t = static_cast<float>(segment) / 32.0f;
-                    const float angle = lerp(motor.minimum_angle, motor.maximum_angle, t);
-                    arc.push_back(world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                        viewport, 0.0f, scale));
-                }
-                canvas.polyline(arc, 4.0f, accent);
-                const Vec2 pivot_screen = screen(motor.pivot);
-                auto ray = [&](float angle, Color color, float width)
-                {
-                    canvas.line(pivot_screen,
-                        world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                            viewport, 0.0f, scale), width, color);
-                };
-                ray(motor.minimum_angle, danger, 2.5f);
-                ray(motor.maximum_angle, danger, 2.5f);
-                ray(motor.neutral_angle, white, 3.0f);
-                ray(sim::motor_target_angle(motor, joint_test_input), yellow, 4.0f);
-                add_text(canvas, screen(motor.a) + Vec2{ 8.0f, -15.0f }, "A / PARENT", 1.05f, accent);
-                add_text(canvas, pivot_screen + Vec2{ 8.0f, -15.0f }, "PIVOT", 1.05f, white);
-                add_text(canvas, screen(motor.c) + Vec2{ 8.0f, -15.0f }, "C / DRIVEN", 1.05f, yellow);
+                joint_auto_sweep = true;
+                set_status("JOINT LIMIT TEST RUNNING WITHOUT BLOCKING TRAINING");
+            }
+            cursor.y += 48.0f;
+
+            if (button({ cursor, { usable_width, 38.0f } },
+                    "DELETE SELECTED NODE", input, false,
+                    selected_node >= 0 && selected_node < static_cast<int>(blueprint.nodes.size())))
+            {
+                if (!delete_selected_node())
+                    set_status("NODE DELETE REJECTED");
             }
 
-            const Rect joint_rect{ { viewport.position.x + 20.0f, viewport.position.y + viewport.size.y - 174.0f },
-                { std::min(850.0f, viewport.size.x - 40.0f), 154.0f } };
-            const bool over_joint_lab = contains(joint_rect, input.mouse);
-            if (input.left_pressed && contains(viewport, input.mouse) && !over_joint_lab)
-            {
-                int hit = -1;
-                float best = 20.0f;
-                for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
-                {
-                    const float distance = length(screen(index) - input.mouse);
-                    if (distance < best)
-                    {
-                        best = distance;
-                        hit = static_cast<int>(index);
-                    }
-                }
-                if (input.shift && hit < 0 && blueprint.nodes.size() < 128)
-                {
-                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, 0.0f, scale));
-                    blueprint.radii.push_back(0.16f);
-                    selected_node = static_cast<int>(blueprint.nodes.size() - 1);
-                    rig_preset = RigPreset::custom;
-                    set_status("NODE ADDED - CTRL CLICK ANOTHER NODE TO CONNECT");
-                }
-                else if (input.control && selected_node >= 0 && hit >= 0 && selected_node != hit)
-                {
-                    const auto a = static_cast<std::uint16_t>(selected_node);
-                    const auto b = static_cast<std::uint16_t>(hit);
-                    const bool exists = std::ranges::any_of(blueprint.bones, [&](const sim::DistanceConstraint& bone)
-                    {
-                        return (bone.a == a && bone.b == b) || (bone.a == b && bone.b == a);
-                    });
-                    if (!exists)
-                    {
-                        blueprint.bones.push_back({ a, b, length(blueprint.nodes[b] - blueprint.nodes[a]), 1.0f });
-                        apply_small_rig_change("BONE CONNECTED");
-                    }
-                }
-                else
-                {
-                    selected_node = hit;
-                    dragging_node = hit >= 0;
-                }
-            }
-            if (dragging_node && input.left_down && !over_joint_lab && selected_node >= 0
-                && static_cast<std::size_t>(selected_node) < blueprint.nodes.size())
-                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, 0.0f, scale);
-            if (dragging_node && input.left_released)
-            {
-                dragging_node = false;
-                apply_small_rig_change("NODE MOVED");
-            }
-            draw_joint_lab(joint_rect, input);
+            draw_rig_editor(input, viewport);
         }
 
-        bool delete_selected_node()
+        [[nodiscard]] bool delete_selected_node()
         {
-            if (selected_node < 0 || static_cast<std::size_t>(selected_node) >= blueprint.nodes.size())
-            {
-                set_status("SELECT A NODE FIRST");
+            if (selected_node < 0 || selected_node >= static_cast<int>(blueprint.nodes.size()))
                 return false;
-            }
-            if (blueprint.nodes.size() <= 3)
-            {
-                set_status("A TRAINABLE RIG NEEDS AT LEAST THREE NODES");
-                return false;
-            }
             const auto removed = static_cast<std::uint16_t>(selected_node);
             const bool semantic = removed == blueprint.root_node
                 || removed == blueprint.torso_node || removed == blueprint.head_node
@@ -1167,300 +798,86 @@ namespace runner
                 return false;
             }
             blueprint.nodes.erase(blueprint.nodes.begin() + selected_node);
-            blueprint.radii.erase(blueprint.radii.begin() + selected_node);
-            std::erase_if(blueprint.bones, [removed](const sim::DistanceConstraint& bone)
-            {
-                return bone.a == removed || bone.b == removed;
-            });
+            if (removed < blueprint.radii.size())
+                blueprint.radii.erase(blueprint.radii.begin() + selected_node);
+            blueprint.bones.erase(std::remove_if(blueprint.bones.begin(), blueprint.bones.end(),
+                [removed](const sim::DistanceConstraint& bone)
+                {
+                    return bone.a == removed || bone.b == removed;
+                }), blueprint.bones.end());
             for (sim::DistanceConstraint& bone : blueprint.bones)
             {
                 if (bone.a > removed) --bone.a;
                 if (bone.b > removed) --bone.b;
             }
-            const auto last = static_cast<std::uint16_t>(blueprint.nodes.size() - 1);
-            auto remap = [removed, last](std::uint16_t& index)
+            for (sim::MotorConstraint& motor : blueprint.motors)
             {
-                if (index == removed) index = 0;
-                else if (index > removed) --index;
-                index = std::min(index, last);
-            };
-            remap(blueprint.root_node); remap(blueprint.torso_node); remap(blueprint.head_node);
-            remap(blueprint.left_contact_node); remap(blueprint.right_contact_node);
-            auto remap_supports = [removed](std::vector<std::uint16_t>& nodes)
-            {
-                std::erase(nodes, removed);
-                for (std::uint16_t& node : nodes)
-                {
-                    if (node > removed)
-                        --node;
-                }
-            };
-            remap_supports(blueprint.additional_left_contact_nodes);
-            remap_supports(blueprint.additional_right_contact_nodes);
-            for (sim::MotorConstraint& item : blueprint.motors)
-            {
-                const bool affected = item.a == removed || item.pivot == removed || item.c == removed;
-                remap(item.a); remap(item.pivot); remap(item.c);
-                if (affected || item.a == item.pivot || item.pivot == item.c || item.a == item.c)
-                    item.enabled = false;
+                if (motor.a > removed) --motor.a;
+                if (motor.pivot > removed) --motor.pivot;
+                if (motor.c > removed) --motor.c;
             }
+            auto remap = [removed](std::uint16_t& node)
+            {
+                if (node > removed) --node;
+            };
+            remap(blueprint.root_node);
+            remap(blueprint.torso_node);
+            remap(blueprint.head_node);
+            remap(blueprint.left_contact_node);
+            remap(blueprint.right_contact_node);
+            for (std::uint16_t& node : blueprint.additional_left_contact_nodes) remap(node);
+            for (std::uint16_t& node : blueprint.additional_right_contact_nodes) remap(node);
             selected_node = -1;
-            apply_small_rig_change("NODE DELETED; AFFECTED MOTORS DISABLED");
+            apply_small_rig_change("NODE DELETED");
             return true;
         }
 
-        void draw_rig_panel(Rect rect, const InputState& input)
+        void draw_rig_editor(const InputState& input, Rect viewport)
         {
-            add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
-            Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
-            add_text(canvas, cursor, "GUIDED RIG LAB", 1.80f, white);
-            cursor.y += 38.0f;
-            const float page_width = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { page_width, 36.0f } }, "BODY / FILES", input,
-                rig_panel_page == RigPanelPage::body))
-                rig_panel_page = RigPanelPage::body;
-            if (button({ cursor + Vec2{ page_width + 6.0f, 0.0f }, { page_width, 36.0f } }, "JOINT / MOTOR", input,
-                rig_panel_page == RigPanelPage::motor))
-                rig_panel_page = RigPanelPage::motor;
-            cursor.y += 49.0f;
+            add_rounded_rect(canvas, viewport, 10.0f, rgb(0x0c131c), border, 1.0f);
+            const Rect inner = inset(viewport, 16.0f);
+            draw_course_ground(live_environment, inner, camera_x, zoom);
+            draw_creature(live_environment, inner, camera_x, zoom, true);
 
-            if (rig_panel_page == RigPanelPage::body)
+            if (input.left_pressed)
             {
-                add_text(canvas, cursor, "CHOOSE A BODY; AUTOPILOT RESTARTS AT BALANCE", 1.02f, muted);
-                cursor.y += 27.0f;
-                const float fourth = (rect.size.x - 54.0f) / 4.0f;
-                if (button({ cursor, { fourth, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
-                    use_preset(RigPreset::humanoid);
-                if (button({ cursor + Vec2{ fourth + 6.0f, 0.0f }, { fourth, 35.0f } }, "BIPED", input,
-                    rig_preset == RigPreset::biped))
-                    use_preset(RigPreset::biped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 2.0f, 0.0f }, { fourth, 35.0f } }, "QUADRUPED", input,
-                    rig_preset == RigPreset::quadruped))
-                    use_preset(RigPreset::quadruped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 3.0f, 0.0f }, { fourth, 35.0f } }, "4-LEG", input,
-                    rig_preset == RigPreset::crawler4))
-                    use_preset(RigPreset::crawler4);
-                cursor.y += 43.0f;
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
-                    use_preset(RigPreset::chicken);
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "6-LEG", input,
-                    rig_preset == RigPreset::hexapod))
-                    use_preset(RigPreset::hexapod);
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "MONOPED", input,
-                    rig_preset == RigPreset::monoped))
-                    use_preset(RigPreset::monoped);
-                cursor.y += 48.0f;
-
-                const float file_third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { file_third, 35.0f } }, "SAVE RIG", input) || input.save_pressed)
+                float best_distance = 18.0f;
+                int best = -1;
+                for (std::size_t index = 0; index < live_environment.particles().size(); ++index)
                 {
-                    std::string error{};
-                    set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
-                }
-                if (button({ cursor + Vec2{ file_third + 6.0f, 0.0f }, { file_third, 35.0f } }, "LOAD RIG", input)
-                    || input.load_pressed)
-                {
-                    std::string error{};
-                    blueprint = sim::CreatureBlueprint::load(rig_path, error);
-                    rig_preset = RigPreset::custom;
-                    trainer.set_blueprint(blueprint, false);
-                    set_status(error.empty() ? "RIG LOADED - FRESH BALANCE LESSON STARTED" : error);
-                }
-                if (button({ cursor + Vec2{ (file_third + 6.0f) * 2.0f, 0.0f }, { file_third, 35.0f } },
-                    "USE EVOLVED", input))
-                {
-                    blueprint = trainer.blueprint();
-                    rig_preset = RigPreset::custom;
-                    set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
-                }
-                cursor.y += 50.0f;
-
-                add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
-                if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
-                    "DELETE", input, false, selected_node >= 0))
-                    delete_selected_node();
-                cursor.y += 33.0f;
-                if (selected_node >= 0 && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
-                {
-                    float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
-                    const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                        "NODE SIZE", radius, 0.08f, 0.60f, input);
-                    if (updated != radius)
+                    const Vec2 screen = world_to_screen(live_environment.particles()[index].position,
+                        inner, camera_x, zoom);
+                    const float distance = length(screen - input.mouse);
+                    if (distance < best_distance)
                     {
-                        radius = updated;
-                        queue_rig_change("NODE SIZE UPDATED");
+                        best_distance = distance;
+                        best = static_cast<int>(index);
                     }
-                    cursor.y += 50.0f;
-
-                    add_text(canvas, cursor, "SELECTED NODE ROLE", 1.08f, muted);
-                    cursor.y += 23.0f;
-                    const float role_width = (rect.size.x - 52.0f) * 0.20f;
-                    auto role = [&](int slot, std::string_view label, std::uint16_t& target)
-                    {
-                        if (button({ cursor + Vec2{ role_width * static_cast<float>(slot), 0.0f },
-                            { role_width - 4.0f, 32.0f } }, label, input, target == selected_node))
-                        {
-                            target = static_cast<std::uint16_t>(selected_node);
-                            apply_small_rig_change("NODE ROLE UPDATED");
-                        }
-                    };
-                    role(0, "ROOT", blueprint.root_node);
-                    role(1, "TORSO", blueprint.torso_node);
-                    role(2, "HEAD", blueprint.head_node);
-                    role(3, "FOOT L", blueprint.left_contact_node);
-                    role(4, "FOOT R", blueprint.right_contact_node);
-                    cursor.y += 44.0f;
                 }
-                add_text(canvas, cursor, "SELECT OR DRAG NODES IN THE VIEW. SHIFT ADDS; CTRL CONNECTS.", 1.00f, muted);
+                selected_node = best;
+                dragging_node = selected_node >= 0;
             }
-            else
-            {
-                add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
-                cursor.y += 29.0f;
-                const float motor_width = (rect.size.x - 48.0f) * 0.25f;
-                for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
-                {
-                    const int column = index % 4;
-                    const int row = index / 4;
-                    const bool motor_available = static_cast<std::size_t>(index) < blueprint.active_motor_count;
-                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(column),
-                        static_cast<float>(row) * 41.0f }, { motor_width - 4.0f, 35.0f } },
-                        std::to_string(index + 1), input, selected_motor == index, motor_available))
-                    {
-                        selected_motor = index;
-                        joint_test_group = JointTestGroup::selected;
-                    }
-                }
-                cursor.y += 87.0f;
-                const auto names = motor_names();
-                add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
-                cursor.y += 30.0f;
 
-                sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
-                const float endpoint = (rect.size.x - 48.0f) / 3.0f;
-                auto set_endpoint = [&](Vec2 position, std::string_view label, std::uint16_t& value)
-                {
-                    if (!button({ position, { endpoint, 34.0f } }, label, input, false, selected_node >= 0))
-                        return;
-                    value = static_cast<std::uint16_t>(selected_node);
-                    const bool distinct = motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
-                    const bool connected = distinct && has_direct_bone(motor.a, motor.pivot)
-                        && has_direct_bone(motor.pivot, motor.c);
-                    motor.enabled = connected;
-                    if (connected)
-                    {
-                        const float negative = std::max(2.0f,
-                            (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                        const float positive = std::max(2.0f,
-                            (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                        blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
-                        apply_small_rig_change("MOTOR ENDPOINT UPDATED");
-                    }
-                    else
-                    {
-                        set_status("MOTOR DISABLED - A-PIVOT AND PIVOT-C MUST EACH BE REAL BONES");
-                    }
+            if (!input.left_down)
+                dragging_node = false;
+            if (dragging_node && selected_node >= 0
+                && selected_node < static_cast<int>(blueprint.nodes.size()))
+            {
+                Vec2 world{
+                    camera_x + (input.mouse.x - inner.position.x - inner.size.x * 0.5f) / zoom,
+                    (inner.position.y + inner.size.y * 0.82f - input.mouse.y) / zoom
                 };
-                set_endpoint(cursor, "SET A / PARENT", motor.a);
-                set_endpoint(cursor + Vec2{ endpoint + 6.0f, 0.0f }, "SET PIVOT", motor.pivot);
-                set_endpoint(cursor + Vec2{ (endpoint + 6.0f) * 2.0f, 0.0f }, "SET C / DRIVEN", motor.c);
-                cursor.y += 44.0f;
-
-                const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
-                    && motor.c < blueprint.nodes.size() && motor.a != motor.pivot
-                    && motor.pivot != motor.c && motor.a != motor.c;
-                const bool connected = endpoints_valid && has_direct_bone(motor.a, motor.pivot)
-                    && has_direct_bone(motor.pivot, motor.c);
-                add_text(canvas, cursor, std::format("A {}  PIVOT {}  C {}  {}", motor.a, motor.pivot, motor.c,
-                    connected ? (motor.enabled ? "READY" : "DISABLED") : "NOT CONNECTED"), 1.12f,
-                    connected ? accent : danger);
-                cursor.y += 30.0f;
-
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 34.0f } }, "SET REST", input, false, connected))
-                {
-                    const float negative = std::max(2.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                    const float positive = std::max(2.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
-                    apply_small_rig_change("REST POSE RECALIBRATED");
-                }
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } }, "SAFE RANGE", input,
-                    false, connected))
-                {
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, 0.050f);
-                    apply_small_rig_change("SAFE JOINT DEFAULT APPLIED");
-                }
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 34.0f } }, "SWAP A/C", input,
-                    false, connected))
-                {
-                    std::swap(motor.a, motor.c);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, motor.strength);
-                    apply_small_rig_change("MOTOR DIRECTION SWAPPED");
-                }
-                cursor.y += 46.0f;
-
-                if (button({ cursor, { rect.size.x - 36.0f, 34.0f } },
-                    motor.enabled ? "DISABLE THIS MOTOR" : "ENABLE THIS MOTOR", input, motor.enabled, connected))
-                {
-                    motor.enabled = !motor.enabled;
-                    apply_small_rig_change(motor.enabled ? "MOTOR ENABLED" : "MOTOR DISABLED");
-                }
-                cursor.y += 47.0f;
-
-                float negative = (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi;
-                float positive = (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi;
-                const float updated_negative = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "BACKWARD TRAVEL", negative, 2.0f, 60.0f, input, " DEG");
-                if (updated_negative != negative)
-                {
-                    motor.minimum_angle = motor.neutral_angle - updated_negative * pi / 180.0f;
-                    queue_rig_change("BACKWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_positive = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "FORWARD TRAVEL", positive, 2.0f, 60.0f, input, " DEG");
-                if (updated_positive != positive)
-                {
-                    motor.maximum_angle = motor.neutral_angle + updated_positive * pi / 180.0f;
-                    queue_rig_change("FORWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_power = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "JOINT SPEED / POWER", motor.strength, 0.02f, 0.10f, input);
-                if (updated_power != motor.strength)
-                {
-                    motor.strength = updated_power;
-                    queue_rig_change("JOINT POWER UPDATED");
-                }
+                blueprint.nodes[static_cast<std::size_t>(selected_node)] = world;
+                apply_small_rig_change("NODE MOVED");
             }
         }
 
-        void process_shortcuts(const InputState& input)
+        void update(const InputState& input, float dt, int width, int height)
         {
-            if (input.key_1_pressed) mode = Mode::live;
-            if (input.key_2_pressed || input.key_3_pressed) mode = Mode::rig_lab;
-            if (input.escape_pressed) quit = true;
-            if (input.space_pressed)
-                trainer.set_background_enabled(!trainer.background_enabled());
-            if (input.reset_pressed)
-            {
-                trainer.reset_preview();
-                camera_x = 0.0f;
-            }
-            if (input.delete_pressed && mode == Mode::rig_lab)
-                delete_selected_node();
-        }
-
-        void frame(const InputState& input, float dt, int width, int height)
-        {
-            trainer.synchronize();
-            canvas.clear();
-            canvas.reserve(120000);
-            canvas.quad({ 0.0f, 0.0f }, { static_cast<float>(width), static_cast<float>(height) },
-                rgb(0x080a0d));
             status_time = std::max(0.0f, status_time - dt);
             session_runtime_seconds += std::max(0.0f, dt);
+            ui_font_scale = ui_font::scale();
+
             const rl::TrainingMetrics& current_metrics = trainer.metrics();
             if (!session_stats_initialized)
             {
@@ -1502,105 +919,80 @@ namespace runner
             }
             if (joint_auto_sweep)
             {
-                joint_test_phase += dt;
-                joint_test_input = std::sin(joint_test_phase * 1.55f);
-            }
-            process_shortcuts(input);
-            draw_top_bar(input, width);
-
-            const ui_layout::Box layout_content = ui_layout::content_box(
-                static_cast<float>(width), static_cast<float>(height));
-            const Rect content{ { layout_content.x, layout_content.y },
-                { layout_content.width, layout_content.height } };
-            if (!ui_layout::supported_window(static_cast<float>(width), static_cast<float>(height)))
-            {
-                add_text(canvas, { 24.0f, 100.0f },
-                    "WINDOW TOO SMALL - MINIMUM CONTENT 1080 X 800", 2.0f, danger);
-                return;
-            }
-
-            if (mode == Mode::live)
-            {
-                const ui_layout::Box layout_world = ui_layout::live_world_box(layout_content);
-                const ui_layout::Box layout_side = ui_layout::live_panel_box(layout_content);
-                const Rect world{ { layout_world.x, layout_world.y },
-                    { layout_world.width, layout_world.height } };
-                const Rect side{ { layout_side.x, layout_side.y },
-                    { layout_side.width, layout_side.height } };
-                draw_live_world(world, dt);
-                draw_live_panel(side, input);
+                joint_sweep_phase += dt * 0.75f;
+                const auto names = motor_names();
+                std::array<float, sim::action_count> action{};
+                for (std::size_t index = 0; index < action.size(); ++index)
+                {
+                    if (test_motor_active(static_cast<int>(index)))
+                        action[index] = std::sin(joint_sweep_phase + static_cast<float>(index) * 0.4f);
+                }
+                (void)names;
+                (void)live_environment.step(action);
             }
             else
             {
-                const float panel_width = std::clamp(content.size.x * 0.42f, 680.0f, 760.0f);
-                const Rect side{ content.position, { panel_width, content.size.y } };
-                const Rect world{ { content.position.x + panel_width + 10.0f, content.position.y },
-                    { content.size.x - panel_width - 10.0f, content.size.y } };
-                draw_rig_panel(side, input);
-                add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
-                draw_blueprint(world, input);
-                add_text(canvas, world.position + Vec2{ 20.0f, 18.0f },
-                    "CLICK SELECT / DRAG MOVE / SHIFT ADD / CTRL CONNECT / DELETE REMOVE", 1.12f, muted);
+                const auto publication = trainer.publication();
+                if (publication && publication->body_integrity_valid)
+                    live_environment.apply_publication(*publication);
             }
 
-            if (input.left_released && rig_edit_pending)
+            if (camera_follow)
+                camera_x = live_environment.particles().empty() ? 0.0f
+                    : live_environment.particles()[live_environment.blueprint().root_node].position.x;
+
+            if (input.wheel_y != 0.0f)
+                zoom = clamp(zoom + input.wheel_y * 7.0f, 42.0f, 145.0f);
+            if (input.middle_down)
             {
-                const std::string reason = rig_edit_reason;
-                rig_edit_pending = false;
-                rig_edit_reason.clear();
-                apply_small_rig_change(reason);
+                camera_follow = false;
+                camera_x -= input.mouse_delta.x / zoom;
             }
 
-            if (status_time > 0.0f)
+            draw(width, height, input);
+        }
+
+        void draw(int width, int height, const InputState& input)
+        {
+            canvas.clear(background);
+            draw_top_bar(input, width);
+
+            const float panel_width = width >= 1440 ? 430.0f : 380.0f;
+            const Rect panel{ { 14.0f, 86.0f },
+                { panel_width, static_cast<float>(height) - 100.0f } };
+            const Rect viewport{ { panel.position.x + panel.size.x + 14.0f, 86.0f },
+                { static_cast<float>(width) - panel.size.x - 42.0f,
+                  static_cast<float>(height) - 100.0f } };
+
+            if (mode == Mode::live)
             {
-                const float scale = 1.30f * ui_font_scale;
-                const Vec2 measured = font::measure_text(status, scale);
-                const Rect toast{ { 20.0f, static_cast<float>(height) - 58.0f },
-                    { std::min(measured.x + 30.0f, static_cast<float>(width) - 40.0f), 38.0f } };
-                add_rounded_rect(canvas, toast, 8.0f, rgb(0x10202b, 0.97f), accent, 1.0f);
-                add_text(canvas, toast.position + Vec2{ 14.0f, 10.0f }, status, 1.30f, white);
+                draw_live_panel(input, panel);
+                draw_course_ground(live_environment, viewport, camera_x, zoom);
+                draw_course_reference(live_environment, viewport, camera_x, zoom);
+                draw_course_features(live_environment, viewport, camera_x, zoom);
+                draw_creature(live_environment, viewport, camera_x, zoom);
+                draw_training_preview({
+                    { viewport.position.x + 18.0f, viewport.position.y + 18.0f },
+                    { std::min(420.0f, viewport.size.x * 0.42f),
+                      std::min(290.0f, viewport.size.y * 0.38f) }
+                });
+            }
+            else
+            {
+                draw_rig_lab(input, viewport, panel);
             }
         }
     };
 
-    Application::Application()
-        : impl_(new Impl{})
+    Application::Application(Canvas& canvas)
+        : impl_(std::make_unique<Impl>(canvas))
     {
     }
 
-    Application::~Application()
-    {
-        delete impl_;
-    }
-
-    bool Application::initialize(const std::filesystem::path&, std::string& error)
-    {
-        impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
-            impl_->autosave_rig_path, impl_->autosave_state_path);
-        std::string message{};
-        const bool resumed = impl_->trainer.load_autosave(message);
-        impl_->trainer.synchronize();
-        impl_->blueprint = impl_->trainer.blueprint();
-        impl_->rig_preset = resumed ? Impl::RigPreset::custom : Impl::RigPreset::humanoid;
-        impl_->trainer.set_background_enabled(true);
-        impl_->status = message;
-        impl_->status_time = 6.0f;
-        error.clear();
-        return true;
-    }
+    Application::~Application() = default;
 
     void Application::frame(const InputState& input, float dt, int width, int height)
     {
-        impl_->frame(input, dt, width, height);
-    }
-
-    std::span<const render::Vertex> Application::vertices() const noexcept
-    {
-        return impl_->canvas.vertices();
-    }
-
-    bool Application::wants_quit() const noexcept
-    {
-        return impl_->quit;
+        impl_->update(input, dt, width, height);
     }
 }
