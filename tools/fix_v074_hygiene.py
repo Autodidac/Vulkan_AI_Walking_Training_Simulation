@@ -117,6 +117,20 @@ for path in root.rglob('*'):
 
         auto support_nodes = [&](bool left)
 ''')
+    text = text.replace(
+        '''                (void)environment.step(zero);
+                require(environment.body_integrity_valid(),
+                    "head or passive tail escaped the articulated body");''',
+        '''                (void)environment.step(zero);
+                if (!environment.body_integrity_valid())
+                {
+                    std::cerr << "passive integrity failure rig=" << index
+                        << " frame=" << frame
+                        << " invalid=" << static_cast<int>(environment.invalid_reason())
+                        << std::endl;
+                }
+                require(environment.body_integrity_valid(),
+                    "head or passive tail escaped the articulated body");''')
     normalized = '\n'.join(line.rstrip() for line in text.splitlines()).rstrip() + '\n'
     if normalized != original:
         path.write_text(normalized, encoding='utf-8', newline='\n')
@@ -139,4 +153,4 @@ if workflow.exists():
     workflow.write_text(text, encoding='utf-8', newline='\n')
 
 Path(__file__).unlink()
-print('aligned duck tests and limited fused-foot separation to rigid heel-toe plates')
+print('added deterministic passive-rig diagnostics while preserving all v0.7.4 corrections')
