@@ -31,6 +31,9 @@ jobs:
       - name: Materialize complete source when needed
         shell: bash
         run: |
+          if test -f tools/repair_app_from_passing_source.py; then
+            python3 tools/repair_app_from_passing_source.py
+          fi
           if test -f tools/apply_runner_v074.py; then
             python3 tools/apply_runner_v074.py
             python3 tools/fix_v074_live_failures.py
@@ -114,6 +117,7 @@ jobs:
         shell: pwsh
         run: |
           foreach ($script in @(
+            'tools/repair_app_from_passing_source.py',
             'tools/apply_runner_v074.py',
             'tools/fix_v074_live_failures.py',
             'tools/complete_v074_missions.py',
