@@ -26,7 +26,7 @@ namespace runner::rl
         }
         if (!exists)
         {
-            message = "NO V0.7.4 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.5 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load();
@@ -184,7 +184,7 @@ namespace runner::rl
                     accepted_rig_changes_ = command.accepted_rig_changes;
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
-                    worker_message_ = "V0.7.4 AUTOSAVE RESUMED ASYNCHRONOUSLY";
+                    worker_message_ = "V0.7.5 AUTOSAVE RESUMED ASYNCHRONOUSLY";
                 }
                 else
                 {

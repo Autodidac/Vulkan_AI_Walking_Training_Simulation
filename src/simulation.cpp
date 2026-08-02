@@ -769,7 +769,8 @@ namespace runner::sim
 
     float Environment::ground_height_at(float x) const noexcept
     {
-        if (course_stage_ != CourseStage::moving_hazards)
+        if (course_stage_ != CourseStage::moving_hazards
+            && course_stage_ != CourseStage::crouch_walk)
             return 0.0f;
 
         const float course_x = std::max(0.0f, x + course_progress());
@@ -794,19 +795,27 @@ namespace runner::sim
             height = amplitude * (1.0f - smooth);
         }
 
-        if (course_stage_ >= CourseStage::uneven && !course_zone_is_flat(course_x))
+        if (course_stage_ == CourseStage::crouch_walk)
+        {
+            const float roughness = 0.045f + course_difficulty_ * 0.075f;
+            height += std::sin(course_x * 0.91f) * roughness;
+            height += std::sin(course_x * 2.43f + 0.7f) * roughness * 0.48f;
+            height += std::sin(course_x * 4.10f + 1.2f) * roughness * 0.18f;
+        }
+        else if (course_stage_ >= CourseStage::uneven && !course_zone_is_flat(course_x))
         {
             const float roughness = course_difficulty_ * 0.065f;
             height += std::sin(course_x * 0.83f) * roughness;
             height += std::sin(course_x * 2.17f + 0.7f) * roughness * 0.42f;
         }
-        return std::max(-0.06f, height);
+        return std::max(-0.08f, height);
     }
 
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
         if (course_stage_ != CourseStage::duck_press
+            && course_stage_ != CourseStage::crouch_walk
             && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards)
             return;
@@ -840,29 +849,46 @@ namespace runner::sim
                     { half_width, half_height }, 0.0f,
                     { 0.0f, profile.vertical_velocity }, -2
                 });
-                return;
             }
-
-            constexpr float cycle = 11.0f;
-            const float travel_time = std::max(0.0f, elapsed_seconds_ - 9.0f);
-            float local = std::fmod(travel_time * course_speed(), cycle);
-            if (local < 0.0f)
-                local += cycle;
-            float x = root_x + 7.5f - local;
-            int sequence = 100 + static_cast<int>(std::floor(
-                travel_time * course_speed() / cycle));
-            if (x < root_x - 1.5f)
-            {
-                x += cycle;
-                ++sequence;
-            }
+            return;
+        }
+        if (course_stage_ == CourseStage::crouch_walk)
+        {
+            const float rest_head_top = valid_node(blueprint_.head_node)
+                ? blueprint_.nodes[blueprint_.head_node].y
+                    + particles_[blueprint_.head_node].radius
+                : 4.30f;
+            constexpr float runway = 6.5f;
+            constexpr float spacing = 4.8f;
+            const int first_sequence = std::max(0, static_cast<int>(std::floor(
+                (root_x + progress + runway) / spacing)));
             const float clearance = rest_head_top
-                - (0.58f + course_difficulty_ * 0.08f);
-            course_features_.push_back({
-                CourseFeatureKind::overhead_bar,
-                { x, clearance + 0.12f }, { 0.88f, 0.12f }, 0.0f,
-                { -course_speed(), 0.0f }, sequence
-            });
+                - (0.58f + course_difficulty_ * 0.10f);
+            for (int offset = 0; offset < 7; ++offset)
+            {
+                const int sequence = first_sequence + offset;
+                const float distance = static_cast<float>(sequence) * spacing + runway;
+                const float x = distance - progress;
+                if (x < root_x + 5.5f)
+                    continue;
+                const float ground = ground_height_at(x);
+                if ((sequence % 3) == 1)
+                {
+                    const float radius = 0.12f + course_difficulty_ * 0.08f;
+                    course_features_.push_back({
+                        CourseFeatureKind::rock, { x, ground + radius }, {}, radius,
+                        { -course_speed(), 0.0f }, 200 + sequence
+                    });
+                }
+                else
+                {
+                    course_features_.push_back({
+                        CourseFeatureKind::overhead_bar,
+                        { x, ground + clearance + 0.11f }, { 0.92f, 0.11f }, 0.0f,
+                        { -course_speed(), 0.0f }, 200 + sequence
+                    });
+                }
+            }
             return;
         }
         const int first_sequence = first_course_feature_sequence(root_x, progress);
@@ -1020,6 +1046,9 @@ namespace runner::sim
         duck_clearance_margin_ = 0.0f;
         duck_press_hold_seconds_ = 0.0f;
         duck_press_max_penetration_ = 0.0f;
+        duck_walk_started_seconds_ = 0.0f;
+        crouch_walk_seconds_ = 0.0f;
+        crouch_walk_distance_ = 0.0f;
         torso_swing_seconds_ = 0.0f;
         current_duck_hold_seconds_ = 0.0f;
         stable_stance_seconds_ = 0.0f;
@@ -1064,6 +1093,9 @@ namespace runner::sim
         alternating_step_this_step_ = false;
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
+        single_leg_cycles_ = 0;
+        last_single_leg_landing_x_ = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.x : 0.0f;
         progress_window_start_steps_ = 0;
         knee_first_faults_ = 0;
         wheel_sliding_seconds_ = 0.0f;
@@ -1841,8 +1873,16 @@ namespace runner::sim
         duck_depth_ = std::max(0.0f, rest_head_clearance - head_clearance);
         const float current_uprightness = torso_uprightness();
         duck_active_ = feet_supported && current_uprightness > 0.60f && duck_depth_ >= 0.48f;
-        if (duck_active_)
+        if (!duck_ground_contact_allowed(duck_active_, non_foot_grounded_))
+            invalidate(InvalidMotion::duck_body_contact);
+        if (duck_active_ && !non_foot_grounded_)
             duck_seconds_ += dt;
+        if (course_stage_ == CourseStage::crouch_walk
+            && duck_active_ && !non_foot_grounded_ && feet_supported)
+        {
+            crouch_walk_seconds_ += dt;
+            crouch_walk_distance_ += std::max(0.0f, root_speed) * dt;
+        }
 
         duck_obstacle_weight_ = 0.0f;
         duck_clearance_margin_ = 0.0f;
@@ -1908,7 +1948,7 @@ namespace runner::sim
         {
             if (duck_press_contact_this_step_)
                 duck_press_contact_seen_ = true;
-            if (duck_press_contact_this_step_ && duck_active_
+            if (duck_press_contact_this_step_ && duck_active_ && !non_foot_grounded_
                 && duck_clearance_margin_ >= -0.025f && body_integrity_valid())
             {
                 duck_press_hold_seconds_ += dt;
@@ -1924,6 +1964,9 @@ namespace runner::sim
                 && !duck_press_completed_)
             {
                 duck_press_completed_ = true;
+                duck_walk_started_seconds_ = elapsed_seconds_;
+                progress_window_start_x_ = root_x;
+                progress_window_start_steps_ = alternating_steps_;
                 ++duck_recovery_count_;
                 ++obstacles_passed_;
                 passed_obstacle_this_step_ = true;
@@ -1946,7 +1989,9 @@ namespace runner::sim
             current_duck_hold_seconds_ = 0.0f;
         }
 
-        if (course_stage_ == CourseStage::duck_press && duck_obstacle_weight_ > 0.10f
+        if ((course_stage_ == CourseStage::duck_press
+                || course_stage_ == CourseStage::crouch_walk)
+            && duck_obstacle_weight_ > 0.10f
             && std::abs(torso_turn_speed_) > 0.85f)
             torso_swing_seconds_ += dt;
         else
@@ -1984,6 +2029,14 @@ namespace runner::sim
         }
         else if (!was_supported)
         {
+            if (blueprint_.monopedal_gait()
+                && (course_stage_ == CourseStage::uneven
+                    || course_stage_ == CourseStage::crouch_walk)
+                && std::abs(root_x - last_single_leg_landing_x_) >= 0.040f)
+            {
+                ++single_leg_cycles_;
+                last_single_leg_landing_x_ = root_x;
+            }
             if (powered_takeoff_)
             {
                 powered_landing_this_step_ = true;
@@ -1992,7 +2045,7 @@ namespace runner::sim
                 if (stage_allows_controlled_flips(course_stage_))
                 {
                     maximum_spin_turns_ = std::max(maximum_spin_turns_, landed_turns);
-                    if (landed_turns >= 0.75f)
+                    if (landed_turns >= 0.75f && landed_turns <= 3.0f)
                     {
                         spin_landing_this_step_ = true;
                         ++spin_landing_count_;
@@ -2009,15 +2062,35 @@ namespace runner::sim
 
         previous_left_grounded_ = left;
         previous_right_grounded_ = right;
-        if (rolling_body_motion(root_speed, torso_turn_speed_, torso_uprightness(),
-            feet_supported, non_foot_grounded_))
-            body_rolling_seconds_ += dt;
-        else
-            body_rolling_seconds_ = std::max(0.0f, body_rolling_seconds_ - dt * 2.0f);
-        if (head_ground_contact())
-            head_contact_seconds_ += dt;
-        else
+        const float active_flip_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
+        const float evaluated_turns = spin_landing_this_step_
+            ? maximum_spin_turns_ : active_flip_turns;
+        const bool airborne_or_landing = !feet_supported || spin_landing_this_step_;
+        const bool controlled_somersault = controlled_somersault_allowed(
+            course_stage_, evaluated_turns, torso_turn_speed_, airborne_or_landing);
+        const bool head_faces_forward = valid_node(blueprint_.head_node)
+            && valid_node(blueprint_.torso_node)
+            && particles_[blueprint_.head_node].position.x
+                >= particles_[blueprint_.torso_node].position.x - 0.05f;
+        const bool controlled_prone = forward_prone_allowed(course_stage_,
+            non_foot_grounded_, head_faces_forward, torso_uprightness(), root_speed);
+        if (controlled_somersault || controlled_prone)
+        {
+            body_rolling_seconds_ = std::max(0.0f, body_rolling_seconds_ - dt * 3.0f);
             head_contact_seconds_ = std::max(0.0f, head_contact_seconds_ - dt * 3.0f);
+        }
+        else
+        {
+            if (rolling_body_motion(root_speed, torso_turn_speed_, torso_uprightness(),
+                feet_supported, non_foot_grounded_))
+                body_rolling_seconds_ += dt;
+            else
+                body_rolling_seconds_ = std::max(0.0f, body_rolling_seconds_ - dt * 2.0f);
+            if (head_ground_contact())
+                head_contact_seconds_ += dt;
+            else
+                head_contact_seconds_ = std::max(0.0f, head_contact_seconds_ - dt * 3.0f);
+        }
         if (!rolling_gate_active(elapsed_seconds_))
         {
             body_rolling_seconds_ = 0.0f;
@@ -2029,7 +2102,8 @@ namespace runner::sim
             invalidate(InvalidMotion::body_rolling);
         }
 
-        if (stage_requires_forward_gait(course_stage_)
+        const bool locomotion_required = stage_requires_forward_gait(course_stage_);
+        if (locomotion_required
             && wheel_sliding_motion(root_speed, left, right, stance_slip_speed_))
             wheel_sliding_seconds_ += dt;
         else
@@ -2116,14 +2190,13 @@ namespace runner::sim
             const bool high_energy_stall = average_energy > 0.10f && net_progress < 0.05f;
             const bool inefficient_vibration = average_energy > 0.16f && net_progress < 0.12f
                 && root_path_window_ > std::max(0.08f, net_progress * 2.5f);
-            if (stage_requires_forward_gait(course_stage_)
-                && (high_energy_stall || inefficient_vibration))
+            if (locomotion_required && (high_energy_stall || inefficient_vibration))
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
 
             const std::uint32_t new_steps = alternating_steps_ - progress_window_start_steps_;
-            const bool idle_window = stage_requires_forward_gait(course_stage_)
+            const bool idle_window = locomotion_required
                 && elapsed_seconds_ > rolling_gate_warmup_end_seconds
                 && zero_progress_window(net_progress, new_steps,
                     obstacle_lift_clearance_, recovery_active_);
@@ -2341,7 +2414,8 @@ namespace runner::sim
             : clamp(spin_delta_turns, 0.0f, 0.08f) * 0.18f;
         const float pass_reward = passed_obstacle_this_step_ ? 0.18f : 0.0f;
         const float target_speed = 0.90f + course_difficulty_ * 1.30f;
-        const float run_reward = stage_requires_forward_gait(course_stage_)
+        const bool reward_requires_locomotion = stage_requires_forward_gait(course_stage_);
+        const float run_reward = reward_requires_locomotion
             ? clamp(forward_speed_ / target_speed, 0.0f, 1.0f) * 0.006f : 0.0f;
         const float real_step_reward = alternating_step_this_step_ ? 0.070f : 0.0f;
         const float unearned_progress_penalty = alternating_steps_ == 0u
@@ -2352,7 +2426,8 @@ namespace runner::sim
         const float action_change_penalty = action_change_energy_ * 0.0025f;
         const float press_contact_reward = course_stage_ == CourseStage::duck_press
             && duck_press_contact_this_step_ && duck_active_ ? 0.045f : 0.0f;
-        const float torso_swing_penalty = course_stage_ == CourseStage::duck_press
+        const float torso_swing_penalty = (course_stage_ == CourseStage::duck_press
+                || course_stage_ == CourseStage::crouch_walk)
             ? std::max(0.0f, std::abs(torso_turn_speed_) - 0.22f) * 0.030f : 0.0f;
 
         switch (course_stage_)
@@ -2374,13 +2449,47 @@ namespace runner::sim
             break;
         }
         case CourseStage::duck_press:
-            last_reward_ = std::max(0.0f, upright) * 0.016f
-                + contact * 0.0015f + duck_reward + obstacle_duck_reward
-                + press_contact_reward + pass_reward
-                - std::abs(forward_speed_) * 0.0030f
-                - action_energy * 0.0009f - torso_swing_penalty
-                - premature_duck_penalty - body_contact_penalty;
+            if (!duck_press_completed_)
+            {
+                last_reward_ = std::max(0.0f, upright) * 0.016f
+                    + contact * 0.0015f + duck_reward + obstacle_duck_reward
+                    + press_contact_reward + pass_reward
+                    - std::abs(forward_speed_) * 0.0030f
+                    - action_energy * 0.0009f - torso_swing_penalty
+                    - premature_duck_penalty - body_contact_penalty;
+            }
+            else
+            {
+                const float maintained_crouch = duck_active_ && !non_foot_grounded_
+                    ? 0.030f : -0.050f;
+                last_reward_ = forward_gait_reward + maintained_crouch
+                    + std::max(0.0f, upright) * 0.010f
+                    + duck_reward * 1.25f + obstacle_duck_reward
+                    + swing_reward + run_reward + real_step_reward
+                    + obstacle_lift_reward + pass_reward
+                    - backward_penalty - unearned_progress_penalty
+                    - double_support_shuffle_penalty - action_energy * 0.0010f
+                    - action_change_penalty - collision_penalty - knee_first_penalty
+                    - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
+                    - body_contact_penalty * 2.0f - torso_swing_penalty;
+            }
             break;
+        case CourseStage::crouch_walk:
+        {
+            const float maintained_crouch = duck_active_ && !non_foot_grounded_
+                ? 0.030f : -0.050f;
+            last_reward_ = forward_gait_reward + maintained_crouch
+                + std::max(0.0f, upright) * 0.010f
+                + duck_reward * 1.25f + obstacle_duck_reward
+                + swing_reward + run_reward + real_step_reward
+                + obstacle_lift_reward + pass_reward
+                - backward_penalty - unearned_progress_penalty
+                - double_support_shuffle_penalty - action_energy * 0.0010f
+                - action_change_penalty - collision_penalty - knee_first_penalty
+                - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
+                - body_contact_penalty * 2.0f - torso_swing_penalty;
+            break;
+        }
         case CourseStage::ramps:
             last_reward_ = std::max(0.0f, upright) * 0.010f
                 + contact * 0.0008f + jump_reward
@@ -2431,8 +2540,8 @@ namespace runner::sim
             last_reward_ -= 5.0f;
         }
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f
-            : course_stage_ == CourseStage::duck_press || course_stage_ == CourseStage::ramps
-                || course_stage_ == CourseStage::duck_bars ? 20.0f
+            : course_stage_ == CourseStage::duck_press ? 36.0f
+            : course_stage_ == CourseStage::ramps || course_stage_ == CourseStage::duck_bars ? 20.0f
             : course_stage_ == CourseStage::moving_hazards ? 48.0f : 36.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
         return { last_reward_, forward_speed_, terminated,

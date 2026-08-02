@@ -300,9 +300,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v074-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v074-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v074-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v075-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v075-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v075-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -678,71 +678,111 @@ namespace runner
         void draw_training_pip(Rect rect)
         {
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.98f), accent_dim, 1.5f);
-            add_text(canvas, rect.position + Vec2{ 13.0f, 10.0f },
-                "CURRENT-STAGE VERIFIED SAMPLE", 1.03f, accent);
+            add_text(canvas, rect.position + Vec2{ 13.0f, 9.0f },
+                "LIVE TRAINING ENVIRONMENT", 1.00f, accent);
+
             if (!trainer.has_training_preview())
             {
-                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
-                    "NO STAGE-VALID ROLLOUT YET", 1.02f, muted, rect.size.x - 26.0f);
+                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 43.0f },
+                    "WAITING FOR FIRST INTACT TRAINING FRAME", 0.96f, muted,
+                    rect.size.x - 26.0f);
                 return;
             }
 
             const sim::Environment& environment = trainer.training_preview();
-            const Rect inner{ rect.position + Vec2{ 9.0f, 35.0f },
-                { rect.size.x - 18.0f, rect.size.y - 44.0f } };
             const auto& particles = environment.particles();
             const auto& rig = environment.blueprint();
             if (particles.empty() || rig.root_node >= particles.size())
-                return;
-            if (!environment.body_integrity_valid())
             {
-                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 44.0f },
-                    "SAMPLE REJECTED - BODY DISCONNECTED", 1.02f, danger,
+                add_text_fit(canvas, rect.position + Vec2{ 13.0f, 43.0f },
+                    "TRAINING FRAME HAS NO COMPLETE RIG", 0.96f, danger,
                     rect.size.x - 26.0f);
                 return;
             }
-            float minimum_x = std::numeric_limits<float>::infinity();
-            float maximum_x = -std::numeric_limits<float>::infinity();
-            float maximum_y = -std::numeric_limits<float>::infinity();
+
+            const rl::StageMotionQualification qualification =
+                rl::stage_motion_qualification(environment.course_stage(), environment);
+            const bool foot_only = !environment.non_foot_grounded();
+            const bool intact = environment.body_integrity_valid();
+            const bool moving_crouch = environment.duck_active()
+                && environment.crouch_walk_seconds() > 0.0f;
+            const Color state_color = qualification.valid ? green
+                : intact && foot_only && moving_crouch ? yellow : danger;
+            const std::string_view state_text = qualification.valid
+                ? "QUALIFIED"
+                : !intact ? "BROKEN RIG"
+                : !foot_only ? "BODY TOUCHED GROUND"
+                : !environment.duck_active() ? "NOT CROUCHING"
+                : "LEARNING";
+            add_text_fit(canvas, rect.position + Vec2{ rect.size.x - 154.0f, 9.0f },
+                state_text, 0.82f, state_color, 141.0f, 0.68f);
+
+            const Rect inner{ rect.position + Vec2{ 8.0f, 34.0f },
+                { rect.size.x - 16.0f, rect.size.y - 64.0f } };
+            const float root_x = particles[rig.root_node].position.x;
+
+            float body_min_x = std::numeric_limits<float>::infinity();
+            float body_max_x = -std::numeric_limits<float>::infinity();
+            float body_min_y = std::numeric_limits<float>::infinity();
+            float body_max_y = -std::numeric_limits<float>::infinity();
             for (const sim::Particle& particle : particles)
             {
-                minimum_x = std::min(minimum_x, particle.position.x - particle.radius);
-                maximum_x = std::max(maximum_x, particle.position.x + particle.radius);
-                maximum_y = std::max(maximum_y, particle.position.y + particle.radius);
+                body_min_x = std::min(body_min_x, particle.position.x - particle.radius);
+                body_max_x = std::max(body_max_x, particle.position.x + particle.radius);
+                body_min_y = std::min(body_min_y, particle.position.y - particle.radius);
+                body_max_y = std::max(body_max_y, particle.position.y + particle.radius);
             }
-            const float camera = (minimum_x + maximum_x) * 0.5f;
-            const float ground = environment.ground_height_at(camera);
-            const float body_width = std::max(0.50f, maximum_x - minimum_x);
-            const float body_height = std::max(0.50f, maximum_y - ground);
-            const float horizontal_scale = (inner.size.x - 28.0f) / (body_width + 0.70f);
-            const float vertical_scale = (inner.size.y * 0.76f) / (body_height + 0.30f);
+
+            // Keep the rig large and readable. Show roughly 2 m behind and 4 m
+            // ahead; a distant obstacle gets a distance label instead of forcing
+            // the camera to zoom the body into a tiny cluster.
+            float view_min_x = std::min(root_x - 2.0f, body_min_x - 0.35f);
+            float view_max_x = std::max(root_x + 4.2f, body_max_x + 0.50f);
+            float view_min_y = std::min(body_min_y - 0.18f,
+                environment.ground_height_at(root_x) - 0.18f);
+            float view_max_y = body_max_y + 0.32f;
+            const float world_width = std::max(3.8f, view_max_x - view_min_x);
+            const float world_height = std::max(1.5f, view_max_y - view_min_y);
+            const float horizontal_scale = (inner.size.x - 12.0f) / world_width;
+            const float vertical_scale = (inner.size.y * 0.78f) / world_height;
             const float scale = std::clamp(
-                std::min(horizontal_scale, vertical_scale), 16.0f, 43.0f);
+                std::min(horizontal_scale, vertical_scale), 20.0f, 48.0f);
+            const float camera = (view_min_x + view_max_x) * 0.5f;
 
             std::vector<Vec2> ground_points{};
-            ground_points.reserve(65);
-            for (int sample = 0; sample <= 64; ++sample)
+            ground_points.reserve(81);
+            for (int sample = 0; sample <= 80; ++sample)
             {
-                const float screen_fraction = static_cast<float>(sample) / 64.0f;
+                const float fraction = static_cast<float>(sample) / 80.0f;
                 const float world_x = camera
-                    + (screen_fraction - 0.5f) * inner.size.x / scale;
+                    + (fraction - 0.5f) * inner.size.x / scale;
                 ground_points.push_back(world_to_screen(
                     { world_x, environment.ground_height_at(world_x) },
                     inner, camera, scale, 0.82f));
             }
-            canvas.polyline(ground_points, 3.0f, rgb(0x51606c));
+            canvas.polyline(ground_points, 3.0f, rgb(0x65727d));
 
+            const sim::CourseFeature* next_feature = nullptr;
+            float next_distance = std::numeric_limits<float>::infinity();
             for (const sim::CourseFeature& feature : environment.course_features())
             {
-                const Vec2 point = world_to_screen(feature.center, inner, camera, scale, 0.82f);
-                if (point.x < inner.position.x - 20.0f
-                    || point.x > inner.position.x + inner.size.x + 20.0f)
+                const float distance = feature.center.x - root_x;
+                if (distance >= -0.6f && distance < next_distance)
+                {
+                    next_distance = distance;
+                    next_feature = &feature;
+                }
+
+                const Vec2 point = world_to_screen(feature.center,
+                    inner, camera, scale, 0.82f);
+                if (point.x < inner.position.x - 24.0f
+                    || point.x > inner.position.x + inner.size.x + 24.0f)
                     continue;
                 if (feature.kind == sim::CourseFeatureKind::rock
                     || feature.kind == sim::CourseFeatureKind::moving_hazard
                     || feature.kind == sim::CourseFeatureKind::projectile)
                 {
-                    canvas.circle(point, feature.radius * scale,
+                    canvas.circle(point, std::max(3.0f, feature.radius * scale),
                         feature.kind == sim::CourseFeatureKind::projectile ? danger : yellow, 18);
                 }
                 else
@@ -751,14 +791,42 @@ namespace runner
                         inner, camera, scale, 0.82f);
                     const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
                         inner, camera, scale, 0.82f);
-                    canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y }, yellow);
+                    add_rounded_rect(canvas,
+                        { { minimum.x, maximum.y },
+                          { maximum.x - minimum.x, minimum.y - maximum.y } },
+                        3.0f, accent_dim, accent, 1.0f);
                 }
             }
+
             draw_creature(environment, inner, camera, scale);
-            add_text_fit(canvas, rect.position + Vec2{ 13.0f, rect.size.y - 25.0f },
-                std::format("{:.2f} M  /  {}", environment.distance_travelled(),
-                    sim::invalid_motion_name(environment.invalid_reason())),
-                0.88f, environment.valid_motion() ? green : danger, rect.size.x - 26.0f, 0.72f);
+
+            if (next_feature != nullptr && next_distance > 4.2f)
+            {
+                add_text_fit(canvas,
+                    inner.position + Vec2{ inner.size.x - 138.0f, 7.0f },
+                    std::format("NEXT {:.1f}M >", next_distance),
+                    0.78f, yellow, 128.0f, 0.64f);
+            }
+
+            if (!intact || !foot_only)
+            {
+                add_rounded_rect(canvas,
+                    { inner.position + Vec2{ 5.0f, inner.size.y - 34.0f },
+                      { inner.size.x - 10.0f, 28.0f } },
+                    4.0f, rgb(0x3a0c10, 0.90f), danger, 1.0f);
+                add_text_fit(canvas,
+                    inner.position + Vec2{ 11.0f, inner.size.y - 28.0f },
+                    !foot_only ? "REJECTED: ONLY FEET MAY TOUCH GROUND"
+                        : "REJECTED: RIG LOST BODY INTEGRITY",
+                    0.78f, white, inner.size.x - 22.0f, 0.62f);
+            }
+
+            add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
+                std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
+                    trainer.metrics().update,
+                    environment.crouch_walk_seconds(), environment.crouch_walk_distance(),
+                    environment.gait_cycles(), environment.obstacles_passed()),
+                0.72f, state_color, rect.size.x - 24.0f, 0.58f);
         }
 
         void draw_live_panel(Rect rect, const InputState& input)
@@ -785,8 +853,9 @@ namespace runner
             add_text_fit(canvas, cursor, sim::course_stage_name(autonomy.stage), 2.05f,
                 accent, usable_width, 1.30f);
             cursor.y += 38.0f;
-            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   MASTERY {}/3",
-                autonomy.difficulty * 100.0f, autonomy.mastery_streak), 1.16f, white, usable_width);
+            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   STRICT MASTERY {}/{}",
+                autonomy.difficulty * 100.0f, autonomy.mastery_streak,
+                rl::mastery_lock_confirmations), 1.12f, white, usable_width);
             cursor.y += 29.0f;
             cursor.y += add_wrapped_text(canvas, cursor, autonomy.message, 1.00f,
                 metrics.evaluation_valid || metrics.evaluation_count == 0 ? muted : danger,

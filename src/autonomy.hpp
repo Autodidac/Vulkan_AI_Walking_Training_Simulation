@@ -20,6 +20,7 @@
 
 namespace runner::rl
 {
+    inline constexpr int mastery_lock_confirmations = 8;
     struct AutonomyStatus
     {
         bool enabled{ false };

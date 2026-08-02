@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0400u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0502u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -94,7 +94,8 @@ namespace runner::rl
         if (!paired_leg_chains)
             return action;
 
-        const float leg_pair_strength = stage == sim::CourseStage::duck_press
+        const float leg_pair_strength = (stage == sim::CourseStage::duck_press
+                || stage == sim::CourseStage::crouch_walk)
             ? 0.12f : (stage == sim::CourseStage::balance
                 ? 0.18f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));
         auto mirror_pair = [&](std::size_t left, std::size_t right, float strength)
@@ -148,14 +149,47 @@ namespace runner::rl
         const sim::Environment& environment) noexcept
     {
         auto action = balance_teacher_action(environment);
-        const float pressure = environment.duck_obstacle_weight();
-        action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
-        action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
-        action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
-        action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+        const float pressure = environment.duck_press_completed()
+            ? std::max(0.72f, environment.duck_obstacle_weight())
+            : environment.duck_obstacle_weight();
+        if (!environment.duck_press_completed())
+        {
+            action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
+            action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
+            action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
+            action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+        }
+        else
+        {
+            const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.05f;
+            const float swing = std::sin(phase);
+            action[0] = clamp(action[0] - 0.24f * pressure + 0.34f * swing, -0.82f, 0.82f);
+            action[1] = clamp(action[1] + 0.50f * pressure + 0.34f * std::max(0.0f, swing), -0.90f, 0.90f);
+            action[2] = clamp(action[2] + 0.24f * pressure - 0.34f * swing, -0.82f, 0.82f);
+            action[3] = clamp(action[3] - 0.50f * pressure - 0.34f * std::max(0.0f, -swing), -0.90f, 0.90f);
+        }
         for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
             action[index] = 0.0f;
         return bilateral_joint_synergy_action(environment, action, sim::CourseStage::duck_press);
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        auto action = balance_teacher_action(environment);
+        const float pressure = std::max(0.72f, environment.duck_obstacle_weight());
+        const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.05f;
+        const float swing = std::sin(phase);
+        action[0] = clamp(action[0] - 0.24f * pressure + 0.34f * swing, -0.82f, 0.82f);
+        action[1] = clamp(action[1] + 0.50f * pressure
+            + 0.34f * std::max(0.0f, swing), -0.90f, 0.90f);
+        action[2] = clamp(action[2] + 0.24f * pressure - 0.34f * swing, -0.82f, 0.82f);
+        action[3] = clamp(action[3] - 0.50f * pressure
+            - 0.34f * std::max(0.0f, -swing), -0.90f, 0.90f);
+        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+            action[index] = 0.0f;
+        return bilateral_joint_synergy_action(environment, action,
+            sim::CourseStage::crouch_walk);
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
@@ -181,6 +215,15 @@ namespace runner::rl
                 policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
                 policy_action[index] = lerp(policy_action[index], 0.0f, 0.995f);
+        }
+        else if (stage == sim::CourseStage::crouch_walk)
+        {
+            const auto teacher = crouch_walk_teacher_action(environment);
+            const float leg_assist = 0.58f + environment.duck_obstacle_weight() * 0.24f;
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], 0.0f, 0.98f);
         }
         else if (stage == sim::CourseStage::ramps)
         {
@@ -361,12 +404,31 @@ namespace runner::rl
             if (environment.longest_stable_stance_seconds() < 2.0f
                 || environment.stable_stance_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
+            if (!environment.duck_press_completed()
+                || environment.duck_recoveries() < 1u
+                || environment.duck_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
-            if (environment.obstacles_passed() < 2u)
-                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
+            break;
+        case sim::CourseStage::uneven:
+            if (environment.longest_stable_stance_seconds() < 1.25f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.gait_cycles() < 4u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            break;
+        case sim::CourseStage::crouch_walk:
+            if (environment.longest_stable_stance_seconds() < 1.25f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.gait_cycles() < 4u
+                || environment.crouch_walk_seconds() < 2.0f
+                || environment.crouch_walk_distance() < 0.75f
+                || environment.obstacles_passed() < 3u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
             break;
         case sim::CourseStage::ramps:
             if (environment.longest_stable_stance_seconds() < 1.50f
@@ -374,14 +436,6 @@ namespace runner::rl
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.powered_jumps() < 1u || environment.landed_jumps() < 1u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
-            break;
-        case sim::CourseStage::uneven:
-            if (environment.longest_stable_stance_seconds() < 1.25f)
-                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.alternating_steps() < 3u)
-                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
-            if (environment.distance_travelled() < 1.0f)
-                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
             break;
         case sim::CourseStage::hurdles:
             if (environment.longest_stable_stance_seconds() < 1.0f)
@@ -432,9 +486,18 @@ namespace runner::rl
             quality = pack_quality(
                 static_cast<std::uint16_t>(std::min<std::uint32_t>(
                     environment.duck_recoveries(), 65535u)),
-                quality_bucket(environment.stable_stance_seconds()),
                 quality_bucket(environment.duck_seconds()),
+                quality_bucket(environment.stable_stance_seconds()),
                 quality_bucket(environment.elapsed_seconds()));
+            break;
+        case sim::CourseStage::crouch_walk:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.gait_cycles(), 65535u)),
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    environment.obstacles_passed(), 65535u)),
+                quality_bucket(environment.crouch_walk_distance()),
+                quality_bucket(environment.crouch_walk_seconds()));
             break;
         case sim::CourseStage::ramps:
             quality = pack_quality(
@@ -486,9 +549,20 @@ namespace runner::rl
         }
         if (stage == sim::CourseStage::duck_press)
         {
-            return environment.uprightness() >= 0.60f
-                && (environment.duck_active()
-                    || environment.stable_stance_seconds() >= 0.50f)
+            return environment.duck_press_completed()
+                && !environment.non_foot_grounded()
+                && environment.duck_recoveries() >= 1u
+                && environment.duck_seconds() >= 0.75f
+                && environment.uprightness() >= 0.60f
+                && (environment.left_supported() || environment.right_supported());
+        }
+        if (stage == sim::CourseStage::crouch_walk)
+        {
+            return environment.duck_active()
+                && !environment.non_foot_grounded()
+                && environment.uprightness() >= 0.60f
+                && environment.crouch_walk_seconds() >= 0.35f
+                && environment.gait_cycles() >= 1u
                 && (environment.left_supported() || environment.right_supported());
         }
         return environment.valid_motion() && environment.uprightness() >= 0.45f;

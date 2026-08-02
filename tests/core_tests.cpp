@@ -104,8 +104,28 @@ namespace runner::sim
         static void complete_duck_press(Environment& environment) noexcept
         {
             environment.duck_press_completed_ = true;
+            environment.duck_walk_started_seconds_ = 9.0f;
             environment.elapsed_seconds_ = 10.0f;
             environment.rebuild_course_features();
+        }
+
+        static void qualify_crouch_walk(Environment& environment) noexcept
+        {
+            qualify_stable_stance(environment);
+            environment.duck_press_completed_ = true;
+            environment.duck_walk_started_seconds_ = 1.0f;
+            environment.duck_active_ = true;
+            environment.duck_recovery_count_ = 1u;
+            environment.duck_seconds_ = 3.0f;
+            environment.crouch_walk_seconds_ = 2.5f;
+            environment.crouch_walk_distance_ = 1.2f;
+            environment.alternating_steps_ = 5u;
+            environment.obstacles_passed_ = 4u;
+        }
+
+        static void force_non_foot_contact(Environment& environment) noexcept
+        {
+            environment.non_foot_grounded_ = true;
         }
 
         static void qualify_stable_stance(Environment& environment) noexcept
@@ -249,10 +269,56 @@ int main()
     require(sim::classify_motion_gate(0.4f, 0.0f, { 0.0f, 4.0f }, 1.2f, 2.7f, 0.0f,
             false, sim::CourseStage::duck_bars, 3.21f)
         == sim::InvalidMotion::excessive_spins, "more than three spins is not rejected");
+    require(rl::mastery_lock_confirmations >= 8,
+        "staged mastery locks after too few repeated evaluations");
+    require(sim::controlled_somersault_allowed(
+            sim::CourseStage::duck_bars, 2.75f, 1.2f, true),
+        "controlled somersault is rejected without a powered-launch flag");
+    require(!sim::controlled_somersault_allowed(
+            sim::CourseStage::uneven, 2.0f, 1.2f, true)
+            && !sim::controlled_somersault_allowed(
+                sim::CourseStage::duck_bars, 3.01f, 1.2f, true)
+            && !sim::controlled_somersault_allowed(
+                sim::CourseStage::duck_bars, 2.0f, 0.10f, true),
+        "wrong-stage, over-three-turn, or non-rotating tumbling is accepted");
+    require(sim::forward_prone_allowed(sim::CourseStage::uneven,
+            true, true, 0.25f, 0.10f)
+            && !sim::forward_prone_allowed(sim::CourseStage::duck_press,
+                true, true, 0.25f, 0.10f)
+            && !sim::forward_prone_allowed(sim::CourseStage::crouch_walk,
+                true, true, 0.25f, 0.10f)
+            && !sim::forward_prone_allowed(sim::CourseStage::uneven,
+                true, false, 0.25f, 0.10f),
+        "forward-prone recovery rules do not preserve crouch foot-only contact");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.8f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::sustained_flight, "unpowered flight hard gate missing");
+    require(!sim::duck_ground_contact_allowed(true, true)
+            && sim::duck_ground_contact_allowed(true, false)
+            && sim::duck_ground_contact_allowed(false, true),
+        "foot-only duck contact rule is not strict");
+    require(sim::stage_skill_evidence(sim::CourseStage::balance,
+            0u, 0.0f, 0u, 0.0f, 0u, 0u),
+        "standing incorrectly requires movement");
+    require(sim::stage_skill_evidence(sim::CourseStage::duck_press,
+            0u, 0.80f, 0u, 0.0f, 0u, 1u),
+        "static crouch incorrectly requires walking or running");
+    require(!sim::stage_skill_evidence(sim::CourseStage::uneven,
+            0u, 0.0f, 0u, 0.0f, 0u, 0u)
+            && sim::stage_skill_evidence(sim::CourseStage::uneven,
+                4u, 0.0f, 0u, 0.0f, 0u, 0u),
+        "walking/running stage uses the wrong movement evidence");
+    require(sim::CreatureBlueprint::monoped().monopedal_gait()
+            && !sim::CreatureBlueprint::humanoid().monopedal_gait(),
+        "monoped gait is not distinguished from alternating biped gait");
+    require(!sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
+            3u, 3.0f, 0u, 0.0f, 0u, 4u)
+            && !sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
+                5u, 1.5f, 0u, 0.0f, 0u, 4u)
+            && sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
+                5u, 3.0f, 0u, 0.0f, 0u, 4u),
+        "duck stage can qualify without sustained crouch walking and obstacles");
     require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
         "joint-powered jump is not recognized");
     require(!sim::powered_joint_launch(sim::CourseStage::duck_press, 1.0f, 0.08f),
@@ -335,15 +401,37 @@ int main()
     require(sim::EnvironmentTestAccess::press_collision_resolves_below(press_environment),
         "duck press clips through the model instead of resolving below the platen");
     sim::EnvironmentTestAccess::complete_duck_press(press_environment);
-    require(!press_environment.course_features().empty()
-            && press_environment.course_features().front().kind == sim::CourseFeatureKind::overhead_bar,
-        "duck press never advances to the later moving low-bar lesson");
-    const sim::CourseFeature& later_bar = press_environment.course_features().front();
+    require(std::abs(press_environment.ground_height_at(0.0f)
+            - press_environment.ground_height_at(1.25f)) < 0.0001f,
+        "static crouch lesson incorrectly requires uneven-ground movement");
+    require(std::ranges::none_of(press_environment.course_features(),
+            [](const sim::CourseFeature& feature)
+            {
+                return feature.kind == sim::CourseFeatureKind::overhead_bar;
+            }),
+        "static crouch lesson incorrectly contains the moving low-bar course");
+
+    sim::Environment crouch_environment(sim::CreatureBlueprint::humanoid(), 23);
+    crouch_environment.set_course(sim::CourseStage::crouch_walk, 0.5f);
+    require(std::abs(crouch_environment.ground_height_at(0.0f)
+            - crouch_environment.ground_height_at(1.25f)) > 0.005f,
+        "crouch-walk lesson ground remains flat and stable");
+    const auto later_bar_iterator = std::ranges::find_if(
+        crouch_environment.course_features(), [](const sim::CourseFeature& feature)
+        {
+            return feature.kind == sim::CourseFeatureKind::overhead_bar;
+        });
+    require(later_bar_iterator != crouch_environment.course_features().end(),
+        "crouch-walk lesson has no later moving low bar");
+    const sim::CourseFeature& later_bar = *later_bar_iterator;
     require(later_bar.center.x
-            - press_environment.particles()[press_environment.blueprint().root_node].position.x >= 6.0f,
-        "later low bar starts too close for a meaningful crouch response");
+            - crouch_environment.particles()[crouch_environment.blueprint().root_node].position.x >= 5.5f,
+        "crouch-walk low bar starts too close for a meaningful response");
     require(later_bar.half_extent.x > later_bar.half_extent.y * 5.0f,
-        "later low bar is not horizontal or is effectively an undodgeable wall");
+        "crouch-walk low bar is not horizontal or is effectively a wall");
+    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
+            5u, 3.0f, 0u, 0.0f, 0u, 4u),
+        "valid foot-only crouch-walk evidence is rejected");
 
     require(sim::ground_velocity_retention(true, 0.0f)
         < sim::ground_velocity_retention(false, 0.0f),
@@ -362,17 +450,26 @@ int main()
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
     require(sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
-        && sim::course_stage_name(sim::CourseStage::duck_press) == "2. PRESS DUCK / HOLD / RECOVER"
-        && sim::course_stage_name(sim::CourseStage::ramps) == "3. JUMP / LAND"
-        && sim::course_stage_name(sim::CourseStage::uneven) == "4. WALK / RUN"
-        && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING LOW BAR / HURDLE"
-        && sim::course_stage_name(sim::CourseStage::duck_bars) == "6. CONTROLLED FLIPS"
-        && sim::course_stage_name(sim::CourseStage::moving_hazards) == "7. MIXED GOAL COURSE",
-        "skill curriculum is not ordered by prerequisite");
+        && sim::course_stage_name(sim::CourseStage::duck_press)
+            == "2. STATIC CROUCH / HOLD / RECOVER"
+        && sim::course_stage_name(sim::CourseStage::uneven) == "3. WALK / RUN"
+        && sim::course_stage_name(sim::CourseStage::crouch_walk)
+            == "4. CROUCH WALK / UNEVEN AVOID"
+        && sim::course_stage_name(sim::CourseStage::ramps) == "5. JUMP / LAND"
+        && sim::course_stage_name(sim::CourseStage::hurdles) == "6. MOVING LOW BAR / HURDLE"
+        && sim::course_stage_name(sim::CourseStage::duck_bars) == "7. CONTROLLED FLIPS"
+        && sim::course_stage_name(sim::CourseStage::moving_hazards) == "8. MIXED GOAL COURSE"
+        && static_cast<std::uint8_t>(sim::CourseStage::balance)
+            < static_cast<std::uint8_t>(sim::CourseStage::duck_press)
+        && static_cast<std::uint8_t>(sim::CourseStage::duck_press)
+            < static_cast<std::uint8_t>(sim::CourseStage::uneven)
+        && static_cast<std::uint8_t>(sim::CourseStage::uneven)
+            < static_cast<std::uint8_t>(sim::CourseStage::crouch_walk),
+        "stand, static crouch, walk/run, and crouch-walk prerequisites are misordered");
     require(!sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
-        "duck lesson completes without holding and recovering from the press");
-    require(sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 2u),
-        "press hold and recovery evidence cannot complete the duck lesson");
+        "duck lesson completes without moving crouch evidence");
+    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 5u, 3.0f, 0u, 0.0f, 0u, 4u),
+        "foot-only crouch walk and obstacle evidence cannot complete the duck lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
         "landed jump cannot complete the jump lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
@@ -447,13 +544,13 @@ int main()
         "invalid policy does not restore the champion");
     require(!rl::policy_regression_guard(10.0f, 9.4f, true),
         "small exploration change triggers an unnecessary champion rollback");
-    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
+    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 4, 1.2f, 4.0f),
         "valid stepped best result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f, 0.8f),
         "ducking without clearing a low bar can still seed self-imitation");
-    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f,
-            0.8f, 0u, 0.0f, 0u, 2u),
-        "valid press-and-low-bar result cannot seed self-imitation");
+    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 5, 1.2f, 12.0f,
+            3.0f, 0u, 0.0f, 0u, 4u),
+        "valid foot-only crouch-walk result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
