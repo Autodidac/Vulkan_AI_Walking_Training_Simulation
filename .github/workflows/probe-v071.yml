@@ -43,3 +43,5 @@ jobs:
           git commit -m 'Record active v0.7.1 Windows release status'
           git pull --rebase origin main
           git push origin HEAD:main
+
+# final v0.7.1 probe
