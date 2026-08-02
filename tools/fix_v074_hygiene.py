@@ -38,6 +38,12 @@ for path in root.rglob('*'):
                   flags=re.IGNORECASE)
     text = text.replace('std::array<bool, 5> found{};',
                         'std::array<bool, 6> found{};')
+    text = text.replace(
+        '0.8f, 0u, 0.0f, 0u, 1u),\n        "valid duck-and-clear result cannot seed self-imitation"',
+        '0.8f, 0u, 0.0f, 0u, 2u),\n        "valid press-and-low-bar result cannot seed self-imitation"')
+    text = text.replace(
+        'if (environment.obstacles_passed() < 1u)\n                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);',
+        'if (environment.obstacles_passed() < 2u)\n                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);')
     normalized = '\n'.join(line.rstrip() for line in text.splitlines()).rstrip() + '\n'
     if normalized != original:
         path.write_text(normalized, encoding='utf-8', newline='\n')
@@ -60,4 +66,4 @@ if workflow.exists():
     workflow.write_text(text, encoding='utf-8', newline='\n')
 
 Path(__file__).unlink()
-print('removed legacy binaries, obsolete title, enum mismatch, and normalized Runner v0.7.4 source')
+print('removed legacy material and aligned all two-part duck acceptance tests')
