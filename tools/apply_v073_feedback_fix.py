@@ -46,7 +46,7 @@ replace(
     "src/simulation.cpp",
     "if (elapsed_seconds_ >= 0.20f && !body_integrity_valid())",
     "if (elapsed_seconds_ >= 1.50f && !body_integrity_valid())",
-    "elapsed_seconds_ >= 1.50f && !body_integrity_valid()",
+    "if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())",
 )
 
 # Separate controlled flips from generic destabilizing rotation.
