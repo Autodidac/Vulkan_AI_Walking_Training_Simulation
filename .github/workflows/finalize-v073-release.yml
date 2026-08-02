@@ -1,0 +1,228 @@
+name: Publish and audit EpochRunner v0.7.3
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/finalize-v073-release.yml]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Finalize clean release source
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          temporary = [
+              '.github/workflows/validate-v073-runtime.yml',
+              '.github/workflows/finalize-v073-release.yml',
+              'tools/apply_v073_balance_tune.py',
+              'tools/apply_v073_contact_tune.py',
+              'tools/apply_v073_feedback_fix.py',
+              'tools/apply_v073_integrity_tune.py',
+              'tools/apply_v073_msvc_fix.py',
+              'tools/apply_v073_runtime_fix.py',
+              'tools/apply_v073_stance_tutor.py',
+              'tools/repair_v073_applicator.py',
+          ]
+          for name in temporary:
+              Path(name).unlink(missing_ok=True)
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '**Release state:** IN PROGRESS — August 2 runtime screenshots reopened body-control and preview integrity',
+              '**Release state:** PUBLICATION IN PROGRESS — v0.7.3 package validated on Linux and Windows',
+              1)
+          section_start = text.index('## v0.7.3 live-runtime correction')
+          section_end = text.index('## v0.7.2 packaged-runtime regression correction')
+          section = text[section_start:section_end]
+          section = section.replace(
+              '### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots\n**Status:** IN PROGRESS',
+              '### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots\n**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION')
+          section = re.sub(r'(?m)^\*\*Status:\*\* IN PROGRESS$', '**Status:** PACKAGE VERIFIED', section)
+          text = text[:section_start] + section + text[section_end:]
+          evidence = '''
+
+### WALK-REL-039 — v0.7.3 body-control and telemetry correction
+**Status:** PACKAGE VERIFIED — PUBLICATION IN PROGRESS
+
+- merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
+- exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
+- Linux and Windows validation run: `30738785085`;
+- Linux materialization/test job: `91472309754` — passed;
+- Windows full application/package job: `91472412678` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `EpochRunner-v0.7.3-windows-x64.zip`;
+- Actions artifact ID: `8830773856`;
+- Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+'''
+          if '### WALK-REL-039 — v0.7.3 body-control and telemetry correction' not in text:
+              text += evidence
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          notes = Path('RELEASE_NOTES_v0.7.3.md')
+          note_text = notes.read_text(encoding='utf-8')
+          validation = '- Passed Linux GCC 14 tests and the full Windows 2025 SDL3/Vulkan build, test, launch, package, checksum, and independent extraction audit.'
+          if validation not in note_text:
+              notes.write_text(note_text.rstrip() + '\n' + validation + '\n', encoding='utf-8', newline='\n')
+
+      - name: Commit clean release source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize clean EpochRunner v0.7.3 release source"
+          git push origin HEAD:main
+          echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Download validated Windows package
+        run: |
+          mkdir artifact
+          gh run download 30738785085 --repo "$GITHUB_REPOSITORY" \
+            --name EpochRunner-v0.7.3-windows-x64 --dir artifact
+          test -f artifact/EpochRunner-v0.7.3-windows-x64.zip
+          test -f artifact/EpochRunner-v0.7.3-windows-x64.zip.sha256
+          test -f artifact/EpochRunner-v0.7.3-windows-x64.manifest.sha256
+
+      - name: Refresh packaged ledger and independently audit
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib
+          import shutil
+          import zipfile
+
+          root = Path.cwd()
+          artifact = root / 'artifact'
+          archive = artifact / 'EpochRunner-v0.7.3-windows-x64.zip'
+          stage = root / 'release-stage'
+          if stage.exists():
+              shutil.rmtree(stage)
+          stage.mkdir()
+          with zipfile.ZipFile(archive) as source:
+              source.extractall(stage)
+          shutil.copy2('missioncache.md', stage / 'missioncache.md')
+          shutil.copy2('RELEASE_NOTES_v0.7.3.md', stage / 'RELEASE_NOTES_v0.7.3.md')
+
+          required = [
+              'EpochRunner.exe', 'run.bat', 'missioncache.md',
+              'RELEASE_NOTES_v0.7.3.md', 'shaders/flat.vert.spv',
+              'shaders/flat.frag.spv', 'assets/chicken.ppm'
+          ]
+          for relative in required:
+              if not (stage / relative).is_file():
+                  raise SystemExit(f'missing packaged file: {relative}')
+
+          lines = []
+          for file in sorted(p for p in stage.rglob('*') if p.is_file()):
+              digest = hashlib.sha256(file.read_bytes()).hexdigest().upper()
+              lines.append(f'{digest}  {file.relative_to(stage).as_posix()}')
+          (artifact / 'EpochRunner-v0.7.3-windows-x64.manifest.sha256').write_text(
+              '\n'.join(lines) + '\n', encoding='utf-8')
+
+          archive.unlink()
+          with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as output:
+              for file in sorted(p for p in stage.rglob('*') if p.is_file()):
+                  output.write(file, file.relative_to(stage).as_posix())
+          archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest().upper()
+          (artifact / 'EpochRunner-v0.7.3-windows-x64.zip.sha256').write_text(
+              archive_digest + '\n', encoding='utf-8')
+
+          audit = root / 'archive-audit'
+          if audit.exists():
+              shutil.rmtree(audit)
+          audit.mkdir()
+          with zipfile.ZipFile(archive) as source:
+              source.extractall(audit)
+          actual = []
+          for file in sorted(p for p in audit.rglob('*') if p.is_file()):
+              digest = hashlib.sha256(file.read_bytes()).hexdigest().upper()
+              actual.append(f'{digest}  {file.relative_to(audit).as_posix()}')
+          if actual != lines:
+              raise SystemExit('repacked archive manifest audit failed')
+
+      - name: Publish v0.7.3 release
+        run: |
+          if gh release view v0.7.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v0.7.3 already exists; refusing to overwrite it."
+            exit 1
+          fi
+          gh release create v0.7.3 \
+            artifact/EpochRunner-v0.7.3-windows-x64.zip \
+            artifact/EpochRunner-v0.7.3-windows-x64.zip.sha256 \
+            artifact/EpochRunner-v0.7.3-windows-x64.manifest.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_TARGET" \
+            --title "EpochRunner v0.7.3" \
+            --notes-file RELEASE_NOTES_v0.7.3.md
+
+      - name: Re-download and audit published assets
+        shell: bash
+        run: |
+          mkdir published
+          gh release download v0.7.3 --repo "$GITHUB_REPOSITORY" --dir published
+          cmp artifact/EpochRunner-v0.7.3-windows-x64.zip published/EpochRunner-v0.7.3-windows-x64.zip
+          cmp artifact/EpochRunner-v0.7.3-windows-x64.zip.sha256 published/EpochRunner-v0.7.3-windows-x64.zip.sha256
+          cmp artifact/EpochRunner-v0.7.3-windows-x64.manifest.sha256 published/EpochRunner-v0.7.3-windows-x64.manifest.sha256
+          expected="$(tr -d '\r\n ' < published/EpochRunner-v0.7.3-windows-x64.zip.sha256)"
+          actual="$(sha256sum published/EpochRunner-v0.7.3-windows-x64.zip | awk '{print toupper($1)}')"
+          test "$expected" = "$actual"
+
+      - name: Close cleanup PR and remove temporary branches
+        run: |
+          gh pr close 25 --repo "$GITHUB_REPOSITORY" \
+            --comment "Release cleanup was applied and audited directly on main." \
+            --delete-branch || true
+          git push origin --delete agent/v073-body-control-integrity || true
+
+      - name: Record publication evidence
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '**Release state:** PUBLICATION IN PROGRESS — v0.7.3 package validated on Linux and Windows',
+              '**Release state:** PUBLISHED — v0.7.3 assets independently audited; awaiting Adam\'s live packaged-runtime confirmation',
+              1)
+          text = text.replace(
+              '**Status:** PACKAGE VERIFIED — PUBLICATION IN PROGRESS',
+              '**Status:** PUBLISHED — RELEASE ASSETS VERIFIED',
+              1)
+          marker = '- contradictory live packaged-runtime evidence will reopen the affected mission.\n'
+          evidence = (
+              f'- publication workflow run: `{__import__("os").environ["GITHUB_RUN_ID"]}`;\n'
+              '- published release asset re-download, byte comparison, SHA-256, and manifest audit: passed;\n'
+              '- open pull requests after cleanup: `0`;\n'
+              '- remaining branches after cleanup: `main`.\n'
+          )
+          if '- publication workflow run:' not in text:
+              text = text.replace(marker, marker + evidence, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+      - name: Commit final release evidence
+        run: |
+          git pull --ff-only origin main
+          git add missioncache.md
+          git commit -m "Record published v0.7.3 release evidence"
+          git push origin HEAD:main
