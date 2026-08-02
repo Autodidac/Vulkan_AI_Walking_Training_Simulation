@@ -316,3 +316,7 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 - Actions artifact ID: `8830773856`;
 - Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
 - contradictory live packaged-runtime evidence will reopen the affected mission.
+- publication workflow run: `30739847776`;
+- published release asset re-download, byte comparison, SHA-256, and manifest audit: passed;
+- open pull requests after cleanup: `0`;
+- remaining branches after cleanup: `main`.
