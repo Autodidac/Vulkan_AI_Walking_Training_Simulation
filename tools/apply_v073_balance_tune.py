@@ -45,6 +45,10 @@ patch("src/ppo.hpp", (
         "                ? 0.14f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));",
     ),
     (
+        "constexpr float chain_strength = 0.08f;",
+        "constexpr float chain_strength = 0.0f;",
+    ),
+    (
         "policy_action[index] = lerp(policy_action[index], teacher[index], 0.90f);",
         "policy_action[index] = lerp(policy_action[index], teacher[index], 0.82f);",
     ),
