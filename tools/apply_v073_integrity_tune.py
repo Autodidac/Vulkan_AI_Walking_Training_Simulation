@@ -52,8 +52,11 @@ replacements = (
     ),
 )
 changed = False
+final_grace = "if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())"
 for old, new in replacements:
     if new in text:
+        continue
+    if old.startswith("if (elapsed_seconds_") and final_grace in text:
         continue
     if old not in text:
         raise RuntimeError(f"integrity tuning target missing: {old}")
