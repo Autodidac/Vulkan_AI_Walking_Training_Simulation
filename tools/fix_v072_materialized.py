@@ -58,12 +58,8 @@ def main() -> None:
 """,
         "braced passive foot",
     )
-    simulation = replace_once(
-        simulation,
-        """    void Environment::invalidate(InvalidMotion reason) noexcept
-    {
-""",
-        """    bool Environment::current_display_posture_valid() const noexcept
+
+    strict_display = """    bool Environment::current_display_posture_valid() const noexcept
     {
         if (!valid_node(blueprint_.root_node)
             || !valid_node(blueprint_.torso_node)
@@ -98,11 +94,51 @@ def main() -> None:
             && head.y - head_ground >= 0.80f;
     }
 
-    void Environment::invalidate(InvalidMotion reason) noexcept
+"""
+    current_display = """    bool Environment::current_display_posture_valid() const noexcept
     {
-""",
-        "fresh current display-posture implementation",
-    )
+        if (!valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node)
+            || !valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node))
+            return false;
+
+        const bool supported = contact_supported(blueprint_.left_contact_node)
+            || contact_supported(blueprint_.right_contact_node);
+        if (!supported || non_foot_grounded_)
+            return false;
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const float torso_length = length(
+            particles_[blueprint_.torso_node].position - root);
+        const float head_length = length(
+            particles_[blueprint_.head_node].position - root);
+        const float rest_torso_length = length(
+            blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float rest_head_length = length(
+            blueprint_.nodes[blueprint_.head_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+
+        // Historical lesson evidence may remain latched, but the body displayed
+        // now must still have intact torso and head geometry. Ducking preserves
+        // these segment lengths; the collapsed screenshot pose does not.
+        return torso_length >= rest_torso_length * 0.58f
+            && head_length >= rest_head_length * 0.55f;
+    }
+
+"""
+    if current_display not in simulation:
+        if strict_display in simulation:
+            simulation = simulation.replace(strict_display, current_display, 1)
+        else:
+            anchor = """    void Environment::invalidate(InvalidMotion reason) noexcept
+    {
+"""
+            if anchor not in simulation:
+                raise RuntimeError("missing current display-posture implementation anchor")
+            simulation = simulation.replace(anchor, current_display + anchor, 1)
     simulation_path.write_text(simulation, encoding="utf-8")
 
     policy_path = Path("src/ppo.hpp")
