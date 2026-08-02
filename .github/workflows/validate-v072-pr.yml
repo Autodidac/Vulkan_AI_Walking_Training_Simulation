@@ -121,6 +121,22 @@ jobs:
           policy, count = re.subn(pattern, new_gate, policy, count=1)
           if count != 1 and 'const bool paired_leg_chains' not in policy:
               raise RuntimeError('could not replace support-count coordination heuristic')
+
+          old_assist = '''            const float assist = 0.48f + environment.duck_obstacle_weight() * 0.38f;
+          '''
+          new_assist = '''            const auto observation = environment.observation();
+              const bool overhead_bar = std::abs(observation[30]) < 0.05f
+                  && observation[32] > 0.01f;
+              const float observed_weight = overhead_bar
+                  ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
+              const float obstacle_weight = std::max(
+                  environment.duck_obstacle_weight(), observed_weight);
+              const float assist = 0.56f + obstacle_weight * 0.34f;
+          '''
+          if old_assist in policy:
+              policy = policy.replace(old_assist, new_assist, 1)
+          elif 'const float observed_weight = overhead_bar' not in policy:
+              raise RuntimeError('could not replace cached-only duck assistance')
           policy_path.write_text(policy, encoding='utf-8')
           PY
           git diff --check
