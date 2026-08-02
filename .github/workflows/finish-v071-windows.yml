@@ -65,7 +65,7 @@ jobs:
           path: |
             vcpkg-bincache
             vcpkg/downloads
-          key: epochrunner-v071-glslc-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: epochrunner-v071-shaderc-final-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
             epochrunner-v071-current-runner-${{ runner.os }}-
             epochrunner-v071-final-launch-${{ runner.os }}-
@@ -269,3 +269,5 @@ jobs:
           if ($branches.Count -ne 1 -or $branches[0].Trim() -ne 'main') {
             throw "Unexpected branches remain: $($branches -join ', ')"
           }
+
+# direct final run after MSVC UTF-8 path correction
