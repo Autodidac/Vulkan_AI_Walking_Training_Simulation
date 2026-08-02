@@ -79,3 +79,5 @@ jobs:
           git add missioncache.md RELEASE_NOTES_v0.7.3.md .github/workflows/finalize-v073-ledger.yml
           git commit -m "Finalize v0.7.3 package evidence and cleanup"
           git push origin HEAD:${{ github.head_ref }}
+
+# synchronize trigger
