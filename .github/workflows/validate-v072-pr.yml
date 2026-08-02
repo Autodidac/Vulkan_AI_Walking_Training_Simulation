@@ -138,6 +138,16 @@ jobs:
           elif 'const float observed_weight = overhead_bar' not in policy:
               raise RuntimeError('could not replace cached-only duck assistance')
           policy_path.write_text(policy, encoding='utf-8')
+
+          simulation_path = Path('src/simulation.cpp')
+          simulation = simulation_path.read_text(encoding='utf-8')
+          old_foot = '{ ankle_position.x + 0.055f, ankle_position.y - 0.095f }'
+          new_foot = '{ ankle_position.x + 0.055f, ankle_position.y - 0.205f }'
+          if old_foot in simulation:
+              simulation = simulation.replace(old_foot, new_foot, 1)
+          elif new_foot not in simulation:
+              raise RuntimeError('could not lengthen passive ankle-to-foot separation')
+          simulation_path.write_text(simulation, encoding='utf-8')
           PY
           git diff --check
 
