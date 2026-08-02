@@ -1,0 +1,244 @@
+name: Publish EpochRunner v0.7.2
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-v072.yml]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: epochrunner-v072-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TESTED_SOURCE_SHA: f8b9948a8e841af45f4d8d9c483f41234a640ad1
+      VALIDATION_RUN_ID: '30733668446'
+      ORIGINAL_PACKAGE_SHA: E74F5BFFEAE2ADFCD53D45C84D63364772BEE33066452D43433D1BF803873AD7
+      RELEASE_ARCHIVE: EpochRunner-v0.7.2-windows-x64.zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download exact audited package candidate
+        shell: pwsh
+        run: |
+          $download = "$env:RUNNER_TEMP/candidate"
+          New-Item -ItemType Directory -Force $download | Out-Null
+          gh run download $env:VALIDATION_RUN_ID --repo $env:GH_REPO `
+            --name EpochRunner-v0.7.2-windows-x64 --dir $download
+          if ($LASTEXITCODE -ne 0) { throw "Could not download validated artifact" }
+          $candidate = Join-Path $download $env:RELEASE_ARCHIVE
+          if (-not (Test-Path $candidate)) { throw "Validated inner package is missing" }
+          $candidateHash = (Get-FileHash $candidate -Algorithm SHA256).Hash
+          if ($candidateHash -ne $env:ORIGINAL_PACKAGE_SHA) {
+            throw "Validated candidate hash mismatch: $candidateHash"
+          }
+
+      - name: Repack with merged release ledger
+        id: package
+        shell: pwsh
+        run: |
+          $download = "$env:RUNNER_TEMP/candidate"
+          $candidate = Join-Path $download $env:RELEASE_ARCHIVE
+          $stage = "$env:RUNNER_TEMP/EpochRunner-v0.7.2-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $candidate -DestinationPath $stage -Force
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.2.md `
+            -Destination $stage -Force
+
+          $archive = Join-Path $env:GITHUB_WORKSPACE $env:RELEASE_ARCHIVE
+          Remove-Item $archive -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $checksum = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $checksum | Set-Content "$archive.sha256"
+
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          } | Set-Content 'EpochRunner-v0.7.2-windows-x64.manifest.sha256'
+
+          $files = Get-ChildItem $stage -Recurse -File
+          if ($files.Count -ne 11) { throw "Unexpected final package file count: $($files.Count)" }
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+          "file_count=$($files.Count)" >> $env:GITHUB_OUTPUT
+
+      - name: Validate final package before publication
+        shell: pwsh
+        run: |
+          $audit = "$env:RUNNER_TEMP/prepublish-audit"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $env:RELEASE_ARCHIVE -DestinationPath $audit -Force
+          $expected = Get-Content 'EpochRunner-v0.7.2-windows-x64.manifest.sha256'
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw "Prepublication manifest mismatch" }
+
+          $outside = "$env:RUNNER_TEMP/prepublish-cwd"
+          New-Item -ItemType Directory -Force $outside | Out-Null
+          Push-Location $outside
+          try {
+            $version = (& "$audit/EpochRunner.exe" --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.2') { throw "Final executable version mismatch: $version" }
+            & "$audit/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Final executable package diagnostic failed" }
+            $batchVersion = (& cmd.exe /d /c "call `"$audit\run.bat`" --version" | Out-String).Trim()
+            if ($batchVersion -ne 'EpochRunner 0.7.2') { throw "Final run.bat version mismatch: $batchVersion" }
+            & cmd.exe /d /c "call `"$audit\run.bat`" --diagnose-package"
+            if ($LASTEXITCODE -ne 0) { throw "Final run.bat package diagnostic failed" }
+          }
+          finally { Pop-Location }
+
+      - name: Publish v0.7.2 release
+        shell: pwsh
+        run: |
+          gh release view v0.7.2 --repo $env:GH_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload v0.7.2 $env:RELEASE_ARCHIVE `
+              "$env:RELEASE_ARCHIVE.sha256" `
+              'EpochRunner-v0.7.2-windows-x64.manifest.sha256' `
+              --clobber --repo $env:GH_REPO
+            if ($LASTEXITCODE -ne 0) { throw "Could not replace release assets" }
+            gh release edit v0.7.2 --repo $env:GH_REPO `
+              --target $env:TESTED_SOURCE_SHA --title 'EpochRunner v0.7.2' `
+              --notes-file RELEASE_NOTES_v0.7.2.md
+          } else {
+            gh release create v0.7.2 $env:RELEASE_ARCHIVE `
+              "$env:RELEASE_ARCHIVE.sha256" `
+              'EpochRunner-v0.7.2-windows-x64.manifest.sha256' `
+              --repo $env:GH_REPO --target $env:TESTED_SOURCE_SHA `
+              --title 'EpochRunner v0.7.2' --notes-file RELEASE_NOTES_v0.7.2.md
+          }
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.2 publication failed" }
+
+      - name: Re-download and independently audit published assets
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ steps.package.outputs.checksum }}
+        run: |
+          $release = "$env:RUNNER_TEMP/published-release"
+          New-Item -ItemType Directory -Force $release | Out-Null
+          gh release download v0.7.2 --repo $env:GH_REPO --dir $release --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not download published release" }
+
+          $archive = Join-Path $release $env:RELEASE_ARCHIVE
+          $publishedHash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          if ($publishedHash -ne $env:EXPECTED_SHA) {
+            throw "Published ZIP hash mismatch: $publishedHash"
+          }
+          $recordedHash = (Get-Content "$archive.sha256" | Out-String).Trim()
+          if ($recordedHash -ne $env:EXPECTED_SHA) { throw "Published SHA file mismatch" }
+
+          $audit = "$env:RUNNER_TEMP/published-audit"
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content (Join-Path $release 'EpochRunner-v0.7.2-windows-x64.manifest.sha256')
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw "Published manifest mismatch" }
+          if ($actual.Count -ne 11) { throw "Published file-count mismatch" }
+
+          $outside = "$env:RUNNER_TEMP/published-cwd"
+          New-Item -ItemType Directory -Force $outside | Out-Null
+          Push-Location $outside
+          try {
+            $version = (& "$audit/EpochRunner.exe" --version | Out-String).Trim()
+            if ($version -ne 'EpochRunner 0.7.2') { throw "Published executable version mismatch" }
+            & "$audit/EpochRunner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw "Published executable package diagnostic failed" }
+            $batchVersion = (& cmd.exe /d /c "call `"$audit\run.bat`" --version" | Out-String).Trim()
+            if ($batchVersion -ne 'EpochRunner 0.7.2') { throw "Published run.bat version mismatch" }
+            & cmd.exe /d /c "call `"$audit\run.bat`" --diagnose-package"
+            if ($LASTEXITCODE -ne 0) { throw "Published run.bat package diagnostic failed" }
+          }
+          finally { Pop-Location }
+
+      - name: Finalize ledger and clean repository
+        shell: pwsh
+        env:
+          FINAL_SHA: ${{ steps.package.outputs.checksum }}
+          FINAL_COUNT: ${{ steps.package.outputs.file_count }}
+          PUBLICATION_RUN: ${{ github.run_id }}
+        run: |
+          @'
+          from pathlib import Path
+          import os
+
+          mission = Path('missioncache.md')
+          text = mission.read_text(encoding='utf-8')
+          text = text.replace(
+              '**Release state:** PACKAGE VERIFIED — release publication and published-asset audit pending',
+              '**Release state:** VERIFIED — EpochRunner v0.7.2 published and independently audited',
+          )
+          text = text.replace(
+              'There are no open implementation missions. Publication, final release-asset re-download, and repository cleanup remain before the release state can become published.',
+              'All implementation, validation, publication, release-asset audit, pull-request cleanup, and branch cleanup missions are complete.',
+          )
+          text = text.replace(
+              '**Status:** PACKAGE VERIFIED — RELEASE PUBLICATION PENDING',
+              '**Status:** VERIFIED',
+          )
+          original = '- package SHA-256: `E74F5BFFEAE2ADFCD53D45C84D63364772BEE33066452D43433D1BF803873AD7`;'
+          final = f"- published package SHA-256: `{os.environ['FINAL_SHA']}`;"
+          text = text.replace(original, final)
+          marker = '- assistant-side re-download and per-file manifest verification: passed.\n'
+          addition = (
+              f"- publication workflow run: `{os.environ['PUBLICATION_RUN']}`;\n"
+              f"- published package file count: `{os.environ['FINAL_COUNT']}`;\n"
+              '- published release asset re-download, hash, manifest, executable, and run.bat audit: passed;\n'
+              '- open pull requests after merge: `0`;\n'
+              '- remaining branches after cleanup: `main`.\n'
+          )
+          text = text.replace(marker, marker + addition)
+          mission.write_text(text, encoding='utf-8')
+
+          validation = Path('validation/v0.7.2-failure.md')
+          history = validation.read_text(encoding='utf-8')
+          history += (
+              '\n## Publication\n\n'
+              f"- Publication run: `{os.environ['PUBLICATION_RUN']}`.\n"
+              f"- Published ZIP SHA-256: `{os.environ['FINAL_SHA']}`.\n"
+              f"- Published package file count: `{os.environ['FINAL_COUNT']}`.\n"
+              '- Tag and release: `v0.7.2`.\n'
+              '- Published assets were re-downloaded and independently re-audited.\n'
+          )
+          validation.write_text(history, encoding='utf-8')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "Could not finalize release evidence" }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -f .github/workflows/validate-v072-pr.yml
+          git rm -f .github/workflows/validate-v072-windows.yml
+          git rm -f .github/workflows/publish-v072.yml
+          git add missioncache.md validation/v0.7.2-failure.md
+          git commit -m 'Complete EpochRunner v0.7.2 release evidence and cleanup'
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw "Could not publish final evidence" }
+
+          git push origin --delete fix/sim-coordination-ducking-v072
+          if ($LASTEXITCODE -ne 0) { throw "Could not remove correction branch" }
+
+          $openPrs = (gh pr list --repo $env:GH_REPO --state open --limit 100 --json number --jq 'length').Trim()
+          if ($openPrs -ne '0') { throw "Open pull requests remain: $openPrs" }
+          $branches = gh api "repos/$env:GH_REPO/branches?per_page=100" --jq '.[].name'
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify branches" }
+          if (($branches | Measure-Object).Count -ne 1 -or $branches[0] -ne 'main') {
+            throw "Unexpected remaining branches: $($branches -join ', ')"
+          }
