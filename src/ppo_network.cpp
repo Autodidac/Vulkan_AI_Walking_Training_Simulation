@@ -11,7 +11,7 @@
 #include <span>
 #include <string_view>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     const PolicyNetwork::Layout PolicyNetwork::layout_ = PolicyNetwork::make_layout();
 
@@ -309,7 +309,7 @@ namespace epochrunner::rl
         constexpr std::array<char, 8> expected{ 'E', 'P', 'P', 'O', '2', '3', '\0', '\1' };
         if (!input || magic != expected || count != parameters_.size())
         {
-            error = "Invalid or incompatible EpochRunner policy file.";
+            error = "Invalid or incompatible Runner policy file.";
             return false;
         }
         input.read(reinterpret_cast<char*>(parameters_.data()), static_cast<std::streamsize>(parameters_.size() * sizeof(float)));

@@ -21,4 +21,4 @@ cmake --preset linux-release --fresh
 cmake --build --preset linux-release
 ctest --test-dir build/linux-release --output-on-failure
 
-echo "Built: build/linux-release/EpochRunner"
+echo "Built: build/linux-release/Runner"

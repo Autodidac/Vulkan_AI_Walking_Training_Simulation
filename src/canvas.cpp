@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <span>
 
-namespace epochrunner::render
+namespace runner::render
 {
     void Canvas::triangle(Vec2 a, Vec2 b, Vec2 c, Color color)
     {

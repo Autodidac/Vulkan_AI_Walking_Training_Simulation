@@ -5,7 +5,7 @@
 #include <format>
 #include <type_traits>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     namespace
     {
@@ -56,6 +56,18 @@ namespace epochrunner::rl
         {
             return write_value(output, value.update)
                 && write_value(output, value.environment_steps)
+                && write_value(output, value.total_episodes)
+                && write_value(output, value.total_valid_episodes)
+                && write_value(output, value.total_invalid_episodes)
+                && write_value(output, value.total_resets)
+                && write_value(output, value.total_alternating_steps)
+                && write_value(output, value.total_falls)
+                && write_value(output, value.total_collisions)
+                && write_value(output, value.total_powered_jumps)
+                && write_value(output, value.total_landed_jumps)
+                && write_value(output, value.total_landed_flips)
+                && write_value(output, value.total_obstacles_passed)
+                && write_value(output, value.total_distance)
                 && write_value(output, value.mean_reward)
                 && write_value(output, value.mean_episode_distance)
                 && write_value(output, value.mean_speed)
@@ -99,6 +111,18 @@ namespace epochrunner::rl
         {
             return read_value(input, value.update)
                 && read_value(input, value.environment_steps)
+                && read_value(input, value.total_episodes)
+                && read_value(input, value.total_valid_episodes)
+                && read_value(input, value.total_invalid_episodes)
+                && read_value(input, value.total_resets)
+                && read_value(input, value.total_alternating_steps)
+                && read_value(input, value.total_falls)
+                && read_value(input, value.total_collisions)
+                && read_value(input, value.total_powered_jumps)
+                && read_value(input, value.total_landed_jumps)
+                && read_value(input, value.total_landed_flips)
+                && read_value(input, value.total_obstacles_passed)
+                && read_value(input, value.total_distance)
                 && read_value(input, value.mean_reward)
                 && read_value(input, value.mean_episode_distance)
                 && read_value(input, value.mean_speed)
@@ -232,7 +256,7 @@ namespace epochrunner::rl
             || stage >= sim::course_stage_count
             || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
-            error = "Invalid or incompatible EpochRunner v0.7.1 training-semantics checkpoint.";
+            error = "Invalid or incompatible Runner v0.7.1 training-semantics checkpoint.";
             return false;
         }
         data.stage = static_cast<sim::CourseStage>(stage);

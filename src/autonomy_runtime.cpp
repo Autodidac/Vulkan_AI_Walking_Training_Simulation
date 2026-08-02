@@ -7,7 +7,7 @@
 #include <thread>
 #include <utility>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     AutonomousTrainer::TrainingRoutine AutonomousTrainer::TrainingRoutine::promise_type::get_return_object() noexcept
     {

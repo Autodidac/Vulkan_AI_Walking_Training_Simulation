@@ -11,7 +11,7 @@
 #include <system_error>
 #include <vector>
 
-namespace epochrunner::tools
+namespace runner::tools
 {
     [[nodiscard]] shaderc_shader_kind shader_kind_for(const std::filesystem::path& source_path)
     {
@@ -30,7 +30,7 @@ namespace epochrunner::tools
     {
         if (arguments.size() != 3U)
         {
-            std::cerr << "Usage: EpochRunnerShaderCompiler <input.glsl> <output.spv>\n";
+            std::cerr << "Usage: RunnerShaderCompiler <input.glsl> <output.spv>\n";
             return 2;
         }
 
@@ -123,6 +123,6 @@ namespace epochrunner::tools
 
 int main(int argc, char** argv)
 {
-    return epochrunner::tools::compile_shader(
+    return runner::tools::compile_shader(
         std::span<char*>{ argv, static_cast<std::size_t>(argc) });
 }

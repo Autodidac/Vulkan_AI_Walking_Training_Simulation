@@ -14,8 +14,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_STANDARD": "23",
         "CMAKE_CXX_EXTENSIONS": "OFF",
-        "EPOCHRUNNER_BUILD_APP": "OFF",
-        "EPOCHRUNNER_BUILD_TESTS": "ON"
+        "RUNNER_BUILD_APP": "OFF",
+        "RUNNER_BUILD_TESTS": "ON"
       }
     },
     {

@@ -18,9 +18,9 @@
 #include <thread>
 #include <vector>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0300u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0400u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -94,8 +94,8 @@ namespace epochrunner::rl
         if (!paired_leg_chains)
             return action;
 
-        const float leg_pair_strength = stage == sim::CourseStage::walk
-            ? 0.28f : (stage == sim::CourseStage::balance
+        const float leg_pair_strength = stage == sim::CourseStage::duck_press
+            ? 0.12f : (stage == sim::CourseStage::balance
                 ? 0.18f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));
         auto mirror_pair = [&](std::size_t left, std::size_t right, float strength)
         {
@@ -148,21 +148,14 @@ namespace epochrunner::rl
         const sim::Environment& environment) noexcept
     {
         auto action = balance_teacher_action(environment);
-        const auto observation = environment.observation();
-        const bool overhead_bar = std::abs(observation[30]) < 0.05f
-            && observation[32] > 0.01f;
-        const float distance = observation[29] * 6.0f;
-        const float approach = overhead_bar
-            ? sim::duck_obstacle_approach_weight(distance) : 0.0f;
-        action[0] = clamp(action[0] - 0.28f * approach, -0.70f, 0.70f);
-        action[1] = clamp(action[1] + 0.58f * approach, -0.80f, 0.80f);
-        action[2] = clamp(action[2] + 0.28f * approach, -0.70f, 0.70f);
-        action[3] = clamp(action[3] - 0.58f * approach, -0.80f, 0.80f);
-        action[4] = clamp(action[4] + 0.16f * approach, -0.60f, 0.60f);
-        action[5] = clamp(action[5] - 0.10f * approach, -0.60f, 0.60f);
-        action[6] = clamp(action[6] - 0.16f * approach, -0.60f, 0.60f);
-        action[7] = clamp(action[7] + 0.10f * approach, -0.60f, 0.60f);
-        return bilateral_joint_synergy_action(environment, action, sim::CourseStage::walk);
+        const float pressure = environment.duck_obstacle_weight();
+        action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
+        action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
+        action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
+        action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+            action[index] = 0.0f;
+        return bilateral_joint_synergy_action(environment, action, sim::CourseStage::duck_press);
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
@@ -179,21 +172,15 @@ namespace epochrunner::rl
             for (std::size_t index = 4; index < active; ++index)
                 policy_action[index] = lerp(policy_action[index], teacher[index], 0.97f);
         }
-        else if (stage == sim::CourseStage::walk)
+        else if (stage == sim::CourseStage::duck_press)
         {
             const auto teacher = duck_teacher_action(environment);
-            const auto observation = environment.observation();
-            const bool overhead_bar = std::abs(observation[30]) < 0.05f
-                && observation[32] > 0.01f;
-            const float observed_weight = overhead_bar
-                ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
-            const float obstacle_weight = std::max(
-                environment.duck_obstacle_weight(), observed_weight);
-            const float leg_assist = 0.60f + obstacle_weight * 0.26f;
+            const float pressure = environment.duck_obstacle_weight();
+            const float leg_assist = 0.72f + pressure * 0.24f;
             for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
                 policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.94f);
+                policy_action[index] = lerp(policy_action[index], 0.0f, 0.995f);
         }
         else if (stage == sim::CourseStage::ramps)
         {
@@ -218,6 +205,18 @@ namespace epochrunner::rl
     {
         std::uint64_t update{};
         std::uint64_t environment_steps{};
+        std::uint64_t total_episodes{};
+        std::uint64_t total_valid_episodes{};
+        std::uint64_t total_invalid_episodes{};
+        std::uint64_t total_resets{};
+        std::uint64_t total_alternating_steps{};
+        std::uint64_t total_falls{};
+        std::uint64_t total_collisions{};
+        std::uint64_t total_powered_jumps{};
+        std::uint64_t total_landed_jumps{};
+        std::uint64_t total_landed_flips{};
+        std::uint64_t total_obstacles_passed{};
+        double total_distance{};
         float mean_reward{};
         float mean_episode_distance{};
         float mean_speed{};
@@ -355,13 +354,13 @@ namespace epochrunner::rl
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
             break;
-        case sim::CourseStage::walk:
+        case sim::CourseStage::duck_press:
             if (environment.longest_stable_stance_seconds() < 2.0f
                 || environment.stable_stance_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.duck_recoveries() < 1u || environment.duck_seconds() < 0.50f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
-            if (environment.obstacles_passed() < 1u)
+            if (environment.obstacles_passed() < 2u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
@@ -426,7 +425,7 @@ namespace epochrunner::rl
                 static_cast<std::uint16_t>(65535u
                     - quality_bucket(environment.maximum_joint_speed(), 100.0f)));
             break;
-        case sim::CourseStage::walk:
+        case sim::CourseStage::duck_press:
             quality = pack_quality(
                 static_cast<std::uint16_t>(std::min<std::uint32_t>(
                     environment.duck_recoveries(), 65535u)),
@@ -482,7 +481,7 @@ namespace epochrunner::rl
                 && environment.uprightness() >= 0.82f
                 && (environment.left_supported() || environment.right_supported());
         }
-        if (stage == sim::CourseStage::walk)
+        if (stage == sim::CourseStage::duck_press)
         {
             return environment.uprightness() >= 0.60f
                 && (environment.duck_active()
@@ -733,7 +732,17 @@ namespace epochrunner::rl
             float accumulated_speed{};
             float completed_reward{};
             float completed_distance{};
-            std::size_t completed_episodes{};
+            std::uint64_t completed_episodes{};
+            std::uint64_t valid_episodes{};
+            std::uint64_t invalid_episodes{};
+            std::uint64_t alternating_steps{};
+            std::uint64_t falls{};
+            std::uint64_t collisions{};
+            std::uint64_t powered_jumps{};
+            std::uint64_t landed_jumps{};
+            std::uint64_t landed_flips{};
+            std::uint64_t obstacles_passed{};
+            double total_distance{};
         };
 
         struct ParallelState;

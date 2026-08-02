@@ -6,7 +6,7 @@
 #include <span>
 #include <string>
 
-namespace epochrunner
+namespace runner
 {
     struct InputState
     {

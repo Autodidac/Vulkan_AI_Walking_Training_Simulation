@@ -1,4 +1,4 @@
-# Repository cleanup after EpochRunner v0.7.0
+# Repository cleanup after Runner v0.7.0
 
 - Remaining branches: `main`
 - Open pull requests: `0`

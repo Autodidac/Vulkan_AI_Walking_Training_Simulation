@@ -14,16 +14,16 @@
 #include <string>
 #include <string_view>
 
-#ifndef EPOCHRUNNER_SHADER_DIRECTORY
-#define EPOCHRUNNER_SHADER_DIRECTORY "shaders"
+#ifndef RUNNER_SHADER_DIRECTORY
+#define RUNNER_SHADER_DIRECTORY "shaders"
 #endif
 
-#ifndef EPOCHRUNNER_ASSET_DIRECTORY
-#define EPOCHRUNNER_ASSET_DIRECTORY "assets"
+#ifndef RUNNER_ASSET_DIRECTORY
+#define RUNNER_ASSET_DIRECTORY "assets"
 #endif
 
-#ifndef EPOCHRUNNER_VERSION
-#define EPOCHRUNNER_VERSION "development"
+#ifndef RUNNER_VERSION
+#define RUNNER_VERSION "development"
 #endif
 
 namespace
@@ -67,8 +67,8 @@ namespace
         std::string& error)
     {
         const std::array required_files{
-            std::filesystem::path{ EPOCHRUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
-            std::filesystem::path{ EPOCHRUNNER_SHADER_DIRECTORY } / "flat.frag.spv"
+            std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
+            std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv"
         };
         std::error_code filesystem_error{};
         for (const std::filesystem::path& relative : required_files)
@@ -85,7 +85,7 @@ namespace
         }
 
         const std::filesystem::path asset_directory =
-            base_directory / EPOCHRUNNER_ASSET_DIRECTORY;
+            base_directory / RUNNER_ASSET_DIRECTORY;
         if (!std::filesystem::is_directory(asset_directory, filesystem_error))
         {
             error = "Missing packaged asset directory: " + asset_directory.string();
@@ -108,7 +108,7 @@ int main(int argc, char** argv)
 {
     if (wants_version(argc, argv))
     {
-        std::printf("EpochRunner %s\n", EPOCHRUNNER_VERSION);
+        std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
     }
     const bool package_diagnostic = wants_package_diagnostic(argc, argv);
@@ -122,15 +122,15 @@ int main(int argc, char** argv)
 
     const std::filesystem::path base_directory = executable_directory();
     const std::filesystem::path shader_directory =
-        base_directory / EPOCHRUNNER_SHADER_DIRECTORY;
+        base_directory / RUNNER_SHADER_DIRECTORY;
     const std::filesystem::path asset_directory =
-        base_directory / EPOCHRUNNER_ASSET_DIRECTORY;
+        base_directory / RUNNER_ASSET_DIRECTORY;
     if (package_diagnostic)
     {
         std::string layout_error{};
         if (!validate_runtime_layout(base_directory, layout_error))
         {
-            std::fprintf(stderr, "EpochRunner package diagnostic failed: %s\n",
+            std::fprintf(stderr, "Runner package diagnostic failed: %s\n",
                 layout_error.c_str());
             SDL_Quit();
             return 1;
@@ -145,8 +145,8 @@ int main(int argc, char** argv)
             const char* video_driver = SDL_GetCurrentVideoDriver();
             std::printf(
                 package_diagnostic
-                    ? "EpochRunner " EPOCHRUNNER_VERSION " package diagnostic passed: runtime files present, backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n"
-                    : "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n",
+                    ? "Runner " RUNNER_VERSION " package diagnostic passed: runtime files present, backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n"
+                    : "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n",
                 video_driver != nullptr ? video_driver : "unknown",
                 vulkan_error.c_str());
             SDL_Quit();
@@ -177,8 +177,8 @@ int main(int argc, char** argv)
         const char* video_driver = SDL_GetCurrentVideoDriver();
         std::printf(
             package_diagnostic
-                ? "EpochRunner " EPOCHRUNNER_VERSION " package diagnostic passed: runtime files present, video_driver=%s, instance_extensions=%u\n"
-                : "EpochRunner " EPOCHRUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
+                ? "Runner " RUNNER_VERSION " package diagnostic passed: runtime files present, video_driver=%s, instance_extensions=%u\n"
+                : "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
             video_driver != nullptr ? video_driver : "unknown",
             static_cast<unsigned int>(instance_extension_count));
         SDL_Vulkan_UnloadLibrary();
@@ -187,7 +187,7 @@ int main(int argc, char** argv)
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "EpochRunner v" EPOCHRUNNER_VERSION " - Sand-Sim Enemy Locomotion Trainer",
+        "Runner v" RUNNER_VERSION " - Autonomous Physics Locomotion Trainer",
         1900,
         1180,
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -200,7 +200,7 @@ int main(int argc, char** argv)
     }
     SDL_SetWindowMinimumSize(window, 1280, 820);
 
-    epochrunner::render::VulkanRenderer renderer{};
+    runner::render::VulkanRenderer renderer{};
     std::string error{};
     if (!renderer.initialize(window, shader_directory, error))
     {
@@ -211,7 +211,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    epochrunner::Application application{};
+    runner::Application application{};
     if (!application.initialize(asset_directory, error))
     {
         std::fprintf(stderr, "Application initialization failed: %s\n", error.c_str());
@@ -224,11 +224,11 @@ int main(int argc, char** argv)
 
     bool running = true;
     std::uint64_t previous_ticks = SDL_GetTicksNS();
-    epochrunner::Vec2 previous_mouse{};
+    runner::Vec2 previous_mouse{};
 
     while (running && !application.wants_quit())
     {
-        epochrunner::InputState input{};
+        runner::InputState input{};
         SDL_Event event{};
         while (SDL_PollEvent(&event))
         {

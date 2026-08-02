@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     void PpoTrainer::clear_self_imitation_prior() noexcept
     {

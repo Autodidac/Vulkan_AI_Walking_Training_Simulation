@@ -2,6 +2,7 @@
 #include "autonomy.hpp"
 #include "simulation.hpp"
 #include "ui_layout.hpp"
+#include "ui_font.hpp"
 
 #include <algorithm>
 #include <array>
@@ -19,19 +20,14 @@
 #include <utility>
 #include <vector>
 
-import epoch.gui;
-import epoch.gui.font;
-import epoch.gui.rounded_rect;
 
-#ifndef EPOCHRUNNER_VERSION
-#define EPOCHRUNNER_VERSION "development"
+#ifndef RUNNER_VERSION
+#define RUNNER_VERSION "development"
 #endif
 
-namespace epochrunner
+namespace runner
 {
-    namespace gui = epochengine::gui_lib;
-    namespace font = epochengine::gui_lib::font;
-    namespace rounded = epochengine::gui_lib::rounded_rect;
+    namespace font = ui_font;
 
     namespace
     {
@@ -50,10 +46,6 @@ namespace epochrunner
                 && point.y <= rect.position.y + rect.size.y;
         }
 
-        [[nodiscard]] gui::Rect to_gui(Rect rect) noexcept
-        {
-            return { { rect.position.x, rect.position.y }, { rect.size.x, rect.size.y } };
-        }
 
         [[nodiscard]] Color rgb(std::uint32_t hex, float alpha = 1.0f) noexcept
         {
@@ -82,33 +74,16 @@ namespace epochrunner
         void add_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color fill,
             Color outline = {}, float border_width = 0.0f)
         {
-            rounded::RoundedRectOptions options{};
-            options.bounds = to_gui(rect);
-            options.radii = { radius, radius, radius, radius };
-            options.border_width = border_width;
-            options.segments_per_corner = 6;
-            const rounded::RoundedRectMesh mesh = rounded::make_rounded_rect_mesh(options);
-            if (!mesh.valid)
-            {
-                canvas.quad(rect.position, rect.position + rect.size, fill);
-                return;
-            }
-            for (std::size_t index = 0; index + 2 < mesh.fill_indices.size(); index += 3)
-            {
-                const gui::Vec2 a = mesh.vertices[mesh.fill_indices[index]];
-                const gui::Vec2 b = mesh.vertices[mesh.fill_indices[index + 1]];
-                const gui::Vec2 c = mesh.vertices[mesh.fill_indices[index + 2]];
-                canvas.triangle({ a.x, a.y }, { b.x, b.y }, { c.x, c.y }, fill);
-            }
+            static_cast<void>(radius);
+            canvas.quad(rect.position, rect.position + rect.size, fill);
             if (border_width <= 0.0f)
                 return;
-            for (std::size_t index = 0; index + 2 < mesh.border_indices.size(); index += 3)
-            {
-                const gui::Vec2 a = mesh.vertices[mesh.border_indices[index]];
-                const gui::Vec2 b = mesh.vertices[mesh.border_indices[index + 1]];
-                const gui::Vec2 c = mesh.vertices[mesh.border_indices[index + 2]];
-                canvas.triangle({ a.x, a.y }, { b.x, b.y }, { c.x, c.y }, outline);
-            }
+            const Vec2 minimum = rect.position;
+            const Vec2 maximum = rect.position + rect.size;
+            canvas.quad(minimum, { maximum.x, minimum.y + border_width }, outline);
+            canvas.quad({ minimum.x, maximum.y - border_width }, maximum, outline);
+            canvas.quad(minimum, { minimum.x + border_width, maximum.y }, outline);
+            canvas.quad({ maximum.x - border_width, minimum.y }, maximum, outline);
         }
 
         void add_text(render::Canvas& canvas, Vec2 position, std::string_view text, float scale, Color color)
@@ -258,6 +233,27 @@ namespace epochrunner
         std::uint64_t tracked_rig_signature{};
         std::uint64_t rig_start_update{};
         std::uint64_t rig_start_environment_steps{};
+        std::uint64_t rig_start_episodes{};
+        std::uint64_t rig_start_valid_episodes{};
+        std::uint64_t rig_start_invalid_episodes{};
+        std::uint64_t rig_start_steps{};
+        std::uint64_t rig_start_falls{};
+        std::uint64_t rig_start_collisions{};
+        std::uint64_t rig_start_jumps{};
+        std::uint64_t rig_start_landings{};
+        std::uint64_t rig_start_flips{};
+        std::uint64_t rig_start_obstacles{};
+        double rig_start_distance{};
+        std::uint64_t session_start_episodes{};
+        std::uint64_t session_start_invalid_episodes{};
+        std::uint64_t session_start_resets{};
+        std::uint64_t session_start_collisions{};
+        std::uint64_t session_start_jumps{};
+        std::uint64_t session_start_flips{};
+        std::uint64_t session_start_obstacles{};
+        double session_start_distance{};
+        std::uint8_t rig_best_stage{};
+        bool session_stats_initialized{};
         bool rig_edit_pending{};
         std::string rig_edit_reason{};
         float joint_test_input{};
@@ -266,11 +262,11 @@ namespace epochrunner
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
-        std::filesystem::path rig_path{ "creature.epochrig" };
+        std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "epochrunner-v073-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "epochrunner-v073-evolved.epochrig" };
-        std::filesystem::path autosave_state_path{ "epochrunner-v073-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v074-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v074-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v074-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -470,9 +466,9 @@ namespace epochrunner
             const ui_layout::Box top_bar = ui_layout::top_bar_box(static_cast<float>(width));
             canvas.quad({ top_bar.x, top_bar.y },
                 { top_bar.x + top_bar.width, top_bar.y + top_bar.height }, rgb(0x0b1119));
-            add_text(canvas, { 18.0f, 13.0f }, "EPOCH RUNNER v" EPOCHRUNNER_VERSION, 2.10f, white);
+            add_text(canvas, { 18.0f, 13.0f }, "RUNNER v" RUNNER_VERSION, 2.10f, white);
             if (width >= 1080)
-                add_text(canvas, { 20.0f, 50.0f }, "SAND-SIM ENEMY LOCOMOTION LAB", 1.05f, muted);
+                add_text(canvas, { 20.0f, 50.0f }, "AUTONOMOUS PHYSICS LOCOMOTION LAB", 1.05f, muted);
 
             const float tab_width = width >= 1080 ? 184.0f : 164.0f;
             const float start_x = static_cast<float>(width) - tab_width * 2.0f - 18.0f;
@@ -580,13 +576,19 @@ namespace epochrunner
                         { minimum.x, maximum.y },
                         { maximum.x - minimum.x, minimum.y - maximum.y }
                     };
+                    const Color feature_fill = feature.kind == sim::CourseFeatureKind::hurdle
+                        ? yellow : feature.kind == sim::CourseFeatureKind::duck_press
+                            ? rgb(0x315b70) : accent_dim;
+                    const Color feature_outline = feature.kind == sim::CourseFeatureKind::hurdle
+                        ? yellow : accent;
                     add_rounded_rect(canvas, rect, 4.0f,
-                        feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent_dim,
-                        feature.kind == sim::CourseFeatureKind::hurdle ? yellow : accent, 1.0f);
+                        feature_fill, feature_outline, 1.0f);
                 }
 
                 add_text(canvas, feature_screen + Vec2{ -58.0f, -42.0f },
-                    std::format("HAZARD: {}", sim::course_feature_name(feature.kind)), 1.00f,
+                    std::format(feature.kind == sim::CourseFeatureKind::duck_press
+                        ? std::format("TRAINER: {}", sim::course_feature_name(feature.kind))
+                        : std::format("HAZARD: {}", sim::course_feature_name(feature.kind))), 1.00f,
                     feature.kind == sim::CourseFeatureKind::projectile ? yellow : danger);
             }
         }
@@ -730,7 +732,7 @@ namespace epochrunner
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
             const rl::TrainingMetrics& metrics = trainer.metrics();
 
-            add_text(canvas, cursor, "SAND-SIM ENEMY TRAINER", 1.72f, white);
+            add_text(canvas, cursor, "AUTONOMOUS RIG TRAINER", 1.72f, white);
             cursor.y += 42.0f;
             if (button({ cursor, { usable_width, 48.0f } },
                 trainer.background_enabled() ? "AUTOPILOT ON - CLICK TO PAUSE" : "AUTOPILOT PAUSED - CLICK TO RUN",
@@ -824,15 +826,50 @@ namespace epochrunner
                 autonomy.rig_generation, autonomy.accepted_rig_changes, autonomy.rejected_rig_changes),
                 1.02f, white, usable_width);
             cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("RIG LIFE {}   UPDATES {}   ENV STEPS {}",
+            add_text_fit(canvas, cursor, std::format("RIG {}  UPD {}  ENV {}  BEST STAGE {}",
                 format_duration(rig_lifetime_seconds),
                 ui_layout::lifetime_delta(metrics.update, rig_start_update),
-                ui_layout::lifetime_delta(metrics.environment_steps, rig_start_environment_steps)),
-                1.00f, white, usable_width);
-            cursor.y += 29.0f;
-            add_text_fit(canvas, cursor, std::format("SESSION {}   TOTAL UPDATES {}   TOTAL ENV STEPS {}",
-                format_duration(session_runtime_seconds), metrics.update, metrics.environment_steps),
-                0.98f, muted, usable_width);
+                ui_layout::lifetime_delta(metrics.environment_steps, rig_start_environment_steps),
+                static_cast<unsigned>(rig_best_stage) + 1u), 0.94f, white, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("RIG EPS {}  VALID {}  INVALID {}  DIST {}",
+                ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
+                ui_layout::lifetime_delta(metrics.total_valid_episodes, rig_start_valid_episodes),
+                ui_layout::lifetime_delta(metrics.total_invalid_episodes, rig_start_invalid_episodes),
+                format_distance(static_cast<float>(std::max(0.0,
+                    metrics.total_distance - rig_start_distance)))), 0.90f, white, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("RIG STEPS {}  FALLS {}  COLL {}  OBS {}",
+                ui_layout::lifetime_delta(metrics.total_alternating_steps, rig_start_steps),
+                ui_layout::lifetime_delta(metrics.total_falls, rig_start_falls),
+                ui_layout::lifetime_delta(metrics.total_collisions, rig_start_collisions),
+                ui_layout::lifetime_delta(metrics.total_obstacles_passed, rig_start_obstacles)),
+                0.90f, white, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("RIG JUMP {} / LAND {}  FLIPS {}",
+                ui_layout::lifetime_delta(metrics.total_powered_jumps, rig_start_jumps),
+                ui_layout::lifetime_delta(metrics.total_landed_jumps, rig_start_landings),
+                ui_layout::lifetime_delta(metrics.total_landed_flips, rig_start_flips)),
+                0.90f, white, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("SESSION {}  EPS {}  BAD {}  DIST {}",
+                format_duration(session_runtime_seconds),
+                ui_layout::lifetime_delta(metrics.total_episodes, session_start_episodes),
+                ui_layout::lifetime_delta(metrics.total_invalid_episodes,
+                    session_start_invalid_episodes),
+                format_distance(static_cast<float>(std::max(0.0,
+                    metrics.total_distance - session_start_distance)))),
+                0.88f, muted, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("ALL UPD {} ENV {} EPS {} RESET {} ROLLBACK {}",
+                metrics.update, metrics.environment_steps, metrics.total_episodes,
+                metrics.total_resets, autonomy.rollback_count), 0.86f, muted, usable_width);
+            cursor.y += 25.0f;
+            add_text_fit(canvas, cursor, std::format("ALL DIST {} COLL {} JUMP {} FLIP {} OBS {}",
+                format_distance(static_cast<float>(metrics.total_distance)),
+                metrics.total_collisions, metrics.total_powered_jumps,
+                metrics.total_landed_flips, metrics.total_obstacles_passed),
+                0.84f, muted, usable_width);
             cursor.y += 29.0f;
             add_text_fit(canvas, cursor, std::format("ROLLBACKS {}   POWERED AIR / <=3 SPINS / <50 KM/H",
                 autonomy.rollback_count), 1.00f, white, usable_width);
@@ -884,8 +921,8 @@ namespace epochrunner
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 trainer.has_best_policy()
-                    ? "BEST STAGE-VALID CONTROLLER   v" EPOCHRUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
-                    : "CURRENT POLICY UNVERIFIED   v" EPOCHRUNNER_VERSION "   SEARCHING FOR VALID STANCE",
+                    ? "BEST STAGE-VALID CONTROLLER   v" RUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
+                    : "CURRENT POLICY UNVERIFIED   v" RUNNER_VERSION "   SEARCHING FOR VALID STANCE",
                 1.05f, trainer.has_best_policy() ? muted : danger, overlay_width, 1.00f);
 
             const ui_layout::Box pip = ui_layout::training_pip_box({
@@ -1115,6 +1152,20 @@ namespace epochrunner
                 return false;
             }
             const auto removed = static_cast<std::uint16_t>(selected_node);
+            const bool semantic = removed == blueprint.root_node
+                || removed == blueprint.torso_node || removed == blueprint.head_node
+                || blueprint.is_support_seed(removed);
+            const bool motor_endpoint = std::ranges::any_of(blueprint.motors,
+                [removed](const sim::MotorConstraint& motor)
+                {
+                    return motor.enabled && (motor.a == removed
+                        || motor.pivot == removed || motor.c == removed);
+                });
+            if (rig_preset != RigPreset::custom || semantic || motor_endpoint)
+            {
+                set_status("REQUIRED PRESET / SEMANTIC / MOTOR NODE CANNOT BE DELETED");
+                return false;
+            }
             blueprint.nodes.erase(blueprint.nodes.begin() + selected_node);
             blueprint.radii.erase(blueprint.radii.begin() + selected_node);
             std::erase_if(blueprint.bones, [removed](const sim::DistanceConstraint& bone)
@@ -1410,17 +1461,44 @@ namespace epochrunner
                 rgb(0x080a0d));
             status_time = std::max(0.0f, status_time - dt);
             session_runtime_seconds += std::max(0.0f, dt);
+            const rl::TrainingMetrics& current_metrics = trainer.metrics();
+            if (!session_stats_initialized)
+            {
+                session_stats_initialized = true;
+                session_start_episodes = current_metrics.total_episodes;
+                session_start_invalid_episodes = current_metrics.total_invalid_episodes;
+                session_start_resets = current_metrics.total_resets;
+                session_start_collisions = current_metrics.total_collisions;
+                session_start_jumps = current_metrics.total_powered_jumps;
+                session_start_flips = current_metrics.total_landed_flips;
+                session_start_obstacles = current_metrics.total_obstacles_passed;
+                session_start_distance = current_metrics.total_distance;
+            }
             const std::uint64_t current_signature = trainer.rig_signature();
             if (tracked_rig_signature == 0u || tracked_rig_signature != current_signature)
             {
                 tracked_rig_signature = current_signature;
                 rig_lifetime_seconds = 0.0f;
-                rig_start_update = trainer.metrics().update;
-                rig_start_environment_steps = trainer.metrics().environment_steps;
+                rig_start_update = current_metrics.update;
+                rig_start_environment_steps = current_metrics.environment_steps;
+                rig_start_episodes = current_metrics.total_episodes;
+                rig_start_valid_episodes = current_metrics.total_valid_episodes;
+                rig_start_invalid_episodes = current_metrics.total_invalid_episodes;
+                rig_start_steps = current_metrics.total_alternating_steps;
+                rig_start_falls = current_metrics.total_falls;
+                rig_start_collisions = current_metrics.total_collisions;
+                rig_start_jumps = current_metrics.total_powered_jumps;
+                rig_start_landings = current_metrics.total_landed_jumps;
+                rig_start_flips = current_metrics.total_landed_flips;
+                rig_start_obstacles = current_metrics.total_obstacles_passed;
+                rig_start_distance = current_metrics.total_distance;
+                rig_best_stage = static_cast<std::uint8_t>(trainer.autonomy_status().stage);
             }
             else
             {
                 rig_lifetime_seconds += std::max(0.0f, dt);
+                rig_best_stage = std::max(rig_best_stage,
+                    static_cast<std::uint8_t>(trainer.autonomy_status().stage));
             }
             if (joint_auto_sweep)
             {
@@ -1476,7 +1554,7 @@ namespace epochrunner
             if (status_time > 0.0f)
             {
                 const float scale = 1.30f * ui_font_scale;
-                const gui::Vec2 measured = font::measure_text(status, scale);
+                const Vec2 measured = font::measure_text(status, scale);
                 const Rect toast{ { 20.0f, static_cast<float>(height) - 58.0f },
                     { std::min(measured.x + 30.0f, static_cast<float>(width) - 40.0f), 38.0f } };
                 add_rounded_rect(canvas, toast, 8.0f, rgb(0x10202b, 0.97f), accent, 1.0f);

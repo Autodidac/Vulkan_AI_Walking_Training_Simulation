@@ -1,4 +1,4 @@
-# EpochRunner v0.7.3
+# Runner v0.7.3
 
 - Reopens v0.7.2 simulation-quality claims from Adam's August 2 live screenshots.
 - Replaces each dangling three-contact foot cluster with one rigid ankle/heel/toe triangle and two semantic contacts.

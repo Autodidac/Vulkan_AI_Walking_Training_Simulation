@@ -1,4 +1,4 @@
-# EpochRunner v0.7.2
+# Runner v0.7.2
 
 - Reopens the simulation-quality missions after packaged runtime screenshots contradicted v0.7.1 validation.
 - Adds coordinated bilateral joint synergies while preserving learned residual control.
