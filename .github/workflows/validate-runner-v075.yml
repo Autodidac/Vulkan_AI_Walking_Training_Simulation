@@ -40,7 +40,10 @@ jobs:
           for tool in \
             tools/apply_v075_curriculum_order.py \
             tools/apply_v075_staged_mastery.py \
-            tools/apply_v075_stage_values.py
+            tools/apply_v075_stage_values.py \
+            tools/fix_v075_stage_switches.py \
+            tools/apply_v075_roll_prone_scope.py \
+            tools/apply_v075_future_hazards.py
           do
             if test -f "$tool"; then
               python3 "$tool"
@@ -58,7 +61,10 @@ jobs:
             tools/fix_v075_tests.py \
             tools/apply_v075_curriculum_order.py \
             tools/apply_v075_staged_mastery.py \
-            tools/apply_v075_stage_values.py
+            tools/apply_v075_stage_values.py \
+            tools/fix_v075_stage_switches.py \
+            tools/apply_v075_roll_prone_scope.py \
+            tools/apply_v075_future_hazards.py
           do
             test ! -f "$tool"
           done
@@ -69,7 +75,8 @@ jobs:
               'WALK-DUCK-067', 'WALK-DUCK-068', 'WALK-TERRAIN-069',
               'WALK-PIP-070', 'WALK-CHECKPOINT-071', 'WALK-CHICKEN-072',
               'WALK-CURRICULUM-073', 'WALK-MASTERY-074', 'WALK-FLIP-075',
-              'WALK-STAGES-076', 'WALK-MONOPED-077',
+              'WALK-STAGES-076', 'WALK-MONOPED-077', 'WALK-SAND-078',
+              'WALK-HAZARD-079',
           ]
           missing = [item for item in required if item not in mission]
           if missing:
@@ -113,7 +120,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Correct staged skill values and restore monoped gait"
+          git commit -m "Complete staged v0.7.5 correction"
           git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
@@ -139,7 +146,10 @@ jobs:
             'tools/fix_v075_tests.py',
             'tools/apply_v075_curriculum_order.py',
             'tools/apply_v075_staged_mastery.py',
-            'tools/apply_v075_stage_values.py')) {
+            'tools/apply_v075_stage_values.py',
+            'tools/fix_v075_stage_switches.py',
+            'tools/apply_v075_roll_prone_scope.py',
+            'tools/apply_v075_future_hazards.py')) {
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           git diff --quiet
