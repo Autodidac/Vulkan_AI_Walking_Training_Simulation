@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** EpochRunner v0.7.3
 
-**Release state:** PUBLISHED — v0.7.3 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+**Release state:** PUBLICATION IN PROGRESS — v0.7.3 package validated on Linux and Windows
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -301,7 +301,7 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 
 
 ### WALK-REL-039 — v0.7.3 body-control and telemetry correction
-**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
+**Status:** PACKAGE VERIFIED — PUBLICATION IN PROGRESS
 
 - merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
 - exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
