@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.6
 
-**Release state:** IN PROGRESS - v0.7.5 live screenshot reopened standing mastery and PIP acceptance
+**Release state:** PUBLISHED - v0.7.6 assets independently audited; awaiting Adam's live packaged-runtime confirmation
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -587,21 +587,41 @@ Acceptance requires seeded scenarios covering glancing hits, direct hits, accumu
 ## v0.7.6 standing mastery and live-PIP correction
 
 ### WALK-STAND-080 — Make strict standing mastery attainable and honest
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The v0.7.5 evaluator stopped each standing trial at three seconds while strict mastery required a longer result, leaving the display at STAGE VALID but STRICT MASTERY 0/8 indefinitely. Evaluation now continues through the same six-second strict target used by mastery. Strict success requires all six seeded evaluations, six seconds of neutral stable stance, low joint speed, and near-zero uncontrolled rotation. The UI exposes the exact target, seed count, spin threshold, and failure reason.
 
 ### WALK-SHOULDER-081 — Raise the humanoid central shoulder pivot
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The humanoid central chest/shoulder pivot sits above both lateral shoulder pivots. The calibrated rest arms hang below the shoulders, the standing teacher returns upper-body motors toward neutral, and arms-overhead standing is rejected rather than promoted.
 
 ### WALK-PIP-082 — Never hide the active training result
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
 
 The PIP always publishes the best current finite full-rig training environment. A qualified intact sample has highest priority, but rejected or broken finite attempts remain visible with their exact rejection banner instead of leaving a blank WAITING frame. Standing PIP telemetry shows stance versus target, uncontrolled spin, and upper-body angle.
 
 ### WALK-RELEASE-083 — Publish audited Runner v0.7.6
-**Status:** IN PROGRESS
+**Status:** PUBLISHED - RELEASE ASSETS VERIFIED
 
 Build and test Linux and the complete Windows Vulkan application; verify all deterministic suites, installed executable, executable-relative run.bat, package diagnostics, ZIP, checksum, manifest, and re-downloaded release assets. Remove temporary workflows and branches after publication. Live screenshot acceptance remains pending and contradictory behavior reopens the exact mission.
+
+## v0.7.6 immutable release evidence
+
+- Pull request: `#31`
+- Exact validated source: `c53e75b5b126c0c48c2290f751116636b16dc8ff`
+- Merge commit: `28949c6ce9c0b841e2e452ecb6da22e5e766b2cf`
+- Validation workflow run: `30760774468`
+- Linux deterministic job: `91530745311` - passed
+- Windows application/package job: `91530869350` - passed
+- Validated workflow artifact: `8837612890`
+- Workflow artifact digest: `sha256:efa109bd28053245125dbd908e7c41f1300d24236c8eae8eea70b897f0b5ae17`
+- Publication workflow run: `30762214760`
+- Full MSVC/Vulkan build and all four Windows tests: passed
+- Build-tree version, Vulkan, and package diagnostics from an unrelated working directory: passed
+- Installed executable and executable-relative `run.bat`: passed from an unrelated working directory
+- ZIP extraction and per-file manifest audit: passed before publication
+- Published assets were re-downloaded, byte-compared, checksum-verified, extracted, and manifest-audited by the publisher
+- Temporary release workflows and source branches were removed after publication
+- Open pull requests after cleanup: `0`; remaining branch after cleanup: `main`
+- Live screenshot-level behavior remains pending Adam's released-package confirmation; contradictory behavior reopens the exact mission
