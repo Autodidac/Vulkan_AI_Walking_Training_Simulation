@@ -411,7 +411,8 @@ namespace epochrunner::rl
     {
         const StageMotionQualification qualification =
             stage_motion_qualification(stage, environment);
-        if (!qualification.valid || environment.non_foot_grounded())
+        if (!qualification.valid
+            || !environment.current_display_posture_valid())
             return false;
         if (stage == sim::CourseStage::balance)
         {

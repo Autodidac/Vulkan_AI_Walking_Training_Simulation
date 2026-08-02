@@ -582,6 +582,8 @@ int main()
                 sim::CourseStage::balance, assisted_stance),
             "valid current stance is hidden from the training sample");
         sim::EnvironmentTestAccess::collapse_upper_body(assisted_stance);
+        require(!assisted_stance.current_display_posture_valid(),
+            "fresh geometric posture check accepts a collapsed current body");
         require(!rl::stage_display_sample_eligible(
                 sim::CourseStage::balance, assisted_stance),
             "collapsed current frame is still published as a valid sample");

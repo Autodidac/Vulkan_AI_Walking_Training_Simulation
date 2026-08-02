@@ -1387,6 +1387,41 @@ namespace epochrunner::sim
         return clamp(dot(current, desired), -1.0f, 1.0f);
     }
 
+    bool Environment::current_display_posture_valid() const noexcept
+    {
+        if (!valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node)
+            || !valid_node(blueprint_.head_node)
+            || !valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node))
+            return false;
+
+        const bool supported = contact_supported(blueprint_.left_contact_node)
+            || contact_supported(blueprint_.right_contact_node);
+        if (!supported || non_foot_ground_contact())
+            return false;
+
+        const Vec2 root = particles_[blueprint_.root_node].position;
+        const Vec2 torso = particles_[blueprint_.torso_node].position;
+        const Vec2 head = particles_[blueprint_.head_node].position;
+        const float rest_torso_length = length(
+            blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float rest_head_length = length(
+            blueprint_.nodes[blueprint_.head_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        const float torso_length = length(torso - root);
+        const float head_length = length(head - root);
+        const float torso_ground = ground_height_at(torso.x);
+        const float head_ground = ground_height_at(head.x);
+
+        return torso_uprightness() >= 0.55f
+            && torso_length >= rest_torso_length * 0.58f
+            && head_length >= rest_head_length * 0.55f
+            && torso.y - torso_ground >= 0.55f
+            && head.y - head_ground >= 0.80f;
+    }
+
     void Environment::invalidate(InvalidMotion reason) noexcept
     {
         if (invalid_reason_ == InvalidMotion::none)

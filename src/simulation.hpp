@@ -702,6 +702,7 @@ namespace epochrunner::sim
         [[nodiscard]] bool valid_motion() const noexcept { return invalid_reason_ == InvalidMotion::none; }
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
+        [[nodiscard]] bool current_display_posture_valid() const noexcept;
         [[nodiscard]] bool left_supported() const noexcept
         {
             return contact_supported(blueprint_.left_contact_node);
