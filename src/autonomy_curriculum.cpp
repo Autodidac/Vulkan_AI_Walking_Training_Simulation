@@ -7,7 +7,7 @@
 #include <limits>
 #include <thread>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     bool AutonomousTrainer::stage_mastered_locked() const noexcept
     {
@@ -20,7 +20,7 @@ namespace epochrunner::rl
             return metrics.evaluation_longest_stance >= 3.0f
                 && metrics.evaluation_survival >= 3.0f
                 && metrics.evaluation_max_joint_speed <= 12.0f;
-        case sim::CourseStage::walk:
+        case sim::CourseStage::duck_press:
             return metrics.evaluation_duck_recoveries >= 1.0f
                 && metrics.evaluation_stable_stance >= 1.0f
                 && metrics.evaluation_duck_seconds >= 1.0f

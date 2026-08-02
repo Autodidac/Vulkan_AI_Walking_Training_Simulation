@@ -1,10 +1,10 @@
-# EpochRunner v0.6.0 final release gate
+# Runner v0.6.0 final release gate
 
 Candidate commit: `99e083c7e1e6b3d83c6ddd6cdab48f4c4d3f64e7`
 
 - vcpkg bootstrap: success
 - Visual Studio 2026 configure: success
-- Full SDL3/Vulkan/EpochGui build: success
+- Full SDL3/Vulkan/built-in bitmap UI build: success
 - Course, recovery, rig, concurrency, and throughput tests: success
 - Executable version check: success
 - SDL3/Vulkan diagnostic: success
@@ -290,13 +290,13 @@ All requested installations completed successfully in: 17 min
 
 ```
 
-## Full SDL3/Vulkan/EpochGui build
+## Full SDL3/Vulkan/built-in bitmap UI build
 
 ```text
 MSBuild version 18.8.2+ce25c0108 for .NET Framework
 
   1>Checking Build System
-  Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/windows-release/_deps/epochgui-src/CMakeLists.txt
+  Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/windows-release/_deps/runnergui-src/CMakeLists.txt
   Scanning sources for module dependencies...
   floating_window.cpp
   dock_layout.cpp
@@ -307,33 +307,33 @@ MSBuild version 18.8.2+ce25c0108 for .NET Framework
   panel_host.cpp
   text_control.cpp
   input.cpp
-  epoch.gui.ixx
-  epoch.gui.image.ixx
-  epoch.gui.font.ixx
-  epoch.gui.rounded_rect.ixx
-  epoch.gui.input.ixx
+  runner.gui.ixx
+  runner.gui.image.ixx
+  runner.gui.font.ixx
+  runner.gui.rounded_rect.ixx
+  runner.gui.input.ixx
   Compiling...
-  epoch.gui.ixx
+  runner.gui.ixx
   dock_layout.cpp
   panel_host.cpp
   dockable_window.cpp
   floating_window.cpp
   popup_layout.cpp
   text_control.cpp
-  epoch.gui.font.ixx
-  epoch.gui.image.ixx
-  epoch.gui.rounded_rect.ixx
-  epoch.gui.input.ixx
+  runner.gui.font.ixx
+  runner.gui.image.ixx
+  runner.gui.rounded_rect.ixx
+  runner.gui.input.ixx
   image.cpp
   rounded_rect.cpp
   input.cpp
-  EpochGui.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\epochgui-build\Release\EpochGui.lib
+  built-in bitmap UI.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\_deps\runnergui-build\Release\built-in bitmap UI.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   shader_compiler.cpp
   Compiling...
   shader_compiler.cpp
-  EpochRunnerShaderCompiler.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerShaderCompiler.exe
+  RunnerShaderCompiler.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerShaderCompiler.exe
   1>Compiling flat.frag with vcpkg shaderc
   2>Compiling flat.vert with vcpkg shaderc
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
@@ -358,7 +358,7 @@ MSBuild version 18.8.2+ce25c0108 for .NET Framework
   training_checkpoint.cpp
   autonomy_curriculum.cpp
   autonomy_persistence.cpp
-  EpochRunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerCore.lib
+  RunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerCore.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   renderer.cpp
@@ -370,19 +370,19 @@ MSBuild version 18.8.2+ce25c0108 for .NET Framework
   main.cpp
   canvas.cpp
   renderer.cpp
-  EpochRunner.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunner.exe
+  Runner.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\Runner.exe
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   concurrency_benchmark.cpp
   Compiling...
   concurrency_benchmark.cpp
-  EpochRunnerConcurrencyBenchmark.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerConcurrencyBenchmark.exe
+  RunnerConcurrencyBenchmark.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerConcurrencyBenchmark.exe
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   core_tests.cpp
   Compiling...
   core_tests.cpp
-  EpochRunnerCoreTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerCoreTests.exe
+  RunnerCoreTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerCoreTests.exe
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
 
 ```
@@ -399,24 +399,24 @@ Added 0 tests to meet fixture requirements
 Checking test dependency graph...
 Checking test dependency graph end
 test 1
-    Start 1: EpochRunner.Core
+    Start 1: Runner.Core
 
-1: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerCoreTests.exe
+1: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerCoreTests.exe
 1: Working Directory: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/windows-release
 1: Test timeout computed to be: 10000000
-1: EpochRunner v0.6.0 procedural course, recovery, concurrency, gait, and rig-edit tests passed
-1/2 Test #1: EpochRunner.Core ...................   Passed    0.50 sec
+1: Runner v0.6.0 procedural course, recovery, concurrency, gait, and rig-edit tests passed
+1/2 Test #1: Runner.Core ...................   Passed    0.50 sec
 test 2
-    Start 2: EpochRunner.ConcurrencyBenchmark
+    Start 2: Runner.ConcurrencyBenchmark
 
-2: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\EpochRunnerConcurrencyBenchmark.exe
+2: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\windows-release\Release\RunnerConcurrencyBenchmark.exe
 2: Working Directory: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/windows-release
 2: Test timeout computed to be: 30
 2: mode=1 workers=1 updates=6 updates_per_second=1.49769 environment_steps_per_second=12269.1
 2: mode=2 workers=2 updates=12 updates_per_second=2.99504 environment_steps_per_second=24535.4
 2: mode=4 workers=2 updates=13 updates_per_second=3.24754 environment_steps_per_second=26603.9
-2: EpochRunner v0.6 speed-mode throughput benchmark passed
-2/2 Test #2: EpochRunner.ConcurrencyBenchmark ...   Passed   13.15 sec
+2: Runner v0.6 speed-mode throughput benchmark passed
+2/2 Test #2: Runner.ConcurrencyBenchmark ...   Passed   13.15 sec
 
 100% tests passed out of 2
 
@@ -427,25 +427,25 @@ Total Test time (real) =  13.68 sec
 ## Executable version check
 
 ```text
-EpochRunner 0.6.0
+Runner 0.6.0
 
 ```
 
 ## SDL3/Vulkan diagnostic
 
 ```text
-EpochRunner 0.6.0 SDL3 Vulkan diagnostic passed: backend enabled, video_driver=windows; the CI runner has no Vulkan presentation surface (Installed Vulkan doesn't implement the VK_KHR_surface extension)
+Runner 0.6.0 SDL3 Vulkan diagnostic passed: backend enabled, video_driver=windows; the CI runner has no Vulkan presentation surface (Installed Vulkan doesn't implement the VK_KHR_surface extension)
 
 ```
 
 ## Install/package staging
 
 ```text
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/EpochRunner.exe
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/shaders
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/shaders/flat.frag.spv
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/shaders/flat.vert.spv
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/assets
--- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/EpochRunner-v0.6.0-windows-x64/assets/chicken.ppm
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/Runner.exe
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/shaders
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/shaders/flat.frag.spv
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/shaders/flat.vert.spv
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/assets
+-- Installing: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/package/Runner-v0.6.0-windows-x64/assets/chicken.ppm
 
 ```

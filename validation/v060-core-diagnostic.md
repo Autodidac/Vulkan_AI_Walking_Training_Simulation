@@ -1,4 +1,4 @@
-# EpochRunner v0.6.0 core diagnostic
+# Runner v0.6.0 core diagnostic
 
 Source before integration: `66ad191a0cb16fab4ea744bcb76be4eeaa2d1c88`
 
@@ -62,19 +62,19 @@ MSBuild version 18.8.2+ce25c0108 for .NET Framework
   autonomy_runtime.cpp
   autonomy_commands.cpp
   autonomy_persistence.cpp
-  EpochRunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\EpochRunnerCore.lib
+  RunnerCore.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\RunnerCore.lib
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   concurrency_benchmark.cpp
   Compiling...
   concurrency_benchmark.cpp
-  EpochRunnerConcurrencyBenchmark.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\EpochRunnerConcurrencyBenchmark.exe
+  RunnerConcurrencyBenchmark.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\RunnerConcurrencyBenchmark.exe
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
   Scanning sources for module dependencies...
   core_tests.cpp
   Compiling...
   core_tests.cpp
-  EpochRunnerCoreTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\EpochRunnerCoreTests.exe
+  RunnerCoreTests.vcxproj -> D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\RunnerCoreTests.exe
   Building Custom Rule D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/CMakeLists.txt
 
 ```
@@ -92,24 +92,24 @@ Added 0 tests to meet fixture requirements
 Checking test dependency graph...
 Checking test dependency graph end
 test 1
-    Start 1: EpochRunner.Core
+    Start 1: Runner.Core
 
-1: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\EpochRunnerCoreTests.exe
+1: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\RunnerCoreTests.exe
 1: Working Directory: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/v060-core-diagnostic
 1: Test timeout computed to be: 1500
-1: EpochRunner v0.6.0 procedural course, recovery, concurrency, gait, and rig-edit tests passed
-1/2 Test #1: EpochRunner.Core ...................   Passed    0.85 sec
+1: Runner v0.6.0 procedural course, recovery, concurrency, gait, and rig-edit tests passed
+1/2 Test #1: Runner.Core ...................   Passed    0.85 sec
 test 2
-    Start 2: EpochRunner.ConcurrencyBenchmark
+    Start 2: Runner.ConcurrencyBenchmark
 
-2: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\EpochRunnerConcurrencyBenchmark.exe
+2: Test command: D:\a\Vulkan_AI_Walking_Training_Simulation\Vulkan_AI_Walking_Training_Simulation\build\v060-core-diagnostic\Release\RunnerConcurrencyBenchmark.exe
 2: Working Directory: D:/a/Vulkan_AI_Walking_Training_Simulation/Vulkan_AI_Walking_Training_Simulation/build/v060-core-diagnostic
 2: Test timeout computed to be: 30
 2: mode=1 workers=1 updates=5 updates_per_second=1.24949 environment_steps_per_second=10235.8
 2: mode=2 workers=2 updates=11 updates_per_second=2.74762 environment_steps_per_second=22508.5
 2: mode=4 workers=2 updates=12 updates_per_second=2.99331 environment_steps_per_second=24521.2
-2: EpochRunner v0.5 speed-mode throughput benchmark passed
-2/2 Test #2: EpochRunner.ConcurrencyBenchmark ...   Passed   12.54 sec
+2: Runner v0.5 speed-mode throughput benchmark passed
+2/2 Test #2: Runner.ConcurrencyBenchmark ...   Passed   12.54 sec
 
 100% tests passed out of 2
 

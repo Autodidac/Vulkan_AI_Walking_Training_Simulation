@@ -6,7 +6,7 @@
 #include <thread>
 #include <utility>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     struct PpoTrainer::ParallelState
     {
@@ -451,7 +451,7 @@ namespace epochrunner::rl
                     - metrics_.evaluation_max_joint_speed * 0.015f
                     - std::abs(metrics_.evaluation_distance) * 0.20f;
                 break;
-            case sim::CourseStage::walk:
+            case sim::CourseStage::duck_press:
                 metrics_.evaluation_score = metrics_.evaluation_reward
                     + metrics_.evaluation_duck_seconds * 0.30f
                     + metrics_.evaluation_survival * 0.03f

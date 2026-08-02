@@ -13,7 +13,7 @@ void main()
 {
     vec2 normalized = in_position / push_constants.viewport;
 
-    // EpochRunner emits top-left-origin, Y-down screen coordinates. With a
+    // Runner emits top-left-origin, Y-down screen coordinates. With a
     // positive-height Vulkan viewport, NDC -1 maps to the framebuffer top and
     // NDC +1 maps to the bottom, so no OpenGL-style Y inversion is needed.
     vec2 clip = vec2(normalized.x * 2.0 - 1.0, normalized.y * 2.0 - 1.0);

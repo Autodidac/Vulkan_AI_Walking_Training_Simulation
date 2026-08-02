@@ -10,7 +10,7 @@
 #include <thread>
 #include <utility>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     AutonomousTrainer::TrainingRoutine AutonomousTrainer::TrainingRoutine::promise_type::get_return_object() noexcept
     {
@@ -587,7 +587,7 @@ namespace epochrunner::rl
         std::ofstream output(temporary, std::ios::trunc);
         if (!output)
             return;
-        output << "EPOCHAUTONOMY 2\n";
+        output << "RUNAUTONOMY 2\n";
         output << static_cast<int>(stage_) << ' ' << difficulty_ << ' ' << rig_generation_ << ' '
             << accepted_rig_changes_ << ' ' << rejected_rig_changes_ << ' ' << rollback_count_ << '\n';
         output.close();
@@ -609,7 +609,7 @@ namespace epochrunner::rl
         int stage{};
         input >> magic >> version >> stage >> difficulty_ >> rig_generation_
             >> accepted_rig_changes_ >> rejected_rig_changes_ >> rollback_count_;
-        if (!input || magic != "EPOCHAUTONOMY" || version != 2 || stage < 0
+        if (!input || magic != "RUNAUTONOMY" || version != 2 || stage < 0
             || stage >= static_cast<int>(sim::course_stage_count))
         {
             stage_ = sim::CourseStage::balance;

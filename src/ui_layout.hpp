@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace epochrunner::ui_layout
+namespace runner::ui_layout
 {
     struct Box
     {

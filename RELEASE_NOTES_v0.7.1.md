@@ -1,4 +1,4 @@
-# EpochRunner v0.7.1
+# Runner v0.7.1
 
 - Fixes humanoid shoulder and elbow motors pinning the parent chest/body.
 - Adds reciprocal rotational-inertia-weighted motor reaction with center-of-mass preservation.

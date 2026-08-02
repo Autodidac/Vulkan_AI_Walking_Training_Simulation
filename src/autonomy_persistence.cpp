@@ -4,7 +4,7 @@
 #include <fstream>
 #include <utility>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     namespace
     {
@@ -22,7 +22,7 @@ namespace epochrunner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHAUTONOMY 6\n";
+            output << "RUNAUTONOMY 7\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace epochrunner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "EPOCHAUTONOMY" || version != 6
+            if (!input || magic != "RUNAUTONOMY" || version != 7
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);

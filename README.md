@@ -1,4 +1,4 @@
-# EpochRunner
+# Runner
 
 ## Ordered skill curriculum
 
@@ -7,7 +7,7 @@ Training now advances through stand, duck/recover, jump/land, walk/run, moving d
 Walking convergence now uses phase observations, temporally smoothed actions, and a decaying early gait guide. A step counts only after real swing airtime and clearance, so foot-contact wiggles and double-supported skating cannot masquerade as gait. PPO updates are less destructive, exploration is bounded, and every substantial or invalid regression restores the best valid champion immediately instead of allowing late training to degrade beyond it.
 
 
-EpochRunner is a C++23 Vulkan locomotion laboratory built with SDL3, EpochGui, vcpkg manifest mode, and a compact PPO controller. Version 0.6.5 completes the guided sand-simulation enemy pass: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
+Runner is a C++23 Vulkan locomotion laboratory built with SDL3, Vulkan, vcpkg manifest mode, a built-in bitmap UI, and a compact PPO controller. Version 0.7.4 completes the compression-first ducking, rig-integrity, telemetry, and packaging pass while preserving the guided simulation-enemy curriculum: true four-leg and six-leg support semantics, longer safe training runway, startup-only rolling grace, strict mature rolling rejection, zero-motion episode reset, automatic best-result self-imitation, and a real worker-rollout picture-in-picture.
 
 ## Guided multi-leg training release
 
@@ -19,7 +19,7 @@ The trainer automatically records clean frames from its best valid stepped resul
 
 The former foot-before-knee restriction is no longer a rigid ordering rule. Natural bent-knee lead and useful raised-foot clearance are allowed; only an obvious low-foot body-first shove receives a mild shaping penalty.
 
-## Sand-sim enemy locomotion hotfix
+## Autonomous locomotion hotfix
 
 The trainer now starts with spawn stance and flat sand patrol, then introduces isolated sand mounds and loose/deformed terrain before debris. Early rocks, hurdles, and low bars are generated only on flat zones. Terrain-plus-hazard combinations remain locked to the later combat-traversal lesson at higher difficulty.
 

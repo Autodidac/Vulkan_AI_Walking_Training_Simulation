@@ -14,7 +14,7 @@
 #include <string_view>
 #include <thread>
 
-namespace epochrunner::sim
+namespace runner::sim
 {
     struct EnvironmentTestAccess
     {
@@ -48,6 +48,64 @@ namespace epochrunner::sim
                 environment.particles_[index].position.x += 4.0f;
                 environment.particles_[index].previous = environment.particles_[index].position;
             }
+        }
+
+        static void set_duck_pressure(Environment& environment, float pressure) noexcept
+        {
+            environment.duck_obstacle_weight_ = pressure;
+        }
+
+        static bool press_collision_resolves_below(Environment& environment) noexcept
+        {
+            if (!environment.valid_node(environment.blueprint_.head_node))
+                return false;
+            Particle& head = environment.particles_[environment.blueprint_.head_node];
+            const float bottom = head.position.y + head.radius * 0.45f;
+            environment.course_features_.clear();
+            environment.course_features_.push_back({
+                CourseFeatureKind::duck_press,
+                { head.position.x, bottom + 0.16f }, { 1.5f, 0.16f }, 0.0f, {}, -2
+            });
+            environment.duck_press_contact_this_step_ = false;
+            environment.duck_press_max_penetration_ = 0.0f;
+            environment.solve_course();
+            return environment.duck_press_contact_this_step_
+                && head.position.y + head.radius <= bottom + 0.0001f;
+        }
+
+        static void force_fused_supports(Environment& environment) noexcept
+        {
+            if (!environment.valid_node(environment.blueprint_.left_contact_node)
+                || !environment.valid_node(environment.blueprint_.right_contact_node))
+                return;
+            const float center = 0.5f * (
+                environment.particles_[environment.blueprint_.left_contact_node].position.x
+                + environment.particles_[environment.blueprint_.right_contact_node].position.x);
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (!environment.blueprint_.is_support_seed(index))
+                    continue;
+                environment.particles_[index].position.x = center;
+                environment.particles_[index].previous.x = center;
+            }
+        }
+
+        static void separate_supports(Environment& environment) noexcept
+        {
+            environment.separate_support_clusters();
+        }
+
+        static float primary_support_gap(const Environment& environment) noexcept
+        {
+            return environment.particles_[environment.blueprint_.right_contact_node].position.x
+                - environment.particles_[environment.blueprint_.left_contact_node].position.x;
+        }
+
+        static void complete_duck_press(Environment& environment) noexcept
+        {
+            environment.duck_press_completed_ = true;
+            environment.elapsed_seconds_ = 10.0f;
+            environment.rebuild_course_features();
         }
 
         static void qualify_stable_stance(Environment& environment) noexcept
@@ -116,14 +174,26 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "EpochRunner core test failed: " << message << '\n';
+        std::cerr << "Runner core test failed: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 }
 
 int main()
 {
-    using namespace epochrunner;
+    using namespace runner;
+
+    const sim::DuckPressProfile press_clear = sim::duck_press_profile(1.0f, 0.5f, 5.0f);
+    const sim::DuckPressProfile press_descend = sim::duck_press_profile(3.5f, 0.5f, 5.0f);
+    const sim::DuckPressProfile press_hold = sim::duck_press_profile(5.5f, 0.5f, 5.0f);
+    const sim::DuckPressProfile press_retract = sim::duck_press_profile(8.0f, 0.5f, 5.0f);
+    require(press_clear.bottom_y > 6.0f && press_descend.descending
+            && press_descend.vertical_velocity < 0.0f,
+        "duck press does not begin clear and descend gradually");
+    require(press_hold.holding && press_hold.bottom_y < 4.2f,
+        "duck press does not hold a meaningful crouch target");
+    require(press_retract.retracting && press_retract.vertical_velocity > 0.0f,
+        "duck press does not retract after the hold");
 
     require(ui_layout::top_bar_box(1970.0f).width == 1970.0f,
         "top GUI background does not span the full drawable width");
@@ -136,6 +206,23 @@ int main()
     require(ui_layout::lifetime_delta(120u, 20u) == 100u
             && ui_layout::lifetime_delta(20u, 120u) == 0u,
         "rig lifetime counters can underflow");
+    rl::TrainingMetrics cumulative{};
+    cumulative.total_episodes = 12u;
+    cumulative.total_valid_episodes = 9u;
+    cumulative.total_invalid_episodes = 3u;
+    cumulative.total_resets = 14u;
+    cumulative.total_alternating_steps = 48u;
+    cumulative.total_falls = 2u;
+    cumulative.total_collisions = 7u;
+    cumulative.total_powered_jumps = 5u;
+    cumulative.total_landed_jumps = 4u;
+    cumulative.total_landed_flips = 1u;
+    cumulative.total_obstacles_passed = 11u;
+    cumulative.total_distance = 123.5;
+    require(cumulative.total_valid_episodes + cumulative.total_invalid_episodes
+            == cumulative.total_episodes
+            && cumulative.total_landed_jumps <= cumulative.total_powered_jumps,
+        "cumulative runtime statistics are internally inconsistent");
     require(ui_layout::live_layout_valid(1100.0f, 902.0f),
         "supported minimum live layout overlaps its panel, telemetry, or PIP");
     require(!ui_layout::supported_window(1099.0f, 902.0f)
@@ -168,7 +255,7 @@ int main()
         == sim::InvalidMotion::sustained_flight, "unpowered flight hard gate missing");
     require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
         "joint-powered jump is not recognized");
-    require(!sim::powered_joint_launch(sim::CourseStage::walk, 1.0f, 0.08f),
+    require(!sim::powered_joint_launch(sim::CourseStage::duck_press, 1.0f, 0.08f),
         "duck lesson incorrectly enables flight");
     require(sim::allowed_airtime_for_stage(sim::CourseStage::duck_bars, true) > 2.0f,
         "controlled flip lesson does not allow bounded powered airtime");
@@ -219,6 +306,45 @@ int main()
     require(std::abs(sim::course_feature_observation_size(hurdle_feature) - 0.42f) < 0.0001f,
         "rectangular obstacle extent is incorrect in policy observations");
 
+    const sim::CreatureBlueprint chicken = sim::CreatureBlueprint::chicken();
+    require(chicken.head_node < chicken.nodes.size()
+            && chicken.nodes[chicken.head_node].x > chicken.nodes[chicken.torso_node].x
+            && chicken.nodes[chicken.head_node].y > chicken.nodes[chicken.torso_node].y,
+        "chicken preset does not have a raised forward bird head");
+    require(chicken.nodes[6].x < chicken.nodes[chicken.root_node].x - 1.0f
+            && chicken.nodes[4].x > chicken.nodes[chicken.head_node].x,
+        "chicken preset lacks a distinct tail and beak");
+
+    sim::Environment fused_feet(sim::CreatureBlueprint::humanoid(), 19);
+    sim::EnvironmentTestAccess::force_fused_supports(fused_feet);
+    sim::EnvironmentTestAccess::separate_supports(fused_feet);
+    require(sim::EnvironmentTestAccess::primary_support_gap(fused_feet) > 0.18f,
+        "left and right feet can remain fused into one support blob");
+
+    sim::Environment press_environment(sim::CreatureBlueprint::humanoid(), 17);
+    press_environment.set_course(sim::CourseStage::duck_press, 0.5f);
+    sim::EnvironmentTestAccess::set_duck_pressure(press_environment, 1.0f);
+    const auto press_teacher = rl::duck_teacher_action(press_environment);
+    require(std::abs(press_teacher[4]) < 0.0001f
+            && std::abs(press_teacher[5]) < 0.0001f
+            && std::abs(press_teacher[6]) < 0.0001f
+            && std::abs(press_teacher[7]) < 0.0001f,
+        "duck teacher still prefers shoulder or arm swing over leg compression");
+    require(std::abs(press_teacher[1]) + std::abs(press_teacher[3]) > 0.60f,
+        "duck teacher does not apply meaningful leg compression");
+    require(sim::EnvironmentTestAccess::press_collision_resolves_below(press_environment),
+        "duck press clips through the model instead of resolving below the platen");
+    sim::EnvironmentTestAccess::complete_duck_press(press_environment);
+    require(!press_environment.course_features().empty()
+            && press_environment.course_features().front().kind == sim::CourseFeatureKind::overhead_bar,
+        "duck press never advances to the later moving low-bar lesson");
+    const sim::CourseFeature& later_bar = press_environment.course_features().front();
+    require(later_bar.center.x
+            - press_environment.particles()[press_environment.blueprint().root_node].position.x >= 6.0f,
+        "later low bar starts too close for a meaningful crouch response");
+    require(later_bar.half_extent.x > later_bar.half_extent.y * 5.0f,
+        "later low bar is not horizontal or is effectively an undodgeable wall");
+
     require(sim::ground_velocity_retention(true, 0.0f)
         < sim::ground_velocity_retention(false, 0.0f),
         "feet do not receive more ground traction than head, tail, or body nodes");
@@ -236,17 +362,17 @@ int main()
     require(std::abs(sim::course_marker_distance_m(4) - 32.0f) < 0.0001f,
         "course mile-marker spacing is not shared with obstacle scheduling");
     require(sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
-        && sim::course_stage_name(sim::CourseStage::walk) == "2. LOW BAR DUCK / RECOVER"
+        && sim::course_stage_name(sim::CourseStage::duck_press) == "2. PRESS DUCK / HOLD / RECOVER"
         && sim::course_stage_name(sim::CourseStage::ramps) == "3. JUMP / LAND"
         && sim::course_stage_name(sim::CourseStage::uneven) == "4. WALK / RUN"
-        && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING DUCK / JUMP"
+        && sim::course_stage_name(sim::CourseStage::hurdles) == "5. MOVING LOW BAR / HURDLE"
         && sim::course_stage_name(sim::CourseStage::duck_bars) == "6. CONTROLLED FLIPS"
         && sim::course_stage_name(sim::CourseStage::moving_hazards) == "7. MIXED GOAL COURSE",
         "skill curriculum is not ordered by prerequisite");
-    require(!sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
-        "duck lesson completes without clearing its low bar");
-    require(sim::stage_skill_evidence(sim::CourseStage::walk, 0u, 0.6f, 0u, 0.0f, 0u, 1u),
-        "duck-and-clear evidence cannot complete the duck lesson");
+    require(!sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
+        "duck lesson completes without holding and recovering from the press");
+    require(sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 2u),
+        "press hold and recovery evidence cannot complete the duck lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
         "landed jump cannot complete the jump lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
@@ -290,8 +416,8 @@ int main()
     require(!sim::rolling_gate_active(1.0f)
             && sim::rolling_gate_active(sim::rolling_gate_activation_seconds),
         "rolling hard gate does not provide a bounded startup settle window");
-    require(sim::body_rolling_limit(sim::CourseStage::walk, 1.8f)
-            > sim::body_rolling_limit(sim::CourseStage::walk, 4.0f),
+    require(sim::body_rolling_limit(sim::CourseStage::duck_press, 1.8f)
+            > sim::body_rolling_limit(sim::CourseStage::duck_press, 4.0f),
         "rolling gate does not become strict after startup");
     require(sim::foot_pivot_rolling_limit(1.8f) > sim::foot_pivot_rolling_limit(4.0f),
         "orange-foot rolling gate does not become strict after startup");
@@ -323,11 +449,11 @@ int main()
         "small exploration change triggers an unnecessary champion rollback");
     require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 3, 1.2f, 4.0f),
         "valid stepped best result cannot seed self-imitation");
-    require(!rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f, 0.8f),
+    require(!rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f, 0.8f),
         "ducking without clearing a low bar can still seed self-imitation");
-    require(rl::elite_motion_eligible(sim::CourseStage::walk, true, 0, 0.0f, 4.0f,
-            0.8f, 0u, 0.0f, 0u, 1u),
-        "valid duck-and-clear result cannot seed self-imitation");
+    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f,
+            0.8f, 0u, 0.0f, 0u, 2u),
+        "valid press-and-low-bar result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
@@ -516,29 +642,33 @@ int main()
 
     {
         sim::Environment duck_lesson{ humanoid, 0xD0C7u };
-        duck_lesson.set_course(sim::CourseStage::walk, 0.35f);
+        duck_lesson.set_course(sim::CourseStage::duck_press, 0.35f);
         require(std::ranges::any_of(duck_lesson.course_features(),
                 [](const sim::CourseFeature& feature)
                 {
-                    return feature.kind == sim::CourseFeatureKind::overhead_bar;
+                    return feature.kind == sim::CourseFeatureKind::duck_press;
                 }),
-            "duck lesson has no explicit low-bar obstacle");
+            "duck lesson has no explicit compression platen");
         std::array<float, sim::action_count> unrelated{
             0.9f, -0.8f, 0.2f, 0.7f, -0.9f, 0.6f, 0.1f, -0.5f
         };
         const auto coordinated = rl::bilateral_joint_synergy_action(
-            duck_lesson, unrelated, sim::CourseStage::walk);
+            duck_lesson, unrelated, sim::CourseStage::duck_press);
         require(std::abs(coordinated[0] + coordinated[2])
                 < std::abs(unrelated[0] + unrelated[2])
             && std::abs(coordinated[1] + coordinated[3])
                 < std::abs(unrelated[1] + unrelated[3]),
             "AI outputs are still eight unrelated joint commands");
+        sim::EnvironmentTestAccess::set_duck_pressure(duck_lesson, 1.0f);
         const std::array<float, sim::action_count> neutral{};
         const auto duck = rl::effective_policy_action(
-            duck_lesson, neutral, sim::CourseStage::walk);
+            duck_lesson, neutral, sim::CourseStage::duck_press);
         require(duck[0] < -0.05f && duck[1] > 0.10f
                 && duck[2] > 0.05f && duck[3] < -0.10f,
-            "low-bar obstacle does not trigger a coordinated duck primitive");
+            "compression pressure does not trigger a coordinated leg-driven duck primitive");
+        require(std::abs(duck[4]) < 0.01f && std::abs(duck[5]) < 0.01f
+                && std::abs(duck[6]) < 0.01f && std::abs(duck[7]) < 0.01f,
+            "compression lesson still drives shoulders or elbows");
     }
 
     {
@@ -705,6 +835,13 @@ int main()
             for (int frame = 0; frame < 180; ++frame)
             {
                 (void)environment.step(zero);
+                if (!environment.body_integrity_valid())
+                {
+                    std::cerr << "passive integrity failure rig=" << index
+                        << " frame=" << frame
+                        << " invalid=" << static_cast<int>(environment.invalid_reason())
+                        << std::endl;
+                }
                 require(environment.body_integrity_valid(),
                     "head or passive tail escaped the articulated body");
                 if (!environment.valid_motion())
@@ -803,7 +940,7 @@ int main()
         require(std::abs(procedural.ground_height_at(29.0f) - initial_height) > 0.001f,
             "procedural inclines and hills do not move through the training lane");
 
-        std::array<bool, 5> found{};
+        std::array<bool, 6> found{};
         for (const sim::CourseFeature& feature : procedural.course_features())
             found[static_cast<std::size_t>(feature.kind)] = true;
         require(found[static_cast<std::size_t>(sim::CourseFeatureKind::hurdle)],
@@ -885,16 +1022,28 @@ int main()
         require(std::isfinite(metrics.mean_speed), "PPO mean speed is not finite");
         require(std::isfinite(metrics.policy_loss), "PPO policy loss is not finite");
         require(std::isfinite(metrics.value_loss), "PPO value loss is not finite");
+        require(metrics.total_updates == metrics.update,
+            "fresh cumulative update count does not track policy updates");
+        require(metrics.total_environment_steps == metrics.environment_steps,
+            "fresh cumulative environment count does not track policy steps");
+        require(metrics.total_training_seconds > 0.0,
+            "cumulative training time did not advance");
     }
 
     const std::filesystem::path temporary =
-        std::filesystem::temp_directory_path() / "epochrunner-v061-core-test.eppo";
+        std::filesystem::temp_directory_path() / "runner-v061-core-test.eppo";
     std::string error{};
     require(trainer.save_checkpoint(temporary, error), "failed to save checkpoint: " + error);
     rl::PpoTrainer resumed{ humanoid, 16 };
     require(resumed.load_checkpoint(temporary, error, false), "failed to resume checkpoint: " + error);
     require(resumed.policy().parameters() == trainer.policy().parameters(), "checkpoint policy mismatch");
     require(resumed.metrics().update == trainer.metrics().update, "checkpoint update count was not restored");
+    require(resumed.metrics().total_updates == trainer.metrics().total_updates
+            && resumed.metrics().total_environment_steps
+                == trainer.metrics().total_environment_steps,
+        "checkpoint cumulative update/environment totals were not restored");
+    require(resumed.metrics().total_training_seconds == trainer.metrics().total_training_seconds,
+        "checkpoint cumulative training time was not restored");
     require(resumed.optimizer_step() == trainer.optimizer_step(), "checkpoint optimizer state was not restored");
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
@@ -948,6 +1097,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "EpochRunner v0.6.2 obstacle observation, recovery, concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "Runner v0.7.4 obstacle, duck-press, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }

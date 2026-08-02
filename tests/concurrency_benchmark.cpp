@@ -25,14 +25,14 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "EpochRunner concurrency benchmark failed: " << message << '\n';
+        std::cerr << "Runner concurrency benchmark failed: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
     Result measure(int mode)
     {
         using namespace std::chrono_literals;
-        using namespace epochrunner;
+        using namespace runner;
 
         rl::AutonomousTrainer trainer{ sim::CreatureBlueprint::humanoid(), 64 };
         trainer.set_updates_per_cycle(mode);
@@ -95,6 +95,6 @@ int main()
     require(maximum.updates_per_second > normal.updates_per_second,
         "MAX CPU did not exceed NORMAL measured throughput");
 
-    std::cout << "EpochRunner v0.6.2 speed-mode throughput benchmark passed\n";
+    std::cout << "Runner v0.6.2 speed-mode throughput benchmark passed\n";
     return EXIT_SUCCESS;
 }

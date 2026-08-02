@@ -10,7 +10,7 @@
 #include <string>
 #include <system_error>
 
-namespace epochrunner::sim
+namespace runner::sim
 {
     namespace
     {
@@ -70,17 +70,18 @@ namespace epochrunner::sim
 
                 const Vec2 ankle_position = rig.nodes[ankle];
                 const float radius = ankle < rig.radii.size()
-                    ? clamp(rig.radii[ankle] * 0.64f, 0.090f, 0.125f) : 0.105f;
+                    ? clamp(rig.radii[ankle] * 0.50f, 0.070f, 0.095f) : 0.082f;
                 const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
+                const float side = ankle_position.x < rig.nodes[rig.root_node].x ? -1.0f : 1.0f;
                 rig.nodes.push_back({
-                    ankle_position.x - heel_reach * 0.55f,
-                    ankle_position.y - 0.185f
+                    ankle_position.x - side * heel_reach * 0.20f,
+                    ankle_position.y - 0.205f
                 });
                 rig.radii.push_back(radius);
                 const auto toe = static_cast<std::uint16_t>(rig.nodes.size());
                 rig.nodes.push_back({
-                    ankle_position.x + toe_reach * 0.72f,
-                    ankle_position.y - 0.195f
+                    ankle_position.x + side * toe_reach * 0.78f,
+                    ankle_position.y - 0.210f
                 });
                 rig.radii.push_back(radius);
 
@@ -134,23 +135,40 @@ namespace epochrunner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0f, 2.95f }, { 0.05f, 4.05f }, { 0.64f, 4.72f },
-            { -0.45f, 1.78f }, { -0.30f, 0.32f },
-            { 0.48f, 1.76f }, { 0.66f, 0.32f }, { -1.10f, 3.86f }
+            { 0.00f, 2.52f }, { 0.72f, 2.62f },
+            { 0.88f, 3.12f }, { 1.08f, 3.52f }, { 1.42f, 3.48f },
+            { -0.92f, 2.76f }, { -1.30f, 2.98f },
+            { -0.28f, 1.50f }, { -0.38f, 0.30f },
+            { 0.34f, 1.52f }, { 0.46f, 0.30f },
+            { 0.08f, 2.66f }
         };
-        result.radii = { 0.28f, 0.32f, 0.30f, 0.20f, 0.18f, 0.20f, 0.18f, 0.16f };
+        result.radii = {
+            0.42f, 0.38f, 0.23f, 0.28f, 0.11f,
+            0.24f, 0.13f, 0.18f, 0.14f, 0.18f, 0.14f, 0.26f
+        };
         result.bones = {
-            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f }, { 1, 7, 0.0f, 0.92f },
-            { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
-            { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f }
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
+            { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.94f },
+            { 0, 2, 0.0f, 0.94f }, { 1, 3, 0.0f, 0.94f },
+            { 0, 5, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.88f },
+            { 0, 6, 0.0f, 0.86f }, { 1, 5, 0.0f, 0.82f },
+            { 0, 11, 0.0f, 0.82f }, { 1, 11, 0.0f, 0.82f },
+            { 0, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
+            { 0, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }
         };
         result.motors = {
-            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
-            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
+            MotorConstraint{ 1, 0, 7 }, MotorConstraint{ 0, 7, 8 },
+            MotorConstraint{ 1, 0, 9 }, MotorConstraint{ 0, 9, 10 }
         };
-        add_passive_feet(result);
+        result.active_motor_count = 4;
+        result.root_node = 0;
+        result.torso_node = 1;
+        result.head_node = 3;
+        result.left_contact_node = 8;
+        result.right_contact_node = 10;
+        add_passive_feet(result, 0.15f, 0.25f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 34.0f, 56.0f, 0.044f, 0.050f);
+        calibrate_grounded_defaults(result, 32.0f, 54.0f, 0.042f, 0.047f);
         return result;
     }
 
@@ -499,7 +517,7 @@ namespace epochrunner::sim
                 error = "Could not open temporary rig file for writing: " + temporary.string();
                 return false;
             }
-            output << "EPOCHRIG 4\n";
+            output << "RUNRIG 4\n";
             output << nodes.size() << ' ' << bones.size() << ' ' << active_motor_count << '\n';
             output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
                 << left_contact_node << ' ' << right_contact_node << '\n';
@@ -584,12 +602,12 @@ namespace epochrunner::sim
         std::size_t bone_count{};
         std::size_t motor_count{};
         input >> magic >> version >> node_count >> bone_count >> motor_count;
-        if (!input || magic != "EPOCHRIG"
+        if (!input || magic != "RUNRIG"
             || (version != 1 && version != 2 && version != 3 && version != 4)
             || node_count < 3 || node_count > 128 || bone_count > 256
             || (motor_count != 4 && motor_count != action_count))
         {
-            error = "Invalid or unsupported EpochRunner rig file.";
+            error = "Invalid or unsupported Runner rig file.";
             return humanoid();
         }
 
@@ -788,7 +806,7 @@ namespace epochrunner::sim
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
-        if (course_stage_ != CourseStage::walk
+        if (course_stage_ != CourseStage::duck_press
             && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards)
             return;
@@ -796,27 +814,53 @@ namespace epochrunner::sim
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float progress = course_progress();
-        if (course_stage_ == CourseStage::walk)
+        if (course_stage_ == CourseStage::duck_press)
         {
-            constexpr float cycle = 7.0f;
-            float local = std::fmod(progress, cycle);
+            const float rest_head_top = valid_node(blueprint_.head_node)
+                ? blueprint_.nodes[blueprint_.head_node].y
+                    + particles_[blueprint_.head_node].radius
+                : 4.30f;
+            if (!duck_press_completed_)
+            {
+                float minimum_x = blueprint_.nodes.empty() ? -0.5f : blueprint_.nodes.front().x;
+                float maximum_x = minimum_x;
+                for (const Vec2 node : blueprint_.nodes)
+                {
+                    minimum_x = std::min(minimum_x, node.x);
+                    maximum_x = std::max(maximum_x, node.x);
+                }
+                const float half_width = clamp(
+                    (maximum_x - minimum_x) * 0.42f + 0.45f, 0.82f, 1.20f);
+                const DuckPressProfile profile = duck_press_profile(
+                    elapsed_seconds_, course_difficulty_, rest_head_top);
+                constexpr float half_height = 0.14f;
+                course_features_.push_back({
+                    CourseFeatureKind::duck_press,
+                    { root_x, profile.bottom_y + half_height },
+                    { half_width, half_height }, 0.0f,
+                    { 0.0f, profile.vertical_velocity }, -2
+                });
+                return;
+            }
+
+            constexpr float cycle = 11.0f;
+            const float travel_time = std::max(0.0f, elapsed_seconds_ - 9.0f);
+            float local = std::fmod(travel_time * course_speed(), cycle);
             if (local < 0.0f)
                 local += cycle;
-            float x = root_x + 3.0f - local;
-            int sequence = course_safe_runway_markers
-                + static_cast<int>(std::floor(progress / cycle));
-            if (x < root_x - 1.40f)
+            float x = root_x + 7.5f - local;
+            int sequence = 100 + static_cast<int>(std::floor(
+                travel_time * course_speed() / cycle));
+            if (x < root_x - 1.5f)
             {
                 x += cycle;
                 ++sequence;
             }
-            const float rest_head = valid_node(blueprint_.head_node)
-                ? blueprint_.nodes[blueprint_.head_node].y : 4.0f;
-            const float clearance = std::max(1.45f,
-                rest_head - (0.82f + course_difficulty_ * 0.18f));
+            const float clearance = rest_head_top
+                - (0.58f + course_difficulty_ * 0.08f);
             course_features_.push_back({
                 CourseFeatureKind::overhead_bar,
-                { x, clearance + 0.12f }, { 1.05f, 0.12f }, 0.0f,
+                { x, clearance + 0.12f }, { 0.88f, 0.12f }, 0.0f,
                 { -course_speed(), 0.0f }, sequence
             });
             return;
@@ -846,6 +890,11 @@ namespace epochrunner::sim
 
             const float variation = variation_for(sequence);
             const float x = course_feature_world_x(sequence, progress);
+            const float minimum_approach = course_stage_ == CourseStage::hurdles ? 6.5f : 5.0f;
+            if ((course_stage_ == CourseStage::hurdles
+                    || course_stage_ == CourseStage::moving_hazards)
+                && x < root_x + minimum_approach)
+                continue;
             const float ground = ground_height_at(x);
             const CourseFeatureKind kind = scheduled_course_feature(course_stage_, sequence);
 
@@ -868,6 +917,8 @@ namespace epochrunner::sim
                 });
                 break;
             }
+            case CourseFeatureKind::duck_press:
+                break;
             case CourseFeatureKind::overhead_bar:
             {
                 const float clearance = 3.65f - course_difficulty_ * 0.82f - variation * 0.16f;
@@ -967,6 +1018,9 @@ namespace epochrunner::sim
         duck_depth_ = 0.0f;
         duck_obstacle_weight_ = 0.0f;
         duck_clearance_margin_ = 0.0f;
+        duck_press_hold_seconds_ = 0.0f;
+        duck_press_max_penetration_ = 0.0f;
+        torso_swing_seconds_ = 0.0f;
         current_duck_hold_seconds_ = 0.0f;
         stable_stance_seconds_ = 0.0f;
         longest_stable_stance_seconds_ = 0.0f;
@@ -975,6 +1029,10 @@ namespace epochrunner::sim
         maximum_joint_speed_ = 0.0f;
         duck_recovery_count_ = 0;
         duck_cycle_qualified_ = false;
+        duck_press_contact_this_step_ = false;
+        duck_press_contact_seen_ = false;
+        duck_press_hold_qualified_ = false;
+        duck_press_completed_ = false;
         current_airborne_rotation_ = 0.0f;
         maximum_spin_turns_ = 0.0f;
         powered_jump_count_ = 0;
@@ -1050,6 +1108,65 @@ namespace epochrunner::sim
         const Vec2 correction = delta * ((distance - constraint.rest_length) / distance * constraint.stiffness);
         lhs.position += correction * (lhs.inverse_mass / weight);
         rhs.position -= correction * (rhs.inverse_mass / weight);
+    }
+
+    void Environment::separate_support_clusters() noexcept
+    {
+        auto rigid_contact_plate = [&](std::uint16_t primary,
+            const std::vector<std::uint16_t>& additional) noexcept
+        {
+            return valid_node(primary) && !additional.empty()
+                && std::ranges::all_of(additional,
+                    [&](std::uint16_t node)
+                    {
+                        return valid_node(node)
+                            && direct_bone(blueprint_, primary, node);
+                    });
+        };
+        if (!rigid_contact_plate(blueprint_.left_contact_node,
+                blueprint_.additional_left_contact_nodes)
+            || !rigid_contact_plate(blueprint_.right_contact_node,
+                blueprint_.additional_right_contact_nodes))
+            return;
+
+        auto support_nodes = [&](bool left)
+        {
+            std::array<std::uint16_t, 16> nodes{};
+            std::size_t count = 0;
+            const std::uint16_t primary = left
+                ? blueprint_.left_contact_node : blueprint_.right_contact_node;
+            if (valid_node(primary))
+                nodes[count++] = primary;
+            const auto& additional = left
+                ? blueprint_.additional_left_contact_nodes
+                : blueprint_.additional_right_contact_nodes;
+            for (const std::uint16_t node : additional)
+            {
+                if (count < nodes.size() && valid_node(node))
+                    nodes[count++] = node;
+            }
+            return std::pair{ nodes, count };
+        };
+
+        const auto [left_nodes, left_count] = support_nodes(true);
+        const auto [right_nodes, right_count] = support_nodes(false);
+        for (std::size_t li = 0; li < left_count; ++li)
+        {
+            Particle& left = particles_[left_nodes[li]];
+            for (std::size_t ri = 0; ri < right_count; ++ri)
+            {
+                Particle& right = particles_[right_nodes[ri]];
+                const float minimum_gap = left.radius + right.radius + 0.055f;
+                const float horizontal = right.position.x - left.position.x;
+                if (horizontal >= minimum_gap)
+                    continue;
+                const float correction = (minimum_gap - horizontal) * 0.5f;
+                left.position.x -= correction;
+                left.previous.x -= correction * 0.35f;
+                right.position.x += correction;
+                right.previous.x += correction * 0.35f;
+            }
+        }
     }
 
     bool Environment::body_integrity_valid() const noexcept
@@ -1499,6 +1616,29 @@ namespace epochrunner::sim
         {
             for (const CourseFeature& feature : course_features_)
             {
+                if (feature.kind == CourseFeatureKind::duck_press)
+                {
+                    const float left = feature.center.x - feature.half_extent.x;
+                    const float right = feature.center.x + feature.half_extent.x;
+                    const float bottom = feature.center.y - feature.half_extent.y;
+                    const float top = feature.center.y + feature.half_extent.y;
+                    const bool horizontal_overlap = particle.position.x + particle.radius > left
+                        && particle.position.x - particle.radius < right;
+                    const bool vertical_overlap = particle.position.y + particle.radius > bottom
+                        && particle.position.y - particle.radius < top;
+                    if (!horizontal_overlap || !vertical_overlap)
+                        continue;
+                    const float penetration = particle.position.y + particle.radius - bottom;
+                    duck_press_max_penetration_ = std::max(duck_press_max_penetration_, penetration);
+                    if (penetration > 0.0f)
+                    {
+                        const Vec2 correction{ 0.0f, -penetration };
+                        particle.position += correction;
+                        particle.previous += correction * 0.18f;
+                        duck_press_contact_this_step_ = true;
+                    }
+                    continue;
+                }
                 if (feature.kind == CourseFeatureKind::moving_hazard
                     || feature.kind == CourseFeatureKind::rock
                     || feature.kind == CourseFeatureKind::projectile)
@@ -1708,19 +1848,22 @@ namespace epochrunner::sim
         duck_clearance_margin_ = 0.0f;
         for (const CourseFeature& feature : course_features_)
         {
-            if (feature.kind != CourseFeatureKind::overhead_bar)
+            if (feature.kind != CourseFeatureKind::overhead_bar
+                && feature.kind != CourseFeatureKind::duck_press)
                 continue;
-            const float dx = feature.center.x - root_x;
-            const float weight = duck_obstacle_approach_weight(dx);
-            if (weight <= duck_obstacle_weight_)
-                continue;
-            duck_obstacle_weight_ = weight;
             const float bar_bottom = feature.center.y - feature.half_extent.y;
             const float head_top = valid_node(blueprint_.head_node)
                 ? particles_[blueprint_.head_node].position.y
                     + particles_[blueprint_.head_node].radius
                 : bar_bottom;
-            duck_clearance_margin_ = bar_bottom - head_top;
+            const float clearance = bar_bottom - head_top;
+            const float weight = feature.kind == CourseFeatureKind::duck_press
+                ? clamp((1.10f - clearance) / 1.10f, 0.0f, 1.0f)
+                : duck_obstacle_approach_weight(feature.center.x - root_x);
+            if (weight <= duck_obstacle_weight_)
+                continue;
+            duck_obstacle_weight_ = weight;
+            duck_clearance_margin_ = clearance;
         }
 
         float current_joint_speed = 0.0f;
@@ -1761,7 +1904,32 @@ namespace epochrunner::sim
         longest_stable_stance_seconds_ = std::max(
             longest_stable_stance_seconds_, stable_stance_seconds_);
 
-        if (duck_active_)
+        if (course_stage_ == CourseStage::duck_press)
+        {
+            if (duck_press_contact_this_step_)
+                duck_press_contact_seen_ = true;
+            if (duck_press_contact_this_step_ && duck_active_
+                && duck_clearance_margin_ >= -0.025f && body_integrity_valid())
+            {
+                duck_press_hold_seconds_ += dt;
+                if (duck_press_hold_seconds_ >= 0.55f)
+                    duck_press_hold_qualified_ = true;
+            }
+            else if (!duck_press_hold_qualified_)
+            {
+                duck_press_hold_seconds_ = std::max(0.0f, duck_press_hold_seconds_ - dt * 0.5f);
+            }
+            if (duck_press_hold_qualified_ && !duck_press_contact_this_step_
+                && duck_obstacle_weight_ < 0.15f && stable_stance_seconds_ >= 0.50f
+                && !duck_press_completed_)
+            {
+                duck_press_completed_ = true;
+                ++duck_recovery_count_;
+                ++obstacles_passed_;
+                passed_obstacle_this_step_ = true;
+            }
+        }
+        else if (duck_active_)
         {
             current_duck_hold_seconds_ += dt;
             duck_cycle_qualified_ = duck_cycle_qualified_
@@ -1777,6 +1945,14 @@ namespace epochrunner::sim
         {
             current_duck_hold_seconds_ = 0.0f;
         }
+
+        if (course_stage_ == CourseStage::duck_press && duck_obstacle_weight_ > 0.10f
+            && std::abs(torso_turn_speed_) > 0.85f)
+            torso_swing_seconds_ += dt;
+        else
+            torso_swing_seconds_ = std::max(0.0f, torso_swing_seconds_ - dt * 2.0f);
+        if (torso_swing_seconds_ > 0.75f)
+            invalidate(InvalidMotion::robotic_torso_swing);
 
         const bool collapsed_balance_posture = course_stage_ == CourseStage::balance
             && elapsed_seconds_ >= 1.50f
@@ -1885,6 +2061,8 @@ namespace epochrunner::sim
         int highest_passed_sequence = last_passed_feature_sequence_;
         for (const CourseFeature& feature : course_features_)
         {
+            if (feature.kind == CourseFeatureKind::duck_press)
+                continue;
             const float trailing_edge = feature.center.x + course_feature_half_width(feature);
             if (trailing_edge < root_x - 0.10f)
                 highest_passed_sequence = std::max(highest_passed_sequence, feature.marker_sequence);
@@ -2009,6 +2187,8 @@ namespace epochrunner::sim
         }
 
         collided_this_step_ = false;
+        duck_press_contact_this_step_ = false;
+        duck_press_max_penetration_ = 0.0f;
         rebuild_course_features();
         for (int iteration = 0; iteration < 14; ++iteration)
         {
@@ -2020,9 +2200,12 @@ namespace epochrunner::sim
             stabilize_passive_appendages();
             solve_ground(dt);
             solve_course();
+            separate_support_clusters();
         }
         if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())
             invalidate(InvalidMotion::collapsed_posture);
+        if (duck_press_max_penetration_ > 0.24f)
+            invalidate(InvalidMotion::press_penetration);
         knee_first_this_step_ = knee_before_foot_fault();
         if (knee_first_this_step_)
             ++knee_first_faults_;
@@ -2167,6 +2350,10 @@ namespace epochrunner::sim
             && std::abs(raw_speed) > 0.08f && obstacle_lift_clearance_ < 0.085f
             ? 0.028f : 0.0f;
         const float action_change_penalty = action_change_energy_ * 0.0025f;
+        const float press_contact_reward = course_stage_ == CourseStage::duck_press
+            && duck_press_contact_this_step_ && duck_active_ ? 0.045f : 0.0f;
+        const float torso_swing_penalty = course_stage_ == CourseStage::duck_press
+            ? std::max(0.0f, std::abs(torso_turn_speed_) - 0.22f) * 0.030f : 0.0f;
 
         switch (course_stage_)
         {
@@ -2186,11 +2373,12 @@ namespace epochrunner::sim
                 - body_contact_penalty;
             break;
         }
-        case CourseStage::walk:
+        case CourseStage::duck_press:
             last_reward_ = std::max(0.0f, upright) * 0.016f
                 + contact * 0.0015f + duck_reward + obstacle_duck_reward
-                + pass_reward - std::abs(forward_speed_) * 0.0030f
-                - action_energy * 0.0009f - collision_penalty
+                + press_contact_reward + pass_reward
+                - std::abs(forward_speed_) * 0.0030f
+                - action_energy * 0.0009f - torso_swing_penalty
                 - premature_duck_penalty - body_contact_penalty;
             break;
         case CourseStage::ramps:
@@ -2243,7 +2431,7 @@ namespace epochrunner::sim
             last_reward_ -= 5.0f;
         }
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f
-            : course_stage_ == CourseStage::walk || course_stage_ == CourseStage::ramps
+            : course_stage_ == CourseStage::duck_press || course_stage_ == CourseStage::ramps
                 || course_stage_ == CourseStage::duck_bars ? 20.0f
             : course_stage_ == CourseStage::moving_hazards ? 48.0f : 36.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
@@ -2321,6 +2509,7 @@ namespace epochrunner::sim
             case CourseFeatureKind::hurdle: result[30] = -1.0f; break;
             case CourseFeatureKind::rock: result[30] = -0.5f; break;
             case CourseFeatureKind::overhead_bar: result[30] = 0.0f; break;
+            case CourseFeatureKind::duck_press: result[30] = 0.0f; break;
             case CourseFeatureKind::moving_hazard: result[30] = 0.5f; break;
             case CourseFeatureKind::projectile: result[30] = 1.0f; break;
             }

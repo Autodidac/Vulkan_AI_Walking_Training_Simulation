@@ -18,7 +18,7 @@
 #include <thread>
 #include <vector>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     struct AutonomyStatus
     {
@@ -254,9 +254,9 @@ namespace epochrunner::rl
         std::uint64_t cached_optimizer_step_{};
         bool cached_has_best_{};
 
-        std::filesystem::path autosave_checkpoint_{ "epochrunner-autosave.eppo" };
-        std::filesystem::path autosave_rig_{ "epochrunner-evolved.epochrig" };
-        std::filesystem::path autosave_state_{ "epochrunner-autonomy.state" };
+        std::filesystem::path autosave_checkpoint_{ "runner-autosave.eppo" };
+        std::filesystem::path autosave_rig_{ "runner-evolved.rig" };
+        std::filesystem::path autosave_state_{ "runner-autonomy.state" };
         sim::CourseStage stage_{ sim::CourseStage::balance };
         float difficulty_{ 0.25f };
         std::uint64_t rig_generation_{};

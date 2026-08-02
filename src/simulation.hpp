@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-namespace epochrunner::sim
+namespace runner::sim
 {
     inline constexpr std::size_t action_count = 8;
     inline constexpr std::size_t observation_count = 40;
@@ -19,7 +19,7 @@ namespace epochrunner::sim
     enum class CourseStage : std::uint8_t
     {
         balance,
-        walk,
+        duck_press,
         ramps,
         uneven,
         hurdles,
@@ -83,8 +83,8 @@ namespace epochrunner::sim
         {
         case CourseStage::balance:
             return true;
-        case CourseStage::walk:
-            return duck_seconds >= 0.50f && obstacles_passed >= 1u;
+        case CourseStage::duck_press:
+            return duck_seconds >= 0.50f && obstacles_passed >= 2u;
         case CourseStage::ramps:
             return landed_jumps >= 1u;
         case CourseStage::uneven:
@@ -106,10 +106,10 @@ namespace epochrunner::sim
         switch (stage)
         {
         case CourseStage::balance: return "1. STAND";
-        case CourseStage::walk: return "2. LOW BAR DUCK / RECOVER";
+        case CourseStage::duck_press: return "2. PRESS DUCK / HOLD / RECOVER";
         case CourseStage::ramps: return "3. JUMP / LAND";
         case CourseStage::uneven: return "4. WALK / RUN";
-        case CourseStage::hurdles: return "5. MOVING DUCK / JUMP";
+        case CourseStage::hurdles: return "5. MOVING LOW BAR / HURDLE";
         case CourseStage::duck_bars: return "6. CONTROLLED FLIPS";
         case CourseStage::moving_hazards: return "7. MIXED GOAL COURSE";
         }
@@ -120,6 +120,7 @@ namespace epochrunner::sim
     {
         hurdle,
         overhead_bar,
+        duck_press,
         moving_hazard,
         rock,
         projectile
@@ -131,6 +132,7 @@ namespace epochrunner::sim
         {
         case CourseFeatureKind::hurdle: return "HURDLE";
         case CourseFeatureKind::overhead_bar: return "LOW BAR";
+        case CourseFeatureKind::duck_press: return "DUCK PRESS";
         case CourseFeatureKind::moving_hazard: return "MOVING HAZARD";
         case CourseFeatureKind::rock: return "ROCK";
         case CourseFeatureKind::projectile: return "THROWN OBJECT";
@@ -158,6 +160,7 @@ namespace epochrunner::sim
             return feature.radius;
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
+        case CourseFeatureKind::duck_press:
             return feature.half_extent.x;
         }
         return 0.0f;
@@ -173,6 +176,7 @@ namespace epochrunner::sim
             return feature.center.y + feature.radius;
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
+        case CourseFeatureKind::duck_press:
             return feature.center.y + feature.half_extent.y;
         }
         return feature.center.y;
@@ -301,11 +305,54 @@ namespace epochrunner::sim
 
     [[nodiscard]] inline float duck_obstacle_approach_weight(float distance_ahead) noexcept
     {
-        if (distance_ahead <= -1.25f || distance_ahead >= 4.0f)
+        if (distance_ahead <= -1.25f || distance_ahead >= 8.0f)
             return 0.0f;
-        if (distance_ahead <= 1.0f)
+        if (distance_ahead <= 2.25f)
             return 1.0f;
-        return clamp((4.0f - distance_ahead) / 3.0f, 0.0f, 1.0f);
+        return clamp((8.0f - distance_ahead) / 5.75f, 0.0f, 1.0f);
+    }
+
+    struct DuckPressProfile
+    {
+        float bottom_y{};
+        float vertical_velocity{};
+        bool descending{};
+        bool holding{};
+        bool retracting{};
+    };
+
+    [[nodiscard]] inline DuckPressProfile duck_press_profile(float elapsed_seconds,
+        float difficulty, float standing_head_top) noexcept
+    {
+        constexpr float settle_end = 2.50f;
+        constexpr float descend_end = 5.00f;
+        constexpr float hold_end = 7.00f;
+        constexpr float retract_end = 9.50f;
+        constexpr float cycle = 11.0f;
+        float local = std::fmod(std::max(0.0f, elapsed_seconds), cycle);
+        if (local < 0.0f)
+            local += cycle;
+        const float start = standing_head_top + 1.10f;
+        const float target = standing_head_top - (0.78f + clamp(difficulty, 0.0f, 1.0f) * 0.20f);
+        if (local < settle_end)
+            return { start, 0.0f, false, false, false };
+        if (local < descend_end)
+        {
+            const float t = (local - settle_end) / (descend_end - settle_end);
+            const float smooth = t * t * (3.0f - 2.0f * t);
+            const float derivative = 6.0f * t * (1.0f - t) / (descend_end - settle_end);
+            return { lerp(start, target, smooth), (target - start) * derivative, true, false, false };
+        }
+        if (local < hold_end)
+            return { target, 0.0f, false, true, false };
+        if (local < retract_end)
+        {
+            const float t = (local - hold_end) / (retract_end - hold_end);
+            const float smooth = t * t * (3.0f - 2.0f * t);
+            const float derivative = 6.0f * t * (1.0f - t) / (retract_end - hold_end);
+            return { lerp(target, start, smooth), (start - target) * derivative, false, false, true };
+        }
+        return { start, 0.0f, false, false, false };
     }
 
     [[nodiscard]] inline bool hazard_quiver_motion(float distance_ahead, float root_speed,
@@ -344,6 +391,7 @@ namespace epochrunner::sim
             return feature.radius;
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
+        case CourseFeatureKind::duck_press:
             return std::max(feature.half_extent.x, feature.half_extent.y);
         }
         return 0.0f;
@@ -364,7 +412,9 @@ namespace epochrunner::sim
         zero_progress,
         collapsed_posture,
         excessive_spins,
-        hazard_quiver
+        hazard_quiver,
+        robotic_torso_swing,
+        press_penetration
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -385,6 +435,8 @@ namespace epochrunner::sim
         case InvalidMotion::collapsed_posture: return "COLLAPSED / UNSUPPORTED POSTURE";
         case InvalidMotion::excessive_spins: return "MORE THAN 3 SPINS";
         case InvalidMotion::hazard_quiver: return "HAZARD QUIVER / NO LEG LIFT";
+        case InvalidMotion::robotic_torso_swing: return "ROBOTIC TORSO / SHOULDER SWING";
+        case InvalidMotion::press_penetration: return "DUCK PRESS PENETRATION";
         }
         return "INVALID";
     }
@@ -479,8 +531,8 @@ namespace epochrunner::sim
     {
         const int relative = std::max(0, marker_sequence - course_safe_runway_markers);
         const int selector = relative % course_feature_cycle_length;
-        if (stage == CourseStage::walk)
-            return CourseFeatureKind::overhead_bar;
+        if (stage == CourseStage::duck_press)
+            return CourseFeatureKind::duck_press;
         if (stage == CourseStage::ramps || stage == CourseStage::uneven)
             return CourseFeatureKind::rock;
         if (stage == CourseStage::hurdles)
@@ -647,8 +699,8 @@ namespace epochrunner::sim
                 || course_stage_ == CourseStage::ramps
                 || course_stage_ == CourseStage::duck_bars)
                 return 0.0f;
-            if (course_stage_ == CourseStage::walk)
-                return 0.52f + course_difficulty_ * 0.28f;
+            if (course_stage_ == CourseStage::duck_press)
+                return duck_press_completed_ ? 0.58f + course_difficulty_ * 0.12f : 0.0f;
             if (course_stage_ == CourseStage::uneven)
                 return 0.82f + course_difficulty_ * 0.88f;
             if (course_stage_ == CourseStage::hurdles)
@@ -672,6 +724,10 @@ namespace epochrunner::sim
         {
             return duck_clearance_margin_;
         }
+        [[nodiscard]] bool duck_press_contact() const noexcept { return duck_press_contact_this_step_; }
+        [[nodiscard]] bool duck_press_completed() const noexcept { return duck_press_completed_; }
+        [[nodiscard]] float duck_press_penetration() const noexcept { return duck_press_max_penetration_; }
+        [[nodiscard]] float torso_swing_seconds() const noexcept { return torso_swing_seconds_; }
         [[nodiscard]] std::uint32_t powered_jumps() const noexcept { return powered_jump_count_; }
         [[nodiscard]] std::uint32_t landed_jumps() const noexcept { return landed_jump_count_; }
         [[nodiscard]] float maximum_flip_turns() const noexcept { return maximum_spin_turns_; }
@@ -719,6 +775,7 @@ namespace epochrunner::sim
         friend struct EnvironmentTestAccess;
 
         void solve_distance(const DistanceConstraint& constraint) noexcept;
+        void separate_support_clusters() noexcept;
         void stabilize_passive_appendages() noexcept;
         void stabilize_balance_posture() noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
@@ -767,6 +824,9 @@ namespace epochrunner::sim
         float duck_depth_{};
         float duck_obstacle_weight_{};
         float duck_clearance_margin_{};
+        float duck_press_hold_seconds_{};
+        float duck_press_max_penetration_{};
+        float torso_swing_seconds_{};
         float current_duck_hold_seconds_{};
         float stable_stance_seconds_{};
         float longest_stable_stance_seconds_{};
@@ -775,6 +835,10 @@ namespace epochrunner::sim
         float maximum_joint_speed_{};
         std::uint32_t duck_recovery_count_{};
         bool duck_cycle_qualified_{};
+        bool duck_press_contact_this_step_{};
+        bool duck_press_contact_seen_{};
+        bool duck_press_hold_qualified_{};
+        bool duck_press_completed_{};
         float current_airborne_rotation_{};
         float maximum_spin_turns_{};
         float uncontrolled_spin_turns_{};

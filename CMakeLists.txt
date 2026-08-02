@@ -1,20 +1,20 @@
 cmake_minimum_required(VERSION 3.28)
 
 if(MSVC)
-    set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 else()
     set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 endif()
 
-project(EpochRunner VERSION 0.7.3 LANGUAGES CXX)
+project(Runner VERSION 0.7.4 LANGUAGES CXX)
 
-option(EPOCHRUNNER_BUILD_APP "Build the SDL3/Vulkan EpochRunner application." ON)
-option(EPOCHRUNNER_BUILD_TESTS "Build deterministic core tests." ON)
-option(EPOCHRUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
+option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
+option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
+option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 
 find_package(Threads REQUIRED)
 
-add_library(EpochRunnerCore STATIC
+add_library(RunnerCore STATIC
     src/simulation.cpp
     src/ppo_network.cpp
     src/ppo_trainer.cpp
@@ -26,197 +26,110 @@ add_library(EpochRunnerCore STATIC
     src/autonomy_curriculum.cpp
     src/autonomy_persistence.cpp
 )
-add_library(EpochRunner::Core ALIAS EpochRunnerCore)
+add_library(Runner::Core ALIAS RunnerCore)
+target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+target_link_libraries(RunnerCore PUBLIC Threads::Threads)
+target_compile_features(RunnerCore PUBLIC cxx_std_23)
+set_target_properties(RunnerCore PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
-target_include_directories(EpochRunnerCore PUBLIC
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
-)
-target_link_libraries(EpochRunnerCore PUBLIC Threads::Threads)
-target_compile_features(EpochRunnerCore PUBLIC cxx_std_23)
-set_target_properties(EpochRunnerCore PROPERTIES
-    CXX_STANDARD 23
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
-
-function(epochrunner_enable_warnings target)
+function(runner_enable_warnings target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /permissive- /EHsc /utf-8 /Zc:__cplusplus)
     else()
-        target_compile_options(${target} PRIVATE
-            -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
-        )
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
     endif()
 endfunction()
+runner_enable_warnings(RunnerCore)
 
-epochrunner_enable_warnings(EpochRunnerCore)
-
-if(EPOCHRUNNER_ENABLE_TSAN AND NOT MSVC)
-    target_compile_options(EpochRunnerCore PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
-    target_link_options(EpochRunnerCore PRIVATE -fsanitize=thread)
+if(RUNNER_ENABLE_TSAN AND NOT MSVC)
+    target_compile_options(RunnerCore PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+    target_link_options(RunnerCore PRIVATE -fsanitize=thread)
 endif()
 
-if(EPOCHRUNNER_BUILD_APP)
-    include(FetchContent)
-
-    set(EPOCHGUI_ENABLE_ROUNDED_RECT ON CACHE BOOL "" FORCE)
-    set(EPOCHGUI_ENABLE_INPUT ON CACHE BOOL "" FORCE)
-
-    if(TARGET Autodidac::EpochGui)
-        message(STATUS "EpochRunner: using existing EpochGui target")
-    else()
-        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../modules/epoch.gui.ixx"
-            AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../CMakeLists.txt")
-            message(STATUS "EpochRunner: using EpochGui source tree at ${CMAKE_CURRENT_SOURCE_DIR}/../..")
-            add_subdirectory(
-                "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-                "${CMAKE_CURRENT_BINARY_DIR}/epochgui"
-            )
-        else()
-            FetchContent_Declare(
-                EpochGui
-                GIT_REPOSITORY https://github.com/Autodidac/EpochGui.git
-                GIT_TAG 347ad52e8fc27deb08dea97e56a9b6d8c0db3af2
-                GIT_SHALLOW FALSE
-            )
-            FetchContent_MakeAvailable(EpochGui)
-        endif()
-        set(BUILD_TESTING "${EPOCHRUNNER_BUILD_TESTS}" CACHE BOOL "" FORCE)
-    endif()
-
-    if(MSVC AND TARGET EpochGui)
-        target_compile_options(EpochGui PRIVATE /utf-8)
-    endif()
-
+if(RUNNER_BUILD_APP)
     find_package(SDL3 CONFIG REQUIRED)
     find_package(Vulkan 1.3 REQUIRED)
     find_package(unofficial-shaderc CONFIG REQUIRED)
 
-    add_executable(EpochRunnerShaderCompiler
-        tools/shader_compiler.cpp
-    )
-    target_link_libraries(EpochRunnerShaderCompiler PRIVATE
-        unofficial::shaderc::shaderc
-    )
-    target_compile_features(EpochRunnerShaderCompiler PRIVATE cxx_std_23)
-    set_target_properties(EpochRunnerShaderCompiler PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-    epochrunner_enable_warnings(EpochRunnerShaderCompiler)
+    add_executable(RunnerShaderCompiler tools/shader_compiler.cpp)
+    target_link_libraries(RunnerShaderCompiler PRIVATE unofficial::shaderc::shaderc)
+    target_compile_features(RunnerShaderCompiler PRIVATE cxx_std_23)
+    set_target_properties(RunnerShaderCompiler PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerShaderCompiler)
 
-    set(EPOCHRUNNER_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-    set(EPOCHRUNNER_SHADER_OUTPUTS)
+    set(RUNNER_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
+    set(RUNNER_SHADER_OUTPUTS)
     foreach(shader IN ITEMS flat.vert flat.frag)
         set(source "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${shader}")
-        set(output "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/${shader}.spv")
+        set(output "${RUNNER_SHADER_OUTPUT_DIR}/${shader}.spv")
         add_custom_command(
             OUTPUT "${output}"
-            COMMAND "$<TARGET_FILE:EpochRunnerShaderCompiler>" "${source}" "${output}"
-            DEPENDS
-                "${source}"
-                EpochRunnerShaderCompiler
+            COMMAND "$<TARGET_FILE:RunnerShaderCompiler>" "${source}" "${output}"
+            DEPENDS "${source}" RunnerShaderCompiler
             VERBATIM
-            COMMENT "Compiling ${shader} with vcpkg shaderc"
-        )
-        list(APPEND EPOCHRUNNER_SHADER_OUTPUTS "${output}")
+            COMMENT "Compiling ${shader} with vcpkg shaderc")
+        list(APPEND RUNNER_SHADER_OUTPUTS "${output}")
     endforeach()
-    add_custom_target(EpochRunnerShaders DEPENDS ${EPOCHRUNNER_SHADER_OUTPUTS})
+    add_custom_target(RunnerShaders DEPENDS ${RUNNER_SHADER_OUTPUTS})
 
-    add_executable(EpochRunner
-        src/main.cpp
-        src/app.cpp
-        src/canvas.cpp
-        src/renderer.cpp
-        src/app.hpp
-        src/renderer.hpp
-        src/math.hpp
-    )
-    add_dependencies(EpochRunner EpochRunnerShaders)
-    target_link_libraries(EpochRunner PRIVATE
-        EpochRunner::Core
-        Autodidac::EpochGui
-        SDL3::SDL3
-        Vulkan::Vulkan
-    )
-    target_compile_features(EpochRunner PRIVATE cxx_std_23)
-    target_compile_definitions(EpochRunner PRIVATE
-        EPOCHRUNNER_VERSION="${PROJECT_VERSION}"
-        EPOCHRUNNER_SHADER_DIRECTORY="shaders"
-        EPOCHRUNNER_ASSET_DIRECTORY="assets"
-    )
-    set_target_properties(EpochRunner PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-        VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:EpochRunner>"
-    )
-    epochrunner_enable_warnings(EpochRunner)
+    add_executable(Runner
+        src/main.cpp src/app.cpp src/canvas.cpp src/renderer.cpp
+        src/app.hpp src/renderer.hpp src/math.hpp src/ui_font.hpp)
+    add_dependencies(Runner RunnerShaders)
+    target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
+    target_compile_features(Runner PRIVATE cxx_std_23)
+    target_compile_definitions(Runner PRIVATE
+        RUNNER_VERSION="${PROJECT_VERSION}"
+        RUNNER_SHADER_DIRECTORY="shaders"
+        RUNNER_ASSET_DIRECTORY="assets")
+    set_target_properties(Runner PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
+        VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:Runner>")
+    runner_enable_warnings(Runner)
 
-    add_custom_command(TARGET EpochRunner POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
-            "$<TARGET_FILE_DIR:EpochRunner>/assets"
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${EPOCHRUNNER_SHADER_OUTPUT_DIR}"
-            "$<TARGET_FILE_DIR:EpochRunner>/shaders"
-        VERBATIM
-    )
+    add_custom_command(TARGET Runner POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${RUNNER_SHADER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:Runner>/shaders"
+        VERBATIM)
 
-    install(TARGETS EpochRunner RUNTIME DESTINATION .)
+    install(TARGETS Runner RUNTIME DESTINATION .)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION .)
-    install(DIRECTORY "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
+    install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
 endif()
 
-if(EPOCHRUNNER_BUILD_TESTS)
+if(RUNNER_BUILD_TESTS)
     include(CTest)
     enable_testing()
+    add_executable(RunnerCoreTests tests/core_tests.cpp)
+    target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
+    target_compile_features(RunnerCoreTests PRIVATE cxx_std_23)
+    set_target_properties(RunnerCoreTests PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerCoreTests)
+    add_test(NAME Runner.Core COMMAND RunnerCoreTests)
 
-    add_executable(EpochRunnerCoreTests tests/core_tests.cpp)
-    target_link_libraries(EpochRunnerCoreTests PRIVATE EpochRunner::Core)
-    target_compile_features(EpochRunnerCoreTests PRIVATE cxx_std_23)
-    set_target_properties(EpochRunnerCoreTests PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-    epochrunner_enable_warnings(EpochRunnerCoreTests)
-    add_test(NAME EpochRunner.Core COMMAND EpochRunnerCoreTests)
+    add_executable(RunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
+    target_link_libraries(RunnerConcurrencyBenchmark PRIVATE Runner::Core)
+    target_compile_features(RunnerConcurrencyBenchmark PRIVATE cxx_std_23)
+    set_target_properties(RunnerConcurrencyBenchmark PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerConcurrencyBenchmark)
+    add_test(NAME Runner.ConcurrencyBenchmark COMMAND RunnerConcurrencyBenchmark)
+    set_tests_properties(Runner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
 
-    add_executable(EpochRunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
-    target_link_libraries(EpochRunnerConcurrencyBenchmark PRIVATE EpochRunner::Core)
-    target_compile_features(EpochRunnerConcurrencyBenchmark PRIVATE cxx_std_23)
-    set_target_properties(EpochRunnerConcurrencyBenchmark PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-    epochrunner_enable_warnings(EpochRunnerConcurrencyBenchmark)
-    add_test(NAME EpochRunner.ConcurrencyBenchmark COMMAND EpochRunnerConcurrencyBenchmark)
-    set_tests_properties(EpochRunner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
-
-    add_executable(EpochRunnerRuntimePipelineTests tests/runtime_pipeline_tests.cpp)
-    target_link_libraries(EpochRunnerRuntimePipelineTests PRIVATE EpochRunner::Core)
-    target_compile_features(EpochRunnerRuntimePipelineTests PRIVATE cxx_std_23)
-    set_target_properties(EpochRunnerRuntimePipelineTests PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-    epochrunner_enable_warnings(EpochRunnerRuntimePipelineTests)
-    if(EPOCHRUNNER_ENABLE_TSAN AND NOT MSVC)
-        target_compile_options(EpochRunnerRuntimePipelineTests PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
-        target_link_options(EpochRunnerRuntimePipelineTests PRIVATE -fsanitize=thread)
+    add_executable(RunnerRuntimePipelineTests tests/runtime_pipeline_tests.cpp)
+    target_link_libraries(RunnerRuntimePipelineTests PRIVATE Runner::Core)
+    target_compile_features(RunnerRuntimePipelineTests PRIVATE cxx_std_23)
+    set_target_properties(RunnerRuntimePipelineTests PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerRuntimePipelineTests)
+    if(RUNNER_ENABLE_TSAN AND NOT MSVC)
+        target_compile_options(RunnerRuntimePipelineTests PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+        target_link_options(RunnerRuntimePipelineTests PRIVATE -fsanitize=thread)
     endif()
-    add_test(NAME EpochRunner.RuntimePipeline COMMAND EpochRunnerRuntimePipelineTests)
-    set_tests_properties(EpochRunner.RuntimePipeline PROPERTIES TIMEOUT 90)
+    add_test(NAME Runner.RuntimePipeline COMMAND RunnerRuntimePipelineTests)
+    set_tests_properties(Runner.RuntimePipeline PROPERTIES TIMEOUT 90)
 
-    if(TARGET EpochRunner)
-        add_test(NAME EpochRunner.PackageLayout
-            COMMAND $<TARGET_FILE:EpochRunner> --diagnose-package)
-        set_tests_properties(EpochRunner.PackageLayout PROPERTIES TIMEOUT 30)
+    if(TARGET Runner)
+        add_test(NAME Runner.PackageLayout COMMAND $<TARGET_FILE:Runner> --diagnose-package)
+        set_tests_properties(Runner.PackageLayout PROPERTIES TIMEOUT 30)
     endif()
 endif()

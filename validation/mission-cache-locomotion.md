@@ -1,7 +1,7 @@
 # Mission-cache locomotion validation
 
 - Exact tested source commit: $sourceSha
-- Full SDL3/Vulkan/EpochGui Windows build: passed
+- Full SDL3/Vulkan/built-in bitmap UI Windows build: passed
 - Core and concurrency tests: passed
 - Biped/humanoid obstacle-capable motor-range tests: passed
 - Quadruped anti-quiver and obstacle-lift tests: passed

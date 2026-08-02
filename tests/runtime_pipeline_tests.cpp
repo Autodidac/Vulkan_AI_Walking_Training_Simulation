@@ -18,7 +18,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "EpochRunner runtime pipeline test failed: " << message << '\n';
+        std::cerr << "Runner runtime pipeline test failed: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -38,7 +38,7 @@ namespace
 
 int main()
 {
-    using namespace epochrunner;
+    using namespace runner;
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
     require(humanoid.valid(), "articulated humanoid is invalid");
@@ -102,7 +102,7 @@ int main()
     }
 
     const std::filesystem::path checkpoint =
-        std::filesystem::temp_directory_path() / "epochrunner-v070-runtime-test.eppo";
+        std::filesystem::temp_directory_path() / "runner-v070-runtime-test.eppo";
     std::filesystem::remove(checkpoint);
     std::filesystem::remove(checkpoint.string() + ".tmp");
 
@@ -191,6 +191,6 @@ int main()
     std::filesystem::remove(checkpoint);
     std::filesystem::remove(checkpoint.string() + ".tmp");
 
-    std::cout << "EpochRunner v0.7 runtime pipeline, arms, and async persistence tests passed\n";
+    std::cout << "Runner v0.7 runtime pipeline, arms, and async persistence tests passed\n";
     return EXIT_SUCCESS;
 }

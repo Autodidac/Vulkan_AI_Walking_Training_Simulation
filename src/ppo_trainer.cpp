@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-namespace epochrunner::rl
+namespace runner::rl
 {
     namespace
     {
@@ -48,7 +48,7 @@ namespace epochrunner::rl
                 }
                 return 0.05f;
             }
-            if (stage == sim::CourseStage::walk)
+            if (stage == sim::CourseStage::duck_press)
             {
                 if (update < 600u)
                     return 0.88f;
@@ -82,7 +82,7 @@ namespace epochrunner::rl
         {
             if (stage == sim::CourseStage::balance)
                 return balance_teacher_action(environment);
-            if (stage == sim::CourseStage::walk)
+            if (stage == sim::CourseStage::duck_press)
                 return duck_teacher_action(environment);
             const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
             const float swing = std::sin(phase);
@@ -198,6 +198,23 @@ namespace epochrunner::rl
                     totals.completed_reward += episode_rewards_[environment_index];
                     totals.completed_distance += episode_distances_[environment_index];
                     ++totals.completed_episodes;
+                    if (result.valid_motion)
+                        ++totals.valid_episodes;
+                    else
+                        ++totals.invalid_episodes;
+                    totals.total_distance += static_cast<double>(
+                        std::max(0.0f, environment.distance_travelled()));
+                    totals.alternating_steps += environment.alternating_steps();
+                    totals.collisions += static_cast<std::uint64_t>(
+                        std::max(0.0f, environment.collision_count()));
+                    totals.powered_jumps += environment.powered_jumps();
+                    totals.landed_jumps += environment.landed_jumps();
+                    totals.landed_flips += environment.spin_landings();
+                    totals.obstacles_passed += environment.obstacles_passed();
+                    if (result.invalid_reason == sim::InvalidMotion::fallen
+                        || result.invalid_reason == sim::InvalidMotion::collapsed_posture
+                        || result.invalid_reason == sim::InvalidMotion::body_rolling)
+                        ++totals.falls;
                     episode_rewards_[environment_index] = 0.0f;
                     episode_distances_[environment_index] = 0.0f;
                     rollout_previous_actions_[environment_index].fill(0.0f);
@@ -320,7 +337,23 @@ namespace epochrunner::rl
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
+        const TrainingMetrics previous_metrics = metrics_;
         metrics_ = {};
+        metrics_.total_updates = previous_metrics.total_updates;
+        metrics_.total_environment_steps = previous_metrics.total_environment_steps;
+        metrics_.total_episodes = previous_metrics.total_episodes;
+        metrics_.total_valid_episodes = previous_metrics.total_valid_episodes;
+        metrics_.total_invalid_episodes = previous_metrics.total_invalid_episodes;
+        metrics_.total_resets = previous_metrics.total_resets + 1u;
+        metrics_.total_alternating_steps = previous_metrics.total_alternating_steps;
+        metrics_.total_falls = previous_metrics.total_falls;
+        metrics_.total_collisions = previous_metrics.total_collisions;
+        metrics_.total_powered_jumps = previous_metrics.total_powered_jumps;
+        metrics_.total_landed_jumps = previous_metrics.total_landed_jumps;
+        metrics_.total_landed_flips = previous_metrics.total_landed_flips;
+        metrics_.total_obstacles_passed = previous_metrics.total_obstacles_passed;
+        metrics_.total_distance = previous_metrics.total_distance;
+        metrics_.total_training_seconds = previous_metrics.total_training_seconds;
         reward_history_.clear();
         speed_history_.clear();
         if (clear_best)
@@ -427,6 +460,16 @@ namespace epochrunner::rl
                 staged_totals_.completed_reward += worker.completed_reward;
                 staged_totals_.completed_distance += worker.completed_distance;
                 staged_totals_.completed_episodes += worker.completed_episodes;
+                staged_totals_.valid_episodes += worker.valid_episodes;
+                staged_totals_.invalid_episodes += worker.invalid_episodes;
+                staged_totals_.alternating_steps += worker.alternating_steps;
+                staged_totals_.falls += worker.falls;
+                staged_totals_.collisions += worker.collisions;
+                staged_totals_.powered_jumps += worker.powered_jumps;
+                staged_totals_.landed_jumps += worker.landed_jumps;
+                staged_totals_.landed_flips += worker.landed_flips;
+                staged_totals_.obstacles_passed += worker.obstacles_passed;
+                staged_totals_.total_distance += worker.total_distance;
             }
         }
         random_state_ ^= update_seed + 0xA0761D6478BD642FULL;
@@ -493,6 +536,25 @@ namespace epochrunner::rl
             return;
         ++metrics_.update;
         metrics_.environment_steps += rollout_.size();
+        ++metrics_.total_updates;
+        metrics_.total_environment_steps += rollout_.size();
+        metrics_.total_episodes += staged_totals_.completed_episodes;
+        metrics_.total_valid_episodes += staged_totals_.valid_episodes;
+        metrics_.total_invalid_episodes += staged_totals_.invalid_episodes;
+        metrics_.total_resets += staged_totals_.completed_episodes;
+        metrics_.total_alternating_steps += staged_totals_.alternating_steps;
+        metrics_.total_falls += staged_totals_.falls;
+        metrics_.total_collisions += staged_totals_.collisions;
+        metrics_.total_powered_jumps += staged_totals_.powered_jumps;
+        metrics_.total_landed_jumps += staged_totals_.landed_jumps;
+        metrics_.total_landed_flips += staged_totals_.landed_flips;
+        metrics_.total_obstacles_passed += staged_totals_.obstacles_passed;
+        metrics_.total_distance += staged_totals_.total_distance;
+        if (!environments_.empty())
+        {
+            metrics_.total_training_seconds += static_cast<double>(rollout_.size())
+                / static_cast<double>(environments_.size()) / 60.0;
+        }
         metrics_.mean_speed = staged_totals_.accumulated_speed
             / static_cast<float>(rollout_.size());
         if (staged_totals_.completed_episodes > 0)
@@ -550,7 +612,7 @@ namespace epochrunner::rl
 
     void PpoTrainer::update_policy()
         {
-            constexpr std::size_t epochs = 2;
+            constexpr std::size_t optimization_passes = 2;
             constexpr std::size_t minibatch_size = 256;
             constexpr float clip_range = 0.12f;
             constexpr float value_coefficient = 0.42f;
@@ -565,7 +627,8 @@ namespace epochrunner::rl
             float total_entropy = 0.0f;
             std::size_t sample_count = 0;
 
-            for (std::size_t epoch = 0; epoch < epochs; ++epoch)
+            for (std::size_t optimization_pass = 0;
+                optimization_pass < optimization_passes; ++optimization_pass)
             {
                 for (std::size_t index = indices.size(); index > 1; --index)
                 {

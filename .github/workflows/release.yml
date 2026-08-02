@@ -48,23 +48,23 @@ jobs:
 
       - name: Verify packaged executable identity
         shell: pwsh
-        run: build/windows-release/Release/EpochRunner.exe --version
+        run: build/windows-release/Release/Runner.exe --version
 
       - name: Verify SDL3 and Vulkan runtime path
         shell: pwsh
-        run: build/windows-release/Release/EpochRunner.exe --diagnose-vulkan
+        run: build/windows-release/Release/Runner.exe --diagnose-vulkan
 
       - name: Package exact tagged build
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $package = Join-Path $PWD "package/EpochRunner-$tag-windows-x64"
+          $package = Join-Path $PWD "package/Runner-$tag-windows-x64"
           New-Item -ItemType Directory -Force $package | Out-Null
           cmake --install build/windows-release --config Release --prefix $package
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
             Copy-Item -Destination $package -Force
-          Copy-Item README.md, LICENSE, MISSIONS.md -Destination $package -Force
-          $archive = "EpochRunner-$tag-windows-x64.zip"
+          Copy-Item README.md, LICENSE, missioncache.md -Destination $package -Force
+          $archive = "Runner-$tag-windows-x64.zip"
           Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
           (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
 
@@ -75,19 +75,19 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $archive = "EpochRunner-$tag-windows-x64.zip"
+          $archive = "Runner-$tag-windows-x64.zip"
           $sourceSha = (git rev-parse HEAD).Trim()
           $checksum = (Get-Content "$archive.sha256").Trim()
           gh release create $tag $archive "$archive.sha256" `
             --target $sourceSha `
-            --title "EpochRunner $tag" `
+            --title "Runner $tag" `
             --generate-notes
 
           git fetch origin main
           git switch main
           New-Item -ItemType Directory -Force validation | Out-Null
           @"
-          # EpochRunner $tag release evidence
+          # Runner $tag release evidence
 
           - Source commit: `$sourceSha`
           - Windows runner: `windows-2025`

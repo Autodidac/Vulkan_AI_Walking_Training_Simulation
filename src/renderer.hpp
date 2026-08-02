@@ -11,7 +11,7 @@
 
 struct SDL_Window;
 
-namespace epochrunner::render
+namespace runner::render
 {
     struct Vertex
     {

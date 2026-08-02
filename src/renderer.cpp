@@ -20,7 +20,7 @@
 #include <utility>
 #include <vector>
 
-namespace epochrunner::render
+namespace runner::render
 {
     namespace
     {
@@ -358,9 +358,9 @@ namespace epochrunner::render
                 throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
 
             VkApplicationInfo application{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
-            application.pApplicationName = "EpochRunner";
+            application.pApplicationName = "Runner";
             application.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-            application.pEngineName = "EpochGui";
+            application.pEngineName = "built-in bitmap UI";
             application.engineVersion = VK_MAKE_API_VERSION(0, 0, 88, 70);
             application.apiVersion = VK_API_VERSION_1_3;
             VkInstanceCreateInfo instance_info{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
