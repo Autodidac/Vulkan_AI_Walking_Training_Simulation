@@ -79,15 +79,26 @@ patch("src/ppo.hpp", (
         "policy_action[index] = lerp(policy_action[index], teacher[index], 0.90f);",
         "policy_action[index] = lerp(policy_action[index], teacher[index], 0.96f);",
     ),
+    (
+        "    {\n        return stage_motion_qualification(stage, environment).valid;\n    }\n\n    [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,",
+        "    {\n        return environment.body_integrity_valid()\n            && stage_motion_qualification(stage, environment).valid;\n    }\n\n    [[nodiscard]] inline bool elite_motion_eligible(sim::CourseStage stage, bool valid_motion,",
+    ),
 ))
 
-path = root / "src/ppo.hpp"
-text = path.read_text(encoding="utf-8")
-needle = "        if (!environment.valid_motion())\n            rejection |= evidence_bit(MotionEvidenceFailure::invalid_motion);"
-replacement = "        if (!environment.valid_motion() || !environment.body_integrity_valid())\n            rejection |= evidence_bit(MotionEvidenceFailure::invalid_motion);"
-if replacement not in text:
-    if needle not in text:
-        raise RuntimeError("stage qualification integrity target missing")
-    path.write_text(text.replace(needle, replacement, 1), encoding="utf-8", newline="\n")
+patch("src/ppo_parallel.cpp", ((
+    "                            if (!qualification.valid)\n"
+    "                            {\n"
+    "                                ++totals.invalid_runs;\n"
+    "                                totals.rejection_mask |= qualification.rejection_mask;\n"
+    "                            }",
+    "                            if (!qualification.valid || !environment.body_integrity_valid())\n"
+    "                            {\n"
+    "                                ++totals.invalid_runs;\n"
+    "                                totals.rejection_mask |= qualification.rejection_mask;\n"
+    "                                if (!environment.body_integrity_valid())\n"
+    "                                    totals.rejection_mask |= evidence_bit(\n"
+    "                                        MotionEvidenceFailure::invalid_motion);\n"
+    "                            }",
+),))
 
-print("tuned neutral-first standing and qualification integrity")
+print("tuned neutral-first standing and publication integrity gates")
