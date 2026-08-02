@@ -1,0 +1,80 @@
+name: Finalize EpochRunner v0.7.3 ledger
+
+on:
+  push:
+    branches: [agent/v073-release-cleanup]
+    paths: [.github/workflows/finalize-v073-ledger.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v073-release-cleanup
+          fetch-depth: 0
+
+      - name: Record validated package evidence
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '**Release state:** IN PROGRESS — August 2 runtime screenshots reopened body-control and preview integrity',
+              '**Release state:** PACKAGE VERIFIED — v0.7.3 is ready for publication and Adam\'s live packaged-runtime confirmation',
+              1)
+
+          section_start = text.index('## v0.7.3 live-runtime correction')
+          section_end = text.index('## v0.7.2 packaged-runtime regression correction')
+          section = text[section_start:section_end]
+          section = section.replace(
+              '### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots\n**Status:** IN PROGRESS',
+              '### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots\n**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION')
+          section = re.sub(r'(?m)^\*\*Status:\*\* IN PROGRESS$', '**Status:** PACKAGE VERIFIED', section)
+          text = text[:section_start] + section + text[section_end:]
+
+          evidence = '''
+
+### WALK-REL-039 — v0.7.3 body-control and telemetry correction
+**Status:** PACKAGE VERIFIED — PUBLICATION PENDING
+
+- merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
+- exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
+- Linux and Windows validation run: `30738785085`;
+- Linux materialization/test job: `91472309754` — passed;
+- Windows full application/package job: `91472412678` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `EpochRunner-v0.7.3-windows-x64.zip`;
+- Actions artifact ID: `8830773856`;
+- Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
+- publication and final release-asset re-download audit remain pending;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+'''
+          if '### WALK-REL-039 — v0.7.3 body-control and telemetry correction' not in text:
+              text += evidence
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          notes = Path('RELEASE_NOTES_v0.7.3.md')
+          note_text = notes.read_text(encoding='utf-8')
+          validation = '\n- Passed Linux GCC 14 tests and the full Windows 2025 SDL3/Vulkan build, test, launch, package, checksum, and independent extraction audit.\n'
+          if validation.strip() not in note_text:
+              notes.write_text(note_text.rstrip() + '\n' + validation, encoding='utf-8', newline='\n')
+
+          Path('.github/workflows/finalize-v073-ledger.yml').unlink()
+
+      - name: Commit finalized release source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add missioncache.md RELEASE_NOTES_v0.7.3.md .github/workflows/finalize-v073-ledger.yml
+          git commit -m "Finalize v0.7.3 package evidence and cleanup"
+          git push origin HEAD:agent/v073-release-cleanup
