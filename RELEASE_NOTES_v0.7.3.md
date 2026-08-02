@@ -13,3 +13,4 @@
 - Adds Metric and Imperial display modes with 0.25 km / 0.25 mile course markers.
 - Separates landed powered flips from uncontrolled generic spin and penalizes destabilizing spin outside flip training.
 - Adds current-rig lifetime counters plus session and cumulative runtime totals to the live panel.
+- Passed Linux GCC 14 tests and the full Windows 2025 SDL3/Vulkan build, test, launch, package, checksum, and independent extraction audit.

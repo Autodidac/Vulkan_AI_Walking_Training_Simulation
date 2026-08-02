@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** EpochRunner v0.7.3
 
-**Release state:** IN PROGRESS — August 2 runtime screenshots reopened body-control and preview integrity
+**Release state:** PUBLICATION IN PROGRESS — v0.7.3 package validated on Linux and Windows
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -14,53 +14,53 @@ v0.7.2 remains historical release evidence. It is not accepted as the current ru
 ## v0.7.3 live-runtime correction
 
 ### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
 
 Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
 
 ### WALK-FOOT-030 — Connected rigid heel-toe foot plates
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 Each biped foot uses one ankle/heel/toe triangle with two semantic contacts. Any stretched bone or detached contact cluster invalidates the rollout before champion, imitation, or preview publication.
 
 ### WALK-CONTROL-031 — Feet-first control authority
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 Balance and duck lessons must load feet through knees and hips before arms receive meaningful policy authority. Bilateral coordination remains a light prior and cannot force mirrored leg collapse.
 
 ### WALK-PASSIVE-032 — Stable heads and tails on every rig
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 Head and passive-tail endpoints receive realistic mass, velocity damping, and torso-relative passive angular stabilization. They may react naturally but cannot behave as uncontrolled pendulums.
 
 ### WALK-PREVIEW-033 — Complete-body training preview
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 The training preview may publish only a current, finite, connected full-body snapshot. Its camera fits complete particle bounds; a detached or exploded body is rejected rather than showing isolated feet.
 
 ### WALK-TEST-034 — Runtime-shaped regression coverage
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 Tests cover detached semantic feet, full-skeleton stretch bounds, leg-versus-arm authority, passive head/tail containment, current-frame preview eligibility, Linux C++23 validation, and the complete Windows Vulkan package.
 
 
 ### WALK-UI-035 — Full-width DPI-safe GUI background
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 The header and frame background must span the actual Vulkan drawable width at Windows DPI scaling. Mouse hit testing is converted from SDL logical coordinates to drawable coordinates.
 
 ### WALK-UNITS-036 — Metric/Imperial quarter markers
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 The live panel exposes Metric and Imperial modes. Course reference signs are spaced every 0.25 km or 0.25 mile and all speed/distance labels follow the selected mode.
 
 ### WALK-FLIP-037 — Separate flips from generic spin
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 A flip is powered airborne somersault rotation in the flip lesson followed by a landing. Generic rotation is tracked separately, is never accepted as flip evidence, and is penalized when it destabilizes other lessons.
 
 ### WALK-STATS-038 — Rig lifetime and cumulative runtime totals
-**Status:** IN PROGRESS
+**Status:** PACKAGE VERIFIED
 
 Display current rig age, rig update delta, rig environment-step delta, session runtime, total updates, and total environment steps. Counter deltas are saturating and reset only when the rig signature changes.
 
@@ -298,3 +298,21 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 - published release asset re-download, hash, manifest, executable, and run.bat audit: passed;
 - open pull requests after merge: `0`;
 - remaining branches after cleanup: `main`.
+
+
+### WALK-REL-039 — v0.7.3 body-control and telemetry correction
+**Status:** PACKAGE VERIFIED — PUBLICATION IN PROGRESS
+
+- merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
+- exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
+- Linux and Windows validation run: `30738785085`;
+- Linux materialization/test job: `91472309754` — passed;
+- Windows full application/package job: `91472412678` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `EpochRunner-v0.7.3-windows-x64.zip`;
+- Actions artifact ID: `8830773856`;
+- Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
