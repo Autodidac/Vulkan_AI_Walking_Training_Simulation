@@ -29,7 +29,9 @@ jobs:
           sudo apt-get install -y g++-14 ninja-build
 
       - name: Materialize runtime correction
-        run: python3 tools/apply_v073_runtime_fix.py
+        run: |
+          python3 tools/repair_v073_applicator.py
+          python3 tools/apply_v073_runtime_fix.py
 
       - name: Validate patch hygiene
         run: git diff --check
@@ -80,6 +82,8 @@ jobs:
       - name: Confirm exact materialized source
         shell: pwsh
         run: |
+          python tools/repair_v073_applicator.py
+          if ($LASTEXITCODE -ne 0) { throw "v0.7.3 applicator repair failed" }
           python tools/apply_v073_runtime_fix.py
           if ($LASTEXITCODE -ne 0) { throw "v0.7.3 applicator failed" }
           git diff --check
