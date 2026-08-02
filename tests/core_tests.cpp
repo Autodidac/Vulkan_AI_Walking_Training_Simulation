@@ -381,6 +381,11 @@ int main()
     require(humanoid.additional_left_contact_nodes.size() == 2u
             && humanoid.additional_right_contact_nodes.size() == 2u,
         "dedicated foot plates do not include heel and toe contacts");
+    require(humanoid.nodes[humanoid.motors[1].c].y
+            - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
+            && humanoid.nodes[humanoid.motors[3].c].y
+                - humanoid.nodes[humanoid.right_contact_node].y >= 0.18f,
+        "passive foot adapter leaves an ankle on the contact plane");
     require(std::ranges::none_of(humanoid.motors,
             [&humanoid](const sim::MotorConstraint& motor)
             {

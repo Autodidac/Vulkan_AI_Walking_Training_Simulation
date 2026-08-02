@@ -133,13 +133,13 @@ namespace epochrunner::rl
         {
             const auto teacher = duck_teacher_action(environment);
             const auto observation = environment.observation();
-    const bool overhead_bar = std::abs(observation[30]) < 0.05f
-        && observation[32] > 0.01f;
-    const float observed_weight = overhead_bar
-        ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
-    const float obstacle_weight = std::max(
-        environment.duck_obstacle_weight(), observed_weight);
-    const float assist = 0.56f + obstacle_weight * 0.34f;
+            const bool overhead_bar = std::abs(observation[30]) < 0.05f
+                && observation[32] > 0.01f;
+            const float observed_weight = overhead_bar
+                ? sim::duck_obstacle_approach_weight(observation[29] * 6.0f) : 0.0f;
+            const float obstacle_weight = std::max(
+                environment.duck_obstacle_weight(), observed_weight);
+            const float assist = 0.56f + obstacle_weight * 0.34f;
             for (std::size_t index = 0; index < policy_action.size(); ++index)
                 policy_action[index] = lerp(policy_action[index], teacher[index], assist);
         }

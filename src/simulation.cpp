@@ -40,7 +40,7 @@ namespace epochrunner::sim
                 const float radius = ankle < rig.radii.size()
                     ? clamp(rig.radii[ankle] * 0.68f, 0.095f, 0.135f) : 0.11f;
                 const auto foot = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({ ankle_position.x + 0.055f, ankle_position.y - 0.095f });
+                rig.nodes.push_back({ ankle_position.x + 0.055f, ankle_position.y - 0.205f });
                 rig.radii.push_back(radius);
                 const Vec2 foot_position = rig.nodes[foot];
                 const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
@@ -50,10 +50,12 @@ namespace epochrunner::sim
                 rig.nodes.push_back({ foot_position.x + toe_reach, foot_position.y - 0.018f });
                 rig.radii.push_back(radius);
 
-                // The ankle remains the final articulated leg joint.  A short
-                // passive ankle-to-foot link feeds a separate contact plate;
-                // the lower-leg endpoint itself is never a semantic foot.
+                // The ankle remains the final articulated leg joint. A braced
+                // passive adapter feeds a separate contact plate; the lower-leg
+                // endpoint itself is never a semantic foot or traction contact.
                 rig.bones.push_back({ ankle, foot, 0.0f, 0.98f });
+                rig.bones.push_back({ ankle, heel, 0.0f, 0.94f });
+                rig.bones.push_back({ ankle, toe, 0.0f, 0.94f });
                 rig.bones.push_back({ foot, heel, 0.0f, 0.96f });
                 rig.bones.push_back({ foot, toe, 0.0f, 0.96f });
                 rig.bones.push_back({ heel, toe, 0.0f, 0.90f });
