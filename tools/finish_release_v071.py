@@ -20,67 +20,9 @@ main = replace_once(
 )
 main_path.write_text(main, encoding="utf-8")
 
-# Use the Vulkan SDK's glslc instead of compiling shaderc and SPIR-V Tools from source.
+# Keep the proven vcpkg shaderc compiler path, but install the restored launcher.
 cmake_path = Path("CMakeLists.txt")
 cmake = cmake_path.read_text(encoding="utf-8")
-old_shader_block = '''    find_package(SDL3 CONFIG REQUIRED)
-    find_package(Vulkan 1.3 REQUIRED)
-    find_package(unofficial-shaderc CONFIG REQUIRED)
-
-    add_executable(EpochRunnerShaderCompiler
-        tools/shader_compiler.cpp
-    )
-    target_link_libraries(EpochRunnerShaderCompiler PRIVATE
-        unofficial::shaderc::shaderc
-    )
-    target_compile_features(EpochRunnerShaderCompiler PRIVATE cxx_std_23)
-    set_target_properties(EpochRunnerShaderCompiler PROPERTIES
-        CXX_STANDARD 23
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-    epochrunner_enable_warnings(EpochRunnerShaderCompiler)
-
-    set(EPOCHRUNNER_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-    set(EPOCHRUNNER_SHADER_OUTPUTS)
-    foreach(shader IN ITEMS flat.vert flat.frag)
-        set(source "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${shader}")
-        set(output "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/${shader}.spv")
-        add_custom_command(
-            OUTPUT "${output}"
-            COMMAND "$<TARGET_FILE:EpochRunnerShaderCompiler>" "${source}" "${output}"
-            DEPENDS
-                "${source}"
-                EpochRunnerShaderCompiler
-            VERBATIM
-            COMMENT "Compiling ${shader} with vcpkg shaderc"
-        )
-        list(APPEND EPOCHRUNNER_SHADER_OUTPUTS "${output}")
-    endforeach()
-'''
-new_shader_block = '''    find_package(SDL3 CONFIG REQUIRED)
-    find_package(Vulkan 1.3 REQUIRED COMPONENTS glslc)
-    if(NOT Vulkan_GLSLC_EXECUTABLE)
-        message(FATAL_ERROR "EpochRunner requires glslc from the Vulkan SDK")
-    endif()
-
-    set(EPOCHRUNNER_SHADER_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-    set(EPOCHRUNNER_SHADER_OUTPUTS)
-    foreach(shader IN ITEMS flat.vert flat.frag)
-        set(source "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${shader}")
-        set(output "${EPOCHRUNNER_SHADER_OUTPUT_DIR}/${shader}.spv")
-        add_custom_command(
-            OUTPUT "${output}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${EPOCHRUNNER_SHADER_OUTPUT_DIR}"
-            COMMAND "${Vulkan_GLSLC_EXECUTABLE}" "${source}" -o "${output}"
-            DEPENDS "${source}"
-            VERBATIM
-            COMMENT "Compiling ${shader} with Vulkan SDK glslc"
-        )
-        list(APPEND EPOCHRUNNER_SHADER_OUTPUTS "${output}")
-    endforeach()
-'''
-cmake = replace_once(cmake, old_shader_block, new_shader_block, "shader compiler block")
 cmake = replace_once(
     cmake,
     '''    install(TARGETS EpochRunner RUNTIME DESTINATION .)
@@ -98,12 +40,6 @@ cmake_path.write_text(cmake, encoding="utf-8")
 
 vcpkg_path = Path("vcpkg.json")
 vcpkg = vcpkg_path.read_text(encoding="utf-8")
-vcpkg = replace_once(
-    vcpkg,
-    '    },\n    "shaderc",\n    "vulkan-loader"',
-    '    },\n    "vulkan-loader"',
-    "shaderc manifest dependency",
-)
 vcpkg = vcpkg.replace('"version-semver": "0.6.2"', '"version-semver": "0.7.1"')
 vcpkg_path.write_text(vcpkg, encoding="utf-8")
 
@@ -112,12 +48,15 @@ notes = notes_path.read_text(encoding="utf-8")
 for line in (
     "- Restores `run.bat` as the supported one-click source-tree and extracted-release launcher.\n",
     "- Packages and validates `run.bat`, shaders, assets, and runtime DLLs from an unrelated working directory.\n",
-    "- Uses Vulkan SDK `glslc` for deterministic shader compilation instead of rebuilding shaderc and SPIR-V Tools.\n",
 ):
     if line not in notes:
         if not notes.endswith("\n"):
             notes += "\n"
         notes += line
+notes = notes.replace(
+    "- Uses Vulkan SDK `glslc` for deterministic shader compilation instead of rebuilding shaderc and SPIR-V Tools.\n",
+    "",
+)
 notes_path.write_text(notes, encoding="utf-8")
 
 readme_path = Path("README.md")
