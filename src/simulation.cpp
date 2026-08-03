@@ -1146,59 +1146,48 @@ namespace runner::sim
 
     void Environment::separate_support_clusters() noexcept
     {
-        auto rigid_contact_plate = [&](std::uint16_t primary,
-            const std::vector<std::uint16_t>& additional) noexcept
+        std::array<std::uint16_t, 32> supports{};
+        std::size_t support_count = 0;
+        auto append = [&](std::uint16_t node)
         {
-            return valid_node(primary) && !additional.empty()
-                && std::ranges::all_of(additional,
-                    [&](std::uint16_t node)
-                    {
-                        return valid_node(node)
-                            && direct_bone(blueprint_, primary, node);
-                    });
+            if (!valid_node(node) || support_count >= supports.size())
+                return;
+            if (std::find(supports.begin(), supports.begin() + support_count, node)
+                == supports.begin() + support_count)
+                supports[support_count++] = node;
         };
-        if (!rigid_contact_plate(blueprint_.left_contact_node,
-                blueprint_.additional_left_contact_nodes)
-            || !rigid_contact_plate(blueprint_.right_contact_node,
-                blueprint_.additional_right_contact_nodes))
-            return;
+        append(blueprint_.left_contact_node);
+        append(blueprint_.right_contact_node);
+        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+            append(node);
+        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+            append(node);
 
-        auto support_nodes = [&](bool left)
+        for (std::size_t first = 0; first < support_count; ++first)
         {
-            std::array<std::uint16_t, 16> nodes{};
-            std::size_t count = 0;
-            const std::uint16_t primary = left
-                ? blueprint_.left_contact_node : blueprint_.right_contact_node;
-            if (valid_node(primary))
-                nodes[count++] = primary;
-            const auto& additional = left
-                ? blueprint_.additional_left_contact_nodes
-                : blueprint_.additional_right_contact_nodes;
-            for (const std::uint16_t node : additional)
+            const std::uint16_t first_index = supports[first];
+            Particle& lhs = particles_[first_index];
+            for (std::size_t second = first + 1; second < support_count; ++second)
             {
-                if (count < nodes.size() && valid_node(node))
-                    nodes[count++] = node;
-            }
-            return std::pair{ nodes, count };
-        };
-
-        const auto [left_nodes, left_count] = support_nodes(true);
-        const auto [right_nodes, right_count] = support_nodes(false);
-        for (std::size_t li = 0; li < left_count; ++li)
-        {
-            Particle& left = particles_[left_nodes[li]];
-            for (std::size_t ri = 0; ri < right_count; ++ri)
-            {
-                Particle& right = particles_[right_nodes[ri]];
-                const float minimum_gap = left.radius + right.radius + 0.055f;
-                const float horizontal = right.position.x - left.position.x;
-                if (horizontal >= minimum_gap)
+                const std::uint16_t second_index = supports[second];
+                if (first_index == second_index
+                    || direct_bone(blueprint_, first_index, second_index))
                     continue;
-                const float correction = (minimum_gap - horizontal) * 0.5f;
-                left.position.x -= correction;
-                left.previous.x -= correction * 0.35f;
-                right.position.x += correction;
-                right.previous.x += correction * 0.35f;
+                Particle& rhs = particles_[second_index];
+                const float minimum_gap = lhs.radius + rhs.radius + 0.035f;
+                const float horizontal = rhs.position.x - lhs.position.x;
+                if (std::abs(horizontal) >= minimum_gap)
+                    continue;
+                float authored_direction = blueprint_.nodes[second_index].x
+                    - blueprint_.nodes[first_index].x;
+                if (std::abs(authored_direction) < 1.0e-4f)
+                    authored_direction = horizontal;
+                const float direction = authored_direction < 0.0f ? -1.0f : 1.0f;
+                const float correction = (minimum_gap - std::abs(horizontal)) * 0.5f;
+                lhs.position.x -= direction * correction;
+                lhs.previous.x -= direction * correction * 0.35f;
+                rhs.position.x += direction * correction;
+                rhs.previous.x += direction * correction * 0.35f;
             }
         }
     }
@@ -1767,6 +1756,24 @@ namespace runner::sim
         return clamp(dot(current, desired), -1.0f, 1.0f);
     }
 
+    float Environment::primary_support_span_ratio() const noexcept
+    {
+        if (!valid_node(blueprint_.left_contact_node)
+            || !valid_node(blueprint_.right_contact_node)
+            || blueprint_.left_contact_node >= blueprint_.nodes.size()
+            || blueprint_.right_contact_node >= blueprint_.nodes.size())
+            return 1.0f;
+        const float rest_span = std::abs(
+            blueprint_.nodes[blueprint_.right_contact_node].x
+            - blueprint_.nodes[blueprint_.left_contact_node].x);
+        if (rest_span < 0.08f)
+            return 1.0f;
+        const float current_span = std::abs(
+            particles_[blueprint_.right_contact_node].position.x
+            - particles_[blueprint_.left_contact_node].position.x);
+        return current_span / rest_span;
+    }
+
     bool Environment::current_display_posture_valid() const noexcept
     {
         if (!body_integrity_valid()
@@ -1784,8 +1791,12 @@ namespace runner::sim
 
         const Vec2 root = particles_[blueprint_.root_node].position;
         const Vec2 head = particles_[blueprint_.head_node].position;
+        const bool support_layout_valid = !blueprint_.paired_leg_chains()
+            || (primary_support_span_ratio() >= 0.48f
+                && primary_support_span_ratio() <= 1.85f);
         return torso_uprightness() >= 0.60f
-            && head.y > root.y + 0.20f;
+            && head.y > root.y + 0.20f
+            && support_layout_valid;
     }
 
     void Environment::invalidate(InvalidMotion reason) noexcept
@@ -1937,10 +1948,16 @@ namespace runner::sim
             maximum_joint_speed_ = std::max(maximum_joint_speed_, current_joint_speed);
         const float head_height_ratio = rest_head_clearance > 1.0e-5f
             ? head_clearance / rest_head_clearance : 0.0f;
+        const float support_span_ratio = primary_support_span_ratio();
+        const bool support_layout_valid = !blueprint_.paired_leg_chains()
+            || (support_span_ratio >= 0.55f && support_span_ratio <= 1.65f);
         const bool catastrophic_stance_failure = non_foot_grounded_
             || current_uprightness < 0.70f
-            || head_height_ratio < 0.52f;
+            || head_height_ratio < 0.52f
+            || (blueprint_.paired_leg_chains()
+                && (support_span_ratio < 0.35f || support_span_ratio > 2.10f));
         const bool stable_stance_frame = feet_supported
+            && support_layout_valid
             && current_uprightness >= 0.84f
             && head_height_ratio >= 0.62f
             && stance_slip_speed_ <= 0.10f
@@ -2127,13 +2144,15 @@ namespace runner::sim
         }
 
         const bool locomotion_required = stage_requires_forward_gait(course_stage_);
-        if (locomotion_required
-            && wheel_sliding_motion(root_speed, left, right, stance_slip_speed_))
-            wheel_sliding_seconds_ += dt;
+        const float recent_swing_clearance = std::max(left_clearance, right_clearance);
+        if (locomotion_required && friction_driven_shuffle(root_speed,
+                left, right, stance_slip_speed_, gait_cycles(), recent_swing_clearance))
+            wheel_sliding_seconds_ = std::min(3.0f, wheel_sliding_seconds_ + dt);
         else
             wheel_sliding_seconds_ = std::max(0.0f, wheel_sliding_seconds_ - dt * 1.5f);
-        if (wheel_sliding_seconds_ > 0.90f)
-            invalidate(InvalidMotion::wheel_sliding);
+        // Sliding is a normal part of stance adjustment, crouching, and gait.
+        // It is never a hard invalidation. Pure friction-driven shuffling simply
+        // receives no gait credit and a mild shaping penalty until a real cycle occurs.
 
         float nearest_hazard_dx = std::numeric_limits<float>::infinity();
         float nearest_hazard_target = 0.20f;
@@ -2400,9 +2419,12 @@ namespace runner::sim
         // This is intentionally a mild shaping penalty. Natural knee lead
         // is now tolerated; only a large low-foot body-first obstacle shove reaches here.
         const float knee_first_penalty = knee_first_this_step_ ? 0.028f : 0.0f;
-        const float stance_slip_penalty = clamp(stance_slip_speed_ - 0.08f, 0.0f, 4.0f) * 0.012f;
-        const float wheel_penalty = wheel_sliding_motion(raw_speed,
-            left_supported, right_supported, stance_slip_speed_) ? 0.055f : 0.0f;
+        const float stance_slip_penalty = course_stage_ == CourseStage::balance
+            ? clamp(stance_slip_speed_ - 0.08f, 0.0f, 4.0f) * 0.012f
+            : 0.0f;
+        const float wheel_penalty = friction_driven_shuffle(raw_speed,
+            left_supported, right_supported, stance_slip_speed_, gait_cycles(),
+            swing_clearance) ? 0.028f : 0.0f;
         const float swing_reward = single_support && swing_clearance > 0.10f
             ? clamp(swing_clearance, 0.0f, 0.55f) * 0.005f : 0.0f;
         const float obstacle_lift_ratio = clamp(
@@ -2444,9 +2466,9 @@ namespace runner::sim
         const float real_step_reward = alternating_step_this_step_ ? 0.070f : 0.0f;
         const float unearned_progress_penalty = alternating_steps_ == 0u
             ? std::max(0.0f, safe_progress) * 0.80f : 0.0f;
-        const float double_support_shuffle_penalty = left_supported && right_supported
-            && std::abs(raw_speed) > 0.08f && obstacle_lift_clearance_ < 0.085f
-            ? 0.028f : 0.0f;
+        const float double_support_shuffle_penalty = friction_driven_shuffle(raw_speed,
+            left_supported, right_supported, stance_slip_speed_, gait_cycles(),
+            swing_clearance) ? 0.018f : 0.0f;
         const float action_change_penalty = action_change_energy_ * 0.0025f;
         const float press_contact_reward = course_stage_ == CourseStage::duck_press
             && duck_press_contact_this_step_ && duck_active_ ? 0.045f : 0.0f;
@@ -2460,6 +2482,10 @@ namespace runner::sim
         const float upper_body_posture_penalty = course_stage_ == CourseStage::balance
             ? std::max(0.0f, upper_body_deviation - 0.30f) * 0.035f
             : 0.0f;
+        const float support_span_error = blueprint_.paired_leg_chains()
+            ? std::abs(primary_support_span_ratio() - 1.0f) : 0.0f;
+        const float support_span_penalty = std::max(0.0f,
+            support_span_error - 0.22f) * 0.090f;
 
         switch (course_stage_)
         {
@@ -2478,6 +2504,7 @@ namespace runner::sim
                 - stance_slip_speed_ * 0.010f
                 - posture_failure_seconds_ * 0.020f
                 - upper_body_posture_penalty
+                - support_span_penalty
                 - body_contact_penalty;
             break;
         }
@@ -2489,22 +2516,21 @@ namespace runner::sim
                     + press_contact_reward + pass_reward
                     - std::abs(forward_speed_) * 0.0030f
                     - action_energy * 0.0009f - torso_swing_penalty
+                    - support_span_penalty
                     - premature_duck_penalty - body_contact_penalty;
             }
             else
             {
-                const float maintained_crouch = duck_active_ && !non_foot_grounded_
-                    ? 0.030f : -0.050f;
-                last_reward_ = forward_gait_reward + maintained_crouch
-                    + std::max(0.0f, upright) * 0.010f
-                    + duck_reward * 1.25f + obstacle_duck_reward
-                    + swing_reward + run_reward + real_step_reward
-                    + obstacle_lift_reward + pass_reward
-                    - backward_penalty - unearned_progress_penalty
-                    - double_support_shuffle_penalty - action_energy * 0.0010f
-                    - action_change_penalty - collision_penalty - knee_first_penalty
-                    - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
-                    - body_contact_penalty * 2.0f - torso_swing_penalty;
+                const float recovered_pose = !duck_active_ && !non_foot_grounded_
+                    && stable_stance_seconds_ >= 0.40f ? 0.065f : 0.0f;
+                last_reward_ = recovered_pose
+                    + std::max(0.0f, upright) * 0.016f
+                    + contact * 0.0015f + pass_reward
+                    - std::abs(forward_speed_) * 0.0080f
+                    - std::abs(distance_travelled_) * 0.0040f
+                    - action_energy * 0.0009f - action_change_penalty
+                    - support_span_penalty - torso_swing_penalty
+                    - body_contact_penalty * 2.0f;
             }
             break;
         case CourseStage::crouch_walk:

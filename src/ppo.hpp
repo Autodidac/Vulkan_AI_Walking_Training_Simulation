@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0600u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0700u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -30,54 +30,145 @@ namespace runner::rl
         static_assert(sim::observation_count == 40);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
+        const sim::CreatureBlueprint& rig = environment.blueprint();
 
-        const std::size_t leg_count = std::min<std::size_t>(4u,
-            environment.blueprint().active_motor_count);
-        for (std::size_t index = 0; index < leg_count; ++index)
-        {
-            const float joint_speed = observation[joint_velocity_begin + index];
-            action[index] = clamp(-0.12f * joint_speed, -0.30f, 0.30f);
-        }
-        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
         {
             const float joint_offset = observation[joint_angle_begin + index];
             const float joint_speed = observation[joint_velocity_begin + index];
-            action[index] = clamp(-0.18f * joint_offset - 0.045f * joint_speed,
-                -0.22f, 0.22f);
+            action[index] = clamp(-0.16f * joint_offset - 0.055f * joint_speed,
+                -0.28f, 0.28f);
         }
 
-        // Plant and load the feet through the leg chains before granting the
-        // arms meaningful authority. The support correction is intentionally
-        // asymmetric so a missing foot is recovered instead of mirrored.
-        // Rest geometry is the standing target. Do not preload a crouch
-        // before both rigid feet have established support.
-        action[0] = clamp(action[0], -0.34f, 0.34f);
-        action[1] = clamp(action[1], -0.34f, 0.34f);
-        action[2] = clamp(action[2], -0.34f, 0.34f);
-        action[3] = clamp(action[3], -0.34f, 0.34f);
-        if (!environment.left_supported())
+        if (rig.paired_leg_chains())
         {
-            action[0] = clamp(action[0] - 0.012f, -0.38f, 0.38f);
-            action[1] = clamp(action[1] + 0.020f, -0.40f, 0.40f);
+            if (!environment.left_supported())
+            {
+                action[0] = clamp(action[0] - 0.010f, -0.34f, 0.34f);
+                action[1] = clamp(action[1] + 0.016f, -0.36f, 0.36f);
+            }
+            if (!environment.right_supported())
+            {
+                action[2] = clamp(action[2] + 0.010f, -0.34f, 0.34f);
+                action[3] = clamp(action[3] - 0.016f, -0.36f, 0.36f);
+            }
+            const float correction = clamp(observation[0] * 0.32f
+                + observation[2] * 0.05f, -0.15f, 0.15f);
+            action[0] = clamp(action[0] - correction, -0.44f, 0.44f);
+            action[1] = clamp(action[1] + correction * 0.16f, -0.44f, 0.44f);
+            action[2] = clamp(action[2] - correction, -0.44f, 0.44f);
+            action[3] = clamp(action[3] - correction * 0.16f, -0.44f, 0.44f);
         }
-        if (!environment.right_supported())
+
+        const bool support_loaded = environment.left_supported()
+            || environment.right_supported();
+        const float upper_body_authority = support_loaded
+            && environment.stable_stance_seconds() >= 0.75f ? 0.35f : 0.10f;
+        for (std::size_t index = 4; index < rig.active_motor_count; ++index)
+            action[index] *= upper_body_authority;
+        return action;
+    }
+
+    struct MotorDiscoveryProbe
+    {
+        std::array<float, sim::action_count> action{};
+        float weight{};
+    };
+
+    [[nodiscard]] inline std::size_t motor_discovery_lane_count(
+        const sim::CreatureBlueprint& rig) noexcept
+    {
+        return std::min<std::size_t>(2u * rig.active_motor_count + 4u, 24u);
+    }
+
+    [[nodiscard]] inline MotorDiscoveryProbe motor_discovery_probe(
+        const sim::Environment& environment, std::size_t environment_index,
+        std::uint64_t update, std::size_t rollout_step) noexcept
+    {
+        MotorDiscoveryProbe probe{};
+        const std::size_t active = environment.blueprint().active_motor_count;
+        const std::size_t lane_count = motor_discovery_lane_count(environment.blueprint());
+        if (active == 0u || environment_index >= lane_count || update >= 480u)
+            return probe;
+        const std::size_t half_cycle = (rollout_step / 24u) & 1u;
+        const float progress = clamp(static_cast<float>(update) / 480.0f, 0.0f, 1.0f);
+        const float amplitude = lerp(0.20f, 0.48f, progress);
+        const std::size_t lane = environment_index % lane_count;
+        if (half_cycle != 0u)
         {
-            action[2] = clamp(action[2] + 0.012f, -0.38f, 0.38f);
-            action[3] = clamp(action[3] - 0.020f, -0.40f, 0.40f);
+            probe.weight = 0.88f;
+            return probe;
         }
+        if (lane < active)
+            probe.action[lane] = amplitude;
+        else if (lane < active * 2u)
+            probe.action[lane - active] = -amplitude;
+        else if (lane == active * 2u)
+        {
+            for (std::size_t index = 0; index < active; ++index)
+                probe.action[index] = amplitude;
+        }
+        else if (lane == active * 2u + 1u)
+        {
+            for (std::size_t index = 0; index < active; ++index)
+                probe.action[index] = -amplitude;
+        }
+        else if (lane == active * 2u + 2u)
+        {
+            for (std::size_t index = 0; index < active; ++index)
+                probe.action[index] = ((index / 2u) & 1u) == 0u
+                    ? amplitude : -amplitude;
+        }
+        else
+        {
+            for (std::size_t index = 0; index < active; ++index)
+                probe.action[index] = (index & 1u) == 0u
+                    ? amplitude : -amplitude;
+        }
+        probe.weight = 0.88f;
+        return probe;
+    }
 
-        const float correction = clamp(observation[0] * 0.40f
-            + observation[2] * 0.07f, -0.20f, 0.20f);
-        action[0] = clamp(action[0] - correction, -0.52f, 0.52f);
-        action[1] = clamp(action[1] + correction * 0.20f, -0.52f, 0.52f);
-        action[2] = clamp(action[2] - correction, -0.52f, 0.52f);
-        action[3] = clamp(action[3] - correction * 0.20f, -0.52f, 0.52f);
+    [[nodiscard]] inline float motor_action_for_target_angle(
+        const sim::MotorConstraint& motor, float target_angle) noexcept
+    {
+        target_angle = clamp(target_angle, motor.minimum_angle, motor.maximum_angle);
+        if (target_angle < motor.neutral_angle)
+        {
+            const float span = std::max(1.0e-5f,
+                motor.neutral_angle - motor.minimum_angle);
+            return clamp((target_angle - motor.neutral_angle) / span, -1.0f, 0.0f);
+        }
+        const float span = std::max(1.0e-5f,
+            motor.maximum_angle - motor.neutral_angle);
+        return clamp((target_angle - motor.neutral_angle) / span, 0.0f, 1.0f);
+    }
 
-        const bool feet_loaded = environment.left_supported() && environment.right_supported();
-        const float arm_authority = feet_loaded
-            && environment.stable_stance_seconds() >= 1.0f ? 0.20f : 0.03f;
-        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
-            action[index] *= arm_authority;
+    [[nodiscard]] inline std::array<float, sim::action_count> compact_support_teacher_action(
+        const sim::Environment& environment, float pressure) noexcept
+    {
+        auto action = balance_teacher_action(environment);
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        pressure = clamp(pressure, 0.0f, 1.0f);
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            const sim::MotorConstraint& motor = rig.motors[index];
+            if (!motor.enabled || motor.a >= rig.nodes.size()
+                || motor.pivot >= rig.nodes.size() || motor.c >= rig.nodes.size())
+                continue;
+            if (!rig.is_support_seed(motor.c))
+                continue;
+            const Vec2 reference = rig.nodes[motor.a] - rig.nodes[motor.pivot];
+            const Vec2 driven = rig.nodes[motor.c] - rig.nodes[motor.pivot];
+            if (length(reference) <= 1.0e-5f || length(driven) <= 1.0e-5f)
+                continue;
+            Vec2 compact = driven;
+            compact.x *= 1.0f + pressure * 0.34f;
+            compact.y *= 1.0f - pressure * 0.26f;
+            const float target = signed_angle(reference, compact);
+            const float desired = motor_action_for_target_angle(motor, target);
+            action[index] = lerp(action[index], desired, 0.78f);
+        }
         return action;
     }
 
@@ -87,19 +178,19 @@ namespace runner::rl
         sim::CourseStage stage) noexcept
     {
         const sim::CreatureBlueprint& rig = environment.blueprint();
-        const bool paired_leg_chains = rig.active_motor_count >= 4u
-            && rig.motors[0].enabled && rig.motors[1].enabled
-            && rig.motors[2].enabled && rig.motors[3].enabled
-            && rig.motors[0].pivot == rig.motors[2].pivot
-            && rig.motors[1].a == rig.motors[0].pivot
-            && rig.motors[3].a == rig.motors[2].pivot;
+        const bool paired_leg_chains = rig.paired_leg_chains();
         if (!paired_leg_chains)
             return action;
+        if (stage == sim::CourseStage::balance)
+        {
+            for (float& value : action)
+                value = clamp(value, -1.0f, 1.0f);
+            return action;
+        }
 
-        const float leg_pair_strength = (stage == sim::CourseStage::duck_press
-                || stage == sim::CourseStage::crouch_walk)
-            ? 0.12f : (stage == sim::CourseStage::balance
-                ? 0.18f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));
+        const float leg_pair_strength = stage == sim::CourseStage::duck_press
+            ? 0.04f : (stage == sim::CourseStage::crouch_walk
+                ? 0.10f : (stage == sim::CourseStage::ramps ? 0.22f : 0.18f));
         auto mirror_pair = [&](std::size_t left, std::size_t right, float strength)
         {
             const float mirrored = 0.5f * (action[left] - action[right]);
@@ -119,7 +210,8 @@ namespace runner::rl
 
         // Keep a light hip/knee chain prior without forcing both legs into the
         // same folded pose. PPO retains most of the residual leg authority.
-        constexpr float chain_strength = 0.04f;
+        const float chain_strength = stage == sim::CourseStage::duck_press
+            ? 0.0f : 0.04f;
         const float left_chain = 0.5f * (-action[0] + action[1]);
         const float right_chain = 0.5f * (action[2] - action[3]);
         action[0] = lerp(action[0], -left_chain, chain_strength);
@@ -128,12 +220,15 @@ namespace runner::rl
         action[3] = lerp(action[3], -right_chain, chain_strength);
 
         // The chain prior must not reintroduce same-direction pair motion.
-        const float hip_pair_mean = 0.5f * (action[0] + action[2]);
-        const float knee_pair_mean = 0.5f * (action[1] + action[3]);
-        action[0] -= hip_pair_mean * 0.25f;
-        action[2] -= hip_pair_mean * 0.25f;
-        action[1] -= knee_pair_mean * 0.25f;
-        action[3] -= knee_pair_mean * 0.25f;
+        if (stage != sim::CourseStage::duck_press)
+        {
+            const float hip_pair_mean = 0.5f * (action[0] + action[2]);
+            const float knee_pair_mean = 0.5f * (action[1] + action[3]);
+            action[0] -= hip_pair_mean * 0.25f;
+            action[2] -= hip_pair_mean * 0.25f;
+            action[1] -= knee_pair_mean * 0.25f;
+            action[3] -= knee_pair_mean * 0.25f;
+        }
 
         if (rig.active_motor_count >= 8u
             && environment.longest_stable_stance_seconds() < 1.0f
@@ -150,29 +245,28 @@ namespace runner::rl
     [[nodiscard]] inline std::array<float, sim::action_count> duck_teacher_action(
         const sim::Environment& environment) noexcept
     {
-        auto action = balance_teacher_action(environment);
+        const sim::CreatureBlueprint& rig = environment.blueprint();
         const float pressure = environment.duck_press_completed()
-            ? std::max(0.72f, environment.duck_obstacle_weight())
-            : environment.duck_obstacle_weight();
-        if (!environment.duck_press_completed())
+            ? 0.0f : environment.duck_obstacle_weight();
+        auto action = rig.paired_leg_chains()
+            ? balance_teacher_action(environment)
+            : compact_support_teacher_action(environment, pressure);
+        if (rig.paired_leg_chains() && !environment.duck_press_completed())
         {
-            action[0] = clamp(action[0] - 0.30f * pressure, -0.70f, 0.70f);
-            action[1] = clamp(action[1] + 0.62f * pressure, -0.82f, 0.82f);
-            action[2] = clamp(action[2] + 0.30f * pressure, -0.70f, 0.70f);
-            action[3] = clamp(action[3] - 0.62f * pressure, -0.82f, 0.82f);
+            const float span_ratio = environment.primary_support_span_ratio();
+            const float outward_help = clamp((0.82f - span_ratio) * 0.10f, 0.0f, 0.08f);
+            const float inward_help = clamp((span_ratio - 1.15f) * 0.16f, 0.0f, 0.14f);
+            const float hip = 0.065f * pressure + outward_help - inward_help;
+            const float knee = 0.52f * pressure;
+            action[0] = clamp(action[0] - hip, -0.48f, 0.48f);
+            action[1] = clamp(action[1] + knee, -0.78f, 0.78f);
+            action[2] = clamp(action[2] + hip, -0.48f, 0.48f);
+            action[3] = clamp(action[3] - knee, -0.78f, 0.78f);
         }
-        else
-        {
-            const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.05f;
-            const float swing = std::sin(phase);
-            action[0] = clamp(action[0] - 0.24f * pressure + 0.34f * swing, -0.82f, 0.82f);
-            action[1] = clamp(action[1] + 0.50f * pressure + 0.34f * std::max(0.0f, swing), -0.90f, 0.90f);
-            action[2] = clamp(action[2] + 0.24f * pressure - 0.34f * swing, -0.82f, 0.82f);
-            action[3] = clamp(action[3] - 0.50f * pressure - 0.34f * std::max(0.0f, -swing), -0.90f, 0.90f);
-        }
-        for (std::size_t index = 4; index < environment.blueprint().active_motor_count; ++index)
+        for (std::size_t index = 4; index < rig.active_motor_count; ++index)
             action[index] = 0.0f;
-        return bilateral_joint_synergy_action(environment, action, sim::CourseStage::duck_press);
+        return bilateral_joint_synergy_action(environment, action,
+            sim::CourseStage::duck_press);
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
@@ -203,16 +297,19 @@ namespace runner::rl
         if (stage == sim::CourseStage::balance)
         {
             const auto teacher = balance_teacher_action(environment);
+            const bool established = environment.stable_stance_seconds() >= 0.75f;
+            const float leg_assist = established ? 0.46f : 0.72f;
+            const float body_assist = established ? 0.52f : 0.78f;
             for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.96f);
+                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.97f);
+                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
         }
         else if (stage == sim::CourseStage::duck_press)
         {
             const auto teacher = duck_teacher_action(environment);
             const float pressure = environment.duck_obstacle_weight();
-            const float leg_assist = 0.72f + pressure * 0.24f;
+            const float leg_assist = 0.58f + pressure * 0.20f;
             for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
                 policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
@@ -414,6 +511,10 @@ namespace runner::rl
             if (environment.maximum_upper_body_motor_deviation()
                 > standing_neutral_arm_limit)
                 rejection |= evidence_bit(MotionEvidenceFailure::non_neutral_posture);
+            if (environment.blueprint().paired_leg_chains()
+                && (environment.primary_support_span_ratio() < 0.55f
+                    || environment.primary_support_span_ratio() > 1.65f))
+                rejection |= evidence_bit(MotionEvidenceFailure::non_neutral_posture);
             if (environment.uncontrolled_spin_turns()
                 > standing_qualification_spin_limit)
                 rejection |= evidence_bit(MotionEvidenceFailure::excessive_rotation);
@@ -428,6 +529,10 @@ namespace runner::rl
                 || environment.duck_recoveries() < 1u
                 || environment.duck_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_recovery);
+            if (environment.blueprint().paired_leg_chains()
+                && (environment.primary_support_span_ratio() < 0.42f
+                    || environment.primary_support_span_ratio() > 1.82f))
+                rejection |= evidence_bit(MotionEvidenceFailure::non_neutral_posture);
             if (environment.maximum_joint_speed() > 12.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::unstable_joints);
             break;
@@ -570,7 +675,10 @@ namespace runner::rl
                 && environment.maximum_upper_body_motor_deviation()
                     <= standing_neutral_arm_limit
                 && environment.uncontrolled_spin_turns()
-                    <= standing_qualification_spin_limit;
+                    <= standing_qualification_spin_limit
+                && (!environment.blueprint().paired_leg_chains()
+                    || (environment.primary_support_span_ratio() >= 0.55f
+                        && environment.primary_support_span_ratio() <= 1.65f));
         }
         if (stage == sim::CourseStage::duck_press)
         {

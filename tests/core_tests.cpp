@@ -101,6 +101,41 @@ namespace runner::sim
                 - environment.particles_[environment.blueprint_.left_contact_node].position.x;
         }
 
+        static float minimum_semantic_support_clearance(
+            const Environment& environment) noexcept
+        {
+            std::array<std::uint16_t, 32> supports{};
+            std::size_t count = 0;
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (environment.blueprint_.is_support_seed(index))
+                    supports[count++] = static_cast<std::uint16_t>(index);
+            }
+            float minimum = 1000.0f;
+            for (std::size_t first = 0; first < count; ++first)
+            {
+                for (std::size_t second = first + 1; second < count; ++second)
+                {
+                    const std::uint16_t lhs_index = supports[first];
+                    const std::uint16_t rhs_index = supports[second];
+                    const bool same_foot = std::ranges::any_of(environment.blueprint_.bones,
+                        [lhs_index, rhs_index](const DistanceConstraint& bone)
+                        {
+                            return (bone.a == lhs_index && bone.b == rhs_index)
+                                || (bone.a == rhs_index && bone.b == lhs_index);
+                        });
+                    if (same_foot)
+                        continue;
+                    const Particle& lhs = environment.particles_[lhs_index];
+                    const Particle& rhs = environment.particles_[rhs_index];
+                    const float clearance = std::abs(rhs.position.x - lhs.position.x)
+                        - lhs.radius - rhs.radius;
+                    minimum = std::min(minimum, clearance);
+                }
+            }
+            return minimum;
+        }
+
         static void complete_duck_press(Environment& environment) noexcept
         {
             environment.duck_press_completed_ = true;
@@ -313,6 +348,12 @@ int main()
         "forward-prone recovery rules do not preserve crouch foot-only contact");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");
+    require(!sim::friction_driven_shuffle(0.42f, true, false, 0.30f, 0u, 0.0f)
+            && !sim::friction_driven_shuffle(0.42f, true, true, 0.30f, 1u, 0.0f)
+            && !sim::friction_driven_shuffle(0.42f, true, true, 0.30f, 0u, 0.10f),
+        "normal single-support, established-gait, or foot-repositioning slide is penalized");
+    require(sim::friction_driven_shuffle(0.42f, true, true, 0.30f, 0u, 0.0f),
+        "friction-driven double-support shuffling is not recognized");
     require(sim::classify_motion_gate(1.0f, 0.0f, { 0.0f, 3.0f }, 0.8f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::sustained_flight, "unpowered flight hard gate missing");
     require(!sim::duck_ground_contact_allowed(true, true)
@@ -407,6 +448,81 @@ int main()
     sim::EnvironmentTestAccess::separate_supports(fused_feet);
     require(sim::EnvironmentTestAccess::primary_support_gap(fused_feet) > 0.18f,
         "left and right feet can remain fused into one support blob");
+
+    const std::array<sim::CreatureBlueprint, 7> support_presets{
+        sim::CreatureBlueprint::chicken(),
+        sim::CreatureBlueprint::biped(),
+        sim::CreatureBlueprint::humanoid(),
+        sim::CreatureBlueprint::quadruped(),
+        sim::CreatureBlueprint::crawler4(),
+        sim::CreatureBlueprint::hexapod(),
+        sim::CreatureBlueprint::monoped()
+    };
+    for (std::size_t preset = 0; preset < support_presets.size(); ++preset)
+    {
+        sim::Environment environment(support_presets[preset], 100u + preset);
+        sim::EnvironmentTestAccess::force_fused_supports(environment);
+        for (int iteration = 0; iteration < 64; ++iteration)
+            sim::EnvironmentTestAccess::separate_supports(environment);
+        require(sim::EnvironmentTestAccess::minimum_semantic_support_clearance(environment)
+                > -0.005f,
+            "a preset can retain fused semantic supports");
+    }
+
+    const sim::CreatureBlueprint humanoid_rig = sim::CreatureBlueprint::humanoid();
+    const sim::CreatureBlueprint quad_rig = sim::CreatureBlueprint::quadruped();
+    require(humanoid_rig.paired_leg_chains() && !quad_rig.paired_leg_chains(),
+        "biped-only control path is not separated from quadruped control");
+
+    sim::Environment neutral_humanoid(humanoid_rig, 131);
+    neutral_humanoid.set_course(sim::CourseStage::balance, 0.25f);
+    const auto standing_teacher = rl::balance_teacher_action(neutral_humanoid);
+    require(std::abs(standing_teacher[0]) < 0.20f
+            && std::abs(standing_teacher[2]) < 0.20f,
+        "standing teacher still forces a jumping-jack hip pose");
+    std::array<float, sim::action_count> exploratory{};
+    exploratory.fill(0.80f);
+    const auto residual_standing = rl::effective_policy_action(
+        neutral_humanoid, exploratory, sim::CourseStage::balance);
+    require(std::abs(residual_standing[0] - standing_teacher[0]) > 0.08f,
+        "standing teacher still erases nearly all PPO exploration");
+
+    sim::Environment neutral_quad(quad_rig, 137);
+    neutral_quad.set_course(sim::CourseStage::balance, 0.25f);
+    const auto quad_teacher = rl::balance_teacher_action(neutral_quad);
+    require(std::ranges::all_of(quad_teacher, [](float value)
+            {
+                return std::abs(value) < 0.30f;
+            }),
+        "quadruped standing receives biped-like forced leg motion");
+
+    sim::Environment crouch_humanoid(humanoid_rig, 141);
+    crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);
+    sim::EnvironmentTestAccess::set_duck_pressure(crouch_humanoid, 1.0f);
+    const auto crouch_teacher = rl::duck_teacher_action(crouch_humanoid);
+    require(std::abs(crouch_teacher[0]) < std::abs(crouch_teacher[1])
+            && std::abs(crouch_teacher[2]) < std::abs(crouch_teacher[3]),
+        "static crouch teacher still spreads hips before bending knees");
+
+    const rl::MotorDiscoveryProbe positive_probe = rl::motor_discovery_probe(
+        neutral_humanoid, 0u, 0u, 0u);
+    const rl::MotorDiscoveryProbe negative_probe = rl::motor_discovery_probe(
+        neutral_humanoid, humanoid_rig.active_motor_count, 0u, 0u);
+    const rl::MotorDiscoveryProbe synchronized_probe = rl::motor_discovery_probe(
+        neutral_humanoid, humanoid_rig.active_motor_count * 2u, 0u, 0u);
+    const rl::MotorDiscoveryProbe alternating_probe = rl::motor_discovery_probe(
+        neutral_humanoid, humanoid_rig.active_motor_count * 2u + 3u, 0u, 0u);
+    require(positive_probe.weight > 0.80f && positive_probe.action[0] > 0.0f
+            && negative_probe.action[0] < 0.0f,
+        "motor discovery does not test one joint in both directions");
+    require(std::ranges::all_of(
+            std::span(synchronized_probe.action).first(humanoid_rig.active_motor_count),
+            [](float value) { return value > 0.0f; }),
+        "motor discovery does not test synchronized joint motion");
+    require(alternating_probe.action[0] * alternating_probe.action[1] < 0.0f,
+        "motor discovery does not test alternating joint motion");
+    require(rl::motor_discovery_probe(neutral_humanoid, 0u, 480u, 0u).weight == 0.0f,
+        "motor discovery never yields control back to PPO");
 
     sim::Environment press_environment(sim::CreatureBlueprint::humanoid(), 17);
     press_environment.set_course(sim::CourseStage::duck_press, 0.5f);
@@ -527,9 +643,9 @@ int main()
     require(sim::gait_progress_multiplier(2, true, 0.18f)
             > sim::gait_progress_multiplier(0, true, 0.18f),
         "alternating lifted-foot gait does not receive stronger progress credit");
-    require(sim::wheel_sliding_motion(0.45f, true, true, 0.50f),
+    require(sim::friction_driven_shuffle(0.45f, true, true, 0.50f, 0u, 0.0f),
         "double-supported wheel-like sliding is not detected");
-    require(!sim::wheel_sliding_motion(0.45f, true, false, 0.50f),
+    require(!sim::friction_driven_shuffle(0.45f, true, false, 0.50f, 0u, 0.0f),
         "single-support walking is incorrectly classified as wheel sliding");
     require(!sim::rolling_gate_active(1.0f)
             && sim::rolling_gate_active(sim::rolling_gate_activation_seconds),

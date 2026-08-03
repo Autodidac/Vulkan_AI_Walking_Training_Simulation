@@ -220,11 +220,13 @@ namespace runner::sim
         return clamp(established + swing_bonus, 0.0f, 1.0f);
     }
 
-    [[nodiscard]] inline bool wheel_sliding_motion(float root_speed, bool left_supported,
-        bool right_supported, float stance_slip_speed) noexcept
+    [[nodiscard]] inline bool friction_driven_shuffle(float root_speed,
+        bool left_supported, bool right_supported, float stance_slip_speed,
+        std::uint32_t gait_cycles, float swing_clearance) noexcept
     {
         return left_supported && right_supported
-            && std::abs(root_speed) > 0.22f && stance_slip_speed > 0.18f;
+            && gait_cycles == 0u && swing_clearance < 0.06f
+            && std::abs(root_speed) > 0.35f && stance_slip_speed > 0.24f;
     }
 
     [[nodiscard]] inline bool duck_ground_contact_allowed(bool duck_active,
@@ -683,6 +685,15 @@ namespace runner::sim
                 && motors[2].a == motors[3].a
                 && motors[2].pivot == motors[3].pivot;
         }
+        [[nodiscard]] bool paired_leg_chains() const noexcept
+        {
+            return !monopedal_gait() && active_motor_count >= 4u
+                && motors[0].enabled && motors[1].enabled
+                && motors[2].enabled && motors[3].enabled
+                && motors[0].pivot == motors[2].pivot
+                && motors[1].a == motors[0].pivot
+                && motors[3].a == motors[2].pivot;
+        }
 
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();
@@ -809,6 +820,7 @@ namespace runner::sim
         }
         [[nodiscard]] float maximum_joint_speed() const noexcept { return maximum_joint_speed_; }
         [[nodiscard]] float maximum_upper_body_motor_deviation() const noexcept;
+        [[nodiscard]] float primary_support_span_ratio() const noexcept;
         [[nodiscard]] float posture_failure_seconds() const noexcept
         {
             return posture_failure_seconds_;

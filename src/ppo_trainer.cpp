@@ -34,47 +34,42 @@ namespace runner::rl
         {
             if (stage == sim::CourseStage::balance)
             {
-                if (update < 500u)
-                    return 0.92f;
-                if (update < 2500u)
-                {
-                    const float t = static_cast<float>(update - 500u) / 2000.0f;
-                    return lerp(0.92f, 0.45f, t);
-                }
-                if (update < 8000u)
-                {
-                    const float t = static_cast<float>(update - 2500u) / 5500.0f;
-                    return lerp(0.45f, 0.08f, t);
-                }
-                return 0.05f;
+                if (update < 200u)
+                    return 0.66f;
+                if (update < 1600u)
+                    return lerp(0.66f, 0.20f,
+                        static_cast<float>(update - 200u) / 1400.0f);
+                if (update < 4500u)
+                    return lerp(0.20f, 0.03f,
+                        static_cast<float>(update - 1600u) / 2900.0f);
+                return 0.0f;
             }
             if (stage == sim::CourseStage::duck_press
                 || stage == sim::CourseStage::crouch_walk)
             {
-                if (update < 600u)
-                    return 0.88f;
-                if (update < 3000u)
-                    return lerp(0.88f, 0.32f,
-                        static_cast<float>(update - 600u) / 2400.0f);
-                return 0.18f;
+                if (update < 300u)
+                    return 0.70f;
+                if (update < 2000u)
+                    return lerp(0.70f, 0.24f,
+                        static_cast<float>(update - 300u) / 1700.0f);
+                if (update < 5200u)
+                    return lerp(0.24f, 0.06f,
+                        static_cast<float>(update - 2000u) / 3200.0f);
+                return 0.04f;
             }
             if (stage == sim::CourseStage::ramps
                 || stage == sim::CourseStage::duck_bars)
-                return update < 1200u ? 0.42f : 0.12f;
+                return update < 1200u ? 0.36f : 0.10f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
             if (update < 400u)
-                return 0.28f;
+                return 0.24f;
             if (update < 2200u)
-            {
-                const float t = static_cast<float>(update - 400u) / 1800.0f;
-                return lerp(0.28f, 0.13f, t);
-            }
+                return lerp(0.24f, 0.10f,
+                    static_cast<float>(update - 400u) / 1800.0f);
             if (update < 7000u)
-            {
-                const float t = static_cast<float>(update - 2200u) / 4800.0f;
-                return lerp(0.13f, 0.025f, t);
-            }
+                return lerp(0.10f, 0.02f,
+                    static_cast<float>(update - 2200u) / 4800.0f);
             return 0.0f;
         }
 
@@ -184,9 +179,14 @@ namespace runner::rl
                     const float guided_action = lerp(transition.action[action_index],
                         guided[action_index], bootstrap);
                     transition.action[action_index] = clamp(
-                        lerp(previous_action[action_index], guided_action, 0.42f), -1.0f, 1.0f);
+                        lerp(previous_action[action_index], guided_action, 0.60f), -1.0f, 1.0f);
                     previous_action[action_index] = transition.action[action_index];
                 }
+                const MotorDiscoveryProbe probe = motor_discovery_probe(
+                    environment, environment_index, metrics_.update, step);
+                for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
+                    transition.action[action_index] = lerp(transition.action[action_index],
+                        probe.action[action_index], probe.weight);
                 transition.action = effective_policy_action(
                     environment, transition.action, course_stage_);
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
@@ -357,6 +357,14 @@ namespace runner::rl
         metrics_.total_obstacles_passed = previous_metrics.total_obstacles_passed;
         metrics_.total_distance = previous_metrics.total_distance;
         metrics_.total_training_seconds = previous_metrics.total_training_seconds;
+        metrics_.evaluation_count = previous_metrics.evaluation_count;
+        if (!clear_best)
+        {
+            metrics_.best_evaluation_distance = previous_metrics.best_evaluation_distance;
+            metrics_.best_evaluation_score = previous_metrics.best_evaluation_score;
+            metrics_.best_quality_key = previous_metrics.best_quality_key;
+            metrics_.best_update = previous_metrics.best_update;
+        }
         reward_history_.clear();
         speed_history_.clear();
         if (clear_best)
