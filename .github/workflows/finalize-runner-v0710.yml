@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  linux-source:
+  linux-release-source:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -25,23 +25,64 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Remove one-shot release workflow
+      - name: Remove one-shot workflow and record validation
         shell: bash
-        run: rm -f .github/workflows/finalize-runner-v0710.yml
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/finalize-runner-v0710.yml
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
 
-      - name: Verify consolidated source
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(
+              r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PACKAGE VERIFIED — Runner v0.7.10 passed repository consolidation, Linux, Windows, package, and executable acceptance; publication audit pending.',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          for mission in range(104, 109):
+              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              text, count = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing mission {mission}')
+          marker = '## v0.7.10 validation evidence'
+          if marker in text:
+              text = text[:text.index(marker)].rstrip()
+          evidence = '''
+
+## v0.7.10 validation evidence
+
+- Validation workflow run: 30806258665
+- Exact validated source: 994a9fecd9ad4cf9e9f3fc0a3b6a5f10e90c0fb9
+- Artifact ID: 8853413729
+- Artifact digest: sha256:74ae5cba38c51ea0f26856f605a38caa598ec3005f8e0e3723165ef7ca586f51
+- Linux GCC 14 warnings-as-errors build and all six tests: passed
+- Live acceptance matrix: 10/10 passed
+- Full Windows Vulkan build and all six tests: passed
+- Build-tree, installed, and independently extracted diagnostics: passed
+- ZIP checksum and per-file manifest audit: passed
+'''
+          path.write_text(text.rstrip() + evidence, encoding='utf-8')
+          PY
+
+      - name: Verify consolidated release source
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           test ! -f tools/apply_v0710_cleanup.py
+          test ! -f src/autonomy.cpp
           test ! -f .github/workflows/validate-runner-v0710.yml
           test ! -f .github/workflows/finalize-runner-v0710.yml
           test -f CHANGELOG.md
           test -f missioncache.md
           test -f tools/repository_audit.cmake
-          test "$(find . -type f -name 'RELEASE_NOTES*.md' -print | wc -l)" -eq 0
-          test "$(find . -type f -iname '*mission*.md' ! -name missioncache.md -print | wc -l)" -eq 0
+          test "$(find . -path ./.git -prune -o -type f -name 'RELEASE_NOTES*.md' -print | wc -l)" -eq 0
+          test "$(find . -path ./.git -prune -o -type f -iname '*mission*.md' ! -name missioncache.md -print | wc -l)" -eq 0
+          for stale in artifact published-audit published-final published-preliminary release-stage validation; do test ! -e "$stale"; done
           grep -F 'project(Runner VERSION 0.7.10 LANGUAGES CXX)' CMakeLists.txt
           grep -F 'Runner.RepositoryHygiene' CMakeLists.txt
           grep -F 'WALK-RELEASE-108' missioncache.md
@@ -51,7 +92,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Build and test Linux source
+      - name: Build and test exact release source
         env:
           CC: gcc-14
           CXX: g++-14
@@ -64,18 +105,18 @@ jobs:
           cmake --build build/linux-v0710-release --parallel
           ctest --test-dir build/linux-v0710-release --output-on-failure -V --timeout 1200
 
-      - name: Commit exact release source
+      - name: Commit exact package source
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Remove Runner v0.7.10 one-shot release workflow'
+          git commit -m 'Prepare exact Runner v0.7.10 release source'
           git push origin HEAD:main
 
-  windows-package:
-    needs: linux-source
+  windows-publish:
+    needs: linux-release-source
     runs-on: windows-2025
     timeout-minutes: 90
     env:
@@ -90,19 +131,20 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Confirm clean release source
+      - name: Capture exact package source
         shell: pwsh
         run: |
+          "RELEASE_SHA=$(git rev-parse HEAD)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           foreach ($path in @(
-            'tools/apply_v0710_cleanup.py',
+            'tools/apply_v0710_cleanup.py','src/autonomy.cpp',
             '.github/workflows/validate-runner-v0710.yml',
             '.github/workflows/finalize-runner-v0710.yml')) {
-            if (Test-Path $path) { throw "Temporary release tool remains: $path" }
+            if (Test-Path $path) { throw "Temporary or obsolete source remains: $path" }
           }
           if (-not (Test-Path CHANGELOG.md)) { throw 'CHANGELOG.md is missing' }
           if (Get-ChildItem -Recurse -File -Filter 'RELEASE_NOTES*.md') { throw 'Per-release notes remain' }
           git diff --quiet
-          if ($LASTEXITCODE -ne 0) { throw 'Windows source tree is dirty' }
+          if ($LASTEXITCODE -ne 0) { throw 'Release source tree is dirty' }
 
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
@@ -158,37 +200,7 @@ jobs:
           }
           finally { Pop-Location }
 
-      - name: Record package-verified mission state
-        shell: pwsh
-        run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
-
-          path = Path('missioncache.md')
-          text = path.read_text(encoding='utf-8')
-          text = re.sub(
-              r'^\*\*Release state:\*\*.*$',
-              '**Release state:** PACKAGE VERIFIED — Runner v0.7.10 passed consolidated source, Linux, Windows, package, and executable acceptance; publication audit pending.',
-              text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          for mission in range(104, 109):
-              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
-              text, count = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED', text, count=1)
-              if count != 1:
-                  raise SystemExit(f'missing mission {mission}')
-          path.write_text(text, encoding='utf-8')
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add missioncache.md
-          git commit -m 'Record Runner v0.7.10 package validation'
-          git push origin HEAD:main
-          "RELEASE_SHA=$(git rev-parse HEAD)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Install release candidate
+      - name: Install and verify release candidate
         shell: pwsh
         run: |
           $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
@@ -203,11 +215,6 @@ jobs:
             'shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
             if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
           }
-
-      - name: Verify installed executable and launcher
-        shell: pwsh
-        run: |
-          $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
           $outside = "$env:RUNNER_TEMP/runner-v0710-installed-unrelated"
           New-Item -ItemType Directory -Force $outside | Out-Null
           Push-Location $outside
@@ -267,21 +274,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Build release notes from changelog
+      - name: Build release body from changelog
         shell: pwsh
         run: |
-          python - <<'PY'
-          import re
-          from pathlib import Path
+          $text = Get-Content CHANGELOG.md -Raw
+          $match = [regex]::Match($text, '(?ms)^## \[0\.7\.10\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)')
+          if (-not $match.Success) { throw 'v0.7.10 changelog section not found' }
+          Set-Content release-body-v0.7.10.md $match.Groups[1].Value.Trim() -Encoding utf8
 
-          text = Path('CHANGELOG.md').read_text(encoding='utf-8')
-          match = re.search(r'^## \[0\.7\.10\].*?\n(.*?)(?=^## \[|\Z)', text, flags=re.MULTILINE | re.DOTALL)
-          if not match:
-              raise SystemExit('v0.7.10 changelog section not found')
-          Path('release-body-v0.7.10.md').write_text(match.group(1).strip() + '\n', encoding='utf-8')
-          PY
-
-      - name: Publish and re-audit GitHub release
+      - name: Publish and re-audit release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -330,11 +331,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Released package diagnostic failed' }
           & "$releaseExtract/Runner.exe" --diagnose-acceptance
           if ($LASTEXITCODE -ne 0) { throw 'Released acceptance diagnostic failed' }
-
           $tagSha = (git ls-remote origin "refs/tags/$env:TAG").Split()[0]
           if ($tagSha -ne $env:RELEASE_SHA) { throw "Tag target mismatch: $tagSha" }
 
-      - name: Clean work branch and verify repository state
+      - name: Clean branch and audit repository
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -345,40 +345,46 @@ jobs:
           $branches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' | Sort-Object
           if (($branches -join ',') -ne 'main') { throw "Unexpected branches remain: $branches" }
 
-      - name: Record final release evidence
+      - name: Record immutable release evidence
         shell: pwsh
         env:
           ARTIFACT_ID: ${{ steps.package.outputs.artifact-id }}
           ARTIFACT_DIGEST: ${{ steps.package.outputs.artifact-digest }}
         run: |
           git pull --rebase origin main
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
+          $path = 'missioncache.md'
+          $text = Get-Content $path -Raw
+          $text = [regex]::Replace($text, '(?m)^\*\*Release state:\*\*.*$', '**Release state:** PUBLISHED — Runner v0.7.10 changelog, mission cache, source cleanup, acceptance hardening, package, release assets, branch cleanup, and PR audit verified.', 1)
+          foreach ($mission in 104..108) {
+            $pattern = "(?m)(### WALK-[^`r`n]*-{0:D3}[^`r`n]*\r?\n)\*\*Status:\*\*[^`r`n]*" -f $mission
+            $updated = [regex]::Replace($text, $pattern, '$1**Status:** PUBLISHED — RELEASE VERIFIED', 1)
+            if ($updated -eq $text) { throw "Missing mission $mission" }
+            $text = $updated
+          }
+          $marker = '## v0.7.10 immutable release evidence'
+          $index = $text.IndexOf($marker)
+          if ($index -ge 0) { $text = $text.Substring(0, $index).TrimEnd() }
+          $evidence = @"
 
-          path = Path('missioncache.md')
-          text = path.read_text(encoding='utf-8')
-          text = re.sub(
-              r'^\*\*Release state:\*\*.*$',
-              '**Release state:** PUBLISHED — Runner v0.7.10 changelog, mission cache, source cleanup, acceptance hardening, package, release assets, branch cleanup, and PR audit verified.',
-              text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          for mission in range(104, 109):
-              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
-              text, count = re.subn(pattern, rf'\1**Status:** PUBLISHED — RELEASE VERIFIED', text, count=1)
-              if count != 1:
-                  raise SystemExit(f'missing mission {mission}')
+## v0.7.10 immutable release evidence
 
-          evidence = f'''\n## v0.7.10 immutable release evidence\n\n- Exact tagged package source: `{os.environ['RELEASE_SHA']}`\n- Validation and publication workflow run: `{os.environ['GITHUB_RUN_ID']}`\n- Artifact ID: `{os.environ['ARTIFACT_ID']}`\n- Artifact digest: `{os.environ['ARTIFACT_DIGEST']}`\n- Release tag and title: `v0.7.10` / `Runner v0.7.10`\n- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest\n- Single release-history document: `CHANGELOG.md`\n- Single mission ledger: `missioncache.md`\n- Linux GCC 14 warnings-as-errors build and all deterministic suites: passed\n- Full Windows Vulkan build and all tests: passed\n- Build-tree, installed, independently extracted, and released diagnostics: passed\n- Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed\n- Work branch removed; open pull requests: `0`; remaining branches: `main`\n- Contradictory released-package evidence reopens only the exact affected mission\n'''
-          marker = '## v0.7.10 immutable release evidence'
-          if marker in text:
-              text = text[:text.index(marker)].rstrip()
-          text = text.rstrip() + '\n' + evidence
-          path.write_text(text, encoding='utf-8')
-          PY
+- Exact tagged package source: $env:RELEASE_SHA
+- Publication workflow run: $env:GITHUB_RUN_ID
+- Artifact ID: $env:ARTIFACT_ID
+- Artifact digest: $env:ARTIFACT_DIGEST
+- Release tag and title: v0.7.10 / Runner v0.7.10
+- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
+- Single release-history document: CHANGELOG.md
+- Single mission ledger: missioncache.md
+- Linux GCC 14 warnings-as-errors build and all six tests: passed
+- Live acceptance matrix: 10/10 passed
+- Full Windows Vulkan build and all six tests: passed
+- Build-tree, installed, independently extracted, and released diagnostics: passed
+- Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed
+- Work branch removed; open pull requests: 0; remaining branches: main
+- Contradictory released-package evidence reopens only the exact affected mission
+"@
+          Set-Content $path ($text.TrimEnd() + $evidence) -Encoding utf8
           Remove-Item release-body-v0.7.10.md -Force -ErrorAction SilentlyContinue
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
