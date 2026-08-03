@@ -21,6 +21,35 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def repair_original_art() -> None:
+    path = ROOT / "assets/chicken.ppm"
+    lines = path.read_text(encoding="ascii").replace("\r\n", "\n").splitlines()
+    if lines[:4] != ["P3", "# Original Runner icon", "32 20", "255"]:
+        raise RuntimeError("unexpected original Runner art header")
+    rows = lines[4:]
+    if len(rows) != 20:
+        raise RuntimeError(f"expected 20 art scanlines, found {len(rows)}")
+
+    repaired: list[str] = []
+    missing_pixels = 0
+    for row_index, row in enumerate(rows):
+        channels = row.split()
+        if len(channels) % 3 != 0:
+            raise RuntimeError(f"art row {row_index} has a partial pixel")
+        pixel_count = len(channels) // 3
+        if pixel_count > 32:
+            raise RuntimeError(f"art row {row_index} exceeds 32 pixels")
+        missing = 32 - pixel_count
+        missing_pixels += missing
+        channels.extend(["12", "18", "26"] * missing)
+        repaired.append(" ".join(channels))
+
+    if missing_pixels != 6:
+        raise RuntimeError(
+            f"expected to restore six missing background pixels, found {missing_pixels}")
+    path.write_text("\n".join(lines[:4] + repaired) + "\n", encoding="ascii")
+
+
 def patch_cmake() -> None:
     text = read("CMakeLists.txt")
     text = replace_once(text,
@@ -182,14 +211,14 @@ def patch_docs() -> None:
     )
     cache = re.sub(
         r"^\*\*Release state:\*\*.*$",
-        "**Release state:** REOPENED — v0.7.10 packaged startup rejected the valid original P3 artwork; v0.7.11 parser/package correction is in validation.",
+        "**Release state:** REOPENED — v0.7.10 shipped six missing P3 background pixels and a fragile fatal artwork loader; v0.7.11 correction is in validation.",
         cache,
         count=1,
         flags=re.MULTILINE,
     )
     cache = re.sub(
         r"(### WALK-ART-112[^\n]*\n)\*\*Status:\*\*[^\n]*",
-        r"\1**Status:** REOPENED — released v0.7.10 rejects the packaged valid P3 file at application initialization",
+        r"\1**Status:** REOPENED — released v0.7.10 artwork has 634/640 pixels and terminates application initialization",
         cache,
         count=1,
     )
@@ -199,10 +228,10 @@ def patch_docs() -> None:
 
 {marker}
 
-### WALK-PPM-114 — Parse the original packaged P3 artwork portably
+### WALK-PPM-114 — Repair and parse the original packaged P3 artwork
 **Status:** IN VALIDATION
 
-Replace formatted-stream parsing with a binary byte tokenizer that accepts standard ASCII whitespace, CRLF, comments, and an optional UTF-8 BOM while enforcing bounded dimensions, channel ranges, exact pixel count, and no unexpected trailing tokens.
+Restore the six omitted dark-background pixels at the ends of five authored scanlines without shifting or replacing visible artwork. Replace formatted-stream parsing with a binary byte tokenizer that accepts standard ASCII whitespace, CRLF, comments, and an optional UTF-8 BOM while enforcing bounded dimensions, channel ranges, exact pixel count, and no unexpected trailing tokens.
 
 ### WALK-ARTSAFE-115 — Decorative artwork cannot brick Runner startup
 **Status:** IN VALIDATION
@@ -226,6 +255,7 @@ Run Linux warnings-as-errors and all tests, full Windows SDL3/Vulkan build and t
 
 ### Fixed
 
+- Restored six omitted dark-background pixels across five original Runner-art scanlines, producing the declared 32×20 image without shifting visible artwork.
 - Replaced the Windows-fragile formatted-stream P3 parser with a portable binary tokenizer supporting comments, CRLF, and an optional UTF-8 BOM.
 - Made decorative artwork failure nonfatal during normal startup while keeping packaged-release validation strict.
 - Extended `--diagnose-package` and deterministic tests to parse the exact packaged `assets/chicken.ppm` file.
@@ -241,6 +271,7 @@ Run Linux warnings-as-errors and all tests, full Windows SDL3/Vulkan build and t
 
 
 def main() -> None:
+    repair_original_art()
     patch_cmake()
     patch_app()
     patch_main()
