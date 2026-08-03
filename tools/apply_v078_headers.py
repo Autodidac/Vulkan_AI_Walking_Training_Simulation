@@ -44,7 +44,7 @@ replacement = '''    CreatureBlueprint CreatureBlueprint::chicken()
         result.right_contact_node = 10;
         add_passive_feet(result, 0.17f, 0.29f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 28.0f, 52.0f, 0.038f, 0.044f);
+        calibrate_grounded_defaults(result, 34.0f, 58.0f, 0.038f, 0.044f);
         return result;
     }
 
