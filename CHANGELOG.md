@@ -4,6 +4,16 @@ All notable Runner changes are recorded here. The authoritative work ledger is `
 
 ## [0.7.10] - 2026-08-03
 
+
+### Live regression fixes
+
+- Fixed the duck press so it remains anchored over the test station instead of following a displaced rig.
+- Removed solver-injected press velocity that could convert vertical compression into backward sliding.
+- Aligned Stand mastery with the visible 10 rad/s qualification limit and exposed joint-speed blockers in the status line.
+- Reduced only the Stand lock to three consecutive all-six-seed confirmations; later curriculum stages retain eight confirmations.
+- Loaded and rendered the original Runner pixel artwork from the packaged `assets/chicken.ppm` asset.
+- Isolated v0.7.10 autosaves from stale `runner-v078-*` policy, rig, and curriculum-state files.
+
 ### Changed
 
 - Consolidated every per-release notes file into this single changelog.

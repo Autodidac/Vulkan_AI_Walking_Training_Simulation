@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <format>
 #include <limits>
 #include <memory>
@@ -70,6 +71,108 @@ namespace runner
         constexpr Color body{ 0.82f, 0.59f, 0.24f, 1.0f };
         constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
         constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
+
+        struct PixelArt
+        {
+            int width{};
+            int height{};
+            std::vector<Color> pixels{};
+
+            [[nodiscard]] bool loaded() const noexcept
+            {
+                return width > 0 && height > 0
+                    && pixels.size() == static_cast<std::size_t>(width * height);
+            }
+        };
+
+        [[nodiscard]] bool read_ppm_number(std::istream& input, int& value)
+        {
+            input >> std::ws;
+            while (input.peek() == '#')
+            {
+                std::string ignored{};
+                std::getline(input, ignored);
+                input >> std::ws;
+            }
+            return static_cast<bool>(input >> value);
+        }
+
+        [[nodiscard]] bool load_p3_pixel_art(const std::filesystem::path& path,
+            PixelArt& art, std::string& error)
+        {
+            std::ifstream input(path);
+            if (!input)
+            {
+                error = "Could not open original Runner artwork: " + path.string();
+                return false;
+            }
+
+            std::string magic{};
+            input >> magic;
+            int width{};
+            int height{};
+            int maximum{};
+            if (magic != "P3" || !read_ppm_number(input, width)
+                || !read_ppm_number(input, height)
+                || !read_ppm_number(input, maximum)
+                || width <= 0 || height <= 0 || width > 256 || height > 256
+                || maximum <= 0 || maximum > 65535)
+            {
+                error = "Original Runner artwork is not a valid bounded P3 PPM: "
+                    + path.string();
+                return false;
+            }
+
+            PixelArt loaded{};
+            loaded.width = width;
+            loaded.height = height;
+            loaded.pixels.reserve(static_cast<std::size_t>(width * height));
+            const float inverse_maximum = 1.0f / static_cast<float>(maximum);
+            for (int index = 0; index < width * height; ++index)
+            {
+                int red_channel{};
+                int green_channel{};
+                int blue_channel{};
+                if (!read_ppm_number(input, red_channel)
+                    || !read_ppm_number(input, green_channel)
+                    || !read_ppm_number(input, blue_channel)
+                    || red_channel < 0 || green_channel < 0 || blue_channel < 0
+                    || red_channel > maximum || green_channel > maximum
+                    || blue_channel > maximum)
+                {
+                    error = "Original Runner artwork has incomplete pixel data: "
+                        + path.string();
+                    return false;
+                }
+                loaded.pixels.push_back({
+                    static_cast<float>(red_channel) * inverse_maximum,
+                    static_cast<float>(green_channel) * inverse_maximum,
+                    static_cast<float>(blue_channel) * inverse_maximum,
+                    1.0f
+                });
+            }
+            art = std::move(loaded);
+            error.clear();
+            return true;
+        }
+
+        void draw_pixel_art(render::Canvas& canvas, const PixelArt& art,
+            Vec2 position, float pixel_size)
+        {
+            if (!art.loaded() || pixel_size <= 0.0f)
+                return;
+            for (int y = 0; y < art.height; ++y)
+            {
+                for (int x = 0; x < art.width; ++x)
+                {
+                    const Vec2 minimum = position
+                        + Vec2{ static_cast<float>(x) * pixel_size,
+                            static_cast<float>(y) * pixel_size };
+                    canvas.quad(minimum, minimum + Vec2{ pixel_size, pixel_size },
+                        art.pixels[static_cast<std::size_t>(y * art.width + x)]);
+                }
+            }
+        }
 
         void fill_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color color)
         {
@@ -295,14 +398,15 @@ namespace runner
         float joint_test_input{};
         float joint_test_phase{};
         float camera_x{};
+        PixelArt original_runner_art{};
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v078-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v078-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v078-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0710-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0710-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0710-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -505,6 +609,25 @@ namespace runner
             add_text(canvas, { 18.0f, 13.0f }, "RUNNER v" RUNNER_VERSION, 2.10f, white);
             if (width >= 1080)
                 add_text(canvas, { 20.0f, 50.0f }, "AUTONOMOUS PHYSICS LOCOMOTION LAB", 1.05f, muted);
+
+            if (original_runner_art.loaded() && width >= 1280)
+            {
+                constexpr float art_scale = 2.35f;
+                const Rect art_frame{
+                    { 315.0f, 8.0f },
+                    { static_cast<float>(original_runner_art.width) * art_scale + 12.0f,
+                      static_cast<float>(original_runner_art.height) * art_scale + 12.0f }
+                };
+                add_rounded_rect(canvas, art_frame, 7.0f, rgb(0x0a1018), accent_dim, 1.0f);
+                draw_pixel_art(canvas, original_runner_art,
+                    art_frame.position + Vec2{ 6.0f, 6.0f }, art_scale);
+                add_text(canvas,
+                    { art_frame.position.x + art_frame.size.x + 12.0f, 18.0f },
+                    "ORIGINAL RUNNER ART", 1.10f, body_light);
+                add_text(canvas,
+                    { art_frame.position.x + art_frame.size.x + 12.0f, 45.0f },
+                    "PACKAGED / LIVE", 0.95f, muted);
+            }
 
             const float tab_width = width >= 1080 ? 184.0f : 164.0f;
             const float start_x = static_cast<float>(width) - tab_width * 2.0f - 18.0f;
@@ -1862,8 +1985,13 @@ namespace runner
         delete impl_;
     }
 
-    bool Application::initialize(const std::filesystem::path&, std::string& error)
+    bool Application::initialize(const std::filesystem::path& asset_directory,
+        std::string& error)
     {
+        if (!load_p3_pixel_art(asset_directory / "chicken.ppm",
+                impl_->original_runner_art, error))
+            return false;
+
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);
         std::string message{};

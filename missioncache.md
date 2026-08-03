@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.10
 
-**Release state:** IN VALIDATION — Runner v0.7.10 changelog, mission-ledger, source, documentation, acceptance, package, and release cleanup.
+**Release state:** REOPENED — live screenshot shows duck-press backward sliding and Stand curriculum failing to advance despite six valid seeds; v0.7.10 publication blocked pending corrected package evidence.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -2225,3 +2225,30 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 - Semantic multi-foot support clustering tests: passed
 - Vulkan diagnostic: passed
 - Release publication: intentionally blocked until remaining mission ledger items are complete
+
+## v0.7.10 live regression correction
+
+### WALK-PRESS-109 — Duck press must not drag the rig backward
+**Status:** IN VALIDATION
+
+The press stays fixed over the authored test station, resolves contact vertically only, preserves particle velocity during positional correction, and has deterministic regression coverage for zero horizontal authority and zero solver-injected impulse.
+
+### WALK-CURRICULUM-110 — Stand mastery must advance into crouch training
+**Status:** IN VALIDATION
+
+Stand qualification and mastery use the same visible 10 rad/s joint-speed limit. Three consecutive all-six-seed strict Stand evaluations advance to Static Crouch; later stages retain eight-confirmation mastery. The status line exposes stance, spin, joint-speed, and mastery blockers.
+
+### WALK-RELEASE-111 — Revalidate and publish corrected Runner v0.7.10
+**Status:** IN VALIDATION
+
+Re-run Linux warnings-as-errors, all deterministic tests, full Windows Vulkan build/tests, installed and extracted package diagnostics, acceptance matrix, checksum/manifest audit, published-asset re-download, and branch/PR cleanup after WALK-PRESS-109 and WALK-CURRICULUM-110 pass.
+
+### WALK-ART-112 — Display and package the original Runner artwork
+**Status:** IN VALIDATION
+
+The original `assets/chicken.ppm` artwork is loaded during application startup, rendered in the live top bar, and remains a required packaged runtime asset. Missing or malformed art fails initialization instead of silently reverting to a placeholder.
+
+### WALK-AUTOSAVE-113 — Isolate corrected training state from v0.7.8
+**Status:** IN VALIDATION
+
+Runner v0.7.10 writes and loads only `runner-v0710-*` autosave, evolved-rig, and autonomy-state files. It cannot silently resume the stale v0.7.8 curriculum or evolved rig that reproduced the live regression.

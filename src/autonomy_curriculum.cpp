@@ -77,6 +77,7 @@ namespace runner::rl
         }
 
         mastery_streak_ = stage_mastered_locked() ? mastery_streak_ + 1 : 0;
+        const int required_confirmations = required_mastery_confirmations(stage_);
         if (worker_.has_best_policy() && metrics.evaluation_valid)
         {
             const float tolerance = std::max(0.35f, std::abs(metrics.best_evaluation_score) * 0.35f);
@@ -96,7 +97,7 @@ namespace runner::rl
                 metrics.evaluation_invalid_runs,
                 primary_motion_rejection_name(metrics.evaluation_rejection_mask));
         }
-        else if (mastery_streak_ >= mastery_lock_confirmations)
+        else if (mastery_streak_ >= required_confirmations)
         {
             advance_stage_locked();
         }
@@ -111,17 +112,18 @@ namespace runner::rl
                 const std::uint32_t valid_seeds = 6u
                     - std::min<std::uint32_t>(metrics.evaluation_invalid_runs, 6u);
                 worker_message_ = std::format(
-                    "STAGE VALID {}/6 SEEDS - STRICT STAND {:.1f}/{:.1f}S  SPIN {:.2f}/{:.2f}  MASTERY {}/{}",
+                    "STAGE VALID {}/6 SEEDS - STAND {:.1f}/{:.1f}S  SPIN {:.2f}/{:.2f}  JOINT {:.1f}/{:.1f}  MASTERY {}/{}",
                     valid_seeds, metrics.evaluation_longest_stance,
                     standing_mastery_seconds, metrics.evaluation_spin_turns,
-                    standing_mastery_spin_limit, mastery_streak_,
-                    mastery_lock_confirmations);
+                    standing_mastery_spin_limit, metrics.evaluation_max_joint_speed,
+                    standing_mastery_joint_speed_limit, mastery_streak_,
+                    required_confirmations);
             }
             else
             {
                 worker_message_ = std::format("{} - STRICT MASTERY {}/{}",
                     sim::course_stage_name(stage_), mastery_streak_,
-                    mastery_lock_confirmations);
+                    required_confirmations);
             }
         }
     }
