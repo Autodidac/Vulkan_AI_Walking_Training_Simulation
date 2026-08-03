@@ -1,5 +1,6 @@
 #include "pixel_art.hpp"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
