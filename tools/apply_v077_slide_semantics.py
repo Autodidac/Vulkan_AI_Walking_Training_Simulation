@@ -126,6 +126,35 @@ tests = tests.replace(
 tests = tests.replace(
     "for (int iteration = 0; iteration < 12; ++iteration)",
     "for (int iteration = 0; iteration < 64; ++iteration)", 1)
+old_support_pair = '''                for (std::size_t second = first + 1; second < count; ++second)
+                {
+                    const Particle& lhs = environment.particles_[supports[first]];
+                    const Particle& rhs = environment.particles_[supports[second]];
+                    const float clearance = std::abs(rhs.position.x - lhs.position.x)
+                        - lhs.radius - rhs.radius;
+                    minimum = std::min(minimum, clearance);
+                }'''
+new_support_pair = '''                for (std::size_t second = first + 1; second < count; ++second)
+                {
+                    const std::uint16_t lhs_index = supports[first];
+                    const std::uint16_t rhs_index = supports[second];
+                    const bool same_foot = std::ranges::any_of(environment.blueprint_.bones,
+                        [lhs_index, rhs_index](const DistanceConstraint& bone)
+                        {
+                            return (bone.a == lhs_index && bone.b == rhs_index)
+                                || (bone.a == rhs_index && bone.b == lhs_index);
+                        });
+                    if (same_foot)
+                        continue;
+                    const Particle& lhs = environment.particles_[lhs_index];
+                    const Particle& rhs = environment.particles_[rhs_index];
+                    const float clearance = std::abs(rhs.position.x - lhs.position.x)
+                        - lhs.radius - rhs.radius;
+                    minimum = std::min(minimum, clearance);
+                }'''
+if old_support_pair not in tests:
+    raise RuntimeError("semantic support-pair regression block missing")
+tests = tests.replace(old_support_pair, new_support_pair, 1)
 anchor = '''    require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");'''
 addition = anchor + '''
@@ -175,4 +204,4 @@ save("RELEASE_NOTES_v0.7.7.md", notes.rstrip() + "\n")
 (ROOT / "tools/fix_v077_namespace.py").unlink(missing_ok=True)
 (ROOT / "tools/fix_v077_updates.py").unlink(missing_ok=True)
 Path(__file__).unlink()
-print("materialized sliding, friction-drive semantics, math namespace, and evaluation accounting")
+print("materialized sliding, support, namespace, and evaluation fixes")
