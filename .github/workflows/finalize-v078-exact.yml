@@ -45,11 +45,34 @@ jobs:
           replacement = '''if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
           fi
-          git push --force origin "$release_sha:refs/tags/$tag"
-          remote_tag="$(git ls-remote origin "refs/tags/$tag" | awk '{print $1}')"
-          test "$remote_tag" = "$release_sha"
+          gh api --silent -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" 2>/dev/null || true
+          tag_object="$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/tags" \\
+            -f tag="$tag" \\
+            -f message="$release_title" \\
+            -f object="$release_sha" \\
+            -f type=commit \\
+            -f 'tagger[name]=github-actions[bot]' \\
+            -f 'tagger[email]=41898282+github-actions[bot]@users.noreply.github.com' \\
+            --jq .sha)"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \\
+            -f ref="refs/tags/$tag" \\
+            -f sha="$tag_object" >/dev/null
+          verify_release_tag() {
+            local ref_sha ref_type target_sha
+            ref_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
+            ref_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.type)"
+            if [[ "$ref_type" = tag ]]; then
+              target_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ref_sha" --jq .object.sha)"
+            else
+              target_sha="$ref_sha"
+            fi
+            test "$target_sha" = "$release_sha"
+          }
+          verify_release_tag
           '''
           text = text[:start] + replacement + text[end:]
+          direct_check = 'test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)" = "$release_sha"'
+          text = text.replace(direct_check, 'verify_release_tag')
           path.write_text(text, encoding='utf-8')
           PY
           bash "$RUNNER_TEMP/finalize_v078_exact.sh"
