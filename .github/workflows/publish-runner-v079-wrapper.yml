@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/publish-runner-v079-wrapper.yml
+  workflow_run:
+    workflows: ["Publish Runner v0.7.9"]
+    types: [completed]
 
 permissions:
   actions: read
