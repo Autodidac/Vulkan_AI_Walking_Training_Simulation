@@ -7,8 +7,8 @@ on:
     paths:
       - .github/workflows/publish-runner-v079-wrapper.yml
   workflow_run:
-    workflows: ["Publish Runner v0.7.9"]
-    types: [completed]
+    workflows: ["Validate Runner v0.7.8"]
+    types: [in_progress]
 
 permissions:
   actions: read
