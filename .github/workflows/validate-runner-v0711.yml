@@ -1,16 +1,17 @@
 name: Validate Runner v0.7.11 artwork startup correction
 
 on:
-  repository_dispatch:
-    types: [validate_runner_v0711]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
-  actions: read
+  pull-requests: read
 
 concurrency:
-  group: validate-runner-v0711
-  cancel-in-progress: false
+  group: validate-runner-v0711-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   linux-source:
@@ -21,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Install GCC 14 and Ninja
@@ -33,7 +34,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/apply_v0711_art_fix.py
+          if test -f tools/apply_v0711_art_fix.py; then
+            python3 tools/apply_v0711_art_fix.py
+          fi
           git diff --check
           test ! -f tools/apply_v0711_art_fix.py
           grep -F 'project(Runner VERSION 0.7.11 LANGUAGES CXX)' CMakeLists.txt
@@ -42,6 +45,13 @@ jobs:
           grep -F 'load_p3_pixel_art' src/main.cpp
           grep -F 'ARTWORK WARNING' src/app.cpp
           grep -F 'WALK-PPM-114' missioncache.md
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('assets/chicken.ppm').read_text(encoding='ascii').splitlines()
+          assert lines[:4] == ['P3', '# Original Runner icon', '32 20', '255']
+          assert len(lines[4:]) == 20
+          assert all(len(row.split()) == 96 for row in lines[4:])
+          PY
 
       - name: Configure Linux deterministic suite
         env:
@@ -62,10 +72,14 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Fix Runner artwork startup and package validation'
-          git pull --rebase origin main
-          git push origin HEAD:main
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if git diff --cached --quiet; then
+            source_sha=$(git rev-parse HEAD)
+          else
+            git commit -m 'Fix Runner artwork startup and package validation'
+            git push origin HEAD:${{ github.head_ref }}
+            source_sha=$(git rev-parse HEAD)
+          fi
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
 
   windows-package:
     needs: linux-source
@@ -86,6 +100,17 @@ jobs:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: runner-v0711-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          restore-keys: |
+            runner-v0710-${{ runner.os }}-
+            runner-v079-${{ runner.os }}-
 
       - name: Bootstrap vcpkg
         shell: cmd
