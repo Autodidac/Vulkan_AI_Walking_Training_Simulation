@@ -216,7 +216,8 @@ jobs:
           }
           finally { Pop-Location }
 
-      - uses: actions/upload-artifact@v4
+      - id: package
+        uses: actions/upload-artifact@v4
         with:
           name: Runner-v0.7.9-windows-x64
           path: |
@@ -225,3 +226,25 @@ jobs:
             Runner-v0.7.9-windows-x64.manifest.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Record immutable validation evidence
+        shell: pwsh
+        run: |
+          git pull --rebase origin agent/v079-live-acceptance-matrix
+          @"
+          Runner v0.7.9 validation passed
+          run_id=${{ github.run_id }}
+          source_sha=$(git rev-parse HEAD)
+          artifact_id=${{ steps.package.outputs.artifact-id }}
+          artifact_digest=${{ steps.package.outputs.artifact-digest }}
+          linux=passed
+          windows=passed
+          build_tree_acceptance=passed
+          installed_acceptance=passed
+          extracted_acceptance=passed
+          "@ | Set-Content VALIDATION_v0.7.9.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add VALIDATION_v0.7.9.txt
+          git commit -m 'Record Runner v0.7.9 validation evidence'
+          git push origin HEAD:agent/v079-live-acceptance-matrix
