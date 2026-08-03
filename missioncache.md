@@ -2246,7 +2246,7 @@ Re-run Linux warnings-as-errors, all deterministic tests, full Windows Vulkan bu
 ### WALK-ART-112 — Display and package the original Runner artwork
 **Status:** PUBLISHED — RELEASE VERIFIED
 
-The original `assets/chicken.ppm` artwork is loaded during application startup, rendered in the live top bar, and remains a required packaged runtime asset. Missing or malformed art fails initialization instead of silently reverting to a placeholder.
+The original `assets/chicken.ppm` artwork is loaded during application startup and rendered in the live top bar when valid. Release/package validation requires a valid packaged asset; normal startup shows an artwork warning and continues without the decoration if a user-side copy is missing or malformed.
 
 ### WALK-AUTOSAVE-113 — Isolate corrected training state from v0.7.8
 **Status:** PUBLISHED — RELEASE VERIFIED
