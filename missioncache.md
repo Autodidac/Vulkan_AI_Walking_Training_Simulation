@@ -2247,3 +2247,8 @@ Re-run Linux warnings-as-errors, all deterministic tests, full Windows Vulkan bu
 **Status:** IN VALIDATION
 
 The original `assets/chicken.ppm` artwork is loaded during application startup, rendered in the live top bar, and remains a required packaged runtime asset. Missing or malformed art fails initialization instead of silently reverting to a placeholder.
+
+### WALK-AUTOSAVE-113 — Isolate corrected training state from v0.7.8
+**Status:** IN VALIDATION
+
+Runner v0.7.10 writes and loads only `runner-v0710-*` autosave, evolved-rig, and autonomy-state files. It cannot silently resume the stale v0.7.8 curriculum or evolved rig that reproduced the live regression.

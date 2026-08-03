@@ -12,6 +12,7 @@ All notable Runner changes are recorded here. The authoritative work ledger is `
 - Aligned Stand mastery with the visible 10 rad/s qualification limit and exposed joint-speed blockers in the status line.
 - Reduced only the Stand lock to three consecutive all-six-seed confirmations; later curriculum stages retain eight confirmations.
 - Loaded and rendered the original Runner pixel artwork from the packaged `assets/chicken.ppm` asset.
+- Isolated v0.7.10 autosaves from stale `runner-v078-*` policy, rig, and curriculum-state files.
 
 ### Changed
 

@@ -130,22 +130,24 @@ namespace runner
             const float inverse_maximum = 1.0f / static_cast<float>(maximum);
             for (int index = 0; index < width * height; ++index)
             {
-                int red{};
-                int green{};
-                int blue{};
-                if (!read_ppm_number(input, red) || !read_ppm_number(input, green)
-                    || !read_ppm_number(input, blue)
-                    || red < 0 || green < 0 || blue < 0
-                    || red > maximum || green > maximum || blue > maximum)
+                int red_channel{};
+                int green_channel{};
+                int blue_channel{};
+                if (!read_ppm_number(input, red_channel)
+                    || !read_ppm_number(input, green_channel)
+                    || !read_ppm_number(input, blue_channel)
+                    || red_channel < 0 || green_channel < 0 || blue_channel < 0
+                    || red_channel > maximum || green_channel > maximum
+                    || blue_channel > maximum)
                 {
                     error = "Original Runner artwork has incomplete pixel data: "
                         + path.string();
                     return false;
                 }
                 loaded.pixels.push_back({
-                    static_cast<float>(red) * inverse_maximum,
-                    static_cast<float>(green) * inverse_maximum,
-                    static_cast<float>(blue) * inverse_maximum,
+                    static_cast<float>(red_channel) * inverse_maximum,
+                    static_cast<float>(green_channel) * inverse_maximum,
+                    static_cast<float>(blue_channel) * inverse_maximum,
                     1.0f
                 });
             }
@@ -402,9 +404,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v078-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v078-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v078-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0710-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0710-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0710-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
