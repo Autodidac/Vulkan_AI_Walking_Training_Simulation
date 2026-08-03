@@ -28,4 +28,6 @@ jobs:
       - name: Finalize and audit Runner v0.7.8
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/finalize_v078_exact.sh
+        run: |
+          sed -i '43d' .github/scripts/finalize_v078_exact.sh
+          bash .github/scripts/finalize_v078_exact.sh
