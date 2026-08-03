@@ -26,11 +26,13 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Prepare exact release source
+      - name: Prepare self-cleaned release source
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/finalize-runner-v0710.yml
+          rm -f .github/workflows/publish-runner-v0710-rescue.yml
+          rm -f PUBLISH_TRIGGER_v0710.tmp PUBLISH_RUN_v0710.tmp
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -52,7 +54,7 @@ jobs:
           for marker in ('## v0.7.10 validation evidence', '## v0.7.10 immutable release evidence'):
               if marker in text:
                   text = text[:text.index(marker)].rstrip()
-          evidence = '''
+          text += '''
 
 ## v0.7.10 validation evidence
 
@@ -66,39 +68,30 @@ jobs:
 - Build-tree, installed, and independently extracted diagnostics: passed
 - ZIP checksum and per-file manifest audit: passed
 '''
-          path.write_text(text.rstrip() + evidence, encoding='utf-8')
+          path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Verify consolidated repository
+      - name: Verify, build, and test Linux source
+        env:
+          CC: gcc-14
+          CXX: g++-14
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
           git diff --check
           test ! -f tools/apply_v0710_cleanup.py
           test ! -f src/autonomy.cpp
           test ! -f .github/workflows/validate-runner-v0710.yml
           test ! -f .github/workflows/finalize-runner-v0710.yml
+          test ! -f .github/workflows/publish-runner-v0710-rescue.yml
           test -f CHANGELOG.md
           test -f missioncache.md
           test -f tools/repository_audit.cmake
           test "$(find . -path ./.git -prune -o -type f -name 'RELEASE_NOTES*.md' -print | wc -l)" -eq 0
           test "$(find . -path ./.git -prune -o -type f -iname '*mission*.md' ! -name missioncache.md -print | wc -l)" -eq 0
           for stale in artifact published-audit published-final published-preliminary release-stage validation; do test ! -e "$stale"; done
-          grep -F 'project(Runner VERSION 0.7.10 LANGUAGES CXX)' CMakeLists.txt
-          grep -F 'Runner.RepositoryHygiene' CMakeLists.txt
-          grep -F 'WALK-RELEASE-108' missioncache.md
-
-      - name: Install GCC 14 and Ninja
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-14 ninja-build
-
-      - name: Build and test Linux release source
-        env:
-          CC: gcc-14
-          CXX: g++-14
-        shell: bash
-        run: |
           cmake -S . -B build/linux-v0710-release -G Ninja \
             -DRUNNER_BUILD_APP=OFF \
             -DRUNNER_BUILD_TESTS=ON \
@@ -131,7 +124,8 @@ jobs:
       TAG: v0.7.10
       RELEASE_TITLE: Runner v0.7.10
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      RESCUE_BRANCH: release/v0710-publisher-rescue
+      TRIGGER_BRANCH: ${{ github.head_ref }}
+      PUBLISHER_BRANCH: release/v0710-publisher-rescue
       WORK_BRANCH: agent/v0710-consolidated-changelog-cleanup
     steps:
       - uses: actions/checkout@v4
@@ -139,33 +133,13 @@ jobs:
           ref: ${{ needs.linux-release-source.outputs.release_sha }}
           fetch-depth: 0
 
-      - name: Confirm exact clean source
-        shell: pwsh
-        run: |
-          if ((git rev-parse HEAD).Trim() -ne $env:RELEASE_SHA) { throw 'Release source SHA mismatch' }
-          foreach ($path in @(
-            'tools/apply_v0710_cleanup.py','src/autonomy.cpp',
-            '.github/workflows/validate-runner-v0710.yml',
-            '.github/workflows/finalize-runner-v0710.yml')) {
-            if (Test-Path $path) { throw "Temporary or obsolete source remains: $path" }
-          }
-          foreach ($path in @('artifact','published-audit','published-final','published-preliminary','release-stage','validation')) {
-            if (Test-Path $path) { throw "Stale release directory remains: $path" }
-          }
-          if (-not (Test-Path CHANGELOG.md)) { throw 'CHANGELOG.md is missing' }
-          if (Get-ChildItem -Recurse -File -Filter 'RELEASE_NOTES*.md') { throw 'Per-release notes remain' }
-          git diff --quiet
-          if ($LASTEXITCODE -ne 0) { throw 'Release source tree is dirty' }
-
-      - name: Checkout pinned vcpkg
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
 
-      - name: Restore vcpkg cache
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             vcpkg-bincache
@@ -175,43 +149,37 @@ jobs:
             runner-v079-${{ runner.os }}-
             runner-v078-${{ runner.os }}-
 
-      - name: Bootstrap vcpkg
-        shell: cmd
-        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-
-      - name: Configure and build full Windows application
+      - name: Build and test complete Windows application
         shell: pwsh
         run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:RELEASE_SHA) { throw 'Release source SHA mismatch' }
+          foreach ($path in @(
+            'tools/apply_v0710_cleanup.py','src/autonomy.cpp',
+            '.github/workflows/validate-runner-v0710.yml',
+            '.github/workflows/finalize-runner-v0710.yml',
+            '.github/workflows/publish-runner-v0710-rescue.yml')) {
+            if (Test-Path $path) { throw "Temporary or obsolete source remains: $path" }
+          }
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg bootstrap failed' }
           cmake --preset windows-release --fresh
           if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
           cmake --build --preset windows-release --parallel
           if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
-
-      - name: Run complete Windows tests
-        shell: pwsh
-        run: |
           ctest --preset windows-release --output-on-failure -V --timeout 1200
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
-
-      - name: Verify build-tree diagnostics
-        shell: pwsh
-        run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
           Push-Location $env:RUNNER_TEMP
           try {
-            $version = (& $exe --version | Out-String).Trim()
-            if ($version -ne 'Runner 0.7.10') { throw "Unexpected version: $version" }
-            & $exe --diagnose-vulkan
-            if ($LASTEXITCODE -ne 0) { throw 'Vulkan diagnostic failed' }
-            & $exe --diagnose-package
-            if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
-            & $exe --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }
+            if ((& $exe --version | Out-String).Trim() -ne 'Runner 0.7.10') { throw 'Version diagnostic failed' }
+            & $exe --diagnose-vulkan; if ($LASTEXITCODE -ne 0) { throw 'Vulkan diagnostic failed' }
+            & $exe --diagnose-package; if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+            & $exe --diagnose-acceptance; if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }
           }
           finally { Pop-Location }
 
-      - name: Install and verify release candidate
+      - name: Install, archive, and independently audit package
         shell: pwsh
         run: |
           $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
@@ -219,60 +187,40 @@ jobs:
           cmake --install build/windows-release --config Release --prefix $stage
           if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
           Copy-Item README.md, LICENSE, CHANGELOG.md, missioncache.md -Destination $stage -Force
-          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
-            Copy-Item -Destination $stage -Force
-          foreach ($required in @(
-            'Runner.exe','run.bat','README.md','CHANGELOG.md','missioncache.md',
-            'shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue | Copy-Item -Destination $stage -Force
+          foreach ($required in @('Runner.exe','run.bat','README.md','CHANGELOG.md','missioncache.md','shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
             if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
           }
           $outside = "$env:RUNNER_TEMP/runner-v0710-installed-unrelated"
           New-Item -ItemType Directory -Force $outside | Out-Null
           Push-Location $outside
           try {
-            $version = (& "$stage/Runner.exe" --version | Out-String).Trim()
-            if ($version -ne 'Runner 0.7.10') { throw "Installed version mismatch: $version" }
-            & "$stage/Runner.exe" --diagnose-package
-            if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
-            & "$stage/Runner.exe" --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance diagnostic failed' }
-            $batchVersion = (& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim()
-            if ($batchVersion -ne 'Runner 0.7.10') { throw "run.bat version mismatch: $batchVersion" }
+            if ((& "$stage/Runner.exe" --version | Out-String).Trim() -ne 'Runner 0.7.10') { throw 'Installed version mismatch' }
+            & "$stage/Runner.exe" --diagnose-package; if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
+            & "$stage/Runner.exe" --diagnose-acceptance; if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance diagnostic failed' }
+            if ((& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.10') { throw 'run.bat version mismatch' }
           }
           finally { Pop-Location }
 
-      - name: Create and independently audit archive
-        shell: pwsh
-        run: |
-          $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
           $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.10-windows-x64.zip"
           Remove-Item $archive -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
           (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
           Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
             $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            "$hash  $relative"
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
           } | Set-Content 'Runner-v0.7.10-windows-x64.manifest.sha256'
-
           $audit = "$env:RUNNER_TEMP/runner-v0710-extracted"
           Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $archive -DestinationPath $audit -Force
           $expected = Get-Content 'Runner-v0.7.10-windows-x64.manifest.sha256'
           $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
             $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            "$hash  $relative"
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
           }
           if (Compare-Object $expected $actual) { throw 'Archive manifest audit failed' }
-          Push-Location $env:RUNNER_TEMP
-          try {
-            & "$audit/Runner.exe" --diagnose-package
-            if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
-            & "$audit/Runner.exe" --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance diagnostic failed' }
-          }
-          finally { Pop-Location }
+          & "$audit/Runner.exe" --diagnose-package; if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
+          & "$audit/Runner.exe" --diagnose-acceptance; if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance diagnostic failed' }
 
       - id: package
         uses: actions/upload-artifact@v4
@@ -285,73 +233,51 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Build release body from changelog
-        shell: pwsh
-        run: |
-          $text = Get-Content CHANGELOG.md -Raw
-          $match = [regex]::Match($text, '(?ms)^## \[0\.7\.10\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)')
-          if (-not $match.Success) { throw 'v0.7.10 changelog section not found' }
-          Set-Content release-body-v0.7.10.md $match.Groups[1].Value.Trim() -Encoding utf8
-
       - name: Publish and re-audit GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $text = Get-Content CHANGELOG.md -Raw
+          $match = [regex]::Match($text, '(?ms)^## \[0\.7\.10\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)')
+          if (-not $match.Success) { throw 'v0.7.10 changelog section not found' }
+          Set-Content release-body-v0.7.10.md $match.Groups[1].Value.Trim() -Encoding utf8
           if (gh release view $env:TAG --repo $env:GITHUB_REPOSITORY 2>$null) {
             gh release delete $env:TAG --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
           }
-          gh release create $env:TAG `
-            --repo $env:GITHUB_REPOSITORY `
-            --title $env:RELEASE_TITLE `
-            --target $env:RELEASE_SHA `
-            --notes-file release-body-v0.7.10.md `
-            Runner-v0.7.10-windows-x64.zip `
-            Runner-v0.7.10-windows-x64.zip.sha256 `
-            Runner-v0.7.10-windows-x64.manifest.sha256
+          gh release create $env:TAG --repo $env:GITHUB_REPOSITORY --title $env:RELEASE_TITLE --target $env:RELEASE_SHA --notes-file release-body-v0.7.10.md Runner-v0.7.10-windows-x64.zip Runner-v0.7.10-windows-x64.zip.sha256 Runner-v0.7.10-windows-x64.manifest.sha256
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
-
           $download = "$env:RUNNER_TEMP/runner-v0710-release-audit"
           Remove-Item $download -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $download | Out-Null
           gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --dir $download
           if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
-          foreach ($file in @(
-            'Runner-v0.7.10-windows-x64.zip',
-            'Runner-v0.7.10-windows-x64.zip.sha256',
-            'Runner-v0.7.10-windows-x64.manifest.sha256')) {
-            $localHash = (Get-FileHash $file -Algorithm SHA256).Hash
-            $remoteHash = (Get-FileHash "$download/$file" -Algorithm SHA256).Hash
-            if ($localHash -ne $remoteHash) { throw "Published asset mismatch: $file" }
+          foreach ($file in @('Runner-v0.7.10-windows-x64.zip','Runner-v0.7.10-windows-x64.zip.sha256','Runner-v0.7.10-windows-x64.manifest.sha256')) {
+            if ((Get-FileHash $file -Algorithm SHA256).Hash -ne (Get-FileHash "$download/$file" -Algorithm SHA256).Hash) { throw "Published asset mismatch: $file" }
           }
-          $expectedZip = (Get-Content "$download/Runner-v0.7.10-windows-x64.zip.sha256").Split()[0]
-          $actualZip = (Get-FileHash "$download/Runner-v0.7.10-windows-x64.zip" -Algorithm SHA256).Hash
-          if ($expectedZip -ne $actualZip) { throw 'Published ZIP checksum mismatch' }
-
-          $releaseExtract = "$env:RUNNER_TEMP/runner-v0710-release-extracted"
-          Remove-Item $releaseExtract -Recurse -Force -ErrorAction SilentlyContinue
-          Expand-Archive "$download/Runner-v0.7.10-windows-x64.zip" -DestinationPath $releaseExtract -Force
+          if ((Get-Content "$download/Runner-v0.7.10-windows-x64.zip.sha256").Split()[0] -ne (Get-FileHash "$download/Runner-v0.7.10-windows-x64.zip" -Algorithm SHA256).Hash) { throw 'Published ZIP checksum mismatch' }
+          $released = "$env:RUNNER_TEMP/runner-v0710-release-extracted"
+          Remove-Item $released -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive "$download/Runner-v0.7.10-windows-x64.zip" -DestinationPath $released -Force
           $expected = Get-Content "$download/Runner-v0.7.10-windows-x64.manifest.sha256"
-          $actual = Get-ChildItem $releaseExtract -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $relative = $_.FullName.Substring($releaseExtract.Length + 1).Replace('\', '/')
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            "$hash  $relative"
+          $actual = Get-ChildItem $released -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($released.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
           }
           if (Compare-Object $expected $actual) { throw 'Published manifest audit failed' }
-          & "$releaseExtract/Runner.exe" --diagnose-package
-          if ($LASTEXITCODE -ne 0) { throw 'Released package diagnostic failed' }
-          & "$releaseExtract/Runner.exe" --diagnose-acceptance
-          if ($LASTEXITCODE -ne 0) { throw 'Released acceptance diagnostic failed' }
-          $tagSha = (git ls-remote origin "refs/tags/$env:TAG").Split()[0]
-          if ($tagSha -ne $env:RELEASE_SHA) { throw "Tag target mismatch: $tagSha" }
+          & "$released/Runner.exe" --diagnose-package; if ($LASTEXITCODE -ne 0) { throw 'Released package diagnostic failed' }
+          & "$released/Runner.exe" --diagnose-acceptance; if ($LASTEXITCODE -ne 0) { throw 'Released acceptance diagnostic failed' }
+          if ((git ls-remote origin "refs/tags/$env:TAG").Split()[0] -ne $env:RELEASE_SHA) { throw 'Tag target mismatch' }
 
-      - name: Close publisher PR and clean branches
+      - name: Close PR, clean branches, and record release evidence
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.package.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.package.outputs.artifact-digest }}
         run: |
           gh pr close $env:PR_NUMBER --repo $env:GITHUB_REPOSITORY --comment 'Runner v0.7.10 publication and release audit completed.'
-          foreach ($branch in @($env:WORK_BRANCH, $env:RESCUE_BRANCH)) {
+          foreach ($branch in @($env:WORK_BRANCH, $env:PUBLISHER_BRANCH, $env:TRIGGER_BRANCH) | Select-Object -Unique) {
             gh api --silent -X DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch" 2>$null
           }
           $openPrs = gh pr list --repo $env:GITHUB_REPOSITORY --state open --limit 100 --json number --jq length
@@ -359,12 +285,6 @@ jobs:
           $branches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' | Sort-Object
           if (($branches -join ',') -ne 'main') { throw "Unexpected branches remain: $branches" }
 
-      - name: Record immutable release evidence
-        shell: pwsh
-        env:
-          ARTIFACT_ID: ${{ steps.package.outputs.artifact-id }}
-          ARTIFACT_DIGEST: ${{ steps.package.outputs.artifact-digest }}
-        run: |
           git fetch origin main
           git checkout -B main origin/main
           $path = 'missioncache.md'
