@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.6
+**Target:** Runner v0.7.7
 
-**Release state:** PUBLISHED - v0.7.6 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+**Release state:** IN PROGRESS - v0.7.6 live screenshots reopened stance, crouch, exploration, and fused-support acceptance
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -625,3 +625,40 @@ Build and test Linux and the complete Windows Vulkan application; verify all det
 - Temporary release workflows and source branches were removed after publication
 - Open pull requests after cleanup: `0`; remaining branch after cleanup: `main`
 - Live screenshot-level behavior remains pending Adam's released-package confirmation; contradictory behavior reopens the exact mission
+
+## v0.7.7 rig-specific learning and support correction
+
+### WALK-RIGSTANCE-084 — Rig-specific standing controller
+**Status:** IN PROGRESS
+
+Standing control and qualification use each preset's authored body orientation and support topology. Quadrupeds, crawlers, hexapods, chickens, monopeds, bipeds, and humanoids may not be forced through one biped hip/knee correction. The quadruped must repeatedly establish a valid stage-one stance without being rearranged by diagonal support separation.
+
+### WALK-CROUCH-085 — Restore leg-driven static crouch learning
+**Status:** IN PROGRESS
+
+Static crouch bends biped knees before spreading hips and compacts the authored support geometry for non-bipeds. It must hold beneath the platen, maintain feet-only ground support, retract, and recover to stable stance. The stage does not reward walking after the platen and may not qualify a jumping-jack stance.
+
+### WALK-EXPLORE-086 — Preserve meaningful PPO exploration
+**Status:** IN PROGRESS
+
+Teacher guidance remains a bootstrap rather than the controller. Dedicated early rollout lanes test every motor alone in both directions, synchronized groups, and alternating patterns, with neutral recovery intervals. The compounded teacher blend leaves enough residual policy authority for visibly different candidates to branch, and the probes stop after initial motor discovery.
+
+### WALK-FEET-087 — Separate every preset's semantic supports
+**Status:** IN PROGRESS
+
+Every pair of semantic support nodes receives non-overlap separation that preserves authored ordering. No preset may show fused feet, and the solver may not reorder a quadruped by assuming every left-channel contact is physically left of every right-channel contact.
+
+### WALK-RELEASE-088 — Publish audited Runner v0.7.7
+**Status:** IN PROGRESS
+
+Build and test Linux and the complete Windows Vulkan package, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime screenshots remain the final acceptance authority.
+
+### WALK-SLIDE-089 — Allow natural foot sliding without friction-drive exploits
+**Status:** IN PROGRESS
+
+Foot sliding is permitted during crouch entry, stance adjustment, walking, running, and unstable-terrain recovery. Sliding itself is not an invalid-motion gate. Pure double-support translation with no gait cycle, no swing clearance, and sustained planted-foot slip is recognized only as a friction-driven shuffle: it receives no gait credit and a mild shaping penalty, but does not terminate the attempt. Standing retains a low-slip stability requirement because its task is stationary support.
+
+### WALK-UPDATES-090 — Keep evaluations synchronized with PPO updates
+**Status:** IN PROGRESS
+
+Evaluation count is cumulative and survives optimizer, transferred-rig, autosave, and recalibration resets just as PPO update count does. With evaluation scheduled on update 1 and every fifth update, update 240 must report 49 evaluations unless the stage itself has just changed. The PIP publication and mastery streak consume each new evaluation exactly once; they may not remain at one evaluation after hundreds of updates.
