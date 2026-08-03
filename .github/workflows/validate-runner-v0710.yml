@@ -28,29 +28,142 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Materialize consolidated v0.7.10 source
-        run: python3 tools/apply_v0710_cleanup.py
+      - name: Materialize consolidated clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/apply_v0710_cleanup.py
 
-      - name: Verify repository consolidation
+          rm -rf artifact published-audit published-final published-preliminary release-stage validation
+          rm -f src/autonomy.cpp
+          rm -f .github/workflows/debug-v0710.yml
+          rm -f .github/workflows/validate-runner-v0710.yml
+          rm -f .github/workflows/consolidate-runner-v0710.yml
+          rm -f .github/workflows/consolidate-runner-v0710-final.yml
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              'tests/core_tests.cpp': {
+                  'Runner v0.7.6 standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed':
+                  'Runner core standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed',
+              },
+              'tests/concurrency_benchmark.cpp': {
+                  'Runner v0.6.2 speed-mode throughput benchmark passed':
+                  'Runner speed-mode throughput benchmark passed',
+              },
+              'tests/runtime_pipeline_tests.cpp': {
+                  'Runner v0.7 runtime pipeline, arms, and async persistence tests passed':
+                  'Runner runtime pipeline, arms, and async persistence tests passed',
+              },
+          }
+          for filename, mapping in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              for old, new in mapping.items():
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+
+          ignore = Path('.gitignore')
+          lines = ignore.read_text(encoding='utf-8').splitlines() if ignore.exists() else []
+          for entry in (
+              '/artifact/', '/published-*/', '/release-stage/', '/validation/',
+              '/VALIDATION_v*.txt', '/Runner-v*.zip', '/Runner-v*.zip.sha256',
+              '/Runner-v*.manifest.sha256',
+          ):
+              if entry not in lines:
+                  lines.append(entry)
+          ignore.write_text('\n'.join(lines).rstrip() + '\n', encoding='utf-8')
+          PY
+
+          cat > tools/repository_audit.cmake <<'CMAKE'
+          if(NOT DEFINED RUNNER_SOURCE_DIR)
+              message(FATAL_ERROR "RUNNER_SOURCE_DIR was not provided")
+          endif()
+
+          foreach(required IN ITEMS CHANGELOG.md missioncache.md README.md)
+              if(NOT EXISTS "${RUNNER_SOURCE_DIR}/${required}")
+                  message(FATAL_ERROR "Missing required repository document: ${required}")
+              endif()
+          endforeach()
+
+          file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
+          if(release_notes)
+              list(JOIN release_notes ", " release_note_list)
+              message(FATAL_ERROR "Per-release note files remain: ${release_note_list}")
+          endif()
+
+          file(GLOB_RECURSE markdown_files "${RUNNER_SOURCE_DIR}/*.md")
+          set(mission_documents "")
+          foreach(path IN LISTS markdown_files)
+              if(path MATCHES "/build/")
+                  continue()
+              endif()
+              get_filename_component(name "${path}" NAME)
+              string(TOLOWER "${name}" lower_name)
+              if(lower_name MATCHES "mission" AND NOT lower_name STREQUAL "missioncache.md")
+                  list(APPEND mission_documents "${path}")
+              endif()
+          endforeach()
+          if(mission_documents)
+              list(JOIN mission_documents ", " mission_document_list)
+              message(FATAL_ERROR "Duplicate mission documents remain: ${mission_document_list}")
+          endif()
+
+          foreach(stale IN ITEMS artifact published-audit published-final published-preliminary release-stage validation)
+              if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
+                  message(FATAL_ERROR "Stale release directory remains: ${stale}")
+              endif()
+          endforeach()
+          if(EXISTS "${RUNNER_SOURCE_DIR}/src/autonomy.cpp")
+              message(FATAL_ERROR "Obsolete monolithic autonomy.cpp remains")
+          endif()
+
+          file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
+          string(FIND "${cmake_text}" "project(Runner VERSION 0.7.10 LANGUAGES CXX)" version_position)
+          if(version_position EQUAL -1)
+              message(FATAL_ERROR "CMake project version is not 0.7.10")
+          endif()
+
+          file(READ "${RUNNER_SOURCE_DIR}/README.md" readme_text)
+          foreach(reference IN ITEMS "CHANGELOG.md" "missioncache.md" "--diagnose-acceptance")
+              string(FIND "${readme_text}" "${reference}" reference_position)
+              if(reference_position EQUAL -1)
+                  message(FATAL_ERROR "README is missing required reference: ${reference}")
+              endif()
+          endforeach()
+
+          file(READ "${RUNNER_SOURCE_DIR}/src/acceptance.cpp" acceptance_text)
+          foreach(reference IN ITEMS "std::hypot" "!cases.empty()" "8. MIXED GOAL COURSE")
+              string(FIND "${acceptance_text}" "${reference}" reference_position)
+              if(reference_position EQUAL -1)
+                  message(FATAL_ERROR "Acceptance hardening is missing: ${reference}")
+              endif()
+          endforeach()
+          message(STATUS "Runner repository hygiene passed")
+          CMAKE
+
+      - name: Verify repository cleanup
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
           test ! -f tools/apply_v0710_cleanup.py
+          test ! -f src/autonomy.cpp
+          test ! -f .github/workflows/debug-v0710.yml
           test ! -f .github/workflows/validate-runner-v0710.yml
+          test ! -f .github/workflows/consolidate-runner-v0710.yml
+          test ! -f .github/workflows/consolidate-runner-v0710-final.yml
           test -f .github/workflows/finalize-runner-v0710.yml
           test -f CHANGELOG.md
           test -f missioncache.md
           test -f tools/repository_audit.cmake
-          test "$(find . -type f -name 'RELEASE_NOTES*.md' -print | wc -l)" -eq 0
-          test "$(find . -type f -iname '*mission*.md' ! -name missioncache.md -print | wc -l)" -eq 0
-          grep -F 'project(Runner VERSION 0.7.10 LANGUAGES CXX)' CMakeLists.txt
-          grep -F 'Runner.RepositoryHygiene' CMakeLists.txt
-          grep -F 'std::hypot' src/acceptance.cpp
-          grep -F '!cases.empty()' src/acceptance.cpp
-          grep -F 'WALK-RELEASE-108' missioncache.md
+          test "$(find . -path ./.git -prune -o -type f -name 'RELEASE_NOTES*.md' -print | wc -l)" -eq 0
+          test "$(find . -path ./.git -prune -o -type f -iname '*mission*.md' ! -name missioncache.md -print | wc -l)" -eq 0
+          for stale in artifact published-audit published-final published-preliminary release-stage validation; do test ! -e "$stale"; done
 
-      - name: Configure deterministic C++23 suite
+      - name: Configure Linux deterministic suite
         env:
           CC: gcc-14
           CXX: g++-14
@@ -91,11 +204,17 @@ jobs:
       - name: Confirm exact clean source
         shell: pwsh
         run: |
-          foreach ($path in @('tools/apply_v0710_cleanup.py', '.github/workflows/validate-runner-v0710.yml')) {
-            if (Test-Path $path) { throw "Temporary validation tool remains: $path" }
+          foreach ($path in @(
+            'tools/apply_v0710_cleanup.py','src/autonomy.cpp',
+            '.github/workflows/debug-v0710.yml',
+            '.github/workflows/validate-runner-v0710.yml',
+            '.github/workflows/consolidate-runner-v0710.yml',
+            '.github/workflows/consolidate-runner-v0710-final.yml')) {
+            if (Test-Path $path) { throw "Temporary or obsolete source remains: $path" }
           }
-          if (-not (Test-Path CHANGELOG.md)) { throw 'CHANGELOG.md is missing' }
-          if (Get-ChildItem -Recurse -File -Filter 'RELEASE_NOTES*.md') { throw 'Per-release notes remain' }
+          foreach ($path in @('artifact','published-audit','published-final','published-preliminary','release-stage','validation')) {
+            if (Test-Path $path) { throw "Stale release directory remains: $path" }
+          }
           git diff --quiet
           if ($LASTEXITCODE -ne 0) { throw 'Windows source tree is dirty' }
 
@@ -153,7 +272,7 @@ jobs:
           }
           finally { Pop-Location }
 
-      - name: Install release candidate
+      - name: Install and verify package
         shell: pwsh
         run: |
           $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
@@ -168,11 +287,6 @@ jobs:
             'shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
             if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
           }
-
-      - name: Verify installed executable and launcher
-        shell: pwsh
-        run: |
-          $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
           $outside = "$env:RUNNER_TEMP/runner-v0710-installed-unrelated"
           New-Item -ItemType Directory -Force $outside | Out-Null
           Push-Location $outside
@@ -188,7 +302,7 @@ jobs:
           }
           finally { Pop-Location }
 
-      - name: Create and independently audit archive
+      - name: Create and audit archive
         shell: pwsh
         run: |
           $stage = "$env:RUNNER_TEMP/Runner-v0.7.10-windows-x64"
@@ -231,46 +345,3 @@ jobs:
             Runner-v0.7.10-windows-x64.manifest.sha256
           if-no-files-found: error
           retention-days: 14
-
-      - name: Record package validation in mission cache
-        shell: pwsh
-        env:
-          ARTIFACT_ID: ${{ steps.package.outputs.artifact-id }}
-          ARTIFACT_DIGEST: ${{ steps.package.outputs.artifact-digest }}
-        run: |
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path('missioncache.md')
-          text = path.read_text(encoding='utf-8')
-          text = re.sub(
-              r'^\*\*Release state:\*\*.*$',
-              '**Release state:** PACKAGE VERIFIED — Runner v0.7.10 passed repository consolidation, Linux, Windows, package, and executable acceptance; publication audit pending.',
-              text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          for mission in range(104, 108):
-              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
-              text, count = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED', text, count=1)
-              if count != 1:
-                  raise SystemExit(f'missing mission {mission}')
-          text = re.sub(
-              r'(### WALK-RELEASE-108[^\n]*\n)\*\*Status:\*\*[^\n]*',
-              r'\1**Status:** VALIDATED — PUBLICATION PENDING',
-              text,
-              count=1,
-          )
-          evidence = f'''\n## v0.7.10 validation evidence\n\n- Validation workflow run: `{os.environ['GITHUB_RUN_ID']}`\n- Exact validated source: `{os.environ['GITHUB_SHA']}`\n- Artifact ID: `{os.environ['ARTIFACT_ID']}`\n- Artifact digest: `{os.environ['ARTIFACT_DIGEST']}`\n- Linux GCC 14 warnings-as-errors build and all deterministic tests: passed\n- Full Windows Vulkan build and all tests: passed\n- Build-tree, installed, and independently extracted diagnostics: passed\n- ZIP checksum and per-file manifest audit: passed\n'''
-          marker = '## v0.7.10 validation evidence'
-          if marker in text:
-              text = text[:text.index(marker)].rstrip()
-          path.write_text(text.rstrip() + '\n' + evidence, encoding='utf-8')
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add missioncache.md
-          git commit -m 'Record Runner v0.7.10 package validation'
-          git push origin HEAD:${{ github.head_ref }}
