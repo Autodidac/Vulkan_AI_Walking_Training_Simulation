@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.9
 
-**Release state:** PACKAGE VERIFIED — Runner v0.7.9 passed Linux, Windows, build-tree acceptance, and all deterministic suites; publication audit pending.
+**Release state:** PUBLISHED — Runner v0.7.9 acceptance matrix, package, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -748,35 +748,36 @@ Reconcile every open or screenshot-reopened ledger item, run strict chicken six-
 ## v0.7.9 executable live-acceptance completion
 
 ### WALK-LIVE-099 — Executable released-package acceptance matrix
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Add one deterministic acceptance entrypoint shared by CTest and the packaged executable. `Runner --diagnose-acceptance` must run without opening a window and print an explicit pass/fail line for every acceptance case.
 
 ### WALK-PRESETS-100 — All-preset finite live-physics soak
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Step chicken, biped, humanoid, quadruped, crawler, hexapod, and monoped environments through the real effective controller. Every particle and observation channel must remain finite and every authored blueprint must remain structurally valid.
 
 ### WALK-RIGMATRIX-101 — Close the carried rig and curriculum acceptance backlog
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 The matrix must verify semantic-support separation, humanoid and chicken strict six-seed balance, raised central shoulder geometry, leg-only duck authority, current-frame PIP fallback, monoped gait identity, and ordered stage evidence. Contradictory released-package evidence reopens only the exact affected mission.
 
 ### WALK-PACKAGE-102 — Run acceptance from installed and extracted packages
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 The Windows package job must run version, Vulkan/package diagnostics, and `--diagnose-acceptance` from the build tree, installed directory, and independently extracted ZIP using unrelated working directories.
 
 ### WALK-RELEASE-103 — Publish audited Runner v0.7.9
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, run all deterministic suites, publish ZIP/checksum/manifest assets, re-download and verify them, update this ledger with exact evidence, and leave only `main` with zero open pull requests.
+
 ## v0.7.9 immutable release evidence
 
-- Exact tagged package source: `28b4f4616109ab094141fd0fab22b35b16c982fa`
-- Validation and publication workflow run: `30799470206`
-- Artifact ID: `8850662981`
-- Artifact digest: `3200e24656728715126119aac73e0579851477b61079d04469c05a06e8a1e217`
+- Exact tagged package source: `c1748749bfc2a52f9f2add54fc8029987bb4a22f`
+- Validation and publication workflow run: `30799184889`
+- Artifact ID: `8850995946`
+- Artifact digest: `731ecc1a6ec82667517b888018fd97a62a36dd75511ad1775f4891d1b460de94`
 - Release tag and title: `v0.7.9` / `Runner v0.7.9`
 - Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
 - Linux GCC 14 warnings-as-errors build and all five deterministic suites: passed
@@ -784,5 +785,5 @@ Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, 
 - Full Windows Vulkan build and all six tests: passed
 - Build-tree, installed, independently extracted, and re-downloaded release acceptance diagnostics: passed
 - Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed
-- Merged work, diagnostic, and trigger branches removed; open pull requests: `0`; remaining branches: `main`
+- Merged work and diagnostic branches removed; open pull requests: `0`; remaining branches: `main`
 - Contradictory released-package evidence reopens only the exact affected mission
