@@ -1,3 +1,4 @@
+# Registered trigger workflow.
 name: Trigger Runner v0.7.9 finalizer
 
 on:
