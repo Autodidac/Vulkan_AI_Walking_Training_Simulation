@@ -63,14 +63,4 @@ text += '''
 - Expands material acceptance with deterministic repeated events, partial burial and escape-side detection, full no-escape burial termination, and direct/glancing impact anti-tunneling checks.
 '''
 notes.write_text(text.rstrip() + '\n', encoding='utf-8')
-
-workflow = root / '.github/workflows/validate-runner-v078.yml'
-text = workflow.read_text(encoding='utf-8')
-text = replace_once(text, "              'WALK-ESCAPE-094', 'WALK-RELEASE-095'\n",
-    "              'WALK-ESCAPE-094', 'WALK-RELEASE-095',\n              'WALK-CHICKEN-096', 'WALK-VISUAL-097', 'WALK-ACCEPT-098'\n",
-    'workflow mission list')
-text = replace_once(text, "              'terrain tests': ('total_height_volume', tests),\n",
-    "              'terrain tests': ('buried_no_escape', tests),\n              'chicken balance': ('valid_chicken_seeds == chicken_seed_count', Path('tests/core_tests.cpp').read_text(encoding='utf-8')),\n              'biomechanical overlay': ('draw_biomechanical_overlay', Path('src/app.cpp').read_text(encoding='utf-8')),\n",
-    'workflow source checks')
-workflow.write_text(text, encoding='utf-8')
 Path(__file__).unlink()
