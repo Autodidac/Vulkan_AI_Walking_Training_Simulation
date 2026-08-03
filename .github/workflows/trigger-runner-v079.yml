@@ -1,0 +1,31 @@
+name: Trigger Runner v0.7.9 finalizer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/trigger-runner-v079.yml
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Trigger finalizer and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          printf '\n# Triggered by workflow run %s\n' "$GITHUB_RUN_ID" >> .github/workflows/finalize-runner-v079.yml
+          git rm .github/workflows/trigger-runner-v079.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/finalize-runner-v079.yml
+          git commit -m 'Trigger Runner v0.7.9 finalizer after newline fix'
+          git push origin HEAD:main
