@@ -1,0 +1,82 @@
+name: Publish Runner v0.7.8
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-runner-v078.yml]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-runner-v078
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: 30781702055
+      TARGET_SHA: 073e10be71d589145beb93e025f946a6661403d3
+      TAG: v0.7.8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download validated Windows package
+        shell: bash
+        run: |
+          rm -rf dist audit
+          mkdir -p dist
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name Runner-v0.7.8-windows-x64 \
+            --dir dist
+          test -s dist/Runner-v0.7.8-windows-x64.zip
+          test -s dist/Runner-v0.7.8-windows-x64.zip.sha256
+          test -s dist/Runner-v0.7.8-windows-x64.manifest.sha256
+
+      - name: Verify package checksum
+        shell: bash
+        run: |
+          expected="$(tr -d '\r\n ' < dist/Runner-v0.7.8-windows-x64.zip.sha256 | tr 'A-F' 'a-f')"
+          actual="$(sha256sum dist/Runner-v0.7.8-windows-x64.zip | awk '{print $1}')"
+          test "$expected" = "$actual"
+
+      - name: Publish clean source tag and release
+        shell: bash
+        run: |
+          test "$(git cat-file -t "$TARGET_SHA")" = commit
+          test -f RELEASE_NOTES_v0.7.8.md
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to replace it."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            dist/Runner-v0.7.8-windows-x64.zip \
+            dist/Runner-v0.7.8-windows-x64.zip.sha256 \
+            dist/Runner-v0.7.8-windows-x64.manifest.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "Runner v0.7.8" \
+            --notes-file RELEASE_NOTES_v0.7.8.md
+
+      - name: Re-download and byte-audit published assets
+        shell: bash
+        run: |
+          mkdir -p audit
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir audit
+          for file in \
+            Runner-v0.7.8-windows-x64.zip \
+            Runner-v0.7.8-windows-x64.zip.sha256 \
+            Runner-v0.7.8-windows-x64.manifest.sha256
+          do
+            cmp "dist/$file" "audit/$file"
+          done
+          published_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')"
+          test "$published_target" = "$TARGET_SHA"
