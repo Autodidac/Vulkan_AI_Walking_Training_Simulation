@@ -22,6 +22,17 @@ def replace_once(path: str, old: str, new: str) -> None:
     save(path, text.replace(old, new, 1))
 
 
+# Core math types live in runner, not runner::sim.
+ppo = load("src/ppo.hpp")
+ppo = ppo.replace("const sim::Vec2 reference =", "const Vec2 reference =")
+ppo = ppo.replace("const sim::Vec2 driven =", "const Vec2 driven =")
+ppo = ppo.replace("sim::Vec2 compact =", "Vec2 compact =")
+ppo = ppo.replace("sim::length(reference)", "length(reference)")
+ppo = ppo.replace("sim::length(driven)", "length(driven)")
+ppo = ppo.replace("sim::signed_angle(reference, compact)",
+                  "signed_angle(reference, compact)")
+save("src/ppo.hpp", ppo)
+
 replace_once("src/simulation.hpp",
 '''    [[nodiscard]] inline bool wheel_sliding_motion(float root_speed, bool left_supported,
         bool right_supported, float stance_slip_speed) noexcept
@@ -122,5 +133,6 @@ if line not in notes:
 save("RELEASE_NOTES_v0.7.7.md", notes.rstrip() + "\n")
 
 (ROOT / "tools/fix_v077_eof.py").unlink(missing_ok=True)
+(ROOT / "tools/fix_v077_namespace.py").unlink(missing_ok=True)
 Path(__file__).unlink()
-print("materialized natural sliding and friction-drive semantics")
+print("materialized natural sliding, friction-drive semantics, and math namespace")
