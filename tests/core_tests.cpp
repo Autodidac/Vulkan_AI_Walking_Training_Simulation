@@ -60,17 +60,42 @@ namespace runner::sim
             if (!environment.valid_node(environment.blueprint_.head_node))
                 return false;
             Particle& head = environment.particles_[environment.blueprint_.head_node];
+            head.previous = head.position - Vec2{ 0.07f, -0.11f };
+            const Vec2 velocity_before = head.position - head.previous;
+            const float x_before = head.position.x;
             const float bottom = head.position.y + head.radius * 0.45f;
             environment.course_features_.clear();
             environment.course_features_.push_back({
                 CourseFeatureKind::duck_press,
-                { head.position.x, bottom + 0.16f }, { 1.5f, 0.16f }, 0.0f, {}, -2
+                { head.position.x, bottom + 0.16f }, { 1.5f, 0.16f }, 0.0f,
+                { 0.0f, -0.5f }, -2
             });
             environment.duck_press_contact_this_step_ = false;
             environment.duck_press_max_penetration_ = 0.0f;
             environment.solve_course();
+            const Vec2 velocity_after = head.position - head.previous;
             return environment.duck_press_contact_this_step_
-                && head.position.y + head.radius <= bottom + 0.0001f;
+                && head.position.y + head.radius <= bottom + 0.0001f
+                && std::abs(head.position.x - x_before) < 0.000001f
+                && length(velocity_after - velocity_before) < 0.000001f;
+        }
+
+        static bool press_anchor_remains_fixed(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            if (!environment.valid_node(environment.blueprint_.root_node))
+                return false;
+            const float expected = environment.blueprint_.nodes[
+                environment.blueprint_.root_node].x;
+            Particle& root = environment.particles_[environment.blueprint_.root_node];
+            root.position.x += 1.75f;
+            root.previous.x += 1.75f;
+            environment.elapsed_seconds_ = 3.5f;
+            environment.duck_press_completed_ = false;
+            environment.rebuild_course_features();
+            return environment.course_features_.size() == 1u
+                && environment.course_features_.front().kind == CourseFeatureKind::duck_press
+                && std::abs(environment.course_features_.front().center.x - expected) < 0.000001f;
         }
 
         static void force_fused_supports(Environment& environment) noexcept
@@ -270,6 +295,14 @@ int main()
         "duck press does not hold a meaningful crouch target");
     require(press_retract.retracting && press_retract.vertical_velocity > 0.0f,
         "duck press does not retract after the hold");
+    sim::Environment press_collision_environment(sim::CreatureBlueprint::humanoid(), 71u);
+    require(sim::EnvironmentTestAccess::press_collision_resolves_below(
+            press_collision_environment),
+        "duck press collision injects velocity or horizontal drag");
+    sim::Environment press_anchor_environment(sim::CreatureBlueprint::humanoid(), 73u);
+    require(sim::EnvironmentTestAccess::press_anchor_remains_fixed(
+            press_anchor_environment),
+        "duck press follows a sliding rig instead of staying fixed over the station");
 
     require(ui_layout::top_bar_box(1970.0f).width == 1970.0f,
         "top GUI background does not span the full drawable width");
@@ -325,8 +358,24 @@ int main()
     require(sim::classify_motion_gate(0.4f, 0.0f, { 0.0f, 4.0f }, 1.2f, 2.7f, 0.0f,
             false, sim::CourseStage::duck_bars, 3.21f)
         == sim::InvalidMotion::excessive_spins, "more than three spins is not rejected");
-    require(rl::mastery_lock_confirmations >= 8,
-        "staged mastery locks after too few repeated evaluations");
+    require(rl::balance_mastery_lock_confirmations == 3
+            && rl::mastery_lock_confirmations >= 8
+            && rl::required_mastery_confirmations(sim::CourseStage::balance) == 3
+            && rl::required_mastery_confirmations(sim::CourseStage::duck_press) >= 8,
+        "standing and later-stage mastery confirmation counts are incorrect");
+    rl::TrainingMetrics standing_mastery{};
+    standing_mastery.evaluation_valid = true;
+    standing_mastery.evaluation_invalid_runs = 0u;
+    standing_mastery.evaluation_longest_stance = rl::standing_mastery_seconds;
+    standing_mastery.evaluation_survival = rl::standing_mastery_seconds;
+    standing_mastery.evaluation_spin_turns = rl::standing_mastery_spin_limit;
+    standing_mastery.evaluation_max_joint_speed =
+        rl::standing_mastery_joint_speed_limit;
+    require(rl::strict_balance_mastery(standing_mastery),
+        "all-six-seed standing evidence cannot satisfy the mastery gate");
+    standing_mastery.evaluation_max_joint_speed += 0.01f;
+    require(!rl::strict_balance_mastery(standing_mastery),
+        "standing mastery accepts joint speed above its visible limit");
     require(sim::controlled_somersault_allowed(
             sim::CourseStage::duck_bars, 2.75f, 1.2f, true),
         "controlled somersault is rejected without a powered-launch flag");
