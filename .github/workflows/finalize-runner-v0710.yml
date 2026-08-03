@@ -1,0 +1,69 @@
+name: Finalize Runner v0.7.10 live correction
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: runner-v0710-live-correction
+  cancel-in-progress: true
+
+jobs:
+  linux-source:
+    if: github.head_ref == 'agent/v0710-press-curriculum-fix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install GCC 14 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Materialize live correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/apply_v0710_press_curriculum_fix.py
+          git diff --check
+          test ! -f tools/apply_v0710_press_curriculum_fix.py
+          grep -F 'press_anchor_x' src/simulation.cpp
+          grep -F 'particle.previous += correction;' src/simulation.cpp
+          grep -F 'balance_mastery_lock_confirmations = 3' src/autonomy.hpp
+          grep -F 'standing_mastery_joint_speed_limit = 10.0f' src/autonomy.hpp
+          grep -F 'ORIGINAL RUNNER ART' src/app.cpp
+          grep -F 'load_p3_pixel_art' src/app.cpp
+          grep -F 'WALK-PRESS-109' missioncache.md
+          grep -F 'WALK-CURRICULUM-110' missioncache.md
+          grep -F 'WALK-ART-112' missioncache.md
+
+      - name: Configure Linux deterministic suite
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          cmake -S . -B build/linux-v0710-live -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build and test Linux suite
+        run: |
+          cmake --build build/linux-v0710-live --parallel
+          ctest --test-dir build/linux-v0710-live --output-on-failure -V --timeout 1200
+
+      - name: Commit exact tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix duck press progression and integrate original Runner art'
+          git push origin HEAD:${{ github.head_ref }}
