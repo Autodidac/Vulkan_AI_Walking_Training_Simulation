@@ -1,16 +1,16 @@
-# Registered validation workflow.
 name: Validate Runner v0.7.9
 
 on:
-  push:
-    branches: [agent/v079-live-acceptance-matrix]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
   pull-requests: read
 
 concurrency:
-  group: runner-v079-live-acceptance
+  group: runner-v079-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v079-live-acceptance-matrix
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Install GCC 14 and Ninja
@@ -70,7 +70,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git commit -m 'Implement Runner v0.7.9 live acceptance matrix'
-          git push origin HEAD:agent/v079-live-acceptance-matrix
+          git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
     needs: linux-source
@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v079-live-acceptance-matrix
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Confirm exact clean materialized source
@@ -230,7 +230,7 @@ jobs:
       - name: Record immutable validation evidence
         shell: pwsh
         run: |
-          git pull --rebase origin agent/v079-live-acceptance-matrix
+          git pull --rebase origin ${{ github.head_ref }}
           @"
           Runner v0.7.9 validation passed
           run_id=${{ github.run_id }}
@@ -247,4 +247,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add VALIDATION_v0.7.9.txt
           git commit -m 'Record Runner v0.7.9 validation evidence'
-          git push origin HEAD:agent/v079-live-acceptance-matrix
+          git push origin HEAD:${{ github.head_ref }}
