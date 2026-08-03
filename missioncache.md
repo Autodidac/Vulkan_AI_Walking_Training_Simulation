@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.8
 
-**Release state:** PACKAGE VERIFIED — v0.7.8 publication in progress; released-package live confirmation remains authoritative
+**Release state:** PUBLISHED — v0.7.8 assets verified after re-download; released-package live confirmation remains authoritative
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -667,42 +667,42 @@ Evaluation count is cumulative and survives optimizer, transferred-rig, autosave
 ## v0.7.8 deformable terrain and falling-material completion
 
 ### WALK-SAND-091 — Deterministic deformable sand terrain
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Replace analytic sine-only ground with a seeded fixed-cost sand-cell heightfield. Foot pressure compacts and sinks loose support, displaces conserved volume into adjacent mounds, and relaxes unstable slopes. The same state must drive collision, live view, PIP, observation, evaluation, and replay.
 
 ### WALK-MATERIAL-092 — Persistent falling sand, rocks, and debris
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Falling material owns persistent position, velocity, radius, density, and kind. Sand deposits into the terrain field; rocks and debris bounce, roll, settle, and transfer impact velocity. No hazard may tunnel, teleport, silently disappear while active, or exist only as a regenerated render curve.
 
 ### WALK-BURIAL-093 — Burial, obstruction, and free-space observations
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Expose terrain firmness, looseness, slope, burial depth, incoming velocity, time-to-impact, density, head/torso/support obstruction, and the safer escape direction to the policy without removing existing gait state.
 
 ### WALK-ESCAPE-094 — Evade, brace, escape, and honest failure
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Reward reducing burial and moving toward available free space. Permit partial penetration into loose material for recovery training, but terminate sustained head-and-torso burial when surrounding material leaves no practical escape. Do not grant survival to a motionless rig hidden beneath debris.
 
 ### WALK-RELEASE-095 — Publish audited Runner v0.7.8
-**Status:** PACKAGE VERIFIED — PUBLICATION IN PROGRESS
+**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
 
 Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
 
 ### WALK-CHICKEN-096 — Correct live chicken balance regression
-**Status:** PACKAGE VERIFIED — LIVE CONFIRMATION PENDING
+**Status:** PUBLISHED — PACKAGE VERIFIED; LIVE CONFIRMATION PENDING
 
 Use a real vertical semantic torso above the horizontal bird body, keep the raised neck, head, beak, tail, two articulated legs, and separate feet, and preserve leg-only motors. Six deterministic balance seeds must all sustain strict standing mastery without body collapse, integrity loss, or more than 0.55 uncontrolled turns.
 
 ### WALK-VISUAL-097 — Biomechanical rig animation treatment
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Decorate live rigs, training PIP, and rig-lab previews with procedural anatomy rings, neural-link pulses, semantic-node halos, faint motion-study ghosts, and a small neural-chip motif. The effect must be generated from current rig state, require no external image asset, preserve telemetry readability, and never alter physics or input hit testing.
 
 ### WALK-ACCEPT-098 — Complete all v0.7.8 mission acceptance
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — PACKAGE VERIFIED
 
 Reconcile every open or screenshot-reopened ledger item, run strict chicken six-seed balance acceptance, seeded deformable-terrain conservation and collapse tests, deterministic repeated material events, partial burial with an escape side, full burial with honest termination, direct and glancing impacts, Linux warnings-as-errors, the complete Windows Vulkan package, executable-relative launch, ZIP manifest, SHA-256, and release re-download audit.
 
@@ -727,3 +727,15 @@ Reconcile every open or screenshot-reopened ledger item, run strict chicken six-
 - Friction policy remains unchanged: natural stance, crouch, gait, and recovery sliding is legal; planted double-support friction shuffling receives no gait credit and only mild shaping pressure
 - Procedural biomechanical overlays are generated from current rig state and require no external reference-image asset
 - Live screenshot-level acceptance remains explicitly pending Adam's v0.7.8 released-package confirmation; contradictory evidence reopens the exact mission
+
+## v0.7.8 immutable publication evidence
+
+- Clean tagged source: `073e10be71d589145beb93e025f946a6661403d3`
+- Published tag and release: `v0.7.8`
+- Final release verification workflow run: `30782901786`
+- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
+- Release assets were re-downloaded and the ZIP checksum was independently verified
+- The publication workflow also byte-compared every uploaded asset after release creation
+- Release tag resolves exactly to the clean tagged source commit
+- Merged work branch deletion and zero-open-PR audit are performed by this finalizer
+- Adam's released-package screenshots remain final authority for WALK-LIVE-066, WALK-REG-029, and the live portion of WALK-CHICKEN-096
