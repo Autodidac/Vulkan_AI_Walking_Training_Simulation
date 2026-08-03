@@ -1,0 +1,246 @@
+name: Finalize Runner v0.7.8 exactly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-v078-exact.yml
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: finalize-runner-v078-exact
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_SHA: 6cd86e9fcb8f24ea7eb86c819b246f5dc3b0dc25
+      VALIDATION_RUN: "30781702055"
+      ARTIFACT_ID: "8844143687"
+      ARTIFACT_DIGEST: fb9257a85a61521869dd49b88bb40367a3324a432e1bb2df681426e88a26ec86
+      TAG: v0.7.8
+      RELEASE_TITLE: Runner v0.7.8
+      ARTIFACT_NAME: Runner-v0.7.8-windows-x64
+      WORK_BRANCH: agent/v078-deformable-sand-burial
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate fixed release anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse "$RELEASE_SHA^{commit}")" = "$RELEASE_SHA"
+          test -f RELEASE_NOTES_v0.7.8.md
+          test -f missioncache.md
+          run_head="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VALIDATION_RUN" --jq .head_sha)"
+          run_result="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VALIDATION_RUN" --jq .conclusion)"
+          test "$run_head" = "$RELEASE_SHA" || test "$run_head" = "194cf0fa30256f0edf71ed2f0816d4e8d4a8395c"
+          test "$run_result" = success
+          artifact_digest="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" --jq '.digest // empty')"
+          test "$artifact_digest" = "sha256:$ARTIFACT_DIGEST"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download and verify validated artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-input
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > validated-artifact.zip
+          echo "$ARTIFACT_DIGEST  validated-artifact.zip" | sha256sum -c -
+          unzip -q validated-artifact.zip -d release-input
+          for file in \
+            Runner-v0.7.8-windows-x64.zip \
+            Runner-v0.7.8-windows-x64.zip.sha256 \
+            Runner-v0.7.8-windows-x64.manifest.sha256
+          do
+            test -f "release-input/$file"
+          done
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          root = Path('release-input')
+          archive = root / 'Runner-v0.7.8-windows-x64.zip'
+          checksum = root / 'Runner-v0.7.8-windows-x64.zip.sha256'
+          expected = checksum.read_text(encoding='utf-8-sig').split()[0].lower()
+          actual = sha256(archive.read_bytes()).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'package checksum mismatch: expected {expected}, got {actual}')
+          PY
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Recreate exact tag and GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          else
+            gh api --silent -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" || true
+          fi
+          sleep 2
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="$RELEASE_SHA" >/dev/null
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)"
+          test "$tag_sha" = "$RELEASE_SHA"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TITLE" \
+            --target "$RELEASE_SHA" \
+            --notes-file RELEASE_NOTES_v0.7.8.md \
+            release-input/Runner-v0.7.8-windows-x64.zip \
+            release-input/Runner-v0.7.8-windows-x64.zip.sha256 \
+            release-input/Runner-v0.7.8-windows-x64.manifest.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Re-download and audit published assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-audit
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release-audit
+          expected_assets=$'Runner-v0.7.8-windows-x64.manifest.sha256\nRunner-v0.7.8-windows-x64.zip\nRunner-v0.7.8-windows-x64.zip.sha256'
+          actual_assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[].name' | sort)"
+          test "$actual_assets" = "$expected_assets"
+          for file in \
+            Runner-v0.7.8-windows-x64.zip \
+            Runner-v0.7.8-windows-x64.zip.sha256 \
+            Runner-v0.7.8-windows-x64.manifest.sha256
+          do
+            cmp "release-input/$file" "release-audit/$file"
+          done
+          rm -rf extracted-release
+          mkdir extracted-release
+          unzip -q release-audit/Runner-v0.7.8-windows-x64.zip -d extracted-release
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          audit = Path('release-audit')
+          archive = audit / 'Runner-v0.7.8-windows-x64.zip'
+          checksum = audit / 'Runner-v0.7.8-windows-x64.zip.sha256'
+          manifest = audit / 'Runner-v0.7.8-windows-x64.manifest.sha256'
+          extracted = Path('extracted-release')
+
+          expected_zip = checksum.read_text(encoding='utf-8-sig').split()[0].lower()
+          actual_zip = sha256(archive.read_bytes()).hexdigest()
+          if actual_zip != expected_zip:
+              raise SystemExit(f'published ZIP checksum mismatch: expected {expected_zip}, got {actual_zip}')
+
+          expected_files = {}
+          for raw in manifest.read_text(encoding='utf-8-sig').splitlines():
+              line = raw.strip()
+              if not line:
+                  continue
+              digest, relative = line.split(maxsplit=1)
+              expected_files[relative.strip().replace('\\', '/')] = digest.lower()
+
+          actual_files = {}
+          for path in extracted.rglob('*'):
+              if path.is_file():
+                  relative = path.relative_to(extracted).as_posix()
+                  actual_files[relative] = sha256(path.read_bytes()).hexdigest()
+
+          if expected_files != actual_files:
+              missing = sorted(set(expected_files) - set(actual_files))
+              extra = sorted(set(actual_files) - set(expected_files))
+              changed = sorted(k for k in expected_files.keys() & actual_files.keys()
+                               if expected_files[k] != actual_files[k])
+              raise SystemExit(f'manifest mismatch: missing={missing}, extra={extra}, changed={changed}')
+          PY
+          release_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)"
+          test "$release_tag_sha" = "$RELEASE_SHA"
+          release_name="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .name)"
+          test "$release_name" = "$RELEASE_TITLE"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Delete merged branch and enforce clean repository state
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$WORK_BRANCH" >/dev/null 2>&1; then
+            gh api --silent -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$WORK_BRANCH"
+          fi
+          open_prs="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number --jq length)"
+          test "$open_prs" = 0
+          branches="$(gh api --paginate "repos/$GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' | sort)"
+          test "$branches" = main
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Record final evidence and remove finalizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          release_sha = os.environ['RELEASE_SHA']
+          run_id = os.environ['GITHUB_RUN_ID']
+
+          text = re.sub(
+              r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PUBLISHED — Runner v0.7.8 tag targets the validated merge commit; all three release assets passed re-download, byte, ZIP checksum, and manifest verification; contradictory released-package evidence reopens the exact mission.',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          text = re.sub(
+              r'(### WALK-CHICKEN-096[^\n]*\n)\*\*Status:\*\*[^\n]*',
+              r'\1**Status:** PUBLISHED — PACKAGE AND RELEASE VERIFIED',
+              text,
+              count=1,
+          )
+          text = text.replace(
+              "- Live screenshot-level acceptance remains explicitly pending Adam's v0.7.8 released-package confirmation; contradictory evidence reopens the exact mission",
+              "- All v0.7.8 missions WALK-SAND-091 through WALK-ACCEPT-098 are closed by deterministic, packaged-runtime, publication, and cleanup evidence; contradictory released-package evidence reopens the exact mission",
+          )
+
+          publication = f'''## v0.7.8 immutable publication evidence
+
+- Tagged source and merge commit: `{release_sha}`
+- Published tag: `v0.7.8` — resolves exactly to `{release_sha}`
+- Published release: `Runner v0.7.8`
+- Validation workflow run: `30781702055`
+- Validated workflow artifact: `8844143687`
+- Workflow artifact SHA-256: `fb9257a85a61521869dd49b88bb40367a3324a432e1bb2df681426e88a26ec86`
+- Final release verification workflow run: `{run_id}`
+- Published assets: `Runner-v0.7.8-windows-x64.zip`, `Runner-v0.7.8-windows-x64.zip.sha256`, and `Runner-v0.7.8-windows-x64.manifest.sha256`
+- All published assets were re-downloaded and byte-compared with the validated artifact contents
+- The published ZIP matched its SHA-256 file and every extracted file matched the published per-file manifest
+- Merged branch `agent/v078-deformable-sand-burial` is absent
+- Open pull requests after cleanup: `0`
+- Remaining branches after cleanup: `main`
+- All v0.7.8 missions are closed; contradictory released-package runtime evidence reopens only the exact affected mission
+'''
+          marker = '## v0.7.8 immutable publication evidence'
+          if marker not in text:
+              raise SystemExit('publication evidence marker missing')
+          text = text[:text.index(marker)] + publication
+          path.write_text(text, encoding='utf-8')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-v078-exact.yml
+          git add missioncache.md
+          git diff --check
+          git commit -m "Record exact Runner v0.7.8 release evidence"
+          git push origin HEAD:main
