@@ -6,6 +6,8 @@
 #include <iterator>
 #include <limits>
 #include <string_view>
+#include <system_error>
+#include <utility>
 
 namespace runner::art
 {
@@ -103,8 +105,11 @@ namespace runner::art
             return false;
         }
 
-        std::string bytes{ std::istreambuf_iterator<char>{ input }, {} };
-        if (!input.eof() || bytes.empty() || bytes.size() > maximum_art_file_size)
+        const std::string bytes{
+            std::istreambuf_iterator<char>{ input },
+            std::istreambuf_iterator<char>{}
+        };
+        if (input.bad() || bytes.empty() || bytes.size() > maximum_art_file_size)
         {
             error = "Runner artwork could not be read as a bounded file: "
                 + path.string();
@@ -145,23 +150,24 @@ namespace runner::art
         const float inverse_maximum = 1.0f / static_cast<float>(maximum);
         for (std::size_t index = 0; index < pixel_count; ++index)
         {
-            int red{};
-            int green{};
-            int blue{};
-            if (!tokenizer.next_integer(red)
-                || !tokenizer.next_integer(green)
-                || !tokenizer.next_integer(blue)
-                || red < 0 || green < 0 || blue < 0
-                || red > maximum || green > maximum || blue > maximum)
+            int red_channel{};
+            int green_channel{};
+            int blue_channel{};
+            if (!tokenizer.next_integer(red_channel)
+                || !tokenizer.next_integer(green_channel)
+                || !tokenizer.next_integer(blue_channel)
+                || red_channel < 0 || green_channel < 0 || blue_channel < 0
+                || red_channel > maximum || green_channel > maximum
+                || blue_channel > maximum)
             {
                 error = "Runner artwork has incomplete or invalid pixel data: "
                     + path.string();
                 return false;
             }
             loaded.pixels.push_back({
-                static_cast<float>(red) * inverse_maximum,
-                static_cast<float>(green) * inverse_maximum,
-                static_cast<float>(blue) * inverse_maximum,
+                static_cast<float>(red_channel) * inverse_maximum,
+                static_cast<float>(green_channel) * inverse_maximum,
+                static_cast<float>(blue_channel) * inverse_maximum,
                 1.0f
             });
         }
