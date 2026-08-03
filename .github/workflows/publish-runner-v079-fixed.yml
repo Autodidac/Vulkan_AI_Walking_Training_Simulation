@@ -1,10 +1,10 @@
-name: Publish Runner v0.7.9
+name: Publish Runner v0.7.9 fixed
 
 on:
   push:
     branches: [main]
     paths:
-      - CMakeLists.txt
+      - .github/workflows/publish-runner-v079-fixed.yml
 
 permissions:
   actions: read
@@ -12,12 +12,11 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: publish-runner-v079
+  group: publish-runner-v079-fixed
   cancel-in-progress: false
 
 jobs:
   windows-package:
-    if: github.repository == 'Autodidac/Vulkan_AI_Walking_Training_Simulation'
     runs-on: windows-2025
     timeout-minutes: 90
     env:
@@ -25,7 +24,6 @@ jobs:
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
       TAG: v0.7.9
       RELEASE_TITLE: Runner v0.7.9
-      WORK_BRANCH: agent/v079-live-acceptance-matrix
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,14 +34,16 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Select-String -Path CMakeLists.txt -SimpleMatch 'project(Runner VERSION 0.7.9 LANGUAGES CXX)')) {
-            throw 'Runner v0.7.9 source was not materialized'
+            throw 'Runner v0.7.9 source is missing'
           }
           foreach ($path in @(
             'tools/apply_v079_acceptance.py',
             '.github/workflows/validate-runner-v079.yml',
             '.github/workflows/finalize-runner-v079.yml',
-            '.github/workflows/materialize-runner-v079.yml')) {
-            if (Test-Path $path) { throw "Temporary release tool remains: $path" }
+            '.github/workflows/materialize-runner-v079.yml',
+            '.github/workflows/publish-runner-v079.yml',
+            '.github/workflows/patch-v079-publisher.yml')) {
+            if (Test-Path $path) { throw "Obsolete release tool remains: $path" }
           }
           git diff --quiet
           if ($LASTEXITCODE -ne 0) { throw 'Windows source tree is dirty' }
@@ -102,9 +102,10 @@ jobs:
           }
           finally { Pop-Location }
 
-      - name: Record package validation and remove publisher
+      - name: Freeze cleaned tagged package source
         shell: pwsh
         run: |
+          git pull --rebase origin main
           @'
           import re
           from pathlib import Path
@@ -127,20 +128,17 @@ jobs:
           '@ | python -
           if ($LASTEXITCODE -ne 0) { throw 'Mission ledger package update failed' }
 
-          git rm .github/workflows/publish-runner-v079.yml
+          git rm .github/workflows/publish-runner-v079-fixed.yml
           Remove-Item VALIDATION_v0.7.9_FAILURE.txt -Force -ErrorAction SilentlyContinue
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add missioncache.md
           git add -u
-          git commit -m 'Record Runner v0.7.9 package validation and clean publisher'
+          git commit -m 'Record Runner v0.7.9 package validation'
+          git pull --rebase origin main
           git push origin HEAD:main
-
-          Add-Content missioncache.md "`n- Windows package source validation commit: ``$(git rev-parse HEAD)```"
-          git add missioncache.md
-          git commit -m 'Freeze Runner v0.7.9 tagged package source'
-          git push origin HEAD:main
-          "RELEASE_SHA=$(git rev-parse HEAD)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $releaseSha = (git rev-parse HEAD).Trim()
+          "RELEASE_SHA=$releaseSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install release candidate
         shell: pwsh
@@ -233,7 +231,7 @@ jobs:
           gh release create $env:TAG `
             --repo $env:GITHUB_REPOSITORY `
             --title $env:RELEASE_TITLE `
-            --target $env:RELEASE_SHA `
+            --target main `
             --notes-file RELEASE_NOTES_v0.7.9.md `
             Runner-v0.7.9-windows-x64.zip `
             Runner-v0.7.9-windows-x64.zip.sha256 `
@@ -271,14 +269,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Released acceptance diagnostic failed' }
 
           $tagSha = (git ls-remote origin "refs/tags/$env:TAG").Split()[0]
-          if ($tagSha -ne $env:RELEASE_SHA) { throw "Tag target mismatch: $tagSha" }
+          if ($tagSha -ne $env:RELEASE_SHA) { throw "Tag target mismatch: expected $env:RELEASE_SHA, got $tagSha" }
 
-      - name: Clean merged branch and verify repository state
+      - name: Clean branches and verify repository state
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --silent -X DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$env:WORK_BRANCH" 2>$null
+          foreach ($branch in @('agent/v079-live-acceptance-matrix', 'diag/v079-publisher-status')) {
+            gh api --silent -X DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch" 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Host "Branch already absent: $branch" }
+          }
           $openPrs = gh pr list --repo $env:GITHUB_REPOSITORY --state open --limit 100 --json number --jq length
           if ($openPrs -ne '0') { throw "Open pull requests remain: $openPrs" }
           $branches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' | Sort-Object
@@ -323,16 +324,17 @@ jobs:
           - Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
           - Linux GCC 14 warnings-as-errors build and all five deterministic suites: passed
           - Live acceptance matrix: 10/10 passed
-          - Full Windows Vulkan build and all tests: passed
+          - Full Windows Vulkan build and all six tests: passed
           - Build-tree, installed, independently extracted, and re-downloaded release acceptance diagnostics: passed
           - Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed
-          - Merged work branch removed; open pull requests: `0`; remaining branches: `main`
+          - Merged work and diagnostic branches removed; open pull requests: `0`; remaining branches: `main`
           - Contradictory released-package evidence reopens only the exact affected mission
           """
           marker = "## v0.7.9 immutable release evidence"
           if marker in text:
               text = text[:text.index(marker)].rstrip() + "\n"
-          text = text.rstrip() + "\n" + "\n".join(line.strip() for line in evidence.strip().splitlines()) + "\n"
+          lines = [line.strip() for line in evidence.strip().splitlines()]
+          text = text.rstrip() + "\n\n" + "\n".join(lines) + "\n"
           path.write_text(text, encoding="utf-8")
           '@ | python -
           if ($LASTEXITCODE -ne 0) { throw 'Final mission ledger update failed' }
@@ -345,19 +347,19 @@ jobs:
           git commit -m 'Publish Runner v0.7.9 and record release evidence'
           git push origin HEAD:main
 
-      - name: Record Windows or publication failure
+      - name: Record publication failure
         if: failure()
         shell: pwsh
         run: |
           git fetch origin main
           git reset --hard origin/main
           @"
-          Runner v0.7.9 Windows/package validation failed
+          Runner v0.7.9 fixed publication failed
           run_id=${{ github.run_id }}
           job=windows-package
           "@ | Set-Content VALIDATION_v0.7.9_FAILURE.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add VALIDATION_v0.7.9_FAILURE.txt
-          git commit -m 'Record Runner v0.7.9 Windows validation failure'
+          git commit -m 'Record Runner v0.7.9 fixed publication failure'
           git push origin HEAD:main
