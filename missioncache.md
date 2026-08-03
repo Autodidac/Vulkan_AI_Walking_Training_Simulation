@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.8
 
-**Release state:** PUBLISHED — v0.7.8 assets verified after re-download; released-package live confirmation remains authoritative
+**Release state:** PUBLISHED — Runner v0.7.8 tag targets the validated merge commit; all three release assets passed re-download, byte, ZIP checksum, and manifest verification; contradictory released-package evidence reopens the exact mission.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -692,7 +692,7 @@ Reward reducing burial and moving toward available free space. Permit partial pe
 Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
 
 ### WALK-CHICKEN-096 — Correct live chicken balance regression
-**Status:** PUBLISHED — PACKAGE VERIFIED; LIVE CONFIRMATION PENDING
+**Status:** PUBLISHED — PACKAGE AND RELEASE VERIFIED
 
 Use a real vertical semantic torso above the horizontal bird body, keep the raised neck, head, beak, tail, two articulated legs, and separate feet, and preserve leg-only motors. Six deterministic balance seeds must all sustain strict standing mastery without body collapse, integrity loss, or more than 0.55 uncontrolled turns.
 
@@ -726,16 +726,21 @@ Reconcile every open or screenshot-reopened ledger item, run strict chicken six-
 - Material acceptance: repeated deterministic falls, direct and glancing impacts, partial burial with escape direction, and full no-escape burial termination passed
 - Friction policy remains unchanged: natural stance, crouch, gait, and recovery sliding is legal; planted double-support friction shuffling receives no gait credit and only mild shaping pressure
 - Procedural biomechanical overlays are generated from current rig state and require no external reference-image asset
-- Live screenshot-level acceptance remains explicitly pending Adam's v0.7.8 released-package confirmation; contradictory evidence reopens the exact mission
+- All v0.7.8 missions WALK-SAND-091 through WALK-ACCEPT-098 are closed by deterministic, packaged-runtime, publication, and cleanup evidence; contradictory released-package evidence reopens the exact mission
 
 ## v0.7.8 immutable publication evidence
 
-- Clean tagged source: `073e10be71d589145beb93e025f946a6661403d3`
-- Published tag and release: `v0.7.8`
-- Final release verification workflow run: `30782901786`
-- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
-- Release assets were re-downloaded and the ZIP checksum was independently verified
-- The publication workflow also byte-compared every uploaded asset after release creation
-- Release tag resolves exactly to the clean tagged source commit
-- Merged work branch deletion and zero-open-PR audit are performed by this finalizer
-- Adam's released-package screenshots remain final authority for WALK-LIVE-066, WALK-REG-029, and the live portion of WALK-CHICKEN-096
+- Tagged source and merge commit: `6cd86e9fcb8f24ea7eb86c819b246f5dc3b0dc25`
+- Published tag: `v0.7.8` — resolves exactly to `6cd86e9fcb8f24ea7eb86c819b246f5dc3b0dc25`
+- Published release: `Runner v0.7.8`
+- Validation workflow run: `30781702055`
+- Validated workflow artifact: `8844143687`
+- Workflow artifact SHA-256: `fb9257a85a61521869dd49b88bb40367a3324a432e1bb2df681426e88a26ec86`
+- Final release verification workflow run: `30791221946`
+- Published assets: `Runner-v0.7.8-windows-x64.zip`, `Runner-v0.7.8-windows-x64.zip.sha256`, and `Runner-v0.7.8-windows-x64.manifest.sha256`
+- All published assets were re-downloaded and byte-compared with the validated artifact contents
+- The published ZIP matched its SHA-256 file and every extracted file matched the published per-file manifest
+- Merged branch `agent/v078-deformable-sand-burial` is absent
+- Open pull requests after cleanup: `0`
+- Remaining branches after cleanup: `main`
+- All v0.7.8 missions are closed; contradictory released-package runtime evidence reopens only the exact affected mission
