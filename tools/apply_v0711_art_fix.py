@@ -158,6 +158,19 @@ def patch_main() -> None:
     write("src/main.cpp", text)
 
 
+def patch_audit() -> None:
+    text = read("tools/repository_audit.cmake")
+    text = replace_once(text,
+        'project(Runner VERSION 0.7.10 LANGUAGES CXX)',
+        'project(Runner VERSION 0.7.11 LANGUAGES CXX)',
+        "repository audit version marker")
+    text = replace_once(text,
+        'CMake project version is not 0.7.10',
+        'CMake project version is not 0.7.11',
+        "repository audit version error")
+    write("tools/repository_audit.cmake", text)
+
+
 def patch_docs() -> None:
     cache = read("missioncache.md")
     cache = re.sub(
@@ -231,6 +244,7 @@ def main() -> None:
     patch_cmake()
     patch_app()
     patch_main()
+    patch_audit()
     patch_docs()
     Path(__file__).unlink()
 
