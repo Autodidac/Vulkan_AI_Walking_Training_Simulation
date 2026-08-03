@@ -1,6 +1,7 @@
 #pragma once
 
 #include "math.hpp"
+#include "deformable_terrain.hpp"
 
 #include <array>
 #include <cstddef>
@@ -14,7 +15,7 @@
 namespace runner::sim
 {
     inline constexpr std::size_t action_count = 8;
-    inline constexpr std::size_t observation_count = 40;
+    inline constexpr std::size_t observation_count = 50;
 
     enum class CourseStage : std::uint8_t
     {
@@ -29,6 +30,14 @@ namespace runner::sim
     };
 
     inline constexpr std::size_t course_stage_count = 8;
+
+    [[nodiscard]] inline bool stage_uses_deformable_terrain(CourseStage stage) noexcept
+    {
+        return stage == CourseStage::uneven
+            || stage == CourseStage::crouch_walk
+            || stage == CourseStage::hurdles
+            || stage == CourseStage::moving_hazards;
+    }
 
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
@@ -451,7 +460,8 @@ namespace runner::sim
         hazard_quiver,
         robotic_torso_swing,
         press_penetration,
-        duck_body_contact
+        duck_body_contact,
+        buried_no_escape
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -475,6 +485,7 @@ namespace runner::sim
         case InvalidMotion::robotic_torso_swing: return "ROBOTIC TORSO / SHOULDER SWING";
         case InvalidMotion::press_penetration: return "DUCK PRESS PENETRATION";
         case InvalidMotion::duck_body_contact: return "DUCK CONTACT - FEET ONLY";
+        case InvalidMotion::buried_no_escape: return "BURIED / NO ESCAPE SPACE";
         }
         return "INVALID";
     }
@@ -608,6 +619,23 @@ namespace runner::sim
         bool grounded{};
     };
 
+    enum class MaterialKind : std::uint8_t
+    {
+        sand,
+        rock,
+        debris
+    };
+
+    struct MaterialParticle
+    {
+        MaterialKind kind{ MaterialKind::sand };
+        Vec2 position{};
+        Vec2 velocity{};
+        float radius{ 0.08f };
+        float density{ 0.45f };
+        bool active{ true };
+    };
+
     struct DistanceConstraint
     {
         std::uint16_t a{};
@@ -739,6 +767,10 @@ namespace runner::sim
         [[nodiscard]] const std::vector<Particle>& particles() const noexcept { return particles_; }
         [[nodiscard]] const CreatureBlueprint& blueprint() const noexcept { return blueprint_; }
         [[nodiscard]] std::span<const CourseFeature> course_features() const noexcept { return course_features_; }
+        [[nodiscard]] std::span<const MaterialParticle> material_particles() const noexcept
+        {
+            return material_particles_;
+        }
         [[nodiscard]] CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
         [[nodiscard]] float elapsed_seconds() const noexcept { return elapsed_seconds_; }
@@ -747,6 +779,15 @@ namespace runner::sim
         [[nodiscard]] bool fallen() const noexcept { return fallen_; }
         [[nodiscard]] float ground_height() const noexcept { return 0.0f; }
         [[nodiscard]] float ground_height_at(float x) const noexcept;
+        [[nodiscard]] float terrain_firmness_at(float x) const noexcept;
+        [[nodiscard]] float terrain_looseness_at(float x) const noexcept;
+        [[nodiscard]] float burial_depth() const noexcept { return burial_depth_; }
+        [[nodiscard]] float free_space_direction() const noexcept { return free_space_direction_; }
+        [[nodiscard]] Vec2 incoming_material_velocity() const noexcept { return incoming_material_velocity_; }
+        [[nodiscard]] float incoming_time_to_impact() const noexcept { return incoming_time_to_impact_; }
+        [[nodiscard]] float incoming_material_density() const noexcept { return incoming_material_density_; }
+        [[nodiscard]] std::uint32_t material_event_count() const noexcept { return material_event_sequence_; }
+        [[nodiscard]] std::uint8_t obstruction_mask() const noexcept { return obstruction_mask_; }
         [[nodiscard]] float course_speed() const noexcept
         {
             if (course_stage_ == CourseStage::balance
@@ -849,6 +890,10 @@ namespace runner::sim
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
         void solve_course() noexcept;
+        void apply_support_pressure(float dt) noexcept;
+        void update_materials(float dt) noexcept;
+        void append_material_features() noexcept;
+        void update_material_metrics(float dt) noexcept;
         void rebuild_course_features() noexcept;
         void update_gait_metrics(float dt, float action_energy) noexcept;
         void invalidate(InvalidMotion reason) noexcept;
@@ -872,6 +917,8 @@ namespace runner::sim
         CreatureBlueprint blueprint_{};
         std::vector<Particle> particles_{};
         std::vector<CourseFeature> course_features_{};
+        DeformableTerrain terrain_{};
+        std::vector<MaterialParticle> material_particles_{};
         std::uint64_t random_state_{ 1 };
         std::array<float, action_count> previous_angles_{};
         std::array<float, action_count> angular_velocities_{};
@@ -969,6 +1016,18 @@ namespace runner::sim
         float recovery_best_upright_{ 1.0f };
         std::uint32_t recovery_events_{};
         std::uint32_t recovery_successes_{};
+        float next_material_event_seconds_{ 1.50f };
+        std::uint32_t material_event_sequence_{};
+        float terrain_firmness_{ 1.0f };
+        float terrain_looseness_{};
+        float burial_depth_{};
+        float previous_burial_depth_{};
+        float buried_no_escape_seconds_{};
+        float free_space_direction_{};
+        Vec2 incoming_material_velocity_{};
+        float incoming_time_to_impact_{ 10.0f };
+        float incoming_material_density_{};
+        std::uint8_t obstruction_mask_{};
         InvalidMotion invalid_reason_{ InvalidMotion::none };
     };
 }

@@ -300,9 +300,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v076-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v076-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v076-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v078-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v078-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v078-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -825,10 +825,14 @@ namespace runner
                     rl::standing_mastery_seconds,
                     environment.uncontrolled_spin_turns(),
                     environment.maximum_upper_body_motor_deviation() * 180.0f / pi)
-                : std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
-                    trainer.metrics().update,
-                    environment.crouch_walk_seconds(), environment.crouch_walk_distance(),
-                    environment.gait_cycles(), environment.obstacles_passed());
+                : environment.course_stage() == sim::CourseStage::moving_hazards
+                    ? std::format("UPDATE {}  BURIAL {:.2f}M  IMPACT {:.1f}S  MATERIAL {}",
+                        trainer.metrics().update, environment.burial_depth(),
+                        environment.incoming_time_to_impact(), environment.material_event_count())
+                    : std::format("UPDATE {}  CROUCH {:.1f}S  {:.2f}M  STEPS {}  PASSED {}",
+                        trainer.metrics().update,
+                        environment.crouch_walk_seconds(), environment.crouch_walk_distance(),
+                        environment.gait_cycles(), environment.obstacles_passed());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
                 pip_metrics, 0.72f, state_color, rect.size.x - 24.0f, 0.58f);
         }

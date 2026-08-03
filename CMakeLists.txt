@@ -6,7 +6,7 @@ else()
     set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 endif()
 
-project(Runner VERSION 0.7.7 LANGUAGES CXX)
+project(Runner VERSION 0.7.8 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -107,6 +107,15 @@ if(RUNNER_BUILD_TESTS)
     set_target_properties(RunnerCoreTests PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerCoreTests)
     add_test(NAME Runner.Core COMMAND RunnerCoreTests)
+
+    add_executable(RunnerDeformableTerrainTests tests/deformable_terrain_tests.cpp)
+    target_link_libraries(RunnerDeformableTerrainTests PRIVATE Runner::Core)
+    target_compile_features(RunnerDeformableTerrainTests PRIVATE cxx_std_23)
+    set_target_properties(RunnerDeformableTerrainTests PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerDeformableTerrainTests)
+    add_test(NAME Runner.DeformableTerrain COMMAND RunnerDeformableTerrainTests)
+    set_tests_properties(Runner.DeformableTerrain PROPERTIES TIMEOUT 45)
 
     add_executable(RunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
     target_link_libraries(RunnerConcurrencyBenchmark PRIVATE Runner::Core)

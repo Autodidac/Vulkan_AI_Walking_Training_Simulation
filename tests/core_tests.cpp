@@ -920,9 +920,9 @@ int main()
     {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
-        static_assert(sim::observation_count == 40);
-        require(observation.size() == 40u,
-            "eight-motor observation layout is not forty floats");
+        static_assert(sim::observation_count == 50);
+        require(observation.size() == 50u,
+            "eight-motor and material observation layout is not fifty floats");
         require(observation[20] == 0.0f && observation[21] == 0.0f,
             "contact channels overlap motor channels at reset");
         require(std::isfinite(observation[18]) && std::isfinite(observation[19]),
