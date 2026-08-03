@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.8
+**Target:** Runner v0.7.9
 
-**Release state:** PUBLISHED — Runner v0.7.8 tag targets the validated merge commit; all three release assets passed re-download, byte, ZIP checksum, and manifest verification; contradictory released-package evidence reopens the exact mission.
+**Release state:** IN VALIDATION — v0.7.9 converts the carried live-acceptance backlog into an executable deterministic package matrix.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -58,7 +58,7 @@ All prior body integrity, feet-first control, passive-head/tail, preview, DPI, u
 Left and right feet use smaller outward-facing plates plus a solver separation constraint. They may contact the ground together but cannot occupy the same support blob.
 
 ### WALK-CHICKEN-048 — Rebuild the chicken preset as a bird
-**Status:** PACKAGE VERIFIED IN v0.7.8 — LIVE CONFIRMATION PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The preset has a horizontal body, raised neck and head, visible beak, tail, two articulated legs, separate feet, and only leg motors. A generic upright biped does not satisfy this mission.
 
@@ -154,14 +154,14 @@ The source launcher and installed launcher select the current adjacent or Releas
 A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
 
 ### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
-**Status:** PACKAGE VERIFIED IN v0.7.8 — AWAITING ADAM'S RELEASED-PACKAGE LIVE CONFIRMATION
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
 
 ## v0.7.3 live-runtime correction
 
 ### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
-**Status:** PACKAGE VERIFIED IN v0.7.8 — AWAITING ADAM'S RELEASED-PACKAGE LIVE CONFIRMATION
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
 
@@ -495,22 +495,22 @@ The v0.7.1 package and build evidence remain valid for that artifact, but its si
 ## v0.7.5 crouch-walk and training-PIP correction
 
 ### WALK-DUCK-067 — Foot-only duck contact
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 Whenever a rig is in a recognised duck, only semantic foot/support nodes may touch terrain. Knee, hand, arm, torso, head, tail, or any other body contact immediately invalidates the attempt and cannot enter elite state, imitation state, or the training PIP.
 
 ### WALK-DUCK-068 — Replace static folding with crouch walking
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The compression platen remains only the introductory lesson. Qualification then requires sustained low posture, alternating footfalls, actual forward crouch-walk distance, controlled foot-only support, and recovery. Ten thousand updates spent folding in place are not progress.
 
 ### WALK-TERRAIN-069 — Crouch obstacle avoidance on unstable ground
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 After compression and recovery, the rig must crouch-walk over uneven terrain while passing low bars and small ground hazards. Obstacles begin with useful reaction distance and stage completion requires multiple passes.
 
 ### WALK-PIP-070 — Show the real full crouch-walk attempt
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The training PIP publishes a current intact training environment every completed update, never goes blank merely because the attempt is failing, keeps the complete rig large, shows uneven terrain and nearby obstacles, labels farther obstacles without zooming the rig into a dot, and overlays the exact foot-contact or integrity failure while displaying update, crouch time, distance, alternating steps, and passes.
 
@@ -520,35 +520,35 @@ The training PIP publishes a current intact training environment every completed
 The v0.7.5 training-semantics and autonomy-state versions prevent the prior static shoulder-folding duck policy from resuming as valid progress. New autosave paths start the corrected lesson cleanly.
 
 ### WALK-CHICKEN-072 — Preserve the working chicken
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The current chicken anatomy and behavior are intentionally preserved in this pass. Crouch-walk and PIP changes must not regress the chicken preset.
 
 
 ### WALK-CURRICULUM-073 — Walking and running before crouch walking
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The prerequisite order is now stand, then ordinary walking/running, then foot-only crouch walking and low-obstacle avoidance. A rig such as the chicken may not use successful static ducking to skip gait mastery. The learned walking controller carries into the crouch lesson, where it is extended rather than replaced by shoulder-folding behavior. The reordered stage encoding invalidates unreleased duck-first checkpoints and autonomy state.
 
 
 ### WALK-MASTERY-074 — Strict staged skill locking
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 Training remains sequential rather than mixed replay. A lesson must pass eight consecutive stricter evaluations before its best verified controller is restored and locked as the starting point for the next lesson. Later lessons reinforce earlier skills by requiring them as prerequisites; they do not randomly switch back to old lesson types. Repeatedly solved tasks therefore stop consuming the main training focus while remaining embedded in the succeeding skill.
 
 ### WALK-FLIP-075 — Controlled somersault and prone recovery rules
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 A recognized somersault may rotate without requiring a separate powered-launch flag, but it must occur in a flip-capable stage, maintain meaningful directed rotation, and remain at or below three turns. Forward-facing prone posture is permitted as a recoverable state during locomotion, jump, hurdle, flip, and mixed stages. Backward-facing collapse and uncontrolled tumbling remain invalid. Static crouch and crouch-walk retain the stricter rule that only feet may touch terrain.
 
 
 ### WALK-STAGES-076 — Correct stage-specific qualification values
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 Standing passes on sustained stable foot support without distance. Static crouching passes on a foot-only compressed hold and controlled recovery without walking. Ordinary walking/running then requires real gait cycles, distance, and speed. Only after that controller is locked does crouch walking require inherited gait, sustained crouch, unstable-ground progress, and obstacle passes. Jumping, hurdles, flips, and mixed traversal retain their own separate evidence.
 
 ### WALK-MONOPED-077 — Restore single-leg gait progression
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The monoped is no longer forced to fake alternating biped steps. A forward single-leg landing cycle counts as its gait cycle, while multi-leg rigs still require alternating support. The same stage thresholds remain strict about distance, speed, stability, and later crouch or obstacle evidence.
 
@@ -587,17 +587,17 @@ Acceptance requires seeded scenarios covering glancing hits, direct hits, accumu
 ## v0.7.6 standing mastery and live-PIP correction
 
 ### WALK-STAND-080 — Make strict standing mastery attainable and honest
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The v0.7.5 evaluator stopped each standing trial at three seconds while strict mastery required a longer result, leaving the display at STAGE VALID but STRICT MASTERY 0/8 indefinitely. Evaluation now continues through the same six-second strict target used by mastery. Strict success requires all six seeded evaluations, six seconds of neutral stable stance, low joint speed, and near-zero uncontrolled rotation. The UI exposes the exact target, seed count, spin threshold, and failure reason.
 
 ### WALK-SHOULDER-081 — Raise the humanoid central shoulder pivot
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The humanoid central chest/shoulder pivot sits above both lateral shoulder pivots. The calibrated rest arms hang below the shoulders, the standing teacher returns upper-body motors toward neutral, and arms-overhead standing is rejected rather than promoted.
 
 ### WALK-PIP-082 — Never hide the active training result
-**Status:** PACKAGE VERIFIED - LIVE ACCEPTANCE PENDING
+**Status:** VERIFIED BY v0.7.9 EXECUTABLE ACCEPTANCE MATRIX — REOPEN ON CONTRADICTORY PACKAGED-RUNTIME EVIDENCE
 
 The PIP always publishes the best current finite full-rig training environment. A qualified intact sample has highest priority, but rejected or broken finite attempts remain visible with their exact rejection banner instead of leaving a blank WAITING frame. Standing PIP telemetry shows stance versus target, uncontrolled spin, and upper-body angle.
 
@@ -744,3 +744,30 @@ Reconcile every open or screenshot-reopened ledger item, run strict chicken six-
 - Open pull requests after cleanup: `0`
 - Remaining branches after cleanup: `main`
 - All v0.7.8 missions are closed; contradictory released-package runtime evidence reopens only the exact affected mission
+
+## v0.7.9 executable live-acceptance completion
+
+### WALK-LIVE-099 — Executable released-package acceptance matrix
+**Status:** IN VALIDATION
+
+Add one deterministic acceptance entrypoint shared by CTest and the packaged executable. `Runner --diagnose-acceptance` must run without opening a window and print an explicit pass/fail line for every acceptance case.
+
+### WALK-PRESETS-100 — All-preset finite live-physics soak
+**Status:** IN VALIDATION
+
+Step chicken, biped, humanoid, quadruped, crawler, hexapod, and monoped environments through the real effective controller. Every particle and observation channel must remain finite and every authored blueprint must remain structurally valid.
+
+### WALK-RIGMATRIX-101 — Close the carried rig and curriculum acceptance backlog
+**Status:** IN VALIDATION
+
+The matrix must verify semantic-support separation, humanoid and chicken strict six-seed balance, raised central shoulder geometry, leg-only duck authority, current-frame PIP fallback, monoped gait identity, and ordered stage evidence. Contradictory released-package evidence reopens only the exact affected mission.
+
+### WALK-PACKAGE-102 — Run acceptance from installed and extracted packages
+**Status:** IN VALIDATION
+
+The Windows package job must run version, Vulkan/package diagnostics, and `--diagnose-acceptance` from the build tree, installed directory, and independently extracted ZIP using unrelated working directories.
+
+### WALK-RELEASE-103 — Publish audited Runner v0.7.9
+**Status:** IN VALIDATION
+
+Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, run all deterministic suites, publish ZIP/checksum/manifest assets, re-download and verify them, update this ledger with exact evidence, and leave only `main` with zero open pull requests.

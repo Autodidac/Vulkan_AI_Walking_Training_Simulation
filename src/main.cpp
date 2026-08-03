@@ -1,3 +1,4 @@
+#include "acceptance.hpp"
 #include "app.hpp"
 #include "renderer.hpp"
 
@@ -55,6 +56,14 @@ namespace
             && std::string_view(argv[1]) == "--diagnose-package";
     }
 
+    [[nodiscard]] bool wants_acceptance_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-acceptance";
+    }
+
     [[nodiscard]] std::filesystem::path executable_directory()
     {
         const char* const base_path = SDL_GetBasePath();
@@ -110,6 +119,21 @@ int main(int argc, char** argv)
     {
         std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
+    }
+    if (wants_acceptance_diagnostic(argc, argv))
+    {
+        const runner::acceptance::Report report =
+            runner::acceptance::run_live_acceptance_matrix();
+        for (const runner::acceptance::CaseResult& result : report.cases)
+        {
+            std::printf("[%s] %s: %s\n",
+                result.passed ? "PASS" : "FAIL",
+                result.name.c_str(),
+                result.detail.c_str());
+        }
+        std::printf("Runner %s live acceptance matrix: %zu/%zu passed\n",
+            RUNNER_VERSION, report.passed_count(), report.cases.size());
+        return report.passed() ? 0 : 1;
     }
     const bool package_diagnostic = wants_package_diagnostic(argc, argv);
     const bool diagnostic = wants_vulkan_diagnostic(argc, argv) || package_diagnostic;
