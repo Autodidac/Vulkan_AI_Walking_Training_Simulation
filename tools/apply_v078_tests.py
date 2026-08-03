@@ -5,6 +5,7 @@ def x(p,o,n):
  if c!=1: raise RuntimeError(f'{p}: {c} matches')
  q.write_text(t.replace(o,n,1))
 x('CMakeLists.txt','project(Runner VERSION 0.7.7 LANGUAGES CXX)','project(Runner VERSION 0.7.8 LANGUAGES CXX)')
+x('tests/core_tests.cpp','        static_assert(sim::observation_count == 40);\n','        static_assert(sim::observation_count == 50);\n')
 x('CMakeLists.txt','''    add_test(NAME Runner.Core COMMAND RunnerCoreTests)
 
     add_executable(RunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
