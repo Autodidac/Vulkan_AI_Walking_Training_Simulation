@@ -21,6 +21,15 @@
 namespace runner::rl
 {
     inline constexpr int mastery_lock_confirmations = 8;
+    inline constexpr int balance_mastery_lock_confirmations = 3;
+    inline constexpr float standing_mastery_joint_speed_limit = 10.0f;
+
+    [[nodiscard]] inline int required_mastery_confirmations(
+        sim::CourseStage stage) noexcept
+    {
+        return stage == sim::CourseStage::balance
+            ? balance_mastery_lock_confirmations : mastery_lock_confirmations;
+    }
 
     [[nodiscard]] inline bool strict_balance_mastery(
         const TrainingMetrics& metrics) noexcept
@@ -30,7 +39,7 @@ namespace runner::rl
             && metrics.evaluation_longest_stance >= standing_mastery_seconds
             && metrics.evaluation_survival >= standing_mastery_seconds
             && metrics.evaluation_spin_turns <= standing_mastery_spin_limit
-            && metrics.evaluation_max_joint_speed <= 8.0f;
+            && metrics.evaluation_max_joint_speed <= standing_mastery_joint_speed_limit;
     }
 
     struct AutonomyStatus

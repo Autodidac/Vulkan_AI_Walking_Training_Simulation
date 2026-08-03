@@ -1017,10 +1017,12 @@ namespace runner::sim
                     (maximum_x - minimum_x) * 0.42f + 0.45f, 0.82f, 1.20f);
                 const DuckPressProfile profile = duck_press_profile(
                     elapsed_seconds_, course_difficulty_, rest_head_top);
+                const float press_anchor_x = blueprint_.root_node < blueprint_.nodes.size()
+                    ? blueprint_.nodes[blueprint_.root_node].x : root_x;
                 constexpr float half_height = 0.14f;
                 course_features_.push_back({
                     CourseFeatureKind::duck_press,
-                    { root_x, profile.bottom_y + half_height },
+                    { press_anchor_x, profile.bottom_y + half_height },
                     { half_width, half_height }, 0.0f,
                     { 0.0f, profile.vertical_velocity }, -2
                 });
@@ -1860,8 +1862,12 @@ namespace runner::sim
                     if (penetration > 0.0f)
                     {
                         const Vec2 correction{ 0.0f, -penetration };
+                        // Move the current and previous positions together so the
+                        // vertical constraint preserves velocity instead of injecting a
+                        // fresh downward impulse on every solver iteration. The press has
+                        // no horizontal authority and therefore cannot drag the rig back.
                         particle.position += correction;
-                        particle.previous += correction * 0.18f;
+                        particle.previous += correction;
                         duck_press_contact_this_step_ = true;
                     }
                     continue;
