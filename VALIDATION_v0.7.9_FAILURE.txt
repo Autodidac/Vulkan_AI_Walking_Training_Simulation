@@ -1,3 +1,0 @@
-Runner v0.7.9 fixed publication failed
-run_id=30798755162
-job=windows-package
