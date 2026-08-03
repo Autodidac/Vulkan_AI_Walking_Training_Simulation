@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.11
 
-**Release state:** REOPENED — v0.7.10 shipped six missing P3 background pixels and a fragile fatal artwork loader; v0.7.11 correction is in validation.
+**Release state:** PUBLISHED — Runner v0.7.11 repaired artwork, parser, startup behavior, package assets, checksum, manifest, released executable, and repository cleanup verified.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -2244,7 +2244,7 @@ Stand qualification and mastery use the same visible 10 rad/s joint-speed limit.
 Re-run Linux warnings-as-errors, all deterministic tests, full Windows Vulkan build/tests, installed and extracted package diagnostics, acceptance matrix, checksum/manifest audit, published-asset re-download, and branch/PR cleanup after WALK-PRESS-109 and WALK-CURRICULUM-110 pass.
 
 ### WALK-ART-112 — Display and package the original Runner artwork
-**Status:** REOPENED — released v0.7.10 artwork has 634/640 pixels and terminates application initialization
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 The original `assets/chicken.ppm` artwork is loaded during application startup, rendered in the live top bar, and remains a required packaged runtime asset. Missing or malformed art fails initialization instead of silently reverting to a placeholder.
 
@@ -2297,21 +2297,63 @@ Runner v0.7.10 writes and loads only `runner-v0710-*` autosave, evolved-rig, and
 ## v0.7.11 packaged artwork startup correction
 
 ### WALK-PPM-114 — Repair and parse the original packaged P3 artwork
-**Status:** IN VALIDATION
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Restore the six omitted dark-background pixels at the ends of five authored scanlines without shifting or replacing visible artwork. Replace formatted-stream parsing with a binary byte tokenizer that accepts standard ASCII whitespace, CRLF, comments, and an optional UTF-8 BOM while enforcing bounded dimensions, channel ranges, exact pixel count, and no unexpected trailing tokens.
 
 ### WALK-ARTSAFE-115 — Decorative artwork cannot brick Runner startup
-**Status:** IN VALIDATION
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 The application uses the original artwork when valid. A missing or malformed user-side decorative asset produces a visible warning and continues without the decoration; it cannot terminate the trainer. Release/package validation remains strict and rejects an invalid packaged asset.
 
 ### WALK-PKGART-116 — Package diagnostics must exercise the real artwork loader
-**Status:** IN VALIDATION
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 `Runner.exe --diagnose-package` parses `assets/chicken.ppm` with the same loader used at application startup. Deterministic tests parse the exact repository asset and BOM/comment/CRLF fixtures, so a release cannot pass by checking only that the asset directory exists.
 
 ### WALK-RELEASE-117 — Publish corrected Runner v0.7.11
-**Status:** IN VALIDATION
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Run Linux warnings-as-errors and all tests, full Windows SDL3/Vulkan build and tests, build-tree/installed/extracted package diagnostics, executable-relative `run.bat`, checksum/manifest audit, release re-download, and repository cleanup before publication.
+
+## v0.7.11 package validation evidence
+
+- Exact tested implementation source: `cf5df4bd661821896ab51a1716f9d84609b3ead4`
+- Clean validated head: `873144e587a879074e78e57fc35c7069b3921ce7` — differs only by deleting the PR trigger
+- Clean release source: `bb63c54af7554d7399e084eb6afb274567f00936`
+- Validation workflow run: `30831831894`
+- Linux deterministic job: `91747416005` — passed
+- Windows application/package job: `91747657685` — passed
+- Validated artifact ID: `8863835903`
+- Validated artifact digest: `sha256:8b65628030b469b114f44582b9b8c26f7cd6ee8a118819f45f03f1df4dd43de7`
+- Validated Windows ZIP SHA-256: `5BDA297C836AFB3E50B7D868A54953992B305FA7D1E747C7AD8DD59709389067`
+- Original art repaired from 634 to 640 pixels by appending six dark-background pixels to five scanlines
+- Exact 20×32 scanline structure, portable parser fixtures, and malformed-data rejection: passed
+- GCC 14 warnings-as-errors and all Linux deterministic suites: passed
+- Full MSVC/SDL3/Vulkan build and all Windows tests: passed
+- Build-tree, installed, independently extracted, and re-downloaded package diagnostics: passed
+- ZIP checksum and all 11 per-file manifest entries: passed
+
+## v0.7.11 immutable release evidence
+
+- Exact tested implementation source: `cf5df4bd661821896ab51a1716f9d84609b3ead4`
+- Clean validated head: `873144e587a879074e78e57fc35c7069b3921ce7`
+- Merged implementation: `1aca8a6cca5931c7a5f75d82478876d0fe68304c`
+- Exact tagged clean source: `bb63c54af7554d7399e084eb6afb274567f00936`
+- Validation workflow run: `30831831894`
+- Linux deterministic job: `91747416005` — passed
+- Windows application/package job: `91747657685` — passed
+- Validated artifact ID: `8863835903`
+- Validated artifact digest: `sha256:8b65628030b469b114f44582b9b8c26f7cd6ee8a118819f45f03f1df4dd43de7`
+- Validated Windows ZIP SHA-256: `5BDA297C836AFB3E50B7D868A54953992B305FA7D1E747C7AD8DD59709389067`
+- Published tag and title: `v0.7.11` / `Runner v0.7.11`
+- Published Windows ZIP SHA-256: `74F28FADB684D0D96B3E7330263FCB46BB59780876B04A9E03FCFC83E0241044`
+- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
+- Original artwork is exactly 640 pixels in 20 scanlines of 32 pixels
+- Portable P3 parser, exact-art test, BOM/comment/CRLF fixture, and malformed-data rejection: passed
+- Decorative artwork failure is nonfatal in normal startup; package validation remains strict
+- Linux GCC 14 warnings-as-errors and all deterministic suites: passed
+- Full Windows SDL3/Vulkan build and all tests: passed
+- Build-tree, installed, validated-artifact, final-extracted, and re-downloaded release diagnostics: passed
+- Published assets were byte-compared; checksum and all manifest entries passed
+- Contradictory released-package evidence reopens only the exact affected mission
