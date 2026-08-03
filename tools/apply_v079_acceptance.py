@@ -166,7 +166,7 @@ Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, 
 """
 if "## v0.7.9 executable live-acceptance completion" in mission:
     raise RuntimeError("v0.7.9 mission section already exists")
-mission = mission.rstrip() + section + "\n"
+mission = mission.rstrip() + section.rstrip() + "\n"
 write("missioncache.md", mission)
 
 for relative in (
