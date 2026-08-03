@@ -41,9 +41,9 @@ if(EXISTS "${RUNNER_SOURCE_DIR}/src/autonomy.cpp")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
-string(FIND "${cmake_text}" "project(Runner VERSION 0.7.10 LANGUAGES CXX)" version_position)
+string(FIND "${cmake_text}" "project(Runner VERSION 0.7.11 LANGUAGES CXX)" version_position)
 if(version_position EQUAL -1)
-    message(FATAL_ERROR "CMake project version is not 0.7.10")
+    message(FATAL_ERROR "CMake project version is not 0.7.11")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/README.md" readme_text)

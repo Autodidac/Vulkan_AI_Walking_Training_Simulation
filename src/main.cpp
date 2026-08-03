@@ -1,5 +1,6 @@
 #include "acceptance.hpp"
 #include "app.hpp"
+#include "pixel_art.hpp"
 #include "renderer.hpp"
 
 #include <SDL3/SDL.h>
@@ -100,6 +101,16 @@ namespace
             error = "Missing packaged asset directory: " + asset_directory.string();
             if (filesystem_error)
                 error += " (" + filesystem_error.message() + ")";
+            return false;
+        }
+
+        runner::art::PixelArt packaged_art{};
+        if (!runner::art::load_p3_pixel_art(
+                asset_directory / "chicken.ppm", packaged_art, error))
+            return false;
+        if (!packaged_art.loaded())
+        {
+            error = "Packaged Runner artwork decoded incompletely";
             return false;
         }
         error.clear();
