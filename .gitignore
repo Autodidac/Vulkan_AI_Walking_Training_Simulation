@@ -9,3 +9,11 @@
 *.user
 *.suo
 *.VC.db
+/artifact/
+/published-*/
+/release-stage/
+/validation/
+/VALIDATION_v*.txt
+/Runner-v*.zip
+/Runner-v*.zip.sha256
+/Runner-v*.manifest.sha256

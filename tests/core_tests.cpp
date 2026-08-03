@@ -1457,6 +1457,6 @@ int main()
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
 
-    std::cout << "Runner v0.7.6 standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
+    std::cout << "Runner core standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;
 }

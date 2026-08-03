@@ -191,6 +191,6 @@ int main()
     std::filesystem::remove(checkpoint);
     std::filesystem::remove(checkpoint.string() + ".tmp");
 
-    std::cout << "Runner v0.7 runtime pipeline, arms, and async persistence tests passed\n";
+    std::cout << "Runner runtime pipeline, arms, and async persistence tests passed\n";
     return EXIT_SUCCESS;
 }
