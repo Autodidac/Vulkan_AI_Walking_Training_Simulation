@@ -20,14 +20,14 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'0700u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'0800u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
     {
         constexpr std::size_t joint_angle_begin = 4;
         constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::action_count;
-        static_assert(sim::observation_count == 40);
+        static_assert(sim::observation_count == 50);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
         const sim::CreatureBlueprint& rig = environment.blueprint();

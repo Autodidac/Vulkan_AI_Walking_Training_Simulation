@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.7
+**Target:** Runner v0.7.8
 
-**Release state:** IN PROGRESS - v0.7.6 live screenshots reopened stance, crouch, exploration, and fused-support acceptance
+**Release state:** IN PROGRESS - v0.7.7 published and audited; v0.7.8 deformable terrain/material release under validation
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -58,7 +58,7 @@ All prior body integrity, feet-first control, passive-head/tail, preview, DPI, u
 Left and right feet use smaller outward-facing plates plus a solver separation constraint. They may contact the ground together but cannot occupy the same support blob.
 
 ### WALK-CHICKEN-048 — Rebuild the chicken preset as a bird
-**Status:** PACKAGE VERIFIED
+**Status:** REOPENED BY v0.7.7 LIVE SCREENSHOT — corrected by WALK-CHICKEN-096
 
 The preset has a horizontal body, raised neck and head, visible beak, tail, two articulated legs, separate feet, and only leg motors. A generic upright biped does not satisfy this mission.
 
@@ -154,14 +154,14 @@ The source launcher and installed launcher select the current adjacent or Releas
 A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
 
 ### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
-**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+**Status:** IN PROGRESS — v0.7.7 chicken screenshot showed rearward collapse, 0.3 s best stance, 1.11 turns, and 0/6 valid seeds
 
 Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
 
 ## v0.7.3 live-runtime correction
 
 ### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
-**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+**Status:** IN PROGRESS — carried into v0.7.8 chicken and material correction
 
 Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
 
@@ -253,9 +253,9 @@ Source-tree `run.bat` selects the current Windows Release build instead of a sta
 Every motor divides correction between the driven subtree and complete parent side using rotational inertia, without world-space joint anchors or center-of-mass injection.
 
 ### WALK-OBS-018 — Non-overlapping eight-motor observation layout
-**Status:** VERIFIED
+**Status:** VERIFIED — expanded without overlap in v0.7.8
 
-The humanoid retains forty non-overlapping observation channels covering eight angles, eight velocities, contacts, foot placement, terrain, obstacle, stage, and phase state.
+The humanoid retains fifty non-overlapping observation channels: the original eight angles, eight velocities, contacts, foot placement, obstacle, stage, and phase state plus terrain firmness, looseness, slope, burial, obstruction, incoming material, and escape direction.
 
 ### WALK-TRAIN-013 — Reject collapsed poses as training success
 **Status:** VERIFIED
@@ -554,13 +554,13 @@ The monoped is no longer forced to fake alternating biped steps. A forward singl
 
 
 ### WALK-SAND-078 — Deformable sand-cell uneven terrain
-**Status:** CARRIED FORWARD — NOT IN v0.7.5
+**Status:** IN PROGRESS - implementation materialized by v0.7.8 mission set below
 
 Replace the current fixed analytic uneven-ground waves with a deterministic deformable sand-cell terrain layer. Foot pressure must compact, displace, mound, and locally collapse the terrain; loose slopes must shift under load; contacts and observations must expose changing support height, firmness, slip, and nearby surface shape. The same terrain state must drive physics, PIP rendering, evaluation, and replay. Acceptance requires repeatable seeded tests, bounded runtime cost across the training pool, no terrain/body tunnelling, and successful gait, prone recovery, crouch-walk, and obstacle traversal on terrain that changes under the rig. This is intentionally carried to the next release rather than delaying the v0.7.5 correction package.
 
 
 ### WALK-HAZARD-079 — Falling material, impact, burial, and escape training
-**Status:** CARRIED FORWARD — NOT IN v0.7.5
+**Status:** IN PROGRESS - implementation materialized by v0.7.8 mission set below
 
 Add dynamic overhead hazards driven by the same terrain/material simulation: falling sand, collapsing loose slopes, rocks, debris, and thrown objects. Observations must include incoming direction, velocity, estimated impact time, material density, local burial depth, free-space direction, and whether the head, torso, or support limbs are obstructed. The rig must learn to evade when possible, brace when avoidance is impossible, remain oriented after impact, dig or push toward free space, recover from forward-prone or partially buried states, regain foot support, and continue the assigned stage.
 
@@ -629,36 +629,79 @@ Build and test Linux and the complete Windows Vulkan application; verify all det
 ## v0.7.7 rig-specific learning and support correction
 
 ### WALK-RIGSTANCE-084 — Rig-specific standing controller
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Standing control and qualification use each preset's authored body orientation and support topology. Quadrupeds, crawlers, hexapods, chickens, monopeds, bipeds, and humanoids may not be forced through one biped hip/knee correction. The quadruped must repeatedly establish a valid stage-one stance without being rearranged by diagonal support separation.
 
 ### WALK-CROUCH-085 — Restore leg-driven static crouch learning
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Static crouch bends biped knees before spreading hips and compacts the authored support geometry for non-bipeds. It must hold beneath the platen, maintain feet-only ground support, retract, and recover to stable stance. The stage does not reward walking after the platen and may not qualify a jumping-jack stance.
 
 ### WALK-EXPLORE-086 — Preserve meaningful PPO exploration
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Teacher guidance remains a bootstrap rather than the controller. Dedicated early rollout lanes test every motor alone in both directions, synchronized groups, and alternating patterns, with neutral recovery intervals. The compounded teacher blend leaves enough residual policy authority for visibly different candidates to branch, and the probes stop after initial motor discovery.
 
 ### WALK-FEET-087 — Separate every preset's semantic supports
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Every pair of semantic support nodes receives non-overlap separation that preserves authored ordering. No preset may show fused feet, and the solver may not reorder a quadruped by assuming every left-channel contact is physically left of every right-channel contact.
 
 ### WALK-RELEASE-088 — Publish audited Runner v0.7.7
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Build and test Linux and the complete Windows Vulkan package, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime screenshots remain the final acceptance authority.
 
 ### WALK-SLIDE-089 — Allow natural foot sliding without friction-drive exploits
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Foot sliding is permitted during crouch entry, stance adjustment, walking, running, and unstable-terrain recovery. Sliding itself is not an invalid-motion gate. Pure double-support translation with no gait cycle, no swing clearance, and sustained planted-foot slip is recognized only as a friction-driven shuffle: it receives no gait credit and a mild shaping penalty, but does not terminate the attempt. Standing retains a low-slip stability requirement because its task is stationary support.
 
 ### WALK-UPDATES-090 — Keep evaluations synchronized with PPO updates
-**Status:** IN PROGRESS
+**Status:** VERIFIED IN v0.7.7 - reopen on contradictory packaged-runtime evidence
 
 Evaluation count is cumulative and survives optimizer, transferred-rig, autosave, and recalibration resets just as PPO update count does. With evaluation scheduled on update 1 and every fifth update, update 240 must report 49 evaluations unless the stage itself has just changed. The PIP publication and mastery streak consume each new evaluation exactly once; they may not remain at one evaluation after hundreds of updates.
+
+
+## v0.7.8 deformable terrain and falling-material completion
+
+### WALK-SAND-091 — Deterministic deformable sand terrain
+**Status:** IN PROGRESS
+
+Replace analytic sine-only ground with a seeded fixed-cost sand-cell heightfield. Foot pressure compacts and sinks loose support, displaces conserved volume into adjacent mounds, and relaxes unstable slopes. The same state must drive collision, live view, PIP, observation, evaluation, and replay.
+
+### WALK-MATERIAL-092 — Persistent falling sand, rocks, and debris
+**Status:** IN PROGRESS
+
+Falling material owns persistent position, velocity, radius, density, and kind. Sand deposits into the terrain field; rocks and debris bounce, roll, settle, and transfer impact velocity. No hazard may tunnel, teleport, silently disappear while active, or exist only as a regenerated render curve.
+
+### WALK-BURIAL-093 — Burial, obstruction, and free-space observations
+**Status:** IN PROGRESS
+
+Expose terrain firmness, looseness, slope, burial depth, incoming velocity, time-to-impact, density, head/torso/support obstruction, and the safer escape direction to the policy without removing existing gait state.
+
+### WALK-ESCAPE-094 — Evade, brace, escape, and honest failure
+**Status:** IN PROGRESS
+
+Reward reducing burial and moving toward available free space. Permit partial penetration into loose material for recovery training, but terminate sustained head-and-torso burial when surrounding material leaves no practical escape. Do not grant survival to a motionless rig hidden beneath debris.
+
+### WALK-RELEASE-095 — Publish audited Runner v0.7.8
+**Status:** IN PROGRESS
+
+Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
+
+### WALK-CHICKEN-096 — Correct live chicken balance regression
+**Status:** IN PROGRESS
+
+Use a real vertical semantic torso above the horizontal bird body, keep the raised neck, head, beak, tail, two articulated legs, and separate feet, and preserve leg-only motors. Six deterministic balance seeds must all sustain strict standing mastery without body collapse, integrity loss, or more than 0.55 uncontrolled turns.
+
+### WALK-VISUAL-097 — Biomechanical rig animation treatment
+**Status:** IN PROGRESS
+
+Decorate live rigs, training PIP, and rig-lab previews with procedural anatomy rings, neural-link pulses, semantic-node halos, faint motion-study ghosts, and a small neural-chip motif. The effect must be generated from current rig state, require no external image asset, preserve telemetry readability, and never alter physics or input hit testing.
+
+### WALK-ACCEPT-098 — Complete all v0.7.8 mission acceptance
+**Status:** IN PROGRESS
+
+Reconcile every open or screenshot-reopened ledger item, run strict chicken six-seed balance acceptance, seeded deformable-terrain conservation and collapse tests, deterministic repeated material events, partial burial with an escape side, full burial with honest termination, direct and glancing impacts, Linux warnings-as-errors, the complete Windows Vulkan package, executable-relative launch, ZIP manifest, SHA-256, and release re-download audit.
