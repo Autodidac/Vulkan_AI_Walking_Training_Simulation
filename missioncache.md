@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.9
 
-**Release state:** IN VALIDATION — v0.7.9 converts the carried live-acceptance backlog into an executable deterministic package matrix.
+**Release state:** PACKAGE VERIFIED — Runner v0.7.9 passed Linux, Windows, build-tree acceptance, and all deterministic suites; publication audit pending.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -748,26 +748,26 @@ Reconcile every open or screenshot-reopened ledger item, run strict chicken six-
 ## v0.7.9 executable live-acceptance completion
 
 ### WALK-LIVE-099 — Executable released-package acceptance matrix
-**Status:** IN VALIDATION
+**Status:** PACKAGE VERIFIED
 
 Add one deterministic acceptance entrypoint shared by CTest and the packaged executable. `Runner --diagnose-acceptance` must run without opening a window and print an explicit pass/fail line for every acceptance case.
 
 ### WALK-PRESETS-100 — All-preset finite live-physics soak
-**Status:** IN VALIDATION
+**Status:** PACKAGE VERIFIED
 
 Step chicken, biped, humanoid, quadruped, crawler, hexapod, and monoped environments through the real effective controller. Every particle and observation channel must remain finite and every authored blueprint must remain structurally valid.
 
 ### WALK-RIGMATRIX-101 — Close the carried rig and curriculum acceptance backlog
-**Status:** IN VALIDATION
+**Status:** PACKAGE VERIFIED
 
 The matrix must verify semantic-support separation, humanoid and chicken strict six-seed balance, raised central shoulder geometry, leg-only duck authority, current-frame PIP fallback, monoped gait identity, and ordered stage evidence. Contradictory released-package evidence reopens only the exact affected mission.
 
 ### WALK-PACKAGE-102 — Run acceptance from installed and extracted packages
-**Status:** IN VALIDATION
+**Status:** PACKAGE VERIFIED
 
 The Windows package job must run version, Vulkan/package diagnostics, and `--diagnose-acceptance` from the build tree, installed directory, and independently extracted ZIP using unrelated working directories.
 
 ### WALK-RELEASE-103 — Publish audited Runner v0.7.9
-**Status:** IN VALIDATION
+**Status:** PACKAGE VERIFIED
 
 Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, run all deterministic suites, publish ZIP/checksum/manifest assets, re-download and verify them, update this ledger with exact evidence, and leave only `main` with zero open pull requests.
