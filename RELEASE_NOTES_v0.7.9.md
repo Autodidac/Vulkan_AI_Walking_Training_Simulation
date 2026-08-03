@@ -6,3 +6,4 @@
 - Verifies the raised humanoid shoulder pivot, leg-only duck authority, current-frame PIP fallback, monoped gait identity, and ordered stage evidence.
 - Adds `Runner --diagnose-acceptance` so the same acceptance matrix runs from build-tree, installed, extracted, and released packages.
 - Adds a dedicated CTest target and carries contradictory packaged-runtime evidence forward as an exact mission reopen rather than silently ignoring it.
+- Validates the exact packaged binary from unrelated working directories before publication.
