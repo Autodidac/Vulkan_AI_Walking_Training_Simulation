@@ -442,6 +442,63 @@ int main()
     require(chicken.nodes[6].x < chicken.nodes[chicken.root_node].x - 1.0f
             && chicken.nodes[4].x > chicken.nodes[chicken.head_node].x,
         "chicken preset lacks a distinct tail and beak");
+    require(chicken.nodes[chicken.torso_node].y
+            > chicken.nodes[chicken.root_node].y + 0.55f,
+        "chicken semantic torso axis is not vertically load-bearing");
+    require(std::ranges::any_of(chicken.bones, [&](const sim::DistanceConstraint& bone)
+        {
+            return (bone.a == chicken.root_node && bone.b == chicken.torso_node)
+                || (bone.b == chicken.root_node && bone.a == chicken.torso_node);
+        }) && std::ranges::any_of(chicken.bones, [&](const sim::DistanceConstraint& bone)
+        {
+            return (bone.a == chicken.torso_node && bone.b == chicken.head_node)
+                || (bone.b == chicken.torso_node && bone.a == chicken.head_node);
+        }),
+        "chicken root, torso, and head do not form an intact semantic spine");
+
+    {
+        constexpr std::size_t chicken_seed_count = 6u;
+        std::uint32_t valid_chicken_seeds = 0u;
+        for (std::size_t seed_index = 0; seed_index < chicken_seed_count; ++seed_index)
+        {
+            const std::uint64_t seed = 0xC11C000u
+                + static_cast<std::uint64_t>(seed_index) * 4099u;
+            sim::Environment environment{ chicken, seed };
+            environment.set_course(sim::CourseStage::balance, 0.25f);
+            const std::array<float, sim::action_count> raw_action{};
+            for (int frame = 0; frame < 1200; ++frame)
+            {
+                const auto action = rl::effective_policy_action(
+                    environment, raw_action, sim::CourseStage::balance);
+                const sim::StepResult step = environment.step(action);
+                if (environment.valid_motion()
+                    && environment.longest_stable_stance_seconds()
+                        >= rl::standing_mastery_seconds)
+                    break;
+                if (step.terminated)
+                    break;
+            }
+            const rl::StageMotionQualification qualification =
+                rl::stage_motion_qualification(sim::CourseStage::balance, environment);
+            const bool accepted = qualification.valid
+                && environment.body_integrity_valid()
+                && environment.longest_stable_stance_seconds()
+                    >= rl::standing_mastery_seconds
+                && environment.uncontrolled_spin_turns() <= 0.55f;
+            valid_chicken_seeds += accepted ? 1u : 0u;
+            if (!accepted)
+            {
+                std::cerr << "chicken balance seed " << seed
+                    << " rejection=" << qualification.rejection_mask
+                    << " invalid=" << static_cast<int>(environment.invalid_reason())
+                    << " stance=" << environment.longest_stable_stance_seconds()
+                    << " spin=" << environment.uncontrolled_spin_turns()
+                    << " survival=" << environment.elapsed_seconds() << std::endl;
+            }
+        }
+        require(valid_chicken_seeds == chicken_seed_count,
+            "chicken balance still reproduces the live 0/6 valid-seed regression");
+    }
 
     sim::Environment fused_feet(sim::CreatureBlueprint::humanoid(), 19);
     sim::EnvironmentTestAccess::force_fused_supports(fused_feet);

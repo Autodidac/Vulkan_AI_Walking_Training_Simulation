@@ -58,7 +58,7 @@ All prior body integrity, feet-first control, passive-head/tail, preview, DPI, u
 Left and right feet use smaller outward-facing plates plus a solver separation constraint. They may contact the ground together but cannot occupy the same support blob.
 
 ### WALK-CHICKEN-048 — Rebuild the chicken preset as a bird
-**Status:** PACKAGE VERIFIED
+**Status:** REOPENED BY v0.7.7 LIVE SCREENSHOT — corrected by WALK-CHICKEN-096
 
 The preset has a horizontal body, raised neck and head, visible beak, tail, two articulated legs, separate feet, and only leg motors. A generic upright biped does not satisfy this mission.
 
@@ -154,14 +154,14 @@ The source launcher and installed launcher select the current adjacent or Releas
 A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
 
 ### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
-**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+**Status:** IN PROGRESS — v0.7.7 chicken screenshot showed rearward collapse, 0.3 s best stance, 1.11 turns, and 0/6 valid seeds
 
 Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
 
 ## v0.7.3 live-runtime correction
 
 ### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
-**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+**Status:** IN PROGRESS — carried into v0.7.8 chicken and material correction
 
 Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
 
@@ -253,9 +253,9 @@ Source-tree `run.bat` selects the current Windows Release build instead of a sta
 Every motor divides correction between the driven subtree and complete parent side using rotational inertia, without world-space joint anchors or center-of-mass injection.
 
 ### WALK-OBS-018 — Non-overlapping eight-motor observation layout
-**Status:** VERIFIED
+**Status:** VERIFIED — expanded without overlap in v0.7.8
 
-The humanoid retains forty non-overlapping observation channels covering eight angles, eight velocities, contacts, foot placement, terrain, obstacle, stage, and phase state.
+The humanoid retains fifty non-overlapping observation channels: the original eight angles, eight velocities, contacts, foot placement, obstacle, stage, and phase state plus terrain firmness, looseness, slope, burial, obstruction, incoming material, and escape direction.
 
 ### WALK-TRAIN-013 — Reject collapsed poses as training success
 **Status:** VERIFIED
@@ -690,3 +690,18 @@ Reward reducing burial and moving toward available free space. Permit partial pe
 **Status:** IN PROGRESS
 
 Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
+
+### WALK-CHICKEN-096 — Correct live chicken balance regression
+**Status:** IN PROGRESS
+
+Use a real vertical semantic torso above the horizontal bird body, keep the raised neck, head, beak, tail, two articulated legs, and separate feet, and preserve leg-only motors. Six deterministic balance seeds must all sustain strict standing mastery without body collapse, integrity loss, or more than 0.55 uncontrolled turns.
+
+### WALK-VISUAL-097 — Biomechanical rig animation treatment
+**Status:** IN PROGRESS
+
+Decorate live rigs, training PIP, and rig-lab previews with procedural anatomy rings, neural-link pulses, semantic-node halos, faint motion-study ghosts, and a small neural-chip motif. The effect must be generated from current rig state, require no external image asset, preserve telemetry readability, and never alter physics or input hit testing.
+
+### WALK-ACCEPT-098 — Complete all v0.7.8 mission acceptance
+**Status:** IN PROGRESS
+
+Reconcile every open or screenshot-reopened ledger item, run strict chicken six-seed balance acceptance, seeded deformable-terrain conservation and collapse tests, deterministic repeated material events, partial burial with an escape side, full burial with honest termination, direct and glancing impacts, Linux warnings-as-errors, the complete Windows Vulkan package, executable-relative launch, ZIP manifest, SHA-256, and release re-download audit.

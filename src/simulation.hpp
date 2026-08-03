@@ -722,6 +722,14 @@ namespace runner::sim
                 && motors[1].a == motors[0].pivot
                 && motors[3].a == motors[2].pivot;
         }
+        [[nodiscard]] bool horizontal_body_plan() const noexcept
+        {
+            if (root_node >= nodes.size() || head_node >= nodes.size())
+                return false;
+            const Vec2 head_offset = nodes[head_node] - nodes[root_node];
+            return active_motor_count <= 4u
+                && std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
+        }
 
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();

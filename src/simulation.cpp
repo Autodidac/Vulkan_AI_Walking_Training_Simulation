@@ -135,16 +135,16 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.00f, 2.52f }, { 0.72f, 2.62f },
-            { 0.88f, 3.12f }, { 1.08f, 3.52f }, { 1.42f, 3.48f },
-            { -0.92f, 2.76f }, { -1.30f, 2.98f },
-            { -0.28f, 1.50f }, { -0.38f, 0.30f },
-            { 0.34f, 1.52f }, { 0.46f, 0.30f },
-            { 0.08f, 2.66f }
+            { 0.00f, 2.40f }, { 0.72f, 2.48f },
+            { 0.98f, 3.04f }, { 1.18f, 3.50f }, { 1.54f, 3.46f },
+            { -0.92f, 2.64f }, { -1.36f, 2.84f },
+            { -0.42f, 1.42f }, { -0.58f, 0.28f },
+            { 0.42f, 1.42f }, { 0.58f, 0.28f },
+            { 0.02f, 3.12f }
         };
         result.radii = {
             0.42f, 0.38f, 0.23f, 0.28f, 0.11f,
-            0.24f, 0.13f, 0.18f, 0.14f, 0.18f, 0.14f, 0.26f
+            0.24f, 0.13f, 0.18f, 0.14f, 0.18f, 0.14f, 0.27f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
@@ -152,23 +152,25 @@ namespace runner::sim
             { 0, 2, 0.0f, 0.94f }, { 1, 3, 0.0f, 0.94f },
             { 0, 5, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.88f },
             { 0, 6, 0.0f, 0.86f }, { 1, 5, 0.0f, 0.82f },
-            { 0, 11, 0.0f, 0.82f }, { 1, 11, 0.0f, 0.82f },
+            { 0, 11, 0.0f, 0.96f }, { 1, 11, 0.0f, 0.92f },
+            { 11, 2, 0.0f, 0.92f }, { 11, 3, 0.0f, 0.90f },
+            { 11, 7, 0.0f, 0.84f }, { 11, 9, 0.0f, 0.84f },
             { 0, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
             { 0, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }
         };
         result.motors = {
-            MotorConstraint{ 1, 0, 7 }, MotorConstraint{ 0, 7, 8 },
-            MotorConstraint{ 1, 0, 9 }, MotorConstraint{ 0, 9, 10 }
+            MotorConstraint{ 11, 0, 7 }, MotorConstraint{ 0, 7, 8 },
+            MotorConstraint{ 11, 0, 9 }, MotorConstraint{ 0, 9, 10 }
         };
         result.active_motor_count = 4;
         result.root_node = 0;
-        result.torso_node = 1;
+        result.torso_node = 11;
         result.head_node = 3;
         result.left_contact_node = 8;
         result.right_contact_node = 10;
-        add_passive_feet(result, 0.15f, 0.25f);
+        add_passive_feet(result, 0.17f, 0.29f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 32.0f, 54.0f, 0.042f, 0.047f);
+        calibrate_grounded_defaults(result, 34.0f, 58.0f, 0.038f, 0.044f);
         return result;
     }
 
@@ -946,17 +948,36 @@ namespace runner::sim
                 incoming_material_density_ = item.density;
             }
         }
-        const float center_ground = ground_height_at(root.position.x);
-        const float left_cost = left_density + std::max(0.0f,
-            ground_height_at(root.position.x - 1.25f) - center_ground) * 3.0f;
-        const float right_cost = right_density + std::max(0.0f,
-            ground_height_at(root.position.x + 1.25f) - center_ground) * 3.0f;
-        const float delta_cost = left_cost - right_cost;
-        free_space_direction_ = std::abs(delta_cost) < 0.08f
-            ? 0.0f : (delta_cost > 0.0f ? 1.0f : -1.0f);
+        const float left_surface = std::min(
+            ground_height_at(root.position.x - 0.85f),
+            ground_height_at(root.position.x - 1.35f));
+        const float right_surface = std::min(
+            ground_height_at(root.position.x + 0.85f),
+            ground_height_at(root.position.x + 1.35f));
+        const float left_space = root.position.y + root.radius - left_surface
+            - left_density * 0.18f;
+        const float right_space = root.position.y + root.radius - right_surface
+            - right_density * 0.18f;
+        const float space_delta = right_space - left_space;
+        free_space_direction_ = std::abs(space_delta) < 0.06f
+            ? 0.0f : (space_delta > 0.0f ? 1.0f : -1.0f);
+        auto node_burial_depth = [&](std::uint16_t node) noexcept
+        {
+            if (!valid_node(node))
+                return 0.0f;
+            const Particle& particle = particles_[node];
+            return ground_height_at(particle.position.x)
+                - (particle.position.y - particle.radius);
+        };
+        const float head_burial = node_burial_depth(blueprint_.head_node);
+        const float torso_burial = node_burial_depth(blueprint_.torso_node);
+        const float left_wall = ground_height_at(root.position.x - 0.70f)
+            - (root.position.y - root.radius);
+        const float right_wall = ground_height_at(root.position.x + 0.70f)
+            - (root.position.y - root.radius);
         const bool trapped = burial_depth_ > 0.32f
-            && (obstruction_mask_ & 0x3u) == 0x3u
-            && (left_density + right_density) > 1.4f;
+            && head_burial > 0.18f && torso_burial > 0.18f
+            && left_wall > 0.18f && right_wall > 0.18f;
         buried_no_escape_seconds_ = trapped
             ? buried_no_escape_seconds_ + dt
             : std::max(0.0f, buried_no_escape_seconds_ - dt * 2.0f);
@@ -2125,22 +2146,41 @@ namespace runner::sim
             || head_height_ratio < 0.52f
             || (blueprint_.paired_leg_chains()
                 && (support_span_ratio < 0.35f || support_span_ratio > 2.10f));
+        const bool horizontal_body = blueprint_.horizontal_body_plan();
+        const float upright_threshold = horizontal_body ? 0.78f : 0.84f;
+        const float head_threshold = horizontal_body ? 0.58f : 0.62f;
+        const float slip_threshold = horizontal_body ? 0.18f : 0.10f;
+        const float vertical_speed_threshold = horizontal_body ? 1.85f : 1.50f;
+        const float stance_grace_limit = horizontal_body ? 1.40f : 0.60f;
         const bool stable_stance_frame = feet_supported
             && support_layout_valid
-            && current_uprightness >= 0.84f
-            && head_height_ratio >= 0.62f
-            && stance_slip_speed_ <= 0.10f
+            && current_uprightness >= upright_threshold
+            && head_height_ratio >= head_threshold
+            && stance_slip_speed_ <= slip_threshold
             && std::abs(torso_turn_speed_) <= 2.00f
             && current_joint_speed <= 12.0f
-            && std::abs(root_vertical_speed) <= 1.50f;
+            && std::abs(root_vertical_speed) <= vertical_speed_threshold;
+        const bool recoverable_horizontal_stance = horizontal_body
+            && feet_supported && support_layout_valid && !non_foot_grounded_
+            && current_uprightness >= 0.70f && head_height_ratio >= 0.54f
+            && stance_slip_speed_ <= 0.35f
+            && std::abs(torso_turn_speed_) <= 2.50f
+            && current_joint_speed <= 12.0f
+            && std::abs(root_vertical_speed) <= 2.25f;
         if (stable_stance_frame)
         {
             stance_failure_grace_seconds_ = std::max(
                 0.0f, stance_failure_grace_seconds_ - dt * 2.0f);
             stable_stance_seconds_ += dt;
         }
+        else if (recoverable_horizontal_stance)
+        {
+            stance_failure_grace_seconds_ = std::min(
+                stance_grace_limit, stance_failure_grace_seconds_ + dt);
+            stable_stance_seconds_ += dt * 0.60f;
+        }
         else if (!catastrophic_stance_failure
-            && stance_failure_grace_seconds_ < 0.60f)
+            && stance_failure_grace_seconds_ < stance_grace_limit)
         {
             stance_failure_grace_seconds_ += dt;
             stable_stance_seconds_ = std::max(
