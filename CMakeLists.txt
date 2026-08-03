@@ -1,13 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 
-# Runner v0.7.9 publication trigger.
-if(MSVC)
-    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-else()
-    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-endif()
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.9 LANGUAGES CXX)
+project(Runner VERSION 0.7.10 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -103,6 +98,12 @@ endif()
 if(RUNNER_BUILD_TESTS)
     include(CTest)
     enable_testing()
+    add_test(NAME Runner.RepositoryHygiene
+        COMMAND ${CMAKE_COMMAND}
+            -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
+    set_tests_properties(Runner.RepositoryHygiene PROPERTIES TIMEOUT 30)
+
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
     target_compile_features(RunnerCoreTests PRIVATE cxx_std_23)

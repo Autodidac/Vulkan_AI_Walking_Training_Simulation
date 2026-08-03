@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.9
+**Target:** Runner v0.7.10
 
-**Release state:** PUBLISHED — Runner v0.7.9 acceptance matrix, package, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.
+**Release state:** IN VALIDATION — Runner v0.7.10 changelog, mission-ledger, source, documentation, acceptance, package, and release cleanup.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -787,3 +787,1441 @@ Build with GCC 14 warnings-as-errors and the complete Windows Vulkan toolchain, 
 - Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed
 - Merged work and diagnostic branches removed; open pull requests: `0`; remaining branches: `main`
 - Contradictory released-package evidence reopens only the exact affected mission
+
+## v0.7.10 repository consolidation and cleanup
+
+### WALK-CHANGELOG-104 — Single authoritative changelog
+**Status:** IN VALIDATION
+
+Merge every `RELEASE_NOTES*.md` document into `CHANGELOG.md`, preserve release history, package the changelog, and prevent per-release note files from returning.
+
+### WALK-CACHE-105 — Single authoritative mission cache
+**Status:** IN VALIDATION
+
+`missioncache.md` is the only mission-named Markdown document. Any legacy mission ledger is imported before deletion, and unfinished work remains explicit rather than disappearing during cleanup.
+
+### WALK-SOURCE-106 — Source and documentation cleanup
+**Status:** IN VALIDATION
+
+Remove stale release triggers and validation debris, simplify duplicated CMake setup, replace contradictory README history, normalize text hygiene, and retain current build and runtime instructions.
+
+### WALK-ACCEPT-107 — Harden executable acceptance
+**Status:** IN VALIDATION
+
+Use true two-dimensional semantic-support clearance, reject an empty acceptance report, verify every curriculum stage label, and retain deterministic live acceptance across all authored presets.
+
+### WALK-RELEASE-108 — Publish audited Runner v0.7.10
+**Status:** IN VALIDATION
+
+Pass Linux warnings-as-errors, the complete Windows Vulkan build and tests, repository hygiene, build-tree/installed/extracted acceptance diagnostics, package manifest and checksum verification, release re-download audit, branch cleanup, and open-PR audit.
+
+## Imported legacy mission ledgers
+
+### Imported from `MISSIONS.md`
+
+# Runner Mission Ledger
+
+This file is the release-blocking source of truth for the Vulkan AI walking trainer.
+
+## Rules
+
+- Missions remain `OPEN`, `ACTIVE`, `BLOCKED`, or `VERIFIED` until evidence closes them.
+- A feature is not complete because a class, thread, coroutine, or button exists in source.
+- Every release must link the implementation, tests, measured behavior, and exact source commit.
+- Missed or deferred missions carry forward and may not be silently removed.
+
+## WALK-RIG-001 — Hip/joint editing must never lock the UI
+
+**Status:** VERIFIED
+
+Human, chicken, biped, quadruped, and monoped joint/node edits must be queued and coalesced. The input/render thread must never wait for PPO rollout, optimizer work, deterministic evaluation, curriculum transitions, rig evolution, autosave, or checkpoint serialization.
+
+**Acceptance:**
+
+- Selecting, dragging, and releasing every hip and knee node remains responsive while MAX CPU training is active.
+- The public edit call returns within one render frame budget.
+- The trainer eventually applies the newest coalesced rig state.
+- A stress test repeatedly edits hip nodes while training and detects no deadlock, long stall, data race, or invalid rig publication.
+
+## WALK-CONC-001 — Real persistent CPU parallelism
+
+**Status:** VERIFIED
+
+- Keep persistent rollout workers.
+- Parallelize independent environment simulation.
+- Parallelize deterministic evaluation where safe.
+- Parallelize PPO minibatch gradient generation using worker-local gradients followed by deterministic reduction.
+- Reserve capacity for input/render and avoid transient thread creation.
+- Report real worker count, utilization, rollout throughput, update throughput, and queue depth.
+
+**Acceptance:** measured training throughput increases across NORMAL, FASTER, and MAX CPU modes on a multicore CPU without freezing the UI.
+
+## WALK-CORO-001 — Useful C++23 coroutine pipeline
+
+**Status:** ACTIVE
+
+Coroutines must divide meaningful trainer stages rather than merely wrapping one serial update:
+
+1. apply queued commands,
+2. launch/await rollout collection,
+3. compute advantages,
+4. launch/await parallel gradient batches,
+5. reduce/apply optimizer update,
+6. evaluate/curriculum/evolution,
+7. publish immutable snapshot,
+8. schedule autosave,
+9. throttle according to speed mode.
+
+**Acceptance:** coroutine suspension points correspond to independently schedulable work and are visible in diagnostics.
+
+## WALK-UI-001 — Functional speed controls
+
+**Status:** VERIFIED
+
+NORMAL, FASTER, and MAX CPU must change measured trainer duty cycle and throughput. They must not merely batch additional serial updates behind the same mutex.
+
+Show:
+
+- updates per second,
+- environment steps per second,
+- rollout worker count,
+- CPU mode,
+- pending commands,
+- trainer busy/idle state.
+
+**Acceptance:** automated control tests verify mode latching; runtime benchmark shows distinct throughput and CPU-use behavior for all modes.
+
+## WALK-ARCH-001 — Remove coarse trainer mutex stalls
+
+**Status:** ACTIVE
+
+No mutex may be held across an entire PPO update, multi-agent evaluation, rig evolution, or disk autosave while UI-facing operations can request the same lock.
+
+Use immutable snapshots, command queues, worker-owned mutable state, short publication locks, and asynchronous persistence.
+
+## WALK-OPT-001 — Parallel PPO optimizer
+
+**Status:** VERIFIED
+
+The current rollout simulation is parallel but the policy-gradient minibatch loop is serial. Add worker-local policy/gradient scratch, partition minibatches, reduce gradients deterministically, and apply Adam once per reduced batch.
+
+**Acceptance:** identical seed/config produces deterministic parameters within the documented floating-point tolerance, and profiler data shows optimizer work distributed across workers.
+
+## WALK-IO-001 — Asynchronous checkpoint/autosave
+
+**Status:** OPEN
+
+Serialize immutable policy/optimizer/rig snapshots on an I/O task without holding the live trainer lock. Use temporary-file plus atomic rename semantics.
+
+**Acceptance:** checkpoint saves do not create visible input stalls or pause rollout workers for disk latency.
+
+## WALK-TEST-001 — Concurrency regression suite
+
+**Status:** OPEN
+
+Required fixtures:
+
+- hip drag during NORMAL training,
+- hip drag during MAX CPU training,
+- repeated preset swaps during training,
+- speed-mode switching under load,
+- pause/single update/background resume,
+- checkpoint save/load under load,
+- clean cancellation and shutdown,
+- deterministic update comparison,
+- ThreadSanitizer-capable CPU test configuration.
+
+## WALK-REL-001 — Verified v0.5 release
+
+**Status:** VERIFIED
+
+Do not publish the next release until:
+
+- Windows Release build passes,
+- core and concurrency tests pass,
+- Vulkan diagnostic passes,
+- hip-edit stress test passes,
+- all speed modes show measured differences,
+- packaged executable reports the correct version,
+- release asset identifies the exact source commit.
+
+## WALK-COURSE-001 — Procedural obstacle and recovery treadmill
+
+**Status:** VERIFIED
+
+The live and training environments must continuously expose movement even when a controller produces no forward translation. A bounded virtual course advances independently of the walker and remains synchronized with physics, observations, rendering, rewards, and diagnostics.
+
+Required terrain classes:
+
+- flat road,
+- inclines,
+- elevated plateaus,
+- declines,
+- rolling hills,
+- rough and uneven ground.
+
+Required physical obstacle classes:
+
+- rocks and low ground clutter,
+- hurdles,
+- overhead and duck-under bars,
+- moving hazards,
+- thrown projectiles with visible trajectories and physical impulse.
+
+Required visual references:
+
+- moving road dashes,
+- numbered metre markers,
+- mile conversion on markers,
+- obstacle labels and approach visibility,
+- actual walker distance separated from virtual course distance.
+
+Required recovery behavior:
+
+- collisions or major balance loss open a bounded recovery window,
+- improving uprightness earns incremental reward,
+- regaining supported upright balance earns a recovery bonus,
+- falling or timing out applies a recovery penalty,
+- live telemetry shows recovery-active state, attempts, and successes.
+
+**Acceptance:**
+
+- Course progress advances while the creature remains stationary.
+- Terrain movement remains continuous across incline, plateau, decline, hill, and uneven sections.
+- Every requested obstacle class is generated procedurally and represented in observations.
+- Projectile and moving-hazard collisions apply bounded physical disturbance.
+- Road markers make virtual movement obvious without faking actual walker distance.
+- Recovery reward/state remains finite and deterministic.
+- Core tests, full Windows build, Vulkan diagnostic, packaging, and exact release checksum pass before this mission becomes `VERIFIED`.
+
+
+## WALK-OBS-001 — Complete obstacle sensing and recovery reward integrity
+
+**Status:** VERIFIED
+
+Every physical obstacle class must expose its actual collision size to the policy. Radial rocks, projectiles, and moving hazards use radius; hurdles and overhead bars use rectangular extent. Harmless upright contact must not open a rewardable recovery event.
+
+**Acceptance:**
+
+- Rock, projectile, and moving-hazard radius is present in observations.
+- Hurdle and overhead-bar extent remains present in observations.
+- Destabilizing impacts and major balance loss start recovery.
+- Harmless upright contact cannot farm recovery bonuses.
+- Hard falls remain terminal.
+- Full Windows/Vulkan build, deterministic tests, diagnostics, package, and checksum pass.
+
+## WALK-PHYS-001 — Biped support, traction, and world-anchored debris
+
+**Status:** VERIFIED
+
+Passive heel/toe geometry must participate in semantic left/right support. Designated feet require usable traction, while incidental head, tail, and body contacts must not pin the creature. Procedural rocks, hazards, and debris must remain in course/world coordinates and may not inherit actor translation.
+
+**Acceptance:**
+
+- Passive biped heel/toe contacts drive support observations, gait validation, airborne checks, rewards, and recovery.
+- Foot contact retains substantially less horizontal velocity than incidental body contact.
+- Head, tail, and torso ground contact slide rather than becoming unintended brakes.
+- A course feature's world position depends on its stable sequence and course progress, never root position.
+- Incompatible v0.6.1 autosaves are not resumed automatically.
+- Full Windows/Vulkan build, deterministic tests, Vulkan diagnostic, package, checksum, and exact-source evidence pass.
+
+## WALK-UI-002 — Readable responsive telemetry
+
+**Status:** VERIFIED
+
+The live and rig interfaces must remain readable at ordinary desktop sizes. Text may not overlap adjacent labels, buttons, cards, or the title bar. Long status messages must wrap or fit within their panel instead of being clipped into neighboring content.
+
+**Acceptance:**
+
+- Increase the default bitmap-font scale and minimum fitted scale.
+- Use a taller responsive title bar with non-overlapping tabs and subtitle.
+- Give live and rig side panels enough width for their controls.
+- Group live metrics into readable cards with larger vertical spacing.
+- Wrap long trainer/status lines and fit world telemetry to viewport width.
+- Full Windows/Vulkan build and executable diagnostics pass with the responsive layout.
+
+## WALK-COURSE-002 — Mile-marker obstacle schedule
+
+**Status:** VERIFIED
+
+All generated course elements must be anchored to shared course/mile-marker coordinates rather than actor position. Rocks, hurdles, overhead bars, moving hazards, and thrown projectiles must each appear in the advanced lesson. Every lesson receives a visible safe runway before its first obstacle, while bounded virtual course speed keeps the next marker from taking excessive real time to arrive.
+
+**Acceptance:**
+
+- Marker rendering and obstacle generation use the same spacing constant.
+- The first three markers form a 24-metre safe runway.
+- Advanced lessons cycle rock, hurdle, overhead bar, moving hazard, and projectile on consecutive markers.
+- Moving hazards oscillate around their marker; projectiles originate and arc around their marker.
+- No obstacle position includes actor/root translation.
+- Virtual course speed brings the first obstacle into view promptly without removing the safe runway.
+- Full Windows/Vulkan build, deterministic schedule tests, diagnostics, package, and exact-source evidence pass.
+
+## WALK-GAIT-002 — Real stepping instead of wheel sliding
+
+**Status:** VERIFIED
+
+Forward reward must represent alternating supported locomotion, not a body sliding across planted contacts. Natural knee lead and bent-leg clearance are allowed; only an egregious low-foot body/joint-first shove into a rock or hurdle receives a mild shaping penalty. Sustained double-supported sliding remains an invalid gait exploit.
+
+**Acceptance:**
+
+- Zero-step sliding receives no positive forward-progress multiplier.
+- Alternating contact plus visible swing-foot clearance earns the strongest gait multiplier.
+- Grounded foot-cluster slip is measured and penalized.
+- Sustained double-supported root motion with slipping feet terminates as wheel sliding.
+- A knee may lead naturally while the foot is rising, close to the obstacle, or already above useful clearance.
+- Only a large knee lead with a substantially trailing, low foot receives a mild shaping penalty and increments telemetry.
+- The joint-clearance rule never terminates an otherwise valid episode and never overrides learned get-up or obstacle strategies.
+- Foot-first and useful-clearance traversal are not penalized.
+- Full Windows/Vulkan build, deterministic gait tests, diagnostics, package, and exact-source evidence pass.
+
+## WALK-SAND-001 — Simulation-enemy locomotion curriculum
+
+**Status:** VERIFIED
+
+Retarget the curriculum from a generic treadmill demonstration to a grounded enemy controller suitable for later integration into a cellular sand simulation.
+
+**Acceptance:**
+
+- Spawn stance and flat patrol precede terrain and hazards.
+- Long flat sections separate sand mounds and loose/deformed patches.
+- Early debris and low-clearance hazards appear only on flat ground.
+- Terrain-plus-hazard combinations unlock only in later combat traversal at higher difficulty.
+- Deterministic evaluation actually runs long enough to encounter the first hazard.
+
+## WALK-ROLL-003 — Head, tail, and body rolling are invalid locomotion
+
+**Status:** VERIFIED
+
+Non-foot body contact may slide during a fall but may not become a movement strategy.
+
+**Acceptance:**
+
+- Head contact cannot remain grounded long enough to propel the rig.
+- Tail, torso, knee, and other non-foot ground contacts are detected semantically.
+- Sustained body-ground rotation terminates as `HEAD / TAIL / BODY ROLLING`.
+- Body-ground motion receives no gait progress multiplier and receives a strong penalty.
+- A new autosave namespace prevents the v0.6.2 rolling policy from resuming.
+
+## WALK-HAZARD-003 — Obstacles are hazards, never pickups or rewards
+
+**Status:** VERIFIED
+
+- Obstacles remain present through contact and are culled only after passing behind the actor.
+- Ordinary obstacle contact cannot open a positive recovery-reward loop.
+- Collision penalties exceed any incidental contact benefit.
+- Hazard labels communicate danger rather than collectible/reward semantics.
+
+## WALK-UI-003 — User-verified readable typography
+
+**Status:** IMPLEMENTED — USER VISUAL REVIEW
+
+The previous UI mission was incorrectly closed from compilation evidence without a visual acceptance pass. Increase all bitmap text substantially, enlarge minimum fitted text, marker signs, hazard labels, panels, and the default window. This mission remains active until the packaged application is visually confirmed readable by the user.
+
+## WALK-LOCO-004 — Obstacle-capable bipeds, quadrupeds, and multi-leg enemies
+
+**Status:** VERIFIED
+
+The biped still fails to establish a usable gait, and the quadruped can stall and quiver at hazards because the old safe motor envelope cannot lift a leg high enough. Add explicit four-legged and six-legged simulation-enemy bodies and eliminate the high-energy no-lift local optimum.
+
+**Acceptance:**
+
+- Biped and humanoid hips/knees have bounded travel sufficient to clear configured rocks and hurdles without requiring an artificial foot-before-knee ordering.
+- Quadruped can articulate a foot above the first debris target without excessive joint strength.
+- High-energy obstacle quivering with no useful leg lift is detected, penalized, and eventually invalidated.
+- Approaching a rock or hurdle creates a measurable foot-lift objective before collision.
+- The QUADRUPED preset is a true four-leg body, not a two-leg articulated biped with a long torso.
+- Near/far legs are staggered enough to remain distinguishable in side view.
+- Four-legged crawler and six-legged hexapod presets are structurally valid, selectable, trainable, and use multi-foot semantic support groups rather than treating extra feet as body contact.
+- Orange semantic foot nodes use flat-sole ground contact and cannot retain wheel-like horizontal velocity while grounded.
+- Sustained double-supported pivoting around stationary orange foot nodes is invalidated as `FOOT-NODE ROLLING`.
+- The UI renders primary orange foot contacts as flat soles rather than circular wheels.
+- Deterministic tests cover all built-in presets, leg travel, support clustering, obstacle approach, quiver rejection, flat-foot contact, and foot-pivot rolling rejection.
+- No release is prepared until every non-visual `OPEN` or `ACTIVE` mission in this ledger has passing evidence.
+
+## WALK-IDLE-005 — Zero movement resets the episode
+
+**Status:** VERIFIED
+
+A non-balance controller may not occupy a rollout for most of an episode while producing no translation, no new gait step, and no useful leg lift.
+
+**Acceptance:**
+
+- Startup settling and active recovery are exempt.
+- Two consecutive one-second zero-progress windows terminate as `ZERO MOVEMENT - RESET`.
+- A real step, useful obstacle lift, or meaningful translation clears the idle accumulator quickly.
+- Live telemetry shows the accumulated idle time.
+- Deterministic tests and a packaged runtime trace confirm prompt reset without rejecting useful get-up behavior.
+
+## WALK-GUIDE-006 — Automatic best-result self-imitation prior
+
+**Status:** VERIFIED
+
+The trainer automatically converts its best valid result into a small behavioral guide. The user does not need to author a demonstration, but may still correct the rig or controller through the existing tools.
+
+**Acceptance:**
+
+- Only a valid, grounded, stepped best result can seed the guide.
+- Frames containing body contact or orange-foot pivot rolling are excluded.
+- The guide contributes a bounded actor-only gradient and never replaces PPO reward learning.
+- Prior weight decays from a modest maximum toward a small floor as the best result ages.
+- A new stage, incompatible rig, reset, or better best result clears or rebuilds the guide.
+- UI reports guide frame count and current weight.
+
+## WALK-PIP-007 — Real training picture-in-picture
+
+**Status:** IMPLEMENTED — USER VISUAL REVIEW
+
+Publish one representative worker-owned rollout environment as an immutable snapshot and render it in a small upper-right picture-in-picture before the controls. It must show actual exploratory training, not a second deterministic live replay.
+
+**Acceptance:**
+
+- Snapshot copying occurs only at publication boundaries under worker ownership.
+- The PIP identifies itself as a raw training sample and displays its own distance and invalid-motion state.
+- Live rendering remains responsive while MAX CPU training is active.
+- User confirms the PIP is visible, useful, and does not obscure primary telemetry.
+
+## WALK-SKILL-008 — Ordered locomotion and acrobatics curriculum
+
+**Status:** IMPLEMENTED — USER TRAINING REVIEW
+
+Teach reusable skills in prerequisite order instead of exposing terrain and combat hazards before the controller owns basic body control:
+
+1. stand upright,
+2. duck and return to standing,
+3. jump from joint power and land upright,
+4. walk, then run,
+5. duck or jump while walking/running,
+6. perform controlled airborne flips and land,
+7. combine standing, ducking, jumping, walking/running, and up to three spins to pass a mixed goal course.
+
+Hazard contact is allowed. Touching an obstacle applies physical response and a bounded event penalty, but contact alone never terminates the episode. Passing the obstacle is the goal and earns progress. Ground rolling/body surfing remains invalid. A powered launch may remain airborne for a bounded stage-specific interval; hovering or unpowered sustained flight remains invalid. A fourth spin invalidates the run.
+
+**Acceptance:**
+
+- Curriculum labels and advancement follow the seven prerequisite stages above.
+- Stationary duck, jump, and flip lessons do not trigger zero-movement rejection.
+- Powered takeoff is recognized only when joint action energy and vertical launch speed exceed thresholds.
+- Jump and flip lessons require supported upright landings.
+- Flip lessons allow up to three airborne spins, while ground rolling and a fourth spin remain invalid.
+- Moving-skill and mixed-goal lessons require forward gait and at least one passed obstacle.
+- Ordinary hazard contact never creates a pickup/reward loop and never terminates by itself.
+- Evaluation, self-imitation eligibility, telemetry, and deterministic tests use duck, jump, landing, spin, and obstacle-pass evidence.
+- Real walking steps require measurable swing airtime and foot clearance; contact wiggles may not count as gait.
+- Straight double-supported skating and pivot rolling around planted semantic feet are invalid.
+- Policy actions are smoothed, early gait exploration receives a decaying periodic guide, and phase observations make repeatable cadence learnable before 10,000 updates.
+- The best valid policy is a protected champion: substantial or invalid evaluation regression immediately restores it, reduces learning rate/exploration, and prevents the 15,000-update collapse.
+- PPO uses a smaller clip range, fewer optimization passes, lower gradient norm, decaying entropy, bounded exploration, and a light champion anchor.
+- The four-action controller remains intact for this pass. Independently controllable humanoid arms require a later controller/output and checkpoint-format expansion rather than stealing leg controls.
+
+## v0.6.5 release closure
+
+All non-visual locomotion missions introduced or reopened after v0.6.3 have passing deterministic tests, full Windows SDL3/Vulkan/built-in bitmap UI build evidence, and Vulkan diagnostics. The release includes true four-leg and six-leg support semantics, flat semantic feet, mature anti-rolling gates, a longer obstacle runway, zero-motion reset, automatic best-result imitation, relaxed joint-clearance guidance, and actual training picture-in-picture publication.
+
+`WALK-UI-003` and `WALK-PIP-007` remain explicitly marked for user visual review because compilation cannot prove readability or preferred placement. They no longer conceal unfinished implementation work and do not block the requested v0.6.5 package.
+
+The coroutine, ownership, asynchronous persistence, and ThreadSanitizer missions remain tracked for the separate v0.7 runtime pipeline in `V070_MASTER_PLAN.md`; they were never silently deleted or misrepresented as part of this locomotion release.
+
+### Imported from `published-audit/missioncache.md`
+
+# Runner mission cache
+
+This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, packaged-runtime behavior, and release evidence agree. Contradictory runtime evidence reopens the mission.
+
+## Release target
+
+**Target:** Runner v0.7.4
+
+**Release state:** PUBLISHED — v0.7.4 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+
+v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
+
+
+
+
+## v0.7.4 rebrand and duck-training correction
+
+### WALK-BRAND-040 — Remove the former project brand completely
+**Status:** PACKAGE VERIFIED
+
+The application title, executable, CMake targets, namespaces, macros, autosaves, rig/state magic, package names, documentation, tests, and release notes use Runner naming. A case-insensitive repository search for the former word must return zero matches. The external GUI dependency is removed and the required bitmap font is local.
+
+### WALK-TITLE-041 — Replace the simulation-enemy trainer title
+**Status:** PACKAGE VERIFIED
+
+The visible title is `AUTONOMOUS RIG TRAINER`, with `AUTONOMOUS PHYSICS LOCOMOTION LAB` as the project subtitle. Sand-simulation hazards may remain curriculum inputs without defining the whole trainer.
+
+### WALK-DUCK-042 — Compression-first duck curriculum
+**Status:** PACKAGE VERIFIED
+
+Stage two begins with a broad stationary overhead platen. It waits for settling, descends gradually, holds at a safe crouch target, retracts, and requires stable recovery before completion. Moving low bars remain a later lesson.
+
+### WALK-COLLIDE-043 — Non-clipping duck press
+**Status:** PACKAGE VERIFIED
+
+The platen is a one-way underside collider. It applies downward contact pressure, never passes through a particle, records penetration, and invalidates excessive penetration rather than treating clipping as duck evidence.
+
+### WALK-CONTROL-044 — Legs before shoulders during ducking
+**Status:** PACKAGE VERIFIED
+
+The duck teacher uses hips and knees while arm outputs remain neutral. Repeated torso/shoulder-axis swinging under the press is penalized and then invalidated instead of becoming the primary learned response.
+
+### WALK-HAZARD-045 — Preparation distance for moving hazards
+**Status:** PACKAGE VERIFIED
+
+Later moving low bars, hurdles, and mixed hazards remain at least 6.5 m or 5 m ahead of the rig when selected so the policy has time to perform a meaningful movement.
+
+### WALK-CARRY-046 — Complete carried missions and publish v0.7.4
+**Status:** PACKAGE VERIFIED
+
+All prior body integrity, feet-first control, passive-head/tail, preview, DPI, units, flip/spin, statistics, concurrency, persistence, launch, and package requirements are revalidated against the clean Runner source and Windows package before publication.
+
+
+
+### WALK-FEET-047 — Prevent fused support plates
+**Status:** PACKAGE VERIFIED
+
+Left and right feet use smaller outward-facing plates plus a solver separation constraint. They may contact the ground together but cannot occupy the same support blob.
+
+### WALK-CHICKEN-048 — Rebuild the chicken preset as a bird
+**Status:** PACKAGE VERIFIED
+
+The preset has a horizontal body, raised neck and head, visible beak, tail, two articulated legs, separate feet, and only leg motors. A generic upright biped does not satisfy this mission.
+
+### WALK-DUCK-049 — Complete two-part duck learning
+**Status:** PACKAGE VERIFIED
+
+The rig must first survive the stationary compression platen, hold a leg-driven crouch, recover, then pass a horizontal moving low bar that begins at least 6 m ahead. Stage completion requires evidence from both obstacles.
+
+### WALK-OBSERVE-050 — Make the duck obstacle learnable
+**Status:** PACKAGE VERIFIED
+
+The policy receives the platen/low-bar geometry early enough to act, teacher assistance remains leg-only, torso-axis swinging is penalized, and the later bar cannot appear as an unavoidable vertical wall.
+
+
+
+## Full conversation reconciliation for v0.7.4
+
+This section is the explicit carry-forward audit of the complete Runner conversation trail. Earlier broad mission names remain valid, but the requirements below are no longer allowed to hide behind shorthand. Every item must be implemented, deterministically tested where practical, exercised by the full Windows package, and preserved in release evidence. Contradictory packaged-runtime screenshots reopen the exact affected mission.
+
+### WALK-AUDIT-051 — No silent omissions across project conversations
+**Status:** PACKAGE VERIFIED
+
+The release pass must reconcile every prior request about rigs, feet, joints, curriculum, hazards, learning, concurrency, PIP, UI, statistics, persistence, launch, package contents, branches, pull requests, and release assets. Anything not completed remains explicitly open rather than disappearing during cleanup.
+
+### WALK-RIGLAB-052 — Safe and complete rig editing
+**Status:** PACKAGE VERIFIED
+
+The rig lab exposes node, bone, motor, semantic root/torso/head, and left/right support meaning. Joint limits and strength remain inspectable and testable per joint or coordinated group. Selecting or dragging the hip cannot lock the application. Required default structural joints cannot be deleted into an invalid rig; invalid edits are rejected without blocking the training worker.
+
+### WALK-PRESETS-053 — Distinct stable preset anatomy
+**Status:** PACKAGE VERIFIED
+
+Humanoid, biped, chicken, quadruped, four-leg crawler, six-leg rig, and monoped presets remain structurally distinct, finite, connected, grounded, and visually recognisable. Every legged preset has explicit semantic feet or support contacts. Stable quadruped-derived physical limits may guide other defaults without turning different rigs into the same body.
+
+### WALK-PIPELINE-054 — Continuous background training without mode stalls
+**Status:** PACKAGE VERIFIED
+
+Training continues on worker-owned state while the live simulation renders immutable publications. C++23 coroutine stages, persistent rollout workers, parallel gradient workers, asynchronous persistence, and NORMAL/FASTER/MAX controls remain functional. Switching between live and rig-lab views does not stop learning, reset the controller, or require reduced visualisation modes.
+
+### WALK-COURSE-055 — Long readable locomotion course
+**Status:** PACKAGE VERIFIED
+
+The course includes clear ground and road reference lines, long flat preparation areas, later ramps, inclines, declines, hills, and uneven terrain. Metric and Imperial modes use quarter-kilometre or quarter-mile reference markers without changing the denser internal obstacle schedule.
+
+### WALK-HAZARDS-056 — Learnable hazards that must be passed
+**Status:** PACKAGE VERIFIED
+
+Rocks, hurdles, low bars, moving hazards, thrown objects, and mixed terrain are world-anchored curriculum obstacles rather than pickups or actor-attached debris. Contact is permitted when physically appropriate, but the goal remains passing or recovering from the hazard. Observation includes type, distance, dimensions, motion, and enough approach time to perform a meaningful movement.
+
+### WALK-CURRICULUM-057 — Ordered reusable movement skills
+**Status:** PACKAGE VERIFIED
+
+The evidence-gated order is standing, compression duck and recovery, powered jump and landing, real alternating walk/run, moving low-bar or hurdle avoidance, controlled landed flips, then mixed traversal combining movement with ducking, jumping, or flipping. Scalar reward alone cannot skip prerequisites.
+
+### WALK-GATES-058 — Anti-exploit locomotion rules
+**Status:** PACKAGE VERIFIED
+
+More than three airborne rotations, flipping at or above 50 km/h, unpowered sustained flight, out-of-bounds motion, micro-movement, zero progress, wheel sliding, body rolling, foot-node rolling, head dragging, collapsed support, hazard quivering, and knee/body-first obstacle shoving cannot qualify or seed elite state. Early harmless settling retains bounded grace.
+
+### WALK-AIRTIME-059 — Powered but bounded aerial ability
+**Status:** PACKAGE VERIFIED
+
+A rig may jump or briefly fly only when joint power produces a recognised launch in an allowed lesson. The allowance is stage-bounded, never substitutes for walking, and ends in a controlled landing. Generic rotation remains diagnostic and penalised outside the dedicated flip lesson.
+
+### WALK-CONTROL-060 — Coordinated joints with feet-first authority
+**Status:** PACKAGE VERIFIED
+
+Hips, knees, shoulders, and elbows may use light stage-aware coordination while PPO keeps residual per-joint control. Feet and leg chains establish support before arms gain authority. Ducking uses hips and knees rather than a robot-like torso or main-shoulder-axis swing; arms remain available later for balance and acrobatics.
+
+### WALK-PIPUI-061 — Full-body PIP and readable responsive UI
+**Status:** PACKAGE VERIFIED
+
+The training PIP shows only a current connected full rig and automatically fits all particles; it never zooms into detached feet or publishes stale collapsed posture. Text, panels, telemetry, controls, and the full-width DPI-safe background remain readable without overlap at supported window sizes.
+
+### WALK-STATS-062 — Complete rig, session, and persisted totals
+**Status:** PACKAGE VERIFIED
+
+Per-rig lifetime statistics include age, updates, environment steps, episodes, valid and invalid episodes, distance, alternating steps, falls or invalidations, collisions, powered jumps, landed jumps, landed flips, obstacles passed, accepted/rejected rig changes, and best stage reached. Session totals and persisted all-time totals expose the same relevant counters plus resets and rollbacks. Counter baselines change only with the rig signature, and incompatible older state cannot silently corrupt totals.
+
+### WALK-LEARNING-063 — Best-result imitation without regression
+**Status:** PACKAGE VERIFIED
+
+Only current stage-valid trajectories may become champions, rollback anchors, evolved-rig seeds, imitation samples, or PIP representatives. Robust perturbed evaluation, quality-before-reward ranking, regression rollback, bounded imitation weight, and fresh-policy semantics remain shared across training, evaluation, preview, and live execution.
+
+### WALK-LAUNCH-064 — Clean executable-relative package launch
+**Status:** PACKAGE VERIFIED
+
+The source launcher and installed launcher select the current adjacent or Release executable, find shaders/assets relative to that executable, and work from an unrelated current directory. Stale root executables, stale learned state, missing DLLs, or source-tree assumptions are release blockers.
+
+### WALK-RELEASE-065 — Tidy audited release repository
+**Status:** PACKAGE VERIFIED
+
+A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
+
+### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
+**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+
+Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
+
+## v0.7.3 live-runtime correction
+
+### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
+**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+
+Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
+
+### WALK-FOOT-030 — Connected rigid heel-toe foot plates
+**Status:** PACKAGE VERIFIED
+
+Each biped foot uses one ankle/heel/toe triangle with two semantic contacts. Any stretched bone or detached contact cluster invalidates the rollout before champion, imitation, or preview publication.
+
+### WALK-CONTROL-031 — Feet-first control authority
+**Status:** PACKAGE VERIFIED
+
+Balance and duck lessons must load feet through knees and hips before arms receive meaningful policy authority. Bilateral coordination remains a light prior and cannot force mirrored leg collapse.
+
+### WALK-PASSIVE-032 — Stable heads and tails on every rig
+**Status:** PACKAGE VERIFIED
+
+Head and passive-tail endpoints receive realistic mass, velocity damping, and torso-relative passive angular stabilization. They may react naturally but cannot behave as uncontrolled pendulums.
+
+### WALK-PREVIEW-033 — Complete-body training preview
+**Status:** PACKAGE VERIFIED
+
+The training preview may publish only a current, finite, connected full-body snapshot. Its camera fits complete particle bounds; a detached or exploded body is rejected rather than showing isolated feet.
+
+### WALK-TEST-034 — Runtime-shaped regression coverage
+**Status:** PACKAGE VERIFIED
+
+Tests cover detached semantic feet, full-skeleton stretch bounds, leg-versus-arm authority, passive head/tail containment, current-frame preview eligibility, Linux C++23 validation, and the complete Windows Vulkan package.
+
+
+### WALK-UI-035 — Full-width DPI-safe GUI background
+**Status:** PACKAGE VERIFIED
+
+The header and frame background must span the actual Vulkan drawable width at Windows DPI scaling. Mouse hit testing is converted from SDL logical coordinates to drawable coordinates.
+
+### WALK-UNITS-036 — Metric/Imperial quarter markers
+**Status:** PACKAGE VERIFIED
+
+The live panel exposes Metric and Imperial modes. Course reference signs are spaced every 0.25 km or 0.25 mile and all speed/distance labels follow the selected mode.
+
+### WALK-FLIP-037 — Separate flips from generic spin
+**Status:** PACKAGE VERIFIED
+
+A flip is powered airborne somersault rotation in the flip lesson followed by a landing. Generic rotation is tracked separately, is never accepted as flip evidence, and is penalized when it destabilizes other lessons.
+
+### WALK-STATS-038 — Rig lifetime and cumulative runtime totals
+**Status:** PACKAGE VERIFIED — COMPLETED BY WALK-STATS-062
+
+The earlier v0.7.3 display covered only age, updates, environment steps, and session runtime. WALK-STATS-062 now carries the complete requested per-rig, session, and persisted all-time counters, including episodes, distance, steps, falls/invalidations, collisions, jumps, flips, obstacles, rig acceptance/rejection, resets, and rollbacks.
+
+## v0.7.2 packaged-runtime regression correction
+
+Adam's August 1, 2026 screenshots contradicted the v0.7.1 runtime conclusion. They reopened the affected missions instead of being treated as cosmetic feedback.
+
+### WALK-REG-022 — Whole-simulation regression correction
+**Status:** VERIFIED
+
+The carried-forward rig, controller, curriculum, persistence, PIP, launch, concurrency, and package requirements were revalidated after the correction. Linux and Windows builds, all deterministic tests, runtime diagnostics, package extraction, and independent checksum verification passed.
+
+### WALK-SYNERGY-023 — Coordinated joint groups with learned residuals
+**Status:** VERIFIED
+
+Bilateral hip, knee, shoulder, and elbow groups provide stage-aware movement structure while PPO retains residual per-joint control. The same effective controller is used by rollout collection, deterministic evaluation, rig evaluation, preview, and live execution.
+
+### WALK-FOOT-024 — Dedicated semantic feet below articulated ankles
+**Status:** VERIFIED
+
+Lower-leg motor endpoints are ankles rather than foot contacts. Each biped leg uses a braced passive ankle adapter connected to a separate foot plate, heel, and toe. Only those explicit semantic foot nodes receive support and traction classification.
+
+### WALK-DUCK-025 — Obstacle-conditioned duck, clear, and recover lesson
+**Status:** VERIFIED
+
+The second lesson presents a moving low bar. Qualification requires lowering the head with semantic foot support, clearing the actual obstacle, and returning to stable stance. Empty-space crouching and permanent collapse cannot complete or seed the lesson.
+
+### WALK-SAMPLE-026 — Current-frame training-sample integrity
+**Status:** VERIFIED
+
+Historical stance evidence cannot authorize a currently collapsed PIP frame. Display eligibility requires current semantic foot support, no current non-foot support, and intact direct pelvis-to-torso and torso-to-head body segments. A valid crouch remains displayable while the screenshot collapse is rejected.
+
+### WALK-LAUNCH-027 — Reject stale source-tree executables and v0.7.1 state
+**Status:** VERIFIED
+
+Source-tree `run.bat` selects the current Windows Release build instead of a stale root executable. Installed packages select the adjacent executable. v0.7.2 uses new checkpoint semantics, autonomy-state format, and isolated autosave paths.
+
+## Training quality
+
+### WALK-MOTOR-012 — Reciprocal parent-side motor reaction
+**Status:** VERIFIED
+
+Every motor divides correction between the driven subtree and complete parent side using rotational inertia, without world-space joint anchors or center-of-mass injection.
+
+### WALK-OBS-018 — Non-overlapping eight-motor observation layout
+**Status:** VERIFIED
+
+The humanoid retains forty non-overlapping observation channels covering eight angles, eight velocities, contacts, foot placement, terrain, obstacle, stage, and phase state.
+
+### WALK-TRAIN-013 — Reject collapsed poses as training success
+**Status:** VERIFIED
+
+Collapsed, body-supported, violent-joint, rolling, skating, hovering, motionless, and prerequisite-incomplete candidates cannot become champions, rollback anchors, evolved-rig seeds, imitation sources, or displayed training samples.
+
+### WALK-CURR-014 — Evidence-gated ordered curriculum
+**Status:** VERIFIED
+
+Advancement requires retained evidence for stand, low-bar duck and recovery, powered jump and landing, alternating gait, moving avoidance, controlled flips, and mixed traversal. Scalar reward cannot bypass missing evidence.
+
+### WALK-BEST-015 — Stage-valid best-policy and imitation selection
+**Status:** VERIFIED
+
+Stage validity and evidence quality outrank scalar reward throughout champion selection, rollback, rig evolution, imitation, and PIP representative selection.
+
+### WALK-EVAL-019 — Latched robust balance evaluation
+**Status:** VERIFIED
+
+A completed three-second stage-valid stand is latched. Six perturbed starts are evaluated and at least four must succeed; invalid later-stage evaluation remains strict.
+
+### WALK-CTRL-020 — Shared effective controller path
+**Status:** VERIFIED
+
+Training, deterministic evaluation, imitation replay, rig evaluation, preview, and live execution share the coordinated effective controller.
+
+### WALK-STATE-016 — Invalidate incompatible learned state
+**Status:** VERIFIED
+
+Training checkpoints use v0.7.2 semantics `0x0007'0200`, autonomy state format 5, and v0.7.2 autosave paths. Earlier optimizer, curriculum, champion, rig-evolution, and imitation state cannot silently resume.
+
+### WALK-RUNTIME-017 — Bounded packaged-runtime acceptance
+**Status:** VERIFIED
+
+The full Windows application passed bounded standing acquisition, robust perturbed evaluation, adversarial collapse rejection, current-frame PIP rejection, concurrency tests, runtime pipeline tests, package layout, and unrelated-working-directory diagnostics.
+
+### WALK-LAUNCH-021 — Executable-relative clean-folder launch
+**Status:** VERIFIED
+
+The build tree, installed executable, installed `run.bat`, independently extracted executable, and independently extracted `run.bat` all passed version and package diagnostics from unrelated working directories.
+
+## Runtime architecture
+
+### WALK-CORO-001 — Meaningful C++23 training pipeline
+**Status:** VERIFIED
+
+Queued commands, rollout collection, advantage computation, parallel gradient generation, deterministic reduction, optimizer application, evaluation, immutable publication, persistence, and throttle stages remain observable.
+
+### WALK-ARCH-001 — Worker-owned mutable trainer state
+**Status:** VERIFIED
+
+The worker exclusively owns mutable PPO, optimizer, curriculum, rig-evolution, and checkpoint state; the UI consumes immutable publications and coalesced commands.
+
+### WALK-IO-001 — Asynchronous checkpoint and autosave
+**Status:** VERIFIED
+
+Checkpoint, rig, and autonomy-state snapshots remain coalesced and published by a dedicated `std::jthread` through temporary-file and atomic-rename writes.
+
+### WALK-TEST-001 — Cross-platform concurrency regression suite
+**Status:** VERIFIED
+
+Hip edits, preset changes, CPU modes, pause/single-step, checkpoint load/save, staged updates, cancellation, coalescing, Linux GCC 14, and Windows full-application coverage pass.
+
+## Ordered movement curriculum
+
+### WALK-SKILL-008 — Ordered reusable skills
+**Status:** VERIFIED
+
+Stand, low-bar duck and recover, jump and land, walk and run, moving avoidance, controlled flips, and mixed traversal remain ordered by prerequisite evidence.
+
+### WALK-ARMS-009 — Humanoid arms for balance and acrobatics
+**Status:** VERIFIED
+
+Independent shoulder and elbow motors retain dedicated observations and participate in coordinated balance and acrobatic control.
+
+### WALK-LEARN-010 — Faster learning without regression
+**Status:** VERIFIED
+
+Physical balance and obstacle primitives guide early learning while PPO retains residual control. Smoothing, anti-skating gates, skill resets, rollback, and bounded imitation remain active.
+
+## Existing locomotion and course requirements
+
+### WALK-RIG-001 — Nonblocking hip and joint editing
+**Status:** VERIFIED
+
+### WALK-CONC-001 — Persistent CPU parallelism
+**Status:** VERIFIED
+
+### WALK-UI-001 — Functional NORMAL, FASTER, and MAX CPU controls
+**Status:** VERIFIED
+
+### WALK-OPT-001 — Parallel PPO optimizer
+**Status:** VERIFIED
+
+### WALK-COURSE-001 — Procedural obstacle and recovery treadmill
+**Status:** VERIFIED
+
+### WALK-OBS-001 — Complete obstacle sensing and reward integrity
+**Status:** VERIFIED
+
+Obstacle type, distance, geometry, and motion are observable. Low-bar ducking is conditioned on the observed bar, and invalid posture cannot be promoted by reward.
+
+### WALK-PHYS-001 — Semantic support, traction, and world-anchored debris
+**Status:** VERIFIED
+
+Only explicit foot nodes receive traction or support semantics. Non-foot ground contact remains body contact, and course features remain world-scheduled rather than attached to the actor.
+
+### WALK-COURSE-002 — Shared mile-marker obstacle schedule
+**Status:** VERIFIED
+
+### WALK-GAIT-002 — Alternating stepping instead of wheel sliding
+**Status:** VERIFIED
+
+Walking qualification requires real alternating supported steps and positive progress; wheel sliding cannot qualify.
+
+### WALK-SAND-001 — Sand-simulation enemy curriculum
+**Status:** VERIFIED
+
+### WALK-ROLL-003 — Head, tail, torso, and foot-node rolling rejection
+**Status:** VERIFIED
+
+Rolling, skating, and non-foot support participate in the shared qualification path and cannot seed elite state.
+
+### WALK-HAZARD-003 — Hazards are never pickups or contact rewards
+**Status:** VERIFIED
+
+### WALK-LOCO-004 — Biped, quadruped, crawler, and hexapod support
+**Status:** VERIFIED
+
+Deterministic preset coverage remains for humanoid, biped, chicken, quadruped, crawler, hexapod, and monoped rigs.
+
+### WALK-IDLE-005 — Zero-progress reset
+**Status:** VERIFIED
+
+Motionless candidates reset and cannot enter elite selection.
+
+### WALK-GUIDE-006 — Automatic best-result imitation prior
+**Status:** VERIFIED
+
+Only stage-valid, clean trajectories can enter the imitation prior; duck imitation additionally requires clearing the low bar.
+
+## UI
+
+### WALK-UI-002 / WALK-UI-003 — Responsive readable telemetry
+**Status:** VERIFIED
+
+Layout checks pass and telemetry exposes stance, retained stance, recovery, evidence quality, and primary rejection reason.
+
+### WALK-PIP-007 — Actual valid worker-rollout picture-in-picture
+**Status:** VERIFIED
+
+The PIP publishes only a currently displayable stage-qualified worker rollout and otherwise reports that no valid rollout exists.
+
+## Release evidence
+
+### WALK-REL-011 — Historical v0.7.0 release evidence
+**Status:** VERIFIED — HISTORICAL
+
+The v0.7.0 evidence remains historical and was superseded by the later runtime screenshots.
+
+### WALK-REL-013 — Historical v0.7.1 training-quality hotfix
+**Status:** VERIFIED — HISTORICAL
+
+The v0.7.1 package and build evidence remain valid for that artifact, but its simulation-quality conclusion was superseded by Adam's August 1 screenshots and corrected in v0.7.2.
+
+### WALK-REL-028 — v0.7.2 simulation-quality correction
+**Status:** VERIFIED
+
+- Exact Windows-tested and packaged source: `3c4b815678fda0b2651136bba90b4d64a6cc9a27`;
+- clean implementation source before evidence-only commits: `38134978a08ef59d793fbc82c45bbe4090bebacb`;
+- Linux GCC 14 successful run: `30732783454`;
+- later clean-source Linux validation: `30732908362`;
+- Windows full application and package run: `30733668446`;
+- Windows job: `91458283228`;
+- four Windows tests: passed;
+- build-tree executable version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics from unrelated CWD: passed;
+- independently extracted executable and `run.bat` diagnostics from unrelated CWD: passed;
+- package: `Runner-v0.7.2-windows-x64.zip`;
+- package file count: `11`;
+- published package SHA-256: `910FDE5A87995BAC6D0E8F2B6B674BBD35C8B638C96E307E0BE95F1027AD013D`;
+- Actions artifact ID: `8828973915`;
+- Actions artifact digest: `632316E2ECD7419E7E471F7AF8D2BFD7C0490F7E24B7459D0CE1D0559C50DBE0`;
+- assistant-side re-download and per-file manifest verification: passed.
+- publication workflow run: `30734413835`;
+- published package file count: `11`;
+- published release asset re-download, hash, manifest, executable, and run.bat audit: passed;
+- open pull requests after merge: `0`;
+- remaining branches after cleanup: `main`.
+
+
+### WALK-REL-039 — v0.7.3 body-control and telemetry correction
+**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
+
+- merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
+- exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
+- Linux and Windows validation run: `30738785085`;
+- Linux materialization/test job: `91472309754` — passed;
+- Windows full application/package job: `91472412678` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `Runner-v0.7.3-windows-x64.zip`;
+- Actions artifact ID: `8830773856`;
+- Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+- publication workflow run: `30739847776`;
+- published release asset re-download, byte comparison, SHA-256, and manifest audit: passed;
+- open pull requests after cleanup: `0`;
+- remaining branches after cleanup: `main`.
+
+
+### WALK-REL-067 — Runner v0.7.4 final package and publication
+**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
+
+- exact validated source: `c6ef7668175d7529a062d577d47e18b96a4b2448`;
+- pull request: `#27`;
+- Linux and Windows validation run: `30745394278`;
+- Linux deterministic build/test job: `91490018837` — passed;
+- Windows full application/package job: `91490104548` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `Runner-v0.7.4-windows-x64.zip`;
+- Actions artifact ID: `8832864892`;
+- Actions artifact digest: `sha256:fbcd60190a2eb2410251a33d658858bd456e920fb9e5eb9bbf0d4a54819c4dd4`;
+- repository and package scans for the former project word and obsolete trainer title: passed;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+- publication workflow run: `30746033693`;
+- published release asset re-download, byte comparison, SHA-256, manifest, extraction, and branding audit: passed;
+- open pull requests after cleanup: `0`;
+- remaining branches after cleanup: `main`.
+
+### Imported from `release-stage/missioncache.md`
+
+# Runner mission cache
+
+This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, packaged-runtime behavior, and release evidence agree. Contradictory runtime evidence reopens the mission.
+
+## Release target
+
+**Target:** Runner v0.7.4
+
+**Release state:** PUBLISHED — v0.7.4 assets independently audited; awaiting Adam's live packaged-runtime confirmation
+
+v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
+
+
+
+
+## v0.7.4 rebrand and duck-training correction
+
+### WALK-BRAND-040 — Remove the former project brand completely
+**Status:** PACKAGE VERIFIED
+
+The application title, executable, CMake targets, namespaces, macros, autosaves, rig/state magic, package names, documentation, tests, and release notes use Runner naming. A case-insensitive repository search for the former word must return zero matches. The external GUI dependency is removed and the required bitmap font is local.
+
+### WALK-TITLE-041 — Replace the simulation-enemy trainer title
+**Status:** PACKAGE VERIFIED
+
+The visible title is `AUTONOMOUS RIG TRAINER`, with `AUTONOMOUS PHYSICS LOCOMOTION LAB` as the project subtitle. Sand-simulation hazards may remain curriculum inputs without defining the whole trainer.
+
+### WALK-DUCK-042 — Compression-first duck curriculum
+**Status:** PACKAGE VERIFIED
+
+Stage two begins with a broad stationary overhead platen. It waits for settling, descends gradually, holds at a safe crouch target, retracts, and requires stable recovery before completion. Moving low bars remain a later lesson.
+
+### WALK-COLLIDE-043 — Non-clipping duck press
+**Status:** PACKAGE VERIFIED
+
+The platen is a one-way underside collider. It applies downward contact pressure, never passes through a particle, records penetration, and invalidates excessive penetration rather than treating clipping as duck evidence.
+
+### WALK-CONTROL-044 — Legs before shoulders during ducking
+**Status:** PACKAGE VERIFIED
+
+The duck teacher uses hips and knees while arm outputs remain neutral. Repeated torso/shoulder-axis swinging under the press is penalized and then invalidated instead of becoming the primary learned response.
+
+### WALK-HAZARD-045 — Preparation distance for moving hazards
+**Status:** PACKAGE VERIFIED
+
+Later moving low bars, hurdles, and mixed hazards remain at least 6.5 m or 5 m ahead of the rig when selected so the policy has time to perform a meaningful movement.
+
+### WALK-CARRY-046 — Complete carried missions and publish v0.7.4
+**Status:** PACKAGE VERIFIED
+
+All prior body integrity, feet-first control, passive-head/tail, preview, DPI, units, flip/spin, statistics, concurrency, persistence, launch, and package requirements are revalidated against the clean Runner source and Windows package before publication.
+
+
+
+### WALK-FEET-047 — Prevent fused support plates
+**Status:** PACKAGE VERIFIED
+
+Left and right feet use smaller outward-facing plates plus a solver separation constraint. They may contact the ground together but cannot occupy the same support blob.
+
+### WALK-CHICKEN-048 — Rebuild the chicken preset as a bird
+**Status:** PACKAGE VERIFIED
+
+The preset has a horizontal body, raised neck and head, visible beak, tail, two articulated legs, separate feet, and only leg motors. A generic upright biped does not satisfy this mission.
+
+### WALK-DUCK-049 — Complete two-part duck learning
+**Status:** PACKAGE VERIFIED
+
+The rig must first survive the stationary compression platen, hold a leg-driven crouch, recover, then pass a horizontal moving low bar that begins at least 6 m ahead. Stage completion requires evidence from both obstacles.
+
+### WALK-OBSERVE-050 — Make the duck obstacle learnable
+**Status:** PACKAGE VERIFIED
+
+The policy receives the platen/low-bar geometry early enough to act, teacher assistance remains leg-only, torso-axis swinging is penalized, and the later bar cannot appear as an unavoidable vertical wall.
+
+
+
+## Full conversation reconciliation for v0.7.4
+
+This section is the explicit carry-forward audit of the complete Runner conversation trail. Earlier broad mission names remain valid, but the requirements below are no longer allowed to hide behind shorthand. Every item must be implemented, deterministically tested where practical, exercised by the full Windows package, and preserved in release evidence. Contradictory packaged-runtime screenshots reopen the exact affected mission.
+
+### WALK-AUDIT-051 — No silent omissions across project conversations
+**Status:** PACKAGE VERIFIED
+
+The release pass must reconcile every prior request about rigs, feet, joints, curriculum, hazards, learning, concurrency, PIP, UI, statistics, persistence, launch, package contents, branches, pull requests, and release assets. Anything not completed remains explicitly open rather than disappearing during cleanup.
+
+### WALK-RIGLAB-052 — Safe and complete rig editing
+**Status:** PACKAGE VERIFIED
+
+The rig lab exposes node, bone, motor, semantic root/torso/head, and left/right support meaning. Joint limits and strength remain inspectable and testable per joint or coordinated group. Selecting or dragging the hip cannot lock the application. Required default structural joints cannot be deleted into an invalid rig; invalid edits are rejected without blocking the training worker.
+
+### WALK-PRESETS-053 — Distinct stable preset anatomy
+**Status:** PACKAGE VERIFIED
+
+Humanoid, biped, chicken, quadruped, four-leg crawler, six-leg rig, and monoped presets remain structurally distinct, finite, connected, grounded, and visually recognisable. Every legged preset has explicit semantic feet or support contacts. Stable quadruped-derived physical limits may guide other defaults without turning different rigs into the same body.
+
+### WALK-PIPELINE-054 — Continuous background training without mode stalls
+**Status:** PACKAGE VERIFIED
+
+Training continues on worker-owned state while the live simulation renders immutable publications. C++23 coroutine stages, persistent rollout workers, parallel gradient workers, asynchronous persistence, and NORMAL/FASTER/MAX controls remain functional. Switching between live and rig-lab views does not stop learning, reset the controller, or require reduced visualisation modes.
+
+### WALK-COURSE-055 — Long readable locomotion course
+**Status:** PACKAGE VERIFIED
+
+The course includes clear ground and road reference lines, long flat preparation areas, later ramps, inclines, declines, hills, and uneven terrain. Metric and Imperial modes use quarter-kilometre or quarter-mile reference markers without changing the denser internal obstacle schedule.
+
+### WALK-HAZARDS-056 — Learnable hazards that must be passed
+**Status:** PACKAGE VERIFIED
+
+Rocks, hurdles, low bars, moving hazards, thrown objects, and mixed terrain are world-anchored curriculum obstacles rather than pickups or actor-attached debris. Contact is permitted when physically appropriate, but the goal remains passing or recovering from the hazard. Observation includes type, distance, dimensions, motion, and enough approach time to perform a meaningful movement.
+
+### WALK-CURRICULUM-057 — Ordered reusable movement skills
+**Status:** PACKAGE VERIFIED
+
+The evidence-gated order is standing, compression duck and recovery, powered jump and landing, real alternating walk/run, moving low-bar or hurdle avoidance, controlled landed flips, then mixed traversal combining movement with ducking, jumping, or flipping. Scalar reward alone cannot skip prerequisites.
+
+### WALK-GATES-058 — Anti-exploit locomotion rules
+**Status:** PACKAGE VERIFIED
+
+More than three airborne rotations, flipping at or above 50 km/h, unpowered sustained flight, out-of-bounds motion, micro-movement, zero progress, wheel sliding, body rolling, foot-node rolling, head dragging, collapsed support, hazard quivering, and knee/body-first obstacle shoving cannot qualify or seed elite state. Early harmless settling retains bounded grace.
+
+### WALK-AIRTIME-059 — Powered but bounded aerial ability
+**Status:** PACKAGE VERIFIED
+
+A rig may jump or briefly fly only when joint power produces a recognised launch in an allowed lesson. The allowance is stage-bounded, never substitutes for walking, and ends in a controlled landing. Generic rotation remains diagnostic and penalised outside the dedicated flip lesson.
+
+### WALK-CONTROL-060 — Coordinated joints with feet-first authority
+**Status:** PACKAGE VERIFIED
+
+Hips, knees, shoulders, and elbows may use light stage-aware coordination while PPO keeps residual per-joint control. Feet and leg chains establish support before arms gain authority. Ducking uses hips and knees rather than a robot-like torso or main-shoulder-axis swing; arms remain available later for balance and acrobatics.
+
+### WALK-PIPUI-061 — Full-body PIP and readable responsive UI
+**Status:** PACKAGE VERIFIED
+
+The training PIP shows only a current connected full rig and automatically fits all particles; it never zooms into detached feet or publishes stale collapsed posture. Text, panels, telemetry, controls, and the full-width DPI-safe background remain readable without overlap at supported window sizes.
+
+### WALK-STATS-062 — Complete rig, session, and persisted totals
+**Status:** PACKAGE VERIFIED
+
+Per-rig lifetime statistics include age, updates, environment steps, episodes, valid and invalid episodes, distance, alternating steps, falls or invalidations, collisions, powered jumps, landed jumps, landed flips, obstacles passed, accepted/rejected rig changes, and best stage reached. Session totals and persisted all-time totals expose the same relevant counters plus resets and rollbacks. Counter baselines change only with the rig signature, and incompatible older state cannot silently corrupt totals.
+
+### WALK-LEARNING-063 — Best-result imitation without regression
+**Status:** PACKAGE VERIFIED
+
+Only current stage-valid trajectories may become champions, rollback anchors, evolved-rig seeds, imitation samples, or PIP representatives. Robust perturbed evaluation, quality-before-reward ranking, regression rollback, bounded imitation weight, and fresh-policy semantics remain shared across training, evaluation, preview, and live execution.
+
+### WALK-LAUNCH-064 — Clean executable-relative package launch
+**Status:** PACKAGE VERIFIED
+
+The source launcher and installed launcher select the current adjacent or Release executable, find shaders/assets relative to that executable, and work from an unrelated current directory. Stale root executables, stale learned state, missing DLLs, or source-tree assumptions are release blockers.
+
+### WALK-RELEASE-065 — Tidy audited release repository
+**Status:** PACKAGE VERIFIED
+
+A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
+
+### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
+**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+
+Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
+
+## v0.7.3 live-runtime correction
+
+### WALK-REG-029 — Reopen live simulation quality after v0.7.2 screenshots
+**Status:** PACKAGE VERIFIED — AWAITING LIVE CONFIRMATION
+
+Acceptance requires deterministic tests, full Windows package validation, and Adam's live packaged-runtime confirmation. Static or metric-only evidence cannot close this mission.
+
+### WALK-FOOT-030 — Connected rigid heel-toe foot plates
+**Status:** PACKAGE VERIFIED
+
+Each biped foot uses one ankle/heel/toe triangle with two semantic contacts. Any stretched bone or detached contact cluster invalidates the rollout before champion, imitation, or preview publication.
+
+### WALK-CONTROL-031 — Feet-first control authority
+**Status:** PACKAGE VERIFIED
+
+Balance and duck lessons must load feet through knees and hips before arms receive meaningful policy authority. Bilateral coordination remains a light prior and cannot force mirrored leg collapse.
+
+### WALK-PASSIVE-032 — Stable heads and tails on every rig
+**Status:** PACKAGE VERIFIED
+
+Head and passive-tail endpoints receive realistic mass, velocity damping, and torso-relative passive angular stabilization. They may react naturally but cannot behave as uncontrolled pendulums.
+
+### WALK-PREVIEW-033 — Complete-body training preview
+**Status:** PACKAGE VERIFIED
+
+The training preview may publish only a current, finite, connected full-body snapshot. Its camera fits complete particle bounds; a detached or exploded body is rejected rather than showing isolated feet.
+
+### WALK-TEST-034 — Runtime-shaped regression coverage
+**Status:** PACKAGE VERIFIED
+
+Tests cover detached semantic feet, full-skeleton stretch bounds, leg-versus-arm authority, passive head/tail containment, current-frame preview eligibility, Linux C++23 validation, and the complete Windows Vulkan package.
+
+
+### WALK-UI-035 — Full-width DPI-safe GUI background
+**Status:** PACKAGE VERIFIED
+
+The header and frame background must span the actual Vulkan drawable width at Windows DPI scaling. Mouse hit testing is converted from SDL logical coordinates to drawable coordinates.
+
+### WALK-UNITS-036 — Metric/Imperial quarter markers
+**Status:** PACKAGE VERIFIED
+
+The live panel exposes Metric and Imperial modes. Course reference signs are spaced every 0.25 km or 0.25 mile and all speed/distance labels follow the selected mode.
+
+### WALK-FLIP-037 — Separate flips from generic spin
+**Status:** PACKAGE VERIFIED
+
+A flip is powered airborne somersault rotation in the flip lesson followed by a landing. Generic rotation is tracked separately, is never accepted as flip evidence, and is penalized when it destabilizes other lessons.
+
+### WALK-STATS-038 — Rig lifetime and cumulative runtime totals
+**Status:** PACKAGE VERIFIED — COMPLETED BY WALK-STATS-062
+
+The earlier v0.7.3 display covered only age, updates, environment steps, and session runtime. WALK-STATS-062 now carries the complete requested per-rig, session, and persisted all-time counters, including episodes, distance, steps, falls/invalidations, collisions, jumps, flips, obstacles, rig acceptance/rejection, resets, and rollbacks.
+
+## v0.7.2 packaged-runtime regression correction
+
+Adam's August 1, 2026 screenshots contradicted the v0.7.1 runtime conclusion. They reopened the affected missions instead of being treated as cosmetic feedback.
+
+### WALK-REG-022 — Whole-simulation regression correction
+**Status:** VERIFIED
+
+The carried-forward rig, controller, curriculum, persistence, PIP, launch, concurrency, and package requirements were revalidated after the correction. Linux and Windows builds, all deterministic tests, runtime diagnostics, package extraction, and independent checksum verification passed.
+
+### WALK-SYNERGY-023 — Coordinated joint groups with learned residuals
+**Status:** VERIFIED
+
+Bilateral hip, knee, shoulder, and elbow groups provide stage-aware movement structure while PPO retains residual per-joint control. The same effective controller is used by rollout collection, deterministic evaluation, rig evaluation, preview, and live execution.
+
+### WALK-FOOT-024 — Dedicated semantic feet below articulated ankles
+**Status:** VERIFIED
+
+Lower-leg motor endpoints are ankles rather than foot contacts. Each biped leg uses a braced passive ankle adapter connected to a separate foot plate, heel, and toe. Only those explicit semantic foot nodes receive support and traction classification.
+
+### WALK-DUCK-025 — Obstacle-conditioned duck, clear, and recover lesson
+**Status:** VERIFIED
+
+The second lesson presents a moving low bar. Qualification requires lowering the head with semantic foot support, clearing the actual obstacle, and returning to stable stance. Empty-space crouching and permanent collapse cannot complete or seed the lesson.
+
+### WALK-SAMPLE-026 — Current-frame training-sample integrity
+**Status:** VERIFIED
+
+Historical stance evidence cannot authorize a currently collapsed PIP frame. Display eligibility requires current semantic foot support, no current non-foot support, and intact direct pelvis-to-torso and torso-to-head body segments. A valid crouch remains displayable while the screenshot collapse is rejected.
+
+### WALK-LAUNCH-027 — Reject stale source-tree executables and v0.7.1 state
+**Status:** VERIFIED
+
+Source-tree `run.bat` selects the current Windows Release build instead of a stale root executable. Installed packages select the adjacent executable. v0.7.2 uses new checkpoint semantics, autonomy-state format, and isolated autosave paths.
+
+## Training quality
+
+### WALK-MOTOR-012 — Reciprocal parent-side motor reaction
+**Status:** VERIFIED
+
+Every motor divides correction between the driven subtree and complete parent side using rotational inertia, without world-space joint anchors or center-of-mass injection.
+
+### WALK-OBS-018 — Non-overlapping eight-motor observation layout
+**Status:** VERIFIED
+
+The humanoid retains forty non-overlapping observation channels covering eight angles, eight velocities, contacts, foot placement, terrain, obstacle, stage, and phase state.
+
+### WALK-TRAIN-013 — Reject collapsed poses as training success
+**Status:** VERIFIED
+
+Collapsed, body-supported, violent-joint, rolling, skating, hovering, motionless, and prerequisite-incomplete candidates cannot become champions, rollback anchors, evolved-rig seeds, imitation sources, or displayed training samples.
+
+### WALK-CURR-014 — Evidence-gated ordered curriculum
+**Status:** VERIFIED
+
+Advancement requires retained evidence for stand, low-bar duck and recovery, powered jump and landing, alternating gait, moving avoidance, controlled flips, and mixed traversal. Scalar reward cannot bypass missing evidence.
+
+### WALK-BEST-015 — Stage-valid best-policy and imitation selection
+**Status:** VERIFIED
+
+Stage validity and evidence quality outrank scalar reward throughout champion selection, rollback, rig evolution, imitation, and PIP representative selection.
+
+### WALK-EVAL-019 — Latched robust balance evaluation
+**Status:** VERIFIED
+
+A completed three-second stage-valid stand is latched. Six perturbed starts are evaluated and at least four must succeed; invalid later-stage evaluation remains strict.
+
+### WALK-CTRL-020 — Shared effective controller path
+**Status:** VERIFIED
+
+Training, deterministic evaluation, imitation replay, rig evaluation, preview, and live execution share the coordinated effective controller.
+
+### WALK-STATE-016 — Invalidate incompatible learned state
+**Status:** VERIFIED
+
+Training checkpoints use v0.7.2 semantics `0x0007'0200`, autonomy state format 5, and v0.7.2 autosave paths. Earlier optimizer, curriculum, champion, rig-evolution, and imitation state cannot silently resume.
+
+### WALK-RUNTIME-017 — Bounded packaged-runtime acceptance
+**Status:** VERIFIED
+
+The full Windows application passed bounded standing acquisition, robust perturbed evaluation, adversarial collapse rejection, current-frame PIP rejection, concurrency tests, runtime pipeline tests, package layout, and unrelated-working-directory diagnostics.
+
+### WALK-LAUNCH-021 — Executable-relative clean-folder launch
+**Status:** VERIFIED
+
+The build tree, installed executable, installed `run.bat`, independently extracted executable, and independently extracted `run.bat` all passed version and package diagnostics from unrelated working directories.
+
+## Runtime architecture
+
+### WALK-CORO-001 — Meaningful C++23 training pipeline
+**Status:** VERIFIED
+
+Queued commands, rollout collection, advantage computation, parallel gradient generation, deterministic reduction, optimizer application, evaluation, immutable publication, persistence, and throttle stages remain observable.
+
+### WALK-ARCH-001 — Worker-owned mutable trainer state
+**Status:** VERIFIED
+
+The worker exclusively owns mutable PPO, optimizer, curriculum, rig-evolution, and checkpoint state; the UI consumes immutable publications and coalesced commands.
+
+### WALK-IO-001 — Asynchronous checkpoint and autosave
+**Status:** VERIFIED
+
+Checkpoint, rig, and autonomy-state snapshots remain coalesced and published by a dedicated `std::jthread` through temporary-file and atomic-rename writes.
+
+### WALK-TEST-001 — Cross-platform concurrency regression suite
+**Status:** VERIFIED
+
+Hip edits, preset changes, CPU modes, pause/single-step, checkpoint load/save, staged updates, cancellation, coalescing, Linux GCC 14, and Windows full-application coverage pass.
+
+## Ordered movement curriculum
+
+### WALK-SKILL-008 — Ordered reusable skills
+**Status:** VERIFIED
+
+Stand, low-bar duck and recover, jump and land, walk and run, moving avoidance, controlled flips, and mixed traversal remain ordered by prerequisite evidence.
+
+### WALK-ARMS-009 — Humanoid arms for balance and acrobatics
+**Status:** VERIFIED
+
+Independent shoulder and elbow motors retain dedicated observations and participate in coordinated balance and acrobatic control.
+
+### WALK-LEARN-010 — Faster learning without regression
+**Status:** VERIFIED
+
+Physical balance and obstacle primitives guide early learning while PPO retains residual control. Smoothing, anti-skating gates, skill resets, rollback, and bounded imitation remain active.
+
+## Existing locomotion and course requirements
+
+### WALK-RIG-001 — Nonblocking hip and joint editing
+**Status:** VERIFIED
+
+### WALK-CONC-001 — Persistent CPU parallelism
+**Status:** VERIFIED
+
+### WALK-UI-001 — Functional NORMAL, FASTER, and MAX CPU controls
+**Status:** VERIFIED
+
+### WALK-OPT-001 — Parallel PPO optimizer
+**Status:** VERIFIED
+
+### WALK-COURSE-001 — Procedural obstacle and recovery treadmill
+**Status:** VERIFIED
+
+### WALK-OBS-001 — Complete obstacle sensing and reward integrity
+**Status:** VERIFIED
+
+Obstacle type, distance, geometry, and motion are observable. Low-bar ducking is conditioned on the observed bar, and invalid posture cannot be promoted by reward.
+
+### WALK-PHYS-001 — Semantic support, traction, and world-anchored debris
+**Status:** VERIFIED
+
+Only explicit foot nodes receive traction or support semantics. Non-foot ground contact remains body contact, and course features remain world-scheduled rather than attached to the actor.
+
+### WALK-COURSE-002 — Shared mile-marker obstacle schedule
+**Status:** VERIFIED
+
+### WALK-GAIT-002 — Alternating stepping instead of wheel sliding
+**Status:** VERIFIED
+
+Walking qualification requires real alternating supported steps and positive progress; wheel sliding cannot qualify.
+
+### WALK-SAND-001 — Sand-simulation enemy curriculum
+**Status:** VERIFIED
+
+### WALK-ROLL-003 — Head, tail, torso, and foot-node rolling rejection
+**Status:** VERIFIED
+
+Rolling, skating, and non-foot support participate in the shared qualification path and cannot seed elite state.
+
+### WALK-HAZARD-003 — Hazards are never pickups or contact rewards
+**Status:** VERIFIED
+
+### WALK-LOCO-004 — Biped, quadruped, crawler, and hexapod support
+**Status:** VERIFIED
+
+Deterministic preset coverage remains for humanoid, biped, chicken, quadruped, crawler, hexapod, and monoped rigs.
+
+### WALK-IDLE-005 — Zero-progress reset
+**Status:** VERIFIED
+
+Motionless candidates reset and cannot enter elite selection.
+
+### WALK-GUIDE-006 — Automatic best-result imitation prior
+**Status:** VERIFIED
+
+Only stage-valid, clean trajectories can enter the imitation prior; duck imitation additionally requires clearing the low bar.
+
+## UI
+
+### WALK-UI-002 / WALK-UI-003 — Responsive readable telemetry
+**Status:** VERIFIED
+
+Layout checks pass and telemetry exposes stance, retained stance, recovery, evidence quality, and primary rejection reason.
+
+### WALK-PIP-007 — Actual valid worker-rollout picture-in-picture
+**Status:** VERIFIED
+
+The PIP publishes only a currently displayable stage-qualified worker rollout and otherwise reports that no valid rollout exists.
+
+## Release evidence
+
+### WALK-REL-011 — Historical v0.7.0 release evidence
+**Status:** VERIFIED — HISTORICAL
+
+The v0.7.0 evidence remains historical and was superseded by the later runtime screenshots.
+
+### WALK-REL-013 — Historical v0.7.1 training-quality hotfix
+**Status:** VERIFIED — HISTORICAL
+
+The v0.7.1 package and build evidence remain valid for that artifact, but its simulation-quality conclusion was superseded by Adam's August 1 screenshots and corrected in v0.7.2.
+
+### WALK-REL-028 — v0.7.2 simulation-quality correction
+**Status:** VERIFIED
+
+- Exact Windows-tested and packaged source: `3c4b815678fda0b2651136bba90b4d64a6cc9a27`;
+- clean implementation source before evidence-only commits: `38134978a08ef59d793fbc82c45bbe4090bebacb`;
+- Linux GCC 14 successful run: `30732783454`;
+- later clean-source Linux validation: `30732908362`;
+- Windows full application and package run: `30733668446`;
+- Windows job: `91458283228`;
+- four Windows tests: passed;
+- build-tree executable version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics from unrelated CWD: passed;
+- independently extracted executable and `run.bat` diagnostics from unrelated CWD: passed;
+- package: `Runner-v0.7.2-windows-x64.zip`;
+- package file count: `11`;
+- published package SHA-256: `910FDE5A87995BAC6D0E8F2B6B674BBD35C8B638C96E307E0BE95F1027AD013D`;
+- Actions artifact ID: `8828973915`;
+- Actions artifact digest: `632316E2ECD7419E7E471F7AF8D2BFD7C0490F7E24B7459D0CE1D0559C50DBE0`;
+- assistant-side re-download and per-file manifest verification: passed.
+- publication workflow run: `30734413835`;
+- published package file count: `11`;
+- published release asset re-download, hash, manifest, executable, and run.bat audit: passed;
+- open pull requests after merge: `0`;
+- remaining branches after cleanup: `main`.
+
+
+### WALK-REL-039 — v0.7.3 body-control and telemetry correction
+**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
+
+- merged implementation commit: `8d25c946f6beb04aa558dfeb6d5f81ead51c4ff9`;
+- exact validated PR branch source: `16edc15036f499223d2dbad11b0157bea108444c`;
+- Linux and Windows validation run: `30738785085`;
+- Linux materialization/test job: `91472309754` — passed;
+- Windows full application/package job: `91472412678` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `Runner-v0.7.3-windows-x64.zip`;
+- Actions artifact ID: `8830773856`;
+- Actions artifact digest: `F46A7612B5F038EF7461615394672F5E4DBFE25CA8B6D193CFD466862FA96A1C`;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+- publication workflow run: `30739847776`;
+- published release asset re-download, byte comparison, SHA-256, and manifest audit: passed;
+- open pull requests after cleanup: `0`;
+- remaining branches after cleanup: `main`.
+
+
+### WALK-REL-067 — Runner v0.7.4 final package and publication
+**Status:** PUBLISHED — RELEASE ASSETS VERIFIED
+
+- exact validated source: `c6ef7668175d7529a062d577d47e18b96a4b2448`;
+- pull request: `#27`;
+- Linux and Windows validation run: `30745394278`;
+- Linux deterministic build/test job: `91490018837` — passed;
+- Windows full application/package job: `91490104548` — passed;
+- Windows build and all tests: passed;
+- build-tree version, Vulkan, and package diagnostics from unrelated CWD: passed;
+- installed executable and installed `run.bat` diagnostics: passed;
+- independent archive extraction and manifest audit: passed;
+- package: `Runner-v0.7.4-windows-x64.zip`;
+- Actions artifact ID: `8832864892`;
+- Actions artifact digest: `sha256:fbcd60190a2eb2410251a33d658858bd456e920fb9e5eb9bbf0d4a54819c4dd4`;
+- repository and package scans for the former project word and obsolete trainer title: passed;
+- contradictory live packaged-runtime evidence will reopen the affected mission.
+- publication workflow run: `30746033693`;
+- published release asset re-download, byte comparison, SHA-256, manifest, extraction, and branding audit: passed;
+- open pull requests after cleanup: `0`;
+- remaining branches after cleanup: `main`.
+
+### Imported from `validation/mission-cache-locomotion.md`
+
+# Mission-cache locomotion validation
+
+- Exact tested source commit: $sourceSha
+- Full SDL3/Vulkan/built-in bitmap UI Windows build: passed
+- Core and concurrency tests: passed
+- Biped/humanoid obstacle-capable motor-range tests: passed
+- Quadruped anti-quiver and obstacle-lift tests: passed
+- Four-legged crawler structural tests: passed
+- Six-legged hexapod structural tests: passed
+- Semantic multi-foot support clustering tests: passed
+- Vulkan diagnostic: passed
+- Release publication: intentionally blocked until remaining mission ledger items are complete

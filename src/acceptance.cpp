@@ -90,8 +90,9 @@ namespace runner::acceptance
                         ? blueprint.radii[first] : 0.12f;
                     const float second_radius = second < blueprint.radii.size()
                         ? blueprint.radii[second] : 0.12f;
-                    const float clearance = std::abs(
-                        blueprint.nodes[second].x - blueprint.nodes[first].x)
+                    const float delta_x = blueprint.nodes[second].x - blueprint.nodes[first].x;
+                    const float delta_y = blueprint.nodes[second].y - blueprint.nodes[first].y;
+                    const float clearance = std::hypot(delta_x, delta_y)
                         - first_radius - second_radius;
                     minimum = std::min(minimum, clearance);
                     compared = true;
@@ -160,7 +161,7 @@ namespace runner::acceptance
 
     bool Report::passed() const noexcept
     {
-        return std::ranges::all_of(cases,
+        return !cases.empty() && std::ranges::all_of(cases,
             [](const CaseResult& result) { return result.passed; });
     }
 
@@ -302,6 +303,13 @@ namespace runner::acceptance
             && sim::course_stage_name(sim::CourseStage::uneven) == "3. WALK / RUN"
             && sim::course_stage_name(sim::CourseStage::crouch_walk)
                 == "4. CROUCH WALK / UNEVEN AVOID"
+            && sim::course_stage_name(sim::CourseStage::ramps) == "5. JUMP / LAND"
+            && sim::course_stage_name(sim::CourseStage::hurdles)
+                == "6. MOVING LOW BAR / HURDLE"
+            && sim::course_stage_name(sim::CourseStage::duck_bars)
+                == "7. CONTROLLED FLIPS"
+            && sim::course_stage_name(sim::CourseStage::moving_hazards)
+                == "8. MIXED GOAL COURSE"
             && sim::stage_skill_evidence(sim::CourseStage::balance,
                 0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && !sim::stage_skill_evidence(sim::CourseStage::uneven,
