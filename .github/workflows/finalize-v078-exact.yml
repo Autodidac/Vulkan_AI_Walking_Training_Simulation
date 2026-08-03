@@ -29,5 +29,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sed -i '43d' .github/scripts/finalize_v078_exact.sh
-          bash .github/scripts/finalize_v078_exact.sh
+          cp .github/scripts/finalize_v078_exact.sh "$RUNNER_TEMP/finalize_v078_exact.sh"
+          sed -i '43d' "$RUNNER_TEMP/finalize_v078_exact.sh"
+          bash "$RUNNER_TEMP/finalize_v078_exact.sh"
