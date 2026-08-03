@@ -45,5 +45,5 @@ Reward reducing burial and moving toward available free space. Permit partial pe
 
 Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
 '''
-p.write_text(t+'\n')
+p.write_text(t.rstrip()+'\n')
 Path(__file__).unlink()
