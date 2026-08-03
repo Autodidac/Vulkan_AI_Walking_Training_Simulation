@@ -33,13 +33,20 @@ jobs:
         run: |
           python3 tools/apply_v077_core.py
           python3 tools/apply_v077_tests_mission.py
+          python3 tools/apply_v077_slide_semantics.py
 
       - name: Verify source and mission hygiene
         shell: bash
         run: |
           git diff --check
-          test ! -f tools/apply_v077_core.py
-          test ! -f tools/apply_v077_tests_mission.py
+          for tool in \
+            tools/apply_v077_core.py \
+            tools/apply_v077_tests_mission.py \
+            tools/apply_v077_slide_semantics.py \
+            tools/fix_v077_eof.py
+          do
+            test ! -f "$tool"
+          done
           python3 - <<'PY'
           from pathlib import Path
           cmake = Path('CMakeLists.txt').read_text(encoding='utf-8')
@@ -48,7 +55,8 @@ jobs:
           simulation = Path('src/simulation.cpp').read_text(encoding='utf-8')
           required = [
               'WALK-RIGSTANCE-084', 'WALK-CROUCH-085',
-              'WALK-EXPLORE-086', 'WALK-FEET-087', 'WALK-RELEASE-088'
+              'WALK-EXPLORE-086', 'WALK-FEET-087',
+              'WALK-RELEASE-088', 'WALK-SLIDE-089'
           ]
           missing = [item for item in required if item not in mission]
           if missing:
@@ -59,6 +67,8 @@ jobs:
               raise SystemExit('motor discovery was not materialized')
           if 'primary_support_span_ratio' not in simulation:
               raise SystemExit('support-span correction was not materialized')
+          if 'friction_driven_shuffle' not in simulation:
+              raise SystemExit('slide/friction semantics were not materialized')
           PY
 
       - name: Configure deterministic C++23 suite
@@ -86,7 +96,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Fix rig-specific learning and semantic supports"
+          git commit -m "Fix rig learning, motor discovery, supports, and sliding"
           git push origin HEAD:${{ github.head_ref }}
 
   windows-package:
@@ -107,7 +117,9 @@ jobs:
         run: |
           foreach ($script in @(
             'tools/apply_v077_core.py',
-            'tools/apply_v077_tests_mission.py')) {
+            'tools/apply_v077_tests_mission.py',
+            'tools/apply_v077_slide_semantics.py',
+            'tools/fix_v077_eof.py')) {
             if (Test-Path $script) { throw "One-shot tool remains: $script" }
           }
           git diff --quiet
