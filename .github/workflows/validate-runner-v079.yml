@@ -1,0 +1,250 @@
+name: Validate Runner v0.7.9
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: runner-v079-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  linux-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install GCC 14 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Materialize clean v0.7.9 source
+        run: python3 tools/apply_v079_acceptance.py
+
+      - name: Verify source and mission hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test ! -f tools/apply_v079_acceptance.py
+          test ! -f .github/workflows/validate-runner-v079.yml
+          test -f src/acceptance.hpp
+          test -f src/acceptance.cpp
+          test -f tests/live_acceptance_tests.cpp
+          test -f RELEASE_NOTES_v0.7.9.md
+          grep -F 'project(Runner VERSION 0.7.9 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'Runner.LiveAcceptance' CMakeLists.txt
+          grep -F -- '--diagnose-acceptance' src/main.cpp
+          grep -F 'WALK-RELEASE-103' missioncache.md
+
+      - name: Configure deterministic C++23 suite
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/linux-v079 -G Ninja
+          -DRUNNER_BUILD_APP=OFF
+          -DRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build and test Linux acceptance suite
+        run: |
+          cmake --build build/linux-v079 --parallel
+          ctest --test-dir build/linux-v079 --output-on-failure -V --timeout 1200
+
+      - name: Commit exact tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Implement Runner v0.7.9 live acceptance matrix'
+          git push origin HEAD:${{ github.head_ref }}
+
+  windows-package:
+    needs: linux-source
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Confirm exact clean materialized source
+        shell: pwsh
+        run: |
+          if (Test-Path tools/apply_v079_acceptance.py) { throw 'one-shot applicator remains' }
+          if (Test-Path .github/workflows/validate-runner-v079.yml) { throw 'temporary validation workflow remains' }
+          git diff --quiet
+          if ($LASTEXITCODE -ne 0) { throw 'Windows source tree is dirty' }
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            vcpkg-bincache
+            vcpkg/downloads
+          key: runner-v079-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            runner-v078-${{ runner.os }}-
+            runner-v077-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure and build full Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
+          cmake --build --preset windows-release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+
+      - name: Run complete Windows tests
+        shell: pwsh
+        run: |
+          ctest --preset windows-release --output-on-failure -V --timeout 1200
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+
+      - name: Verify build-tree package and live acceptance
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& $exe --version | Out-String).Trim()
+            if ($version -ne 'Runner 0.7.9') { throw "Unexpected version: $version" }
+            & $exe --diagnose-vulkan
+            if ($LASTEXITCODE -ne 0) { throw 'Vulkan diagnostic failed' }
+            & $exe --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+            & $exe --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Live acceptance diagnostic failed' }
+          }
+          finally { Pop-Location }
+
+      - name: Install release candidate
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.9-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
+          Copy-Item README.md, LICENSE, missioncache.md, RELEASE_NOTES_v0.7.9.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          foreach ($required in @(
+            'Runner.exe','run.bat','missioncache.md','RELEASE_NOTES_v0.7.9.md',
+            'shaders/flat.vert.spv','shaders/flat.frag.spv','assets/chicken.ppm')) {
+            if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
+          }
+
+      - name: Verify installed executable and launcher
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.9-windows-x64"
+          $outside = "$env:RUNNER_TEMP/runner-v079-installed-unrelated"
+          New-Item -ItemType Directory -Force $outside | Out-Null
+          Push-Location $outside
+          try {
+            $version = (& "$stage/Runner.exe" --version | Out-String).Trim()
+            if ($version -ne 'Runner 0.7.9') { throw "Installed version mismatch: $version" }
+            & "$stage/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
+            & "$stage/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance diagnostic failed' }
+            $batchVersion = (& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim()
+            if ($batchVersion -ne 'Runner 0.7.9') { throw "run.bat version mismatch: $batchVersion" }
+          }
+          finally { Pop-Location }
+
+      - name: Create and independently audit archive
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.9-windows-x64"
+          $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.9-windows-x64.zip"
+          Remove-Item $archive -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          } | Set-Content 'Runner-v0.7.9-windows-x64.manifest.sha256'
+
+          $audit = "$env:RUNNER_TEMP/runner-v079-extracted"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content 'Runner-v0.7.9-windows-x64.manifest.sha256'
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Archive manifest audit failed' }
+
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$audit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
+            & "$audit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance diagnostic failed' }
+          }
+          finally { Pop-Location }
+
+      - id: package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Runner-v0.7.9-windows-x64
+          path: |
+            Runner-v0.7.9-windows-x64.zip
+            Runner-v0.7.9-windows-x64.zip.sha256
+            Runner-v0.7.9-windows-x64.manifest.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record immutable validation evidence
+        shell: pwsh
+        run: |
+          git pull --rebase origin ${{ github.head_ref }}
+          @"
+          Runner v0.7.9 validation passed
+          run_id=${{ github.run_id }}
+          source_sha=$(git rev-parse HEAD)
+          artifact_id=${{ steps.package.outputs.artifact-id }}
+          artifact_digest=${{ steps.package.outputs.artifact-digest }}
+          linux=passed
+          windows=passed
+          build_tree_acceptance=passed
+          installed_acceptance=passed
+          extracted_acceptance=passed
+          "@ | Set-Content VALIDATION_v0.7.9.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add VALIDATION_v0.7.9.txt
+          git commit -m 'Record Runner v0.7.9 validation evidence'
+          git push origin HEAD:${{ github.head_ref }}
