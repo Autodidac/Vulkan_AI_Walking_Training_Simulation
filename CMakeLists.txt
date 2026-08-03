@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
+# Runner v0.7.9 publication trigger.
 if(MSVC)
     set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 else()
