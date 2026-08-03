@@ -1,3 +1,4 @@
+# Registered fixed publisher trigger.
 name: Trigger fixed Runner v0.7.9 publisher
 
 on:
