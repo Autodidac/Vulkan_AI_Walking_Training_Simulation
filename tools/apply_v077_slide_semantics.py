@@ -123,6 +123,9 @@ tests = tests.replace(
 tests = tests.replace(
     "sim::wheel_sliding_motion(0.45f, true, false, 0.50f)",
     "sim::friction_driven_shuffle(0.45f, true, false, 0.50f, 0u, 0.0f)")
+tests = tests.replace(
+    "for (int iteration = 0; iteration < 12; ++iteration)",
+    "for (int iteration = 0; iteration < 64; ++iteration)", 1)
 anchor = '''    require(sim::classify_motion_gate(1.0f, 0.0f, { 301.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::out_of_bounds, "course bounds gate missing");'''
 addition = anchor + '''
