@@ -75,18 +75,31 @@ replace_once('src/simulation.cpp', '''        const bool stable_stance_frame = f
             && std::abs(torso_turn_speed_) <= 2.00f
             && current_joint_speed <= 12.0f
             && std::abs(root_vertical_speed) <= vertical_speed_threshold;
+        const bool recoverable_horizontal_stance = horizontal_body
+            && feet_supported && support_layout_valid && !non_foot_grounded_
+            && current_uprightness >= 0.70f && head_height_ratio >= 0.54f
+            && stance_slip_speed_ <= 0.35f
+            && std::abs(torso_turn_speed_) <= 2.50f
+            && current_joint_speed <= 12.0f
+            && std::abs(root_vertical_speed) <= 2.25f;
         if (stable_stance_frame)
         {
             stance_failure_grace_seconds_ = std::max(
                 0.0f, stance_failure_grace_seconds_ - dt * 2.0f);
             stable_stance_seconds_ += dt;
         }
+        else if (recoverable_horizontal_stance)
+        {
+            stance_failure_grace_seconds_ = std::min(
+                stance_grace_limit, stance_failure_grace_seconds_ + dt);
+            stable_stance_seconds_ += dt * 0.60f;
+        }
         else if (!catastrophic_stance_failure
             && stance_failure_grace_seconds_ < stance_grace_limit)
         {
             stance_failure_grace_seconds_ += dt;
             stable_stance_seconds_ = std::max(
-                0.0f, stable_stance_seconds_ - dt * (horizontal_body ? 0.035f : 0.10f));
+                0.0f, stable_stance_seconds_ - dt * 0.10f);
         }
 ''')
 
@@ -113,12 +126,72 @@ replace_once('src/simulation.cpp', '''        const float center_ground = ground
             ? 0.0f : (space_delta > 0.0f ? 1.0f : -1.0f);
 ''')
 
+replace_once('src/simulation.cpp', '''        const float left_wall = ground_height_at(root.position.x - 0.70f)
+            - (root.position.y - root.radius);
+        const float right_wall = ground_height_at(root.position.x + 0.70f)
+            - (root.position.y - root.radius);
+        const bool trapped = burial_depth_ > 0.32f
+            && (obstruction_mask_ & 0x3u) == 0x3u
+            && left_wall > 0.18f && right_wall > 0.18f;
+''', '''        auto node_burial_depth = [&](std::uint16_t node) noexcept
+        {
+            if (!valid_node(node))
+                return 0.0f;
+            const Particle& particle = particles_[node];
+            return ground_height_at(particle.position.x)
+                - (particle.position.y - particle.radius);
+        };
+        const float head_burial = node_burial_depth(blueprint_.head_node);
+        const float torso_burial = node_burial_depth(blueprint_.torso_node);
+        const float left_wall = ground_height_at(root.position.x - 0.70f)
+            - (root.position.y - root.radius);
+        const float right_wall = ground_height_at(root.position.x + 0.70f)
+            - (root.position.y - root.radius);
+        const bool trapped = burial_depth_ > 0.32f
+            && head_burial > 0.18f && torso_burial > 0.18f
+            && left_wall > 0.18f && right_wall > 0.18f;
+''')
+
+replace_once('tests/deformable_terrain_tests.cpp', '''        static Vec2 root_position(const Environment& environment) noexcept
+        {
+            return environment.particles_[environment.blueprint_.root_node].position;
+        }
+
+''', '''        static Vec2 root_position(const Environment& environment) noexcept
+        {
+            return environment.particles_[environment.blueprint_.root_node].position;
+        }
+
+        static Vec2 node_position(const Environment& environment,
+            std::uint16_t node) noexcept
+        {
+            return environment.particles_[node].position;
+        }
+
+''')
+
 replace_once('tests/deformable_terrain_tests.cpp', '''    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.80f,12.0f,0.22f);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.25f,10.0f,0.18f);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x+0.55f,1.0f,0.25f);
 ''', '''    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-1.05f,14.0f,0.22f);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.35f,10.0f,0.18f);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x+0.10f,7.0f,0.20f);
+''')
+
+replace_once('tests/deformable_terrain_tests.cpp', '''    const Vec2 trapped_root=sim::EnvironmentTestAccess::root_position(trapped);
+    constexpr std::array<float,6> burial_offsets{-0.90f,-0.55f,-0.20f,0.20f,0.55f,0.90f};
+    for(float offset:burial_offsets)
+        sim::EnvironmentTestAccess::deposit_world(trapped,trapped_root.x+offset,12.0f,0.20f);
+''', '''    const Vec2 trapped_root=sim::EnvironmentTestAccess::root_position(trapped);
+    const Vec2 trapped_head=sim::EnvironmentTestAccess::node_position(
+        trapped,trapped.blueprint().head_node);
+    const Vec2 trapped_torso=sim::EnvironmentTestAccess::node_position(
+        trapped,trapped.blueprint().torso_node);
+    constexpr std::array<float,7> burial_offsets{-1.05f,-0.70f,-0.35f,0.0f,0.35f,0.70f,1.05f};
+    for(float offset:burial_offsets)
+        sim::EnvironmentTestAccess::deposit_world(trapped,trapped_root.x+offset,22.0f,0.20f);
+    sim::EnvironmentTestAccess::deposit_world(trapped,trapped_head.x,26.0f,0.18f);
+    sim::EnvironmentTestAccess::deposit_world(trapped,trapped_torso.x,26.0f,0.18f);
 ''')
 
 Path(__file__).unlink()
