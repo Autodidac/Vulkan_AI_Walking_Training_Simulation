@@ -1,5 +1,6 @@
 #include "app.hpp"
 #include "autonomy.hpp"
+#include "pixel_art.hpp"
 #include "simulation.hpp"
 #include "ui_layout.hpp"
 #include "ui_font.hpp"
@@ -10,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <format>
 #include <limits>
 #include <memory>
@@ -72,104 +72,21 @@ namespace runner
         constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
         constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
 
-        struct PixelArt
-        {
-            int width{};
-            int height{};
-            std::vector<Color> pixels{};
-
-            [[nodiscard]] bool loaded() const noexcept
-            {
-                return width > 0 && height > 0
-                    && pixels.size() == static_cast<std::size_t>(width * height);
-            }
-        };
-
-        [[nodiscard]] bool read_ppm_number(std::istream& input, int& value)
-        {
-            input >> std::ws;
-            while (input.peek() == '#')
-            {
-                std::string ignored{};
-                std::getline(input, ignored);
-                input >> std::ws;
-            }
-            return static_cast<bool>(input >> value);
-        }
-
-        [[nodiscard]] bool load_p3_pixel_art(const std::filesystem::path& path,
-            PixelArt& art, std::string& error)
-        {
-            std::ifstream input(path);
-            if (!input)
-            {
-                error = "Could not open original Runner artwork: " + path.string();
-                return false;
-            }
-
-            std::string magic{};
-            input >> magic;
-            int width{};
-            int height{};
-            int maximum{};
-            if (magic != "P3" || !read_ppm_number(input, width)
-                || !read_ppm_number(input, height)
-                || !read_ppm_number(input, maximum)
-                || width <= 0 || height <= 0 || width > 256 || height > 256
-                || maximum <= 0 || maximum > 65535)
-            {
-                error = "Original Runner artwork is not a valid bounded P3 PPM: "
-                    + path.string();
-                return false;
-            }
-
-            PixelArt loaded{};
-            loaded.width = width;
-            loaded.height = height;
-            loaded.pixels.reserve(static_cast<std::size_t>(width * height));
-            const float inverse_maximum = 1.0f / static_cast<float>(maximum);
-            for (int index = 0; index < width * height; ++index)
-            {
-                int red_channel{};
-                int green_channel{};
-                int blue_channel{};
-                if (!read_ppm_number(input, red_channel)
-                    || !read_ppm_number(input, green_channel)
-                    || !read_ppm_number(input, blue_channel)
-                    || red_channel < 0 || green_channel < 0 || blue_channel < 0
-                    || red_channel > maximum || green_channel > maximum
-                    || blue_channel > maximum)
-                {
-                    error = "Original Runner artwork has incomplete pixel data: "
-                        + path.string();
-                    return false;
-                }
-                loaded.pixels.push_back({
-                    static_cast<float>(red_channel) * inverse_maximum,
-                    static_cast<float>(green_channel) * inverse_maximum,
-                    static_cast<float>(blue_channel) * inverse_maximum,
-                    1.0f
-                });
-            }
-            art = std::move(loaded);
-            error.clear();
-            return true;
-        }
-
-        void draw_pixel_art(render::Canvas& canvas, const PixelArt& art,
+        void draw_pixel_art(render::Canvas& canvas, const art::PixelArt& artwork,
             Vec2 position, float pixel_size)
         {
-            if (!art.loaded() || pixel_size <= 0.0f)
+            if (!artwork.loaded() || pixel_size <= 0.0f)
                 return;
-            for (int y = 0; y < art.height; ++y)
+            for (int y = 0; y < artwork.height; ++y)
             {
-                for (int x = 0; x < art.width; ++x)
+                for (int x = 0; x < artwork.width; ++x)
                 {
                     const Vec2 minimum = position
                         + Vec2{ static_cast<float>(x) * pixel_size,
                             static_cast<float>(y) * pixel_size };
                     canvas.quad(minimum, minimum + Vec2{ pixel_size, pixel_size },
-                        art.pixels[static_cast<std::size_t>(y * art.width + x)]);
+                        artwork.pixels[static_cast<std::size_t>(
+                            y * artwork.width + x)]);
                 }
             }
         }
@@ -398,7 +315,7 @@ namespace runner
         float joint_test_input{};
         float joint_test_phase{};
         float camera_x{};
-        PixelArt original_runner_art{};
+        art::PixelArt original_runner_art{};
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
@@ -1988,9 +1905,14 @@ namespace runner
     bool Application::initialize(const std::filesystem::path& asset_directory,
         std::string& error)
     {
-        if (!load_p3_pixel_art(asset_directory / "chicken.ppm",
-                impl_->original_runner_art, error))
-            return false;
+        std::string artwork_error{};
+        if (!art::load_p3_pixel_art(asset_directory / "chicken.ppm",
+                impl_->original_runner_art, artwork_error))
+        {
+            impl_->original_runner_art = {};
+            impl_->status = "ARTWORK WARNING - " + artwork_error;
+            impl_->status_time = 9.0f;
+        }
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);
@@ -2000,8 +1922,11 @@ namespace runner
         impl_->blueprint = impl_->trainer.blueprint();
         impl_->rig_preset = resumed ? Impl::RigPreset::custom : Impl::RigPreset::humanoid;
         impl_->trainer.set_background_enabled(true);
-        impl_->status = message;
-        impl_->status_time = 6.0f;
+        if (impl_->original_runner_art.loaded())
+        {
+            impl_->status = message;
+            impl_->status_time = 6.0f;
+        }
         error.clear();
         return true;
     }

@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.10
+**Target:** Runner v0.7.11
 
-**Release state:** PUBLISHED — corrected Runner v0.7.10 package, original artwork, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.
+**Release state:** REOPENED — v0.7.10 shipped six missing P3 background pixels and a fragile fatal artwork loader; v0.7.11 correction is in validation.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -2244,7 +2244,7 @@ Stand qualification and mastery use the same visible 10 rad/s joint-speed limit.
 Re-run Linux warnings-as-errors, all deterministic tests, full Windows Vulkan build/tests, installed and extracted package diagnostics, acceptance matrix, checksum/manifest audit, published-asset re-download, and branch/PR cleanup after WALK-PRESS-109 and WALK-CURRICULUM-110 pass.
 
 ### WALK-ART-112 — Display and package the original Runner artwork
-**Status:** PUBLISHED — RELEASE VERIFIED
+**Status:** REOPENED — released v0.7.10 artwork has 634/640 pixels and terminates application initialization
 
 The original `assets/chicken.ppm` artwork is loaded during application startup, rendered in the live top bar, and remains a required packaged runtime asset. Missing or malformed art fails initialization instead of silently reverting to a placeholder.
 
@@ -2293,3 +2293,25 @@ Runner v0.7.10 writes and loads only `runner-v0710-*` autosave, evolved-rig, and
 - Published assets were byte-compared; ZIP checksum and extracted per-file manifest: passed
 - Temporary publisher removed before tagging; open pull requests: `0`; remaining branches: `main`
 - Contradictory released-package evidence reopens only the exact affected mission
+
+## v0.7.11 packaged artwork startup correction
+
+### WALK-PPM-114 — Repair and parse the original packaged P3 artwork
+**Status:** IN VALIDATION
+
+Restore the six omitted dark-background pixels at the ends of five authored scanlines without shifting or replacing visible artwork. Replace formatted-stream parsing with a binary byte tokenizer that accepts standard ASCII whitespace, CRLF, comments, and an optional UTF-8 BOM while enforcing bounded dimensions, channel ranges, exact pixel count, and no unexpected trailing tokens.
+
+### WALK-ARTSAFE-115 — Decorative artwork cannot brick Runner startup
+**Status:** IN VALIDATION
+
+The application uses the original artwork when valid. A missing or malformed user-side decorative asset produces a visible warning and continues without the decoration; it cannot terminate the trainer. Release/package validation remains strict and rejects an invalid packaged asset.
+
+### WALK-PKGART-116 — Package diagnostics must exercise the real artwork loader
+**Status:** IN VALIDATION
+
+`Runner.exe --diagnose-package` parses `assets/chicken.ppm` with the same loader used at application startup. Deterministic tests parse the exact repository asset and BOM/comment/CRLF fixtures, so a release cannot pass by checking only that the asset directory exists.
+
+### WALK-RELEASE-117 — Publish corrected Runner v0.7.11
+**Status:** IN VALIDATION
+
+Run Linux warnings-as-errors and all tests, full Windows SDL3/Vulkan build and tests, build-tree/installed/extracted package diagnostics, executable-relative `run.bat`, checksum/manifest audit, release re-download, and repository cleanup before publication.

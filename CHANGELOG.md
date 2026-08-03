@@ -2,6 +2,15 @@
 
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
+## [0.7.11] - 2026-08-03
+
+### Fixed
+
+- Restored six omitted dark-background pixels across five original Runner-art scanlines, producing the declared 32×20 image without shifting visible artwork.
+- Replaced the Windows-fragile formatted-stream P3 parser with a portable binary tokenizer supporting comments, CRLF, and an optional UTF-8 BOM.
+- Made decorative artwork failure nonfatal during normal startup while keeping packaged-release validation strict.
+- Extended `--diagnose-package` and deterministic tests to parse the exact packaged `assets/chicken.ppm` file.
+
 ## [0.7.10] - 2026-08-03
 
 

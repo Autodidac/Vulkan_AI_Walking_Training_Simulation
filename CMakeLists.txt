@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.10 LANGUAGES CXX)
+project(Runner VERSION 0.7.11 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -12,6 +12,7 @@ find_package(Threads REQUIRED)
 
 add_library(RunnerCore STATIC
     src/simulation.cpp
+    src/pixel_art.cpp
     src/acceptance.cpp
     src/ppo_network.cpp
     src/ppo_trainer.cpp
@@ -71,7 +72,7 @@ if(RUNNER_BUILD_APP)
 
     add_executable(Runner
         src/main.cpp src/app.cpp src/canvas.cpp src/renderer.cpp
-        src/app.hpp src/renderer.hpp src/math.hpp src/ui_font.hpp)
+        src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp src/ui_font.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
@@ -103,6 +104,17 @@ if(RUNNER_BUILD_TESTS)
             -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
     set_tests_properties(Runner.RepositoryHygiene PROPERTIES TIMEOUT 30)
+
+    add_executable(RunnerPixelArtTests tests/pixel_art_tests.cpp)
+    target_link_libraries(RunnerPixelArtTests PRIVATE Runner::Core)
+    target_compile_features(RunnerPixelArtTests PRIVATE cxx_std_23)
+    target_compile_definitions(RunnerPixelArtTests PRIVATE
+        RUNNER_SOURCE_ASSET_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    set_target_properties(RunnerPixelArtTests PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerPixelArtTests)
+    add_test(NAME Runner.PixelArt COMMAND RunnerPixelArtTests)
+    set_tests_properties(Runner.PixelArt PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
