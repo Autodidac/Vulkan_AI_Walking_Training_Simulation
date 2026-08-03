@@ -46,4 +46,11 @@ Reward reducing burial and moving toward available free space. Permit partial pe
 Build and test Linux and the complete Windows Vulkan application, verify the installed executable and run.bat from an unrelated directory, audit ZIP/checksum/manifest and re-downloaded release assets, then remove temporary workflows and branches. Live packaged-runtime evidence remains authoritative and reopens exact missions when contradictory.
 '''
 p.write_text(t.rstrip()+'\n')
+core=R/'tests/core_tests.cpp'; core_text=core.read_text(encoding='utf-8')
+old='''        require(observation.size() == 40u,
+            "eight-motor observation layout is not forty floats");'''
+new='''        require(observation.size() == 50u,
+            "eight-motor and material observation layout is not fifty floats");'''
+if core_text.count(old)!=1: raise RuntimeError(f'core observation contract: {core_text.count(old)} matches')
+core.write_text(core_text.replace(old,new,1),encoding='utf-8')
 Path(__file__).unlink()
