@@ -1,4 +1,5 @@
 name: Audit Runner v0.7.8 Cleanup
+# Retry after the publisher completed its final byte audit.
 
 on:
   push:
@@ -46,7 +47,6 @@ jobs:
           test "$(jq -r '.conclusion' <<<"$publisher")" = success
           test "$(jq -r '.headSha' <<<"$publisher")" = 06c911c46316382ae982dcb7a09a6fc7ad328d84
           jq -r '.databaseId' <<<"$publisher" > publisher-run-id.txt
-          jq -r '.url' <<<"$release_json" > release-url.txt
 
       - name: Re-download and audit published assets
         shell: bash
