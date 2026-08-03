@@ -1,0 +1,31 @@
+name: Trigger fixed Runner v0.7.9 publisher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/trigger-v079-fixed.yml
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Trigger fixed publisher and remove trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          printf '\n# Triggered by workflow run %s\n' "$GITHUB_RUN_ID" >> .github/workflows/publish-runner-v079-fixed.yml
+          git rm .github/workflows/trigger-v079-fixed.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/publish-runner-v079-fixed.yml
+          git commit -m 'Trigger fixed Runner v0.7.9 publisher'
+          git push origin HEAD:main
