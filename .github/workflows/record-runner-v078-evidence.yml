@@ -1,0 +1,75 @@
+name: Record Runner v0.7.8 Evidence
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/record-runner-v078-evidence.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record package validation evidence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+
+          def set_status(mission: str, status: str) -> None:
+              global text
+              pattern = rf'(### {re.escape(mission)}[^\n]*\n\*\*Status:\*\*)[^\n]*'
+              text, count = re.subn(pattern, rf'\1 {status}', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing mission {mission}')
+
+          text, count = re.subn(
+              r'\*\*Release state:\*\*[^\n]*',
+              '**Release state:** PACKAGE VERIFIED — v0.7.8 publication in progress; released-package live confirmation remains authoritative',
+              text,
+              count=1)
+          if count != 1:
+              raise SystemExit('missing release state')
+
+          statuses = {
+              'WALK-CHICKEN-048': 'PACKAGE VERIFIED IN v0.7.8 — LIVE CONFIRMATION PENDING',
+              'WALK-LIVE-066': "PACKAGE VERIFIED IN v0.7.8 — AWAITING ADAM'S RELEASED-PACKAGE LIVE CONFIRMATION",
+              'WALK-REG-029': "PACKAGE VERIFIED IN v0.7.8 — AWAITING ADAM'S RELEASED-PACKAGE LIVE CONFIRMATION",
+              'WALK-SAND-078': 'PACKAGE VERIFIED — COMPLETED BY WALK-SAND-091',
+              'WALK-HAZARD-079': 'PACKAGE VERIFIED — COMPLETED BY WALK-MATERIAL-092 THROUGH WALK-ESCAPE-094',
+              'WALK-SAND-091': 'PACKAGE VERIFIED',
+              'WALK-MATERIAL-092': 'PACKAGE VERIFIED',
+              'WALK-BURIAL-093': 'PACKAGE VERIFIED',
+              'WALK-ESCAPE-094': 'PACKAGE VERIFIED',
+              'WALK-RELEASE-095': 'PACKAGE VERIFIED — PUBLICATION IN PROGRESS',
+              'WALK-CHICKEN-096': 'PACKAGE VERIFIED — LIVE CONFIRMATION PENDING',
+              'WALK-VISUAL-097': 'PACKAGE VERIFIED',
+              'WALK-ACCEPT-098': 'PACKAGE VERIFIED',
+          }
+          for mission, status in statuses.items():
+              set_status(mission, status)
+
+          marker = '## v0.7.8 immutable package-validation evidence'
+          if marker not in text:
+              text = text.rstrip() + f'''\n\n{marker}\n\n- Pull request: `#35`\n- Exact validated source: `194cf0fa30256f0edf71ed2f0816d4e8d4a8395c`\n- Merge commit: `6cd86e9fcb8f24ea7eb86c819b246f5dc3b0dc25`\n- Validation workflow run: `30781702055`\n- Linux deterministic job: `91587503156` — passed\n- Windows application/package job: `91587643445` — passed\n- Validated workflow artifact: `8844143687`\n- Workflow artifact digest: `sha256:fb9257a85a61521869dd49b88bb40367a3324a432e1bb2df681426e88a26ec86`\n- GCC 14 warnings-as-errors build and all four Linux suites: passed\n- Full Visual Studio 2026 / MSVC 19.51 Vulkan application build and all five Windows suites: passed\n- Build-tree version, Vulkan, and package diagnostics from an unrelated working directory: passed\n- Installed executable and executable-relative `run.bat`: passed from an unrelated working directory\n- ZIP extraction, SHA-256 generation, and per-file manifest comparison: passed before artifact upload\n- Chicken strict-balance acceptance: all six deterministic seeds passed with bounded spin, intact body, and obstacle-capable leg travel\n- Deformable terrain acceptance: seeded repeatability, pressure compaction, volume conservation, deposit conservation, slope relaxation, and anti-tunnelling passed\n- Material acceptance: repeated deterministic falls, direct and glancing impacts, partial burial with escape direction, and full no-escape burial termination passed\n- Friction policy remains unchanged: natural stance, crouch, gait, and recovery sliding is legal; planted double-support friction shuffling receives no gait credit and only mild shaping pressure\n- Procedural biomechanical overlays are generated from current rig state and require no external reference-image asset\n- Live screenshot-level acceptance remains explicitly pending Adam's v0.7.8 released-package confirmation; contradictory evidence reopens the exact mission\n'''
+
+          path.write_text(text.rstrip() + '\n', encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add missioncache.md
+          git commit -m "Record Runner v0.7.8 package validation evidence"
+          git push origin HEAD:main
