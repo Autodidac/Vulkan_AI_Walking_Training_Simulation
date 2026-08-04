@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.13 is a C++23 SDL3/Vulkan locomotion laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
+Runner 0.7.14 is a combined C++23 SDL3/Vulkan locomotion and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
 
 ## Current curriculum
 
@@ -31,7 +31,7 @@ The built-in presets are chicken, biped, humanoid, quadruped, four-leg crawler, 
 
 ## Terrain and hazards
 
-A deterministic deformable sand heightfield drives collision, observations, evaluation, replay, live rendering, and the training PIP. Foot pressure compacts and displaces material. Falling sand deposits into terrain; rocks and debris bounce, roll, settle, and transfer impact velocity. Burial, obstruction, incoming material, and escape direction are observable, and no-escape burial terminates honestly.
+RunnerCore links the complete platform-neutral `SandHybrid::SandHybrid` library pinned at `99dd8acddfa9be1402981052b39cbf6284ed99ae`. The live map uses canonical fine cells, SandHybrid material identity, derived 8×8 macro-tile metadata, and 64×64 dirty-section scheduling. A primary humanoid is approximately 3–5 macro tiles tall. Full uniform 8×8 regions promote immediately; any changed or partial cell demotes immediately. Sand keeps irregular blob/pixel edges while structural stone may form a true vertical face or 90-degree ledge. Collision, observations, evaluation, replay, preview rendering, pressure, deposits, burial, and material impacts consume this same map state.
 
 ## Controls
 
@@ -86,6 +86,7 @@ Runner.exe --diagnose-acceptance
 ## Repository records
 
 - [`CHANGELOG.md`](CHANGELOG.md) is the single release-history document.
-- [`missioncache.md`](missioncache.md) is the single authoritative mission ledger with status, acceptance criteria, and immutable release evidence.
+- [`missioncache.md`](missioncache.md) is Runner's single authoritative mission ledger with status, acceptance criteria, and immutable release evidence.
+- [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library and preserves ownership of both canonical ledgers.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.

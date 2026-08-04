@@ -2,6 +2,21 @@
 
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
+## [0.7.14] - 2026-08-04
+
+### Added
+
+- Linked the complete platform-neutral `SandHybrid::SandHybrid` library at pinned commit `99dd8acddfa9be1402981052b39cbf6284ed99ae` into RunnerCore.
+- Added a live canonical fine-cell terrain with derived 8×8 macro metadata and SandHybrid 64×64 dirty-section scheduling.
+- Added package-preserved integration ownership and upstream mission-ledger bridge documentation.
+
+### Changed
+
+- Rescaled terrain so chicken, biped, and humanoid bodies occupy approximately 3–5 macro tiles.
+- Replaced the smooth preview fill with the same macro/fine pixel terrain used by collision and training.
+- Preserved irregular granular edges while allowing deterministic structural 90-degree ledges.
+- Folded the validated v0.7.13 toe command/hinge rate gates into the combined release and isolated v0.7.14 learned state.
+
 ## [0.7.13] - 2026-08-04
 
 ### Fixed

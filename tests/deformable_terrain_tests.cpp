@@ -51,7 +51,7 @@ int main()
         require(std::abs(first.cells()[i].height-second.cells()[i].height)<1.0e-7f, "same seed changed height");
         require(std::abs(first.cells()[i].firmness-second.cells()[i].firmness)<1.0e-7f, "same seed changed firmness");
     }
-    constexpr float x=12.5f;
+    constexpr float x=20.5f;
     const float volume=first.total_height_volume(), height=first.height_at(x), firmness=first.firmness_at(x);
     first.apply_pressure(x,2.4f,0.65f,1.0f/60.0f);
     require(first.height_at(x)<height,"pressure did not compact sand");

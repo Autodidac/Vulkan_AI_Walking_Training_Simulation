@@ -60,7 +60,7 @@ namespace runner::sim
         };
 
         static constexpr std::size_t macro_cell_side = sandhybrid::terrain::tile_size;
-        static constexpr float fine_cell_spacing = 0.125f;
+        static constexpr float fine_cell_spacing = 0.140625f;
         static constexpr float cell_spacing = fine_cell_spacing;
         static constexpr float macro_tile_size = fine_cell_spacing
             * static_cast<float>(macro_cell_side);
@@ -71,14 +71,14 @@ namespace runner::sim
         static constexpr std::size_t macro_rows = vertical_cell_count / macro_cell_side;
         static constexpr std::size_t macro_tile_count = macro_columns * macro_rows;
         static constexpr float period = static_cast<float>(cell_count) * fine_cell_spacing;
-        static constexpr float world_bottom = -4.0f;
+        static constexpr float world_bottom = -4.5f;
         static constexpr float world_top = world_bottom
             + static_cast<float>(vertical_cell_count) * fine_cell_spacing;
 
         static_assert(macro_cell_side == 8u);
         static_assert(cell_count % macro_cell_side == 0u);
         static_assert(vertical_cell_count % macro_cell_side == 0u);
-        static_assert(macro_tile_size == 1.0f);
+        static_assert(macro_tile_size == 1.125f);
         static_assert(sandhybrid::material_count < 256u);
 
         void reset(std::uint64_t seed, float difficulty) noexcept
@@ -100,11 +100,11 @@ namespace runner::sim
             {
                 refresh_column(column);
                 cells_[column].rest_height = cells_[column].height;
-                const FineCell& top = top_cell(column);
+                const FineCell* top = top_cell(column);
                 const float random_firmness = 0.26f
                     + unit_hash(seed_ ^ (static_cast<std::uint64_t>(column)
                         * 0xbf58476d1ce4e5b9ULL)) * 0.30f;
-                cells_[column].firmness = top.structural()
+                cells_[column].firmness = top != nullptr && top->structural()
                     ? 0.82f : std::clamp(random_firmness, 0.18f, 0.72f);
                 cells_[column].loose_fraction = 1.0f - cells_[column].firmness;
             }
@@ -232,7 +232,8 @@ namespace runner::sim
 
                 const std::size_t high = difference > 0.0f ? index : right;
                 const std::size_t low = difference > 0.0f ? right : index;
-                if (top_cell(high).structural())
+                const FineCell* high_top = top_cell(high);
+                if (high_top == nullptr || high_top->structural())
                     continue;
                 const float mobility = std::clamp(1.0f - average_firmness, 0.08f, 1.0f);
                 const float movement = std::min(excess * 0.20f,
@@ -256,10 +257,10 @@ namespace runner::sim
 
         [[nodiscard]] float total_height_volume() const noexcept
         {
-            float result = 0.0f;
-            for (const FineCell& cell : fine_cells_)
-                result += cell.fill * fine_cell_spacing;
-            return result;
+            double result = 0.0;
+            for (const Cell& column : cells_)
+                result += static_cast<double>(column.height);
+            return static_cast<float>(result);
         }
 
         [[nodiscard]] float maximum_neighbor_delta() const noexcept
@@ -370,7 +371,7 @@ namespace runner::sim
             FineCell& cell = fine_cells_[fine_index(column, row)];
             if (!cell.occupied())
                 return false;
-            cell = {};
+            clear_cell(cell);
             changed_cell(column, row);
             return true;
         }
@@ -527,6 +528,13 @@ namespace runner::sim
             return row * macro_columns + column;
         }
 
+        static void clear_cell(FineCell& cell) noexcept
+        {
+            cell.material_id = 0u;
+            cell.flags = 0u;
+            cell.fill = 0.0f;
+        }
+
         static void set_cell(FineCell& cell, sandhybrid::Material material,
             bool structural, float fill) noexcept
         {
@@ -534,23 +542,21 @@ namespace runner::sim
             cell.flags = structural ? FineCell::structural_flag : 0u;
             cell.fill = std::clamp(fill, 0.0f, 1.0f);
             if (cell.fill <= 1.0e-6f)
-                cell = {};
+                clear_cell(cell);
         }
 
-        [[nodiscard]] FineCell& top_cell(std::size_t column) noexcept
+        [[nodiscard]] FineCell* top_cell(std::size_t column) noexcept
         {
             const int row = surface_rows_[column];
-            if (row < 0)
-                return empty_cell_;
-            return fine_cells_[fine_index(column, static_cast<std::size_t>(row))];
+            return row < 0 ? nullptr
+                : &fine_cells_[fine_index(column, static_cast<std::size_t>(row))];
         }
 
-        [[nodiscard]] const FineCell& top_cell(std::size_t column) const noexcept
+        [[nodiscard]] const FineCell* top_cell(std::size_t column) const noexcept
         {
             const int row = surface_rows_[column];
-            if (row < 0)
-                return empty_cell_;
-            return fine_cells_[fine_index(column, static_cast<std::size_t>(row))];
+            return row < 0 ? nullptr
+                : &fine_cells_[fine_index(column, static_cast<std::size_t>(row))];
         }
 
         void refresh_column(std::size_t column) noexcept
@@ -651,7 +657,7 @@ namespace runner::sim
                 removed += take;
                 const std::size_t changed_row = static_cast<std::size_t>(top);
                 if (cell.fill <= 1.0e-6f)
-                    cell = {};
+                    clear_cell(cell);
                 changed_cell(column, changed_row);
             }
             return removed;
@@ -678,7 +684,11 @@ namespace runner::sim
                     target = &fine_cells_[fine_index(column, row)];
                 }
                 if (!target->occupied())
-                    set_cell(*target, material, structural, 0.0f);
+                {
+                    target->material_id = static_cast<std::uint8_t>(material);
+                    target->flags = structural ? FineCell::structural_flag : 0u;
+                    target->fill = 0.0f;
+                }
                 const float capacity = (1.0f - target->fill) * fine_cell_spacing;
                 const float put = std::min(remaining, capacity);
                 target->fill += put / fine_cell_spacing;
@@ -737,6 +747,5 @@ namespace runner::sim
         float difficulty_{ 0.25f };
         std::size_t macro_promotions_{};
         std::size_t macro_demotions_{};
-        inline static FineCell empty_cell_{};
     };
 }
