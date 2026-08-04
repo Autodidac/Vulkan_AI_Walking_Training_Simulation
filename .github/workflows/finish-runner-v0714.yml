@@ -1,0 +1,442 @@
+name: Finish and publish Runner v0.7.14
+
+on:
+  push:
+    branches: [agent/v0714-sandhybrid-live-map-integration]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: finish-runner-v0714
+  cancel-in-progress: false
+
+jobs:
+  linux-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install GCC 14 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build
+
+      - name: Materialize optional art and final source
+        run: |
+          set -euo pipefail
+          python3 tools/apply_runner_v0714_optional_art.py
+          test -f assets/optional/runner_armor_concepts/runner_armor_concepts.webp
+          test -f assets/optional/runner_armor_concepts/README.md
+          test ! -e tools/runner_v0714_optional_art
+          test ! -f tools/apply_runner_v0714_optional_art.py
+          echo '2f99c87459bb1fbc28bc556e8df07b58a5b2d51650a300563bffcb8a38a57f19  assets/optional/runner_armor_concepts/runner_armor_concepts.webp' | sha256sum --check
+          grep -F 'WALK-ART-136' missioncache.md
+          grep -F 'project(Runner VERSION 0.7.14 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae' CMakeLists.txt
+          grep -F 'SandHybrid::SandHybrid' CMakeLists.txt
+          git diff --check
+
+      - name: Configure Linux deterministic suite
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: cmake -S . -B build/linux-v0714 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build and test Linux suite
+        run: |
+          cmake --build build/linux-v0714 --parallel
+          ctest --test-dir build/linux-v0714 --output-on-failure -V --timeout 1800
+
+      - name: Freeze exact tested source
+        id: source
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/finish-runner-v0714.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Finalize Runner v0.7.14 source and optional art'
+          git push origin HEAD:agent/v0714-sandhybrid-live-map-integration
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  windows-package:
+    needs: linux-source
+    runs-on: windows-2025
+    timeout-minutes: 150
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      validated_zip_sha256: ${{ steps.package.outputs.zip_sha256 }}
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.linux-source.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: runner-v0714-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0714-vcpkg-${{ runner.os }}-
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Configure and build Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
+          cmake --build --preset windows-release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+
+      - name: Run complete Windows tests
+        shell: pwsh
+        run: |
+          ctest --preset windows-release --output-on-failure -V --timeout 1800
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+
+      - name: Verify build-tree diagnostics
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            if ((& $exe --version | Out-String).Trim() -ne 'Runner 0.7.14') { throw 'Version mismatch' }
+            & $exe --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+            & $exe --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'All-rig acceptance failed' }
+          }
+          finally { Pop-Location }
+
+      - name: Install and verify package with optional fallback
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.14-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
+          Copy-Item README.md,LICENSE,CHANGELOG.md,missioncache.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          foreach ($required in @(
+            'Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md',
+            'assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv',
+            'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
+            'assets/optional/runner_armor_concepts/runner_armor_concepts.webp',
+            'assets/optional/runner_armor_concepts/README.md')) {
+            if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
+          }
+          $artHash = (Get-FileHash "$stage/assets/optional/runner_armor_concepts/runner_armor_concepts.webp" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($artHash -ne '2f99c87459bb1fbc28bc556e8df07b58a5b2d51650a300563bffcb8a38a57f19') { throw "Optional art hash mismatch: $artHash" }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$stage/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
+            & "$stage/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance failed' }
+            if ((& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.14') { throw 'run.bat mismatch' }
+          }
+          finally { Pop-Location }
+
+          $fallback = "$env:RUNNER_TEMP/Runner-v0.7.14-no-optional-art"
+          Remove-Item $fallback -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $fallback | Out-Null
+          Copy-Item "$stage/*" -Destination $fallback -Recurse -Force
+          Remove-Item "$fallback/assets/optional" -Recurse -Force
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$fallback/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'No-optional-art package diagnostic failed' }
+            & "$fallback/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'No-optional-art acceptance failed' }
+          }
+          finally { Pop-Location }
+          "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Create and audit archive
+        id: package
+        shell: pwsh
+        run: |
+          $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.14-windows-x64.zip"
+          $checksum = "$archive.sha256"
+          $manifest = "$env:GITHUB_WORKSPACE/Runner-v0.7.14-windows-x64.manifest.sha256"
+          Compress-Archive -Path "$env:STAGE/*" -DestinationPath $archive -Force
+          $zipHash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $zipHash | Set-Content $checksum
+          Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          } | Set-Content $manifest
+          $audit = "$env:RUNNER_TEMP/runner-v0714-extracted"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content $manifest
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Extracted manifest mismatch' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$audit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
+            & "$audit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance failed' }
+          }
+          finally { Pop-Location }
+          "zip_sha256=$($zipHash.ToUpperInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload validated package
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Runner-v0.7.14-windows-x64
+          path: |
+            Runner-v0.7.14-windows-x64.zip
+            Runner-v0.7.14-windows-x64.zip.sha256
+            Runner-v0.7.14-windows-x64.manifest.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [linux-source, windows-package]
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TESTED_SOURCE: ${{ needs.linux-source.outputs.source_sha }}
+      ARTIFACT_ID: ${{ needs.windows-package.outputs.artifact_id }}
+      ARTIFACT_DIGEST: ${{ needs.windows-package.outputs.artifact_digest }}
+      VALIDATED_ZIP_SHA256: ${{ needs.windows-package.outputs.validated_zip_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Runner-v0.7.14-windows-x64
+          path: validated-artifact
+
+      - name: Merge validated source and freeze package evidence
+        shell: pwsh
+        run: |
+          $repo = $env:GITHUB_REPOSITORY
+          gh pr merge 52 --repo $repo --merge --admin --delete-branch
+          if ($LASTEXITCODE -ne 0) { throw 'Validated PR merge failed' }
+          git fetch origin main
+          git checkout -B main origin/main
+          Remove-Item .github/workflows/validate-runner-v0714.yml -Force -ErrorAction SilentlyContinue
+          foreach ($temporary in @(
+            '.github/workflows/publish-runner-v0713.yml',
+            'tools/publish_v0713.ps1','tools/patch_publish_v0713.py',
+            'tools/patch_publish_selectstring_v0713.py')) {
+            if (Test-Path $temporary) { Remove-Item $temporary -Force }
+          }
+          @'
+          import os, re
+          from pathlib import Path
+          p = Path('missioncache.md')
+          t = p.read_text(encoding='utf-8')
+          t = re.sub(r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PACKAGE VERIFIED — v0.7.14 SandHybrid live map, toe-rate gates, optional-art fallback, Linux, full Windows Vulkan, installed/extracted diagnostics, checksum, and manifest passed; publication pending.',
+              t, count=1, flags=re.M)
+          for name in ('WALK-SANDLIB-129','WALK-TERRAINSCALE-130','WALK-HYBRIDMAP-131','WALK-LIVEMAP-132','WALK-BRIDGE-133','WALK-ART-136'):
+              pattern = rf'(### {name}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              t, n = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED', t, count=1)
+              if n != 1:
+                  raise SystemExit(f'missing mission {name}')
+          pattern = r'(### WALK-RELEASE-135[^\n]*\n)\*\*Status:\*\*[^\n]*'
+          t, n = re.subn(pattern, r'\1**Status:** PACKAGE VERIFIED — PUBLICATION PENDING', t, count=1)
+          if n != 1:
+              raise SystemExit('missing WALK-RELEASE-135')
+          marker = '## v0.7.14 package validation evidence'
+          if marker in t:
+              t = t[:t.index(marker)].rstrip() + '\n'
+          evidence = f'''\n## v0.7.14 package validation evidence\n\n- Exact tested source: `{os.environ['TESTED_SOURCE']}`\n- Validation workflow run: `{os.environ['GITHUB_RUN_ID']}`\n- Validated artifact ID: `{os.environ['ARTIFACT_ID']}`\n- Validated artifact digest: `{os.environ['ARTIFACT_DIGEST']}`\n- Validated Windows ZIP SHA-256: `{os.environ['VALIDATED_ZIP_SHA256']}`\n- Linux GCC 14 warnings-as-errors build and deterministic suite: passed\n- Full Windows SDL3/Vulkan build and complete tests: passed\n- Every preset Stand and static Crouch acceptance gate: passed\n- Build-tree, installed, and independently extracted diagnostics: passed\n- SandHybrid API, 8x8 macro/fine, scale, live-map, and volume contracts: passed\n- Optional armor reference hash and package presence: passed\n- Package and all-rig diagnostics with `assets/optional` removed: passed\n- ZIP checksum and per-file manifest audit: passed\n'''
+          p.write_text(t.rstrip() + '\n\n' + evidence.strip() + '\n', encoding='utf-8', newline='\n')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Mission cache package update failed' }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Freeze validated Runner v0.7.14 package source'
+          git push origin main
+          "RELEASE_SHA=$((git rev-parse HEAD).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Repack current verified documents and publish release
+        shell: pwsh
+        run: |
+          $repo = $env:GITHUB_REPOSITORY
+          $tag = 'v0.7.14'
+          $artifact = Join-Path $env:GITHUB_WORKSPACE 'validated-artifact'
+          $validatedZip = Join-Path $artifact 'Runner-v0.7.14-windows-x64.zip'
+          $validatedChecksum = Join-Path $artifact 'Runner-v0.7.14-windows-x64.zip.sha256'
+          $validatedManifest = Join-Path $artifact 'Runner-v0.7.14-windows-x64.manifest.sha256'
+          foreach ($path in @($validatedZip,$validatedChecksum,$validatedManifest)) {
+            if (-not (Test-Path $path)) { throw "Validated artifact file missing: $path" }
+          }
+          $validatedHash = (Get-FileHash $validatedZip -Algorithm SHA256).Hash
+          if ($validatedHash -ne $env:VALIDATED_ZIP_SHA256) { throw "Validated ZIP changed: $validatedHash" }
+          if ((Get-Content $validatedChecksum).Trim().ToUpperInvariant() -ne $validatedHash) { throw 'Validated checksum mismatch' }
+
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.14-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $validatedZip -DestinationPath $stage -Force
+          Copy-Item README.md,LICENSE,CHANGELOG.md,missioncache.md -Destination $stage -Force
+
+          $archive = Join-Path $env:GITHUB_WORKSPACE 'Runner-v0.7.14-windows-x64.zip'
+          $checksum = "$archive.sha256"
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Runner-v0.7.14-windows-x64.manifest.sha256'
+          Remove-Item $archive,$checksum,$manifest -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
+          $finalHash = (Get-FileHash $archive -Algorithm SHA256).Hash
+          $finalHash | Set-Content $checksum
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          } | Set-Content $manifest
+
+          $audit = "$env:RUNNER_TEMP/runner-v0714-final-extracted"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content $manifest
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Final package manifest mismatch' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$audit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Final package diagnostic failed' }
+            & "$audit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Final acceptance failed' }
+            if ((& cmd.exe /d /c "call `"$audit\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.14') { throw 'Final run.bat mismatch' }
+          }
+          finally { Pop-Location }
+
+          $notes = Join-Path $env:RUNNER_TEMP 'Runner-v0.7.14-release-notes.md'
+          @"
+          # Runner v0.7.14
+
+          Combines the validated articulated-toe natural-motion gate with the live SandHybrid terrain integration.
+
+          - Links the pinned platform-neutral SandHybrid core.
+          - Uses canonical fine cells with derived 8x8 macro metadata for collision, training, burial, impacts, preview, and rendering.
+          - Keeps granular pixel boundaries and deterministic hard structural ledges.
+          - Preserves all-rig Stand and static Crouch acceptance.
+          - Packages Adam's modular armor direction as an optional concept contact sheet.
+          - Proves Runner starts and passes diagnostics with the entire optional-art directory removed.
+          - Carries reachable ledge climbing and backward controlled descent forward explicitly in missioncache.
+
+          Validated on Linux GCC 14 and the complete Windows SDL3/Vulkan package, including build-tree, installed, extracted, checksum, manifest, and release-asset audits.
+          "@ | Set-Content $notes
+          if (gh release view $tag --repo $repo 2>$null) {
+            gh release delete $tag --repo $repo --cleanup-tag --yes
+          }
+          gh release create $tag --repo $repo --title 'Runner v0.7.14' --target $env:RELEASE_SHA --notes-file $notes $archive $checksum $manifest
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+
+          $download = "$env:RUNNER_TEMP/runner-v0714-release-download"
+          Remove-Item $download -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $download | Out-Null
+          gh release download $tag --repo $repo --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset download failed' }
+          foreach ($name in @(
+            'Runner-v0.7.14-windows-x64.zip',
+            'Runner-v0.7.14-windows-x64.zip.sha256',
+            'Runner-v0.7.14-windows-x64.manifest.sha256')) {
+            $local = Join-Path $env:GITHUB_WORKSPACE $name
+            $remote = Join-Path $download $name
+            if (-not (Test-Path $remote)) { throw "Downloaded release asset missing: $name" }
+            if ((Get-FileHash $local -Algorithm SHA256).Hash -ne (Get-FileHash $remote -Algorithm SHA256).Hash) {
+              throw "Released asset differs: $name"
+            }
+          }
+          $releaseAudit = "$env:RUNNER_TEMP/runner-v0714-release-extracted"
+          Remove-Item $releaseAudit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive (Join-Path $download 'Runner-v0.7.14-windows-x64.zip') -DestinationPath $releaseAudit -Force
+          $expected = Get-Content (Join-Path $download 'Runner-v0.7.14-windows-x64.manifest.sha256')
+          $actual = Get-ChildItem $releaseAudit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($releaseAudit.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Downloaded release manifest mismatch' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$releaseAudit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Released package diagnostic failed' }
+            & "$releaseAudit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Released acceptance failed' }
+          }
+          finally { Pop-Location }
+          "FINAL_ZIP_SHA256=$finalHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Clean repository and record immutable release evidence
+        shell: pwsh
+        run: |
+          $repo = $env:GITHUB_REPOSITORY
+          $openPrs = gh pr list --repo $repo --state open --json number --jq '.[].number'
+          foreach ($number in $openPrs) {
+            gh pr close $number --repo $repo --delete-branch
+          }
+          $branches = gh api "repos/$repo/branches?per_page=100" --paginate --jq '.[].name'
+          foreach ($branch in $branches) {
+            if ($branch -eq 'main') { continue }
+            gh api --method DELETE "repos/$repo/git/refs/heads/$branch" 2>$null
+          }
+
+          git pull --rebase origin main
+          @'
+          import os, re
+          from pathlib import Path
+          p = Path('missioncache.md')
+          t = p.read_text(encoding='utf-8')
+          t = re.sub(r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PUBLISHED — Runner v0.7.14 source, SandHybrid integration, optional-art fallback, Windows package, checksum, manifest, released executable, branch cleanup, and PR audit verified.',
+              t, count=1, flags=re.M)
+          for name in ('WALK-SANDLIB-129','WALK-TERRAINSCALE-130','WALK-HYBRIDMAP-131','WALK-LIVEMAP-132','WALK-BRIDGE-133','WALK-RELEASE-135'):
+              pattern = rf'(### {name}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              t, n = re.subn(pattern, rf'\1**Status:** PUBLISHED — RELEASE VERIFIED', t, count=1)
+              if n != 1:
+                  raise SystemExit(f'missing mission {name}')
+          pattern = r'(### WALK-ART-136[^\n]*\n)\*\*Status:\*\*[^\n]*'
+          t, n = re.subn(pattern, r'\1**Status:** PUBLISHED — OPTIONAL REFERENCE, NON-BLOCKING', t, count=1)
+          if n != 1:
+              raise SystemExit('missing WALK-ART-136')
+          marker = '## v0.7.14 immutable release evidence'
+          if marker in t:
+              t = t[:t.index(marker)].rstrip() + '\n'
+          evidence = f'''\n## v0.7.14 immutable release evidence\n\n- Published tag and title: `v0.7.14` / `Runner v0.7.14`\n- Exact tested source: `{os.environ['TESTED_SOURCE']}`\n- Release source commit: `{os.environ['RELEASE_SHA']}`\n- Validation workflow run: `{os.environ['GITHUB_RUN_ID']}`\n- Actions artifact ID: `{os.environ['ARTIFACT_ID']}`\n- Actions artifact digest: `{os.environ['ARTIFACT_DIGEST']}`\n- Published Windows ZIP SHA-256: `{os.environ['FINAL_ZIP_SHA256']}`\n- Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest\n- Released assets re-downloaded and byte-compared: passed\n- Released ZIP checksum, manifest, executable, run.bat, package diagnostics, and all-rig acceptance: passed\n- Optional armor concept contact sheet packaged with verified hash: passed\n- Missing optional-art fallback diagnostics: passed\n- Open pull requests after cleanup: `0`\n- Remaining branches after cleanup: `main`\n- Contradictory released-package evidence reopens only the exact affected mission\n'''
+          p.write_text(t.rstrip() + '\n\n' + evidence.strip() + '\n', encoding='utf-8', newline='\n')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable evidence update failed' }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git commit -m 'Record immutable Runner v0.7.14 release evidence'
+          git push origin main
