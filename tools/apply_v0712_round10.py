@@ -27,10 +27,7 @@ def patch_static_press_invalid_state() -> None:
         // stage-specific checks can run. Every other invalid reason remains.
         if (course_stage_ == CourseStage::duck_press
             && invalid_reason_ == InvalidMotion::sustained_flight)
-        {
             invalid_reason_ = InvalidMotion::none;
-            invalid_motion_seconds_ = 0.0f;
-        }
         if (invalid_reason_ != InvalidMotion::none)'''
     if "Static crouch qualification explicitly requires grounded support" in text:
         raise RuntimeError("static press flight reset was already materialized")
