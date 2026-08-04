@@ -1,0 +1,35 @@
+name: Publish Runner v0.7.13
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-runner-v0713.yml]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: publish-runner-v0713-final
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Publish and independently audit Runner v0.7.13
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/patch_publish_v0713.py
+          if ($LASTEXITCODE -ne 0) { throw 'Publisher finalization failed' }
+          $publisher = Get-Content tools/publish_v0713.ps1 -Raw
+          & ([scriptblock]::Create($publisher))
