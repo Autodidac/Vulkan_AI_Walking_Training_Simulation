@@ -35,8 +35,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 tools/prepare_v0712_applicator.py
           python3 tools/apply_v0712_runtime_fix.py
           git diff --check
+          test ! -f tools/prepare_v0712_applicator.py
           test ! -f tools/apply_v0712_runtime_fix.py
           test ! -f WORK_v0712.tmp
           grep -F 'project(Runner VERSION 0.7.12 LANGUAGES CXX)' CMakeLists.txt
