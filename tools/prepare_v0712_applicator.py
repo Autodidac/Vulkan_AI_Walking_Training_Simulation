@@ -56,6 +56,23 @@ round4_text = round4_text.replace(
 )
 round4.write_text(round4_text, encoding="utf-8")
 
+# Static crouch and crouch-walk both call the compact teacher; only the first
+# occurrence belongs to the static press correction.
+round5 = TOOLS / "apply_v0712_round5.py"
+round5_text = round5.read_text(encoding="utf-8")
+old_round5 = '''    text = replace_once(text,
+        "            : compact_support_teacher_action(environment, pressure);",
+        "            : compact_support_teacher_action(environment, pressure * 0.35f);",
+        "bounded compact crouch teacher")'''
+new_round5 = '''    text = text.replace(
+        "            : compact_support_teacher_action(environment, pressure);",
+        "            : compact_support_teacher_action(environment, pressure * 0.35f);",
+        1)'''
+if round5_text.count(old_round5) != 1:
+    raise RuntimeError(
+        f"expected one round-five compact teacher edit, found {round5_text.count(old_round5)}")
+round5.write_text(round5_text.replace(old_round5, new_round5, 1), encoding="utf-8")
+
 old_main = '''    patch_acceptance()
     patch_docs()
     trigger = ROOT / "WORK_v0712.tmp"'''
