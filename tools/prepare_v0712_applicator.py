@@ -27,7 +27,11 @@ old_main = '''    patch_acceptance()
     trigger = ROOT / "WORK_v0712.tmp"'''
 new_main = '''    patch_acceptance()
     patch_docs()
-    for script_name in ("apply_v0712_round2.py", "apply_v0712_round3.py"):
+    for script_name in (
+        "apply_v0712_round2.py",
+        "apply_v0712_round3.py",
+        "apply_v0712_round4.py",
+    ):
         script = ROOT / "tools" / script_name
         namespace = {
             "__name__": script_name.removesuffix(".py"),
