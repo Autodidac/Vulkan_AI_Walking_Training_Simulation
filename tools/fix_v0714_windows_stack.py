@@ -65,10 +65,10 @@ def patch_terrain() -> None:
         "        // fixed arrays made each Environment several hundred KiB and overflowed\n"
         "        // the default 1 MiB Windows thread stack when tests held multiple rigs.\n"
         "        // std::vector preserves deep-copy value semantics without sharing terrain.\n"
-        "        std::vector<Cell> cells_{ cell_count };\n"
-        "        std::vector<FineCell> fine_cells_{ fine_cell_count };\n"
-        "        std::vector<MacroTile> macro_tiles_{ macro_tile_count };\n"
-        "        std::vector<int> surface_rows_{ cell_count, -1 };\n",
+        "        std::vector<Cell> cells_ = std::vector<Cell>(cell_count);\n"
+        "        std::vector<FineCell> fine_cells_ = std::vector<FineCell>(fine_cell_count);\n"
+        "        std::vector<MacroTile> macro_tiles_ = std::vector<MacroTile>(macro_tile_count);\n"
+        "        std::vector<int> surface_rows_ = std::vector<int>(cell_count, -1);\n",
         "heap-backed terrain storage",
     )
 
