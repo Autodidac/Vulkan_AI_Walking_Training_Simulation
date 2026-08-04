@@ -27,13 +27,14 @@ old_main = '''    patch_acceptance()
     trigger = ROOT / "WORK_v0712.tmp"'''
 new_main = '''    patch_acceptance()
     patch_docs()
-    round_two = ROOT / "tools/apply_v0712_round2.py"
-    namespace = {
-        "__name__": "runner_v0712_round2",
-        "__file__": str(round_two),
-    }
-    exec(compile(round_two.read_text(encoding="utf-8"), str(round_two), "exec"), namespace)
-    namespace["main"]()
+    for script_name in ("apply_v0712_round2.py", "apply_v0712_round3.py"):
+        script = ROOT / "tools" / script_name
+        namespace = {
+            "__name__": script_name.removesuffix(".py"),
+            "__file__": str(script),
+        }
+        exec(compile(script.read_text(encoding="utf-8"), str(script), "exec"), namespace)
+        namespace["main"]()
     trigger = ROOT / "WORK_v0712.tmp"'''
 if text.count(old_main) != 1:
     raise RuntimeError(f"expected one applicator main tail, found {text.count(old_main)}")
