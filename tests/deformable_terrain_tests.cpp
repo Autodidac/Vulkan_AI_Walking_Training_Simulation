@@ -44,6 +44,8 @@ namespace { void require(bool ok, std::string_view message) { if (ok) return; st
 int main()
 {
     using namespace runner;
+    static_assert(sizeof(sim::DeformableTerrain) < 128u * 1024u);
+    static_assert(sizeof(sim::Environment) < 256u * 1024u);
     sim::DeformableTerrain first{}, second{};
     first.reset(0x12345678u, 0.72f); second.reset(0x12345678u, 0.72f);
     for (std::size_t i=0; i<sim::DeformableTerrain::cell_count; ++i)

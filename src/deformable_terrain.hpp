@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 namespace runner::sim
 {
@@ -85,10 +86,10 @@ namespace runner::sim
         {
             seed_ = seed == 0u ? 1u : seed;
             difficulty_ = std::clamp(difficulty, 0.0f, 1.0f);
-            cells_.fill(Cell{});
-            fine_cells_.fill(FineCell{});
-            macro_tiles_.fill(MacroTile{});
-            surface_rows_.fill(-1);
+            std::fill(cells_.begin(), cells_.end(), Cell{});
+            std::fill(fine_cells_.begin(), fine_cells_.end(), FineCell{});
+            std::fill(macro_tiles_.begin(), macro_tiles_.end(), MacroTile{});
+            std::fill(surface_rows_.begin(), surface_rows_.end(), -1);
             section_grid_ = {};
             tick_ = 1u;
             macro_promotions_ = 0u;
@@ -305,17 +306,17 @@ namespace runner::sim
             return actor_height / macro_tile_size;
         }
 
-        [[nodiscard]] const std::array<Cell, cell_count>& cells() const noexcept
+        [[nodiscard]] const std::vector<Cell>& cells() const noexcept
         {
             return cells_;
         }
 
-        [[nodiscard]] const std::array<FineCell, fine_cell_count>& fine_cells() const noexcept
+        [[nodiscard]] const std::vector<FineCell>& fine_cells() const noexcept
         {
             return fine_cells_;
         }
 
-        [[nodiscard]] const std::array<MacroTile, macro_tile_count>& macro_tiles() const noexcept
+        [[nodiscard]] const std::vector<MacroTile>& macro_tiles() const noexcept
         {
             return macro_tiles_;
         }
@@ -737,10 +738,17 @@ namespace runner::sim
             return wrap_column(static_cast<std::ptrdiff_t>(std::floor(scaled + 0.5f)));
         }
 
-        std::array<Cell, cell_count> cells_{};
-        std::array<FineCell, fine_cell_count> fine_cells_{};
-        std::array<MacroTile, macro_tile_count> macro_tiles_{};
-        std::array<int, cell_count> surface_rows_{};
+        // Keep the canonical live map off Environment's stack frame. The old
+        // fixed arrays made each Environment several hundred KiB and overflowed
+        // the default 1 MiB Windows thread stack when tests held multiple rigs.
+        // std::vector preserves deep-copy value semantics without sharing terrain.
+        // Never use list initialization here; for example, the audit string
+        // std::vector<FineCell> fine_cells_{ fine_cell_count };
+        // creates a one-element vector through aggregate initialization.
+        std::vector<Cell> cells_ = std::vector<Cell>(cell_count);
+        std::vector<FineCell> fine_cells_ = std::vector<FineCell>(fine_cell_count);
+        std::vector<MacroTile> macro_tiles_ = std::vector<MacroTile>(macro_tile_count);
+        std::vector<int> surface_rows_ = std::vector<int>(cell_count, -1);
         sandhybrid::SparseSectionGrid section_grid_{};
         std::uint64_t seed_{ 1u };
         std::uint64_t tick_{ 1u };
@@ -748,4 +756,7 @@ namespace runner::sim
         std::size_t macro_promotions_{};
         std::size_t macro_demotions_{};
     };
+
+    static_assert(sizeof(DeformableTerrain) < 128u * 1024u,
+        "DeformableTerrain must remain safe to embed in Windows stack-resident rigs");
 }

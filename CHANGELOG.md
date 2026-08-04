@@ -14,6 +14,8 @@ All notable Runner changes are recorded here. The authoritative work ledger is `
 
 ### Changed
 
+- Moved the canonical fine-cell terrain arrays off each rig's Windows stack while preserving independent deep-copy terrain state.
+
 - Rescaled terrain so chicken, biped, and humanoid bodies occupy approximately 3–5 macro tiles.
 - Replaced the smooth preview fill with the same macro/fine pixel terrain used by collision and training.
 - Preserved irregular granular edges while allowing deterministic structural 90-degree ledges.

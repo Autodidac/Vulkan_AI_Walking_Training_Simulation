@@ -2495,6 +2495,13 @@ Acceptance requires the Windows package to include the optional reference and RE
 
 After the combined live map is accepted, add a hard-wall curriculum where a rig climbs without jumping when its hands can reach a ledge at any ledge height, and turns backward to lower itself from a ledge when the remaining fall is no greater than its standing height. Completion requires hand/ledge contact, support transfer, no powered takeoff, and controlled feet-first recovery.
 
+### WALK-WINSTACK-137 — Heap-backed canonical terrain storage
+**Status:** IMPLEMENTED — VALIDATION REQUIRED
+
+The canonical SandHybrid fine-cell map remains owned independently by every `Environment`, but its bulk arrays are heap-backed rather than embedded in the Windows thread stack. This preserves deterministic deep-copy value semantics and removes the default 1 MiB stack overflow reproduced by the Windows core, terrain, live-acceptance, concurrency, and runtime-pipeline tests.
+
+Acceptance requires `sizeof(DeformableTerrain) < 128 KiB`, `sizeof(Environment) < 256 KiB`, Linux warnings-as-errors and the complete Windows test matrix to pass, and installed/extracted package diagnostics to remain unchanged. Raising the linker stack limit alone does not satisfy this mission.
+
 ### WALK-RELEASE-135 — Publish the combined Runner v0.7.14 package
 **Status:** BLOCKED — IMPLEMENTATION VALIDATION AND PACKAGE ACCEPTANCE REQUIRED
 
