@@ -131,8 +131,10 @@ def patch_static_press_settle_and_grounding() -> None:
         const float allowed_airtime = course_stage_ == CourseStage::duck_press
             ? std::max(base_allowed_airtime, 0.75f)
             : base_allowed_airtime;'''
-    text = replace_once(text, old_airtime, new_airtime,
-        "static press support-flicker airtime grace")
+    position = text.rfind(old_airtime)
+    if position < 0:
+        raise RuntimeError("missing gait-metrics airtime terminator")
+    text = text[:position] + new_airtime + text[position + len(old_airtime):]
     write("src/simulation.cpp", text)
 
 
@@ -146,14 +148,6 @@ def patch_diagnostics() -> None:
         "            float worst_root_vertical_speed{};\n"
         "            sim::InvalidMotion last_invalid{ sim::InvalidMotion::none };",
         "remaining Stand gate diagnostics")
-    # The detailed ratios are now encoded by shortest stance outcome; keep the
-    # fields initialized for future expansion without claiming unavailable data.
-    text = replace_once(text,
-        "                << \", joint_speed=\" << result.worst_joint_speed\n"
-        "                << \", invalid=\" << static_cast<int>(result.last_invalid);",
-        "                << \", joint_speed=\" << result.worst_joint_speed\n"
-        "                << \", invalid=\" << static_cast<int>(result.last_invalid);",
-        "stable diagnostic formatting")
     write("src/acceptance.cpp", text)
 
 
