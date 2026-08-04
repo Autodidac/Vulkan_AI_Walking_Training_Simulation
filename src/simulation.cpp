@@ -1227,8 +1227,16 @@ namespace runner::sim
         previous_angles_.fill(0.0f);
         angular_velocities_.fill(0.0f);
         previous_applied_actions_.fill(0.0f);
+        articulated_toe_commands_.fill(0.0f);
+        previous_articulated_toe_angles_.fill(0.0f);
         for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
             previous_angles_[index] = joint_angle(blueprint_.motors[index]);
+        for (std::size_t side = 0; side < previous_articulated_toe_angles_.size(); ++side)
+        {
+            MotorConstraint toe_motor{};
+            if (articulated_toe_motor(side == 0u, toe_motor))
+                previous_articulated_toe_angles_[side] = joint_angle(toe_motor);
+        }
         elapsed_seconds_ = 0.0f;
         distance_travelled_ = 0.0f;
         forward_speed_ = 0.0f;
@@ -1713,15 +1721,18 @@ namespace runner::sim
         return true;
     }
 
-    void Environment::solve_articulated_toes(
-        std::span<const float, action_count> actions) noexcept
+    void Environment::update_articulated_toe_commands(
+        std::span<const float, action_count> actions, float dt) noexcept
     {
-        auto solve_side = [&](bool left, std::size_t hip_index,
-            std::size_t knee_index)
+        auto update_side = [&](bool left, std::size_t side,
+            std::size_t hip_index, std::size_t knee_index)
         {
             MotorConstraint toe_motor{};
             if (!articulated_toe_motor(left, toe_motor))
+            {
+                articulated_toe_commands_[side] = 0.0f;
                 return;
+            }
 
             const std::uint16_t heel = left
                 ? blueprint_.left_contact_node : blueprint_.right_contact_node;
@@ -1733,34 +1744,79 @@ namespace runner::sim
             const float chain_effort = clamp(
                 0.5f * (std::abs(hip) + std::abs(knee)), 0.0f, 1.0f);
 
-            float toe_action = 0.0f;
-            if (course_stage_ == CourseStage::balance)
+            float desired = 0.0f;
+            if (course_stage_ == CourseStage::duck_press)
             {
-                // Keep the new hinge neutral during Stand. Toe actuation begins
-                // only when a lesson actually asks for flexion or propulsion.
-                toe_action = 0.0f;
-            }
-            else if (course_stage_ == CourseStage::duck_press)
-            {
-                // Dorsiflex with the hip/knee chain instead of spreading the
-                // feet apart to gain head clearance.
-                toe_action = 0.16f + chain_effort * 0.24f;
+                desired = 0.16f + chain_effort * 0.24f;
             }
             else if (stage_requires_forward_gait(course_stage_)
                 || stage_allows_powered_airtime(course_stage_))
             {
-                // A grounded toe plantar-flexes for push-off; a swing toe lifts
-                // for clearance. Both motions are coupled to the same-side leg
-                // chain and therefore happen in the same policy step.
-                toe_action = supported
+                desired = supported
                     ? -(0.30f + chain_effort * 0.42f)
                     : 0.46f + chain_effort * 0.18f;
             }
-            solve_motor(toe_motor, clamp(toe_action, -0.90f, 0.80f));
+            articulated_toe_commands_[side] = rate_limited_toe_command(
+                articulated_toe_commands_[side],
+                clamp(desired, -0.90f, 0.80f), dt, supported, course_stage_);
         };
 
-        solve_side(true, 0u, 1u);
-        solve_side(false, 2u, 3u);
+        update_side(true, 0u, 0u, 1u);
+        update_side(false, 1u, 2u, 3u);
+    }
+
+    void Environment::solve_articulated_toes() noexcept
+    {
+        for (std::size_t side = 0; side < articulated_toe_commands_.size(); ++side)
+        {
+            MotorConstraint toe_motor{};
+            if (articulated_toe_motor(side == 0u, toe_motor))
+                solve_motor(toe_motor, articulated_toe_commands_[side]);
+        }
+    }
+
+    void Environment::limit_articulated_toe_rates(float dt) noexcept
+    {
+        for (std::size_t side = 0; side < previous_articulated_toe_angles_.size(); ++side)
+        {
+            const bool left = side == 0u;
+            MotorConstraint toe_motor{};
+            if (!articulated_toe_motor(left, toe_motor))
+                continue;
+            const std::uint16_t heel = left
+                ? blueprint_.left_contact_node : blueprint_.right_contact_node;
+            const bool supported = contact_supported(heel);
+            const float current = joint_angle(toe_motor);
+            const float prior = previous_articulated_toe_angles_[side];
+            const float maximum_delta = toe_angular_rate_limit(
+                supported, course_stage_) * dt;
+            const float bounded_delta = clamp(wrap_angle(current - prior),
+                -maximum_delta, maximum_delta);
+            const float bounded = wrap_angle(prior + bounded_delta);
+            const float correction = wrap_angle(bounded - current);
+            if (std::abs(correction) > 1.0e-6f
+                && toe_motor.pivot < particles_.size()
+                && toe_motor.c < particles_.size())
+            {
+                Particle& toe = particles_[toe_motor.c];
+                const Vec2 pivot = particles_[toe_motor.pivot].position;
+                const Vec2 corrected = pivot + rotate(toe.position - pivot, correction);
+                const Vec2 translation = corrected - toe.position;
+                toe.position = corrected;
+                toe.previous += translation;
+
+                const float minimum_y = ground_height_at(toe.position.x)
+                    + ground_contact_offset(true, toe.radius);
+                if (toe.position.y < minimum_y)
+                {
+                    const float lift = minimum_y - toe.position.y;
+                    toe.position.y += lift;
+                    toe.previous.y += lift;
+                }
+                toe.grounded = toe.position.y <= minimum_y + 0.0025f;
+            }
+            previous_articulated_toe_angles_[side] = joint_angle(toe_motor);
+        }
     }
 
     void Environment::solve_motor(const MotorConstraint& motor, float action) noexcept
@@ -2796,13 +2852,14 @@ namespace runner::sim
         duck_press_max_penetration_ = 0.0f;
         update_materials(dt);
         rebuild_course_features();
+        update_articulated_toe_commands(applied_actions, dt);
         for (int iteration = 0; iteration < 14; ++iteration)
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
                 solve_distance(bone);
             for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
-            solve_articulated_toes(applied_actions);
+            solve_articulated_toes();
             stabilize_balance_posture();
             stabilize_duck_posture();
             stabilize_passive_appendages();
@@ -2827,6 +2884,10 @@ namespace runner::sim
             // same grounded foot state that preview and gait metrics observe.
             solve_ground(dt);
         }
+        // The iterative solver can otherwise reverse the toe between
+        // stabilization and push-off every frame. Bound the final physical
+        // hinge travel while preserving the contact and propulsion roles.
+        limit_articulated_toe_rates(dt);
         apply_support_pressure(dt);
         if (stage_uses_deformable_terrain(course_stage_))
             terrain_.step(dt);

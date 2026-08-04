@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1200u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1300u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept

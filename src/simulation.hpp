@@ -669,6 +669,48 @@ namespace runner::sim
         return clamp(target, motor.minimum_angle, motor.maximum_angle);
     }
 
+    [[nodiscard]] inline float toe_command_slew_rate(bool supported,
+        CourseStage stage) noexcept
+    {
+        if (stage == CourseStage::balance)
+            return 0.55f;
+        if (stage == CourseStage::duck_press)
+            return 0.80f;
+        if (supported)
+            return stage_allows_powered_airtime(stage) ? 1.55f : 1.25f;
+        return stage_allows_powered_airtime(stage) ? 2.20f : 1.80f;
+    }
+
+    [[nodiscard]] inline float rate_limited_toe_command(float previous,
+        float desired, float dt, bool supported, CourseStage stage) noexcept
+    {
+        desired = clamp(desired, -1.0f, 1.0f);
+        if (std::abs(desired) < 0.055f)
+            desired = 0.0f;
+        const float maximum_delta = toe_command_slew_rate(supported, stage)
+            * clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
+        float next = previous + clamp(desired - previous,
+            -maximum_delta, maximum_delta);
+        if (std::abs(next) < 0.025f && desired == 0.0f)
+            next = 0.0f;
+        return clamp(next, -1.0f, 1.0f);
+    }
+
+    [[nodiscard]] inline float toe_angular_rate_limit(bool supported,
+        CourseStage stage) noexcept
+    {
+        constexpr float radians_per_degree = pi / 180.0f;
+        if (stage == CourseStage::balance)
+            return 38.0f * radians_per_degree;
+        if (stage == CourseStage::duck_press)
+            return 58.0f * radians_per_degree;
+        if (supported)
+            return (stage_allows_powered_airtime(stage) ? 112.0f : 88.0f)
+                * radians_per_degree;
+        return (stage_allows_powered_airtime(stage) ? 168.0f : 138.0f)
+            * radians_per_degree;
+    }
+
     struct CreatureBlueprint
     {
         std::vector<Vec2> nodes{};
@@ -900,8 +942,10 @@ namespace runner::sim
         void stabilize_duck_posture() noexcept;
         [[nodiscard]] bool articulated_toe_motor(bool left,
             MotorConstraint& motor) const noexcept;
-        void solve_articulated_toes(
-            std::span<const float, action_count> actions) noexcept;
+        void update_articulated_toe_commands(
+            std::span<const float, action_count> actions, float dt) noexcept;
+        void solve_articulated_toes() noexcept;
+        void limit_articulated_toe_rates(float dt) noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
         void solve_course() noexcept;
@@ -938,6 +982,8 @@ namespace runner::sim
         std::array<float, action_count> previous_angles_{};
         std::array<float, action_count> angular_velocities_{};
         std::array<float, action_count> previous_applied_actions_{};
+        std::array<float, 2> articulated_toe_commands_{};
+        std::array<float, 2> previous_articulated_toe_angles_{};
         Vec2 previous_pelvis_{};
         float elapsed_seconds_{};
         float distance_travelled_{};

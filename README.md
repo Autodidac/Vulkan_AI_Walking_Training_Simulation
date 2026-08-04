@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.10 is a C++23 SDL3/Vulkan locomotion laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
+Runner 0.7.13 is a C++23 SDL3/Vulkan locomotion laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
 
 ## Current curriculum
 
