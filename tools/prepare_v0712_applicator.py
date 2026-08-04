@@ -21,5 +21,18 @@ new = '''    old = """        case sim::CourseStage::duck_press:
 '''
 if text.count(old) != 1:
     raise RuntimeError(f"expected one obsolete crouch applicator block, found {text.count(old)}")
-path.write_text(text.replace(old, new, 1), encoding="utf-8")
+text = text.replace(old, new, 1)
+old_main = '''    patch_acceptance()
+    patch_docs()
+    trigger = ROOT / "WORK_v0712.tmp"'''
+new_main = '''    patch_acceptance()
+    patch_docs()
+    round_two = ROOT / "tools/apply_v0712_round2.py"
+    namespace = {"__name__": "runner_v0712_round2"}
+    exec(compile(round_two.read_text(encoding="utf-8"), str(round_two), "exec"), namespace)
+    namespace["main"]()
+    trigger = ROOT / "WORK_v0712.tmp"'''
+if text.count(old_main) != 1:
+    raise RuntimeError(f"expected one applicator main tail, found {text.count(old_main)}")
+path.write_text(text.replace(old_main, new_main, 1), encoding="utf-8")
 Path(__file__).unlink()
