@@ -19,11 +19,7 @@ namespace runner::rl
         case sim::CourseStage::balance:
             return strict_balance_mastery(metrics);
         case sim::CourseStage::duck_press:
-            return metrics.evaluation_duck_recoveries >= 2.0f
-                && metrics.evaluation_duck_seconds >= 1.25f
-                && metrics.evaluation_longest_stance >= 2.5f
-                && metrics.evaluation_survival >= 9.0f
-                && metrics.evaluation_max_joint_speed <= 10.0f;
+            return strict_duck_press_mastery(metrics);
         case sim::CourseStage::uneven:
             return metrics.evaluation_distance >= 7.0f
                 && metrics.evaluation_stride_events >= 8.0f

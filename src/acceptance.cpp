@@ -78,12 +78,11 @@ namespace runner::acceptance
                         continue;
                     const auto first_index = static_cast<std::uint16_t>(first);
                     const auto second_index = static_cast<std::uint16_t>(second);
-                    const bool same_plate = std::ranges::any_of(blueprint.bones,
-                        [first_index, second_index](const sim::DistanceConstraint& bone)
-                        {
-                            return (bone.a == first_index && bone.b == second_index)
-                                || (bone.a == second_index && bone.b == first_index);
-                        });
+                    const bool same_plate =
+                        (blueprint.is_left_support_seed(first_index)
+                            && blueprint.is_left_support_seed(second_index))
+                        || (blueprint.is_right_support_seed(first_index)
+                            && blueprint.is_right_support_seed(second_index));
                     if (same_plate)
                         continue;
                     const float first_radius = first < blueprint.radii.size()
@@ -107,6 +106,15 @@ namespace runner::acceptance
             std::uint32_t total{};
             float worst_spin{};
             float shortest_stance{ std::numeric_limits<float>::max() };
+            float lowest_upright{ 1.0f };
+            float worst_slip{};
+            float worst_support_span{ 1.0f };
+            std::uint32_t nonfoot_seeds{};
+            std::uint32_t unsupported_seeds{};
+            float worst_joint_speed{};
+            float lowest_head_height_ratio{ 1.0f };
+            float worst_root_vertical_speed{};
+            sim::InvalidMotion last_invalid{ sim::InvalidMotion::none };
         };
 
         [[nodiscard]] BalanceGateResult strict_balance_gate(
@@ -141,12 +149,135 @@ namespace runner::acceptance
                         >= rl::standing_mastery_seconds
                     && environment.uncontrolled_spin_turns() <= 0.55f;
                 result.accepted += accepted ? 1u : 0u;
-                result.worst_spin = std::max(result.worst_spin,
-                    environment.uncontrolled_spin_turns());
                 result.shortest_stance = std::min(result.shortest_stance,
                     environment.longest_stable_stance_seconds());
+                result.worst_spin = std::max(result.worst_spin,
+                    environment.uncontrolled_spin_turns());
+                result.lowest_upright = std::min(result.lowest_upright,
+                    environment.uprightness());
+                result.worst_slip = std::max(result.worst_slip,
+                    environment.stance_slip_speed());
+                result.worst_support_span = std::max(result.worst_support_span,
+                    environment.primary_support_span_ratio());
+                result.nonfoot_seeds += environment.non_foot_grounded() ? 1u : 0u;
+                result.unsupported_seeds += (environment.left_supported()
+                    || environment.right_supported()) ? 0u : 1u;
+                result.worst_joint_speed = std::max(result.worst_joint_speed,
+                    environment.maximum_joint_speed());
+                result.last_invalid = environment.invalid_reason();
             }
             return result;
+        }
+
+        struct CrouchGateResult
+        {
+            std::uint32_t accepted{};
+            std::uint32_t total{};
+            float shortest_duck{ std::numeric_limits<float>::max() };
+            float longest_duck{};
+            float minimum_clearance{ std::numeric_limits<float>::max() };
+            float maximum_penetration{};
+            std::uint32_t fewest_recoveries{ std::numeric_limits<std::uint32_t>::max() };
+            std::uint32_t contact_seeds{};
+            std::uint32_t completed_seeds{};
+            std::uint32_t rejection_mask{};
+            std::uint32_t supported_seeds{};
+            std::uint32_t intact_seeds{};
+            float lowest_upright{ 1.0f };
+            int first_grounded_nonfoot{ -1 };
+            sim::InvalidMotion last_invalid{ sim::InvalidMotion::none };
+        };
+
+        [[nodiscard]] CrouchGateResult strict_crouch_gate(
+            const CreatureBlueprint& blueprint, std::uint64_t seed_base)
+        {
+            CrouchGateResult result{};
+            result.total = 4u;
+            for (std::uint32_t seed_index = 0; seed_index < result.total; ++seed_index)
+            {
+                const std::uint64_t seed = seed_base
+                    + static_cast<std::uint64_t>(seed_index) * 4099u;
+                Environment environment{ blueprint, seed };
+                environment.set_course(sim::CourseStage::duck_press, 0.25f);
+                bool contact_seen = false;
+                float seed_longest_duck = 0.0f;
+                float seed_minimum_clearance = std::numeric_limits<float>::max();
+                for (int frame = 0; frame < 1800; ++frame)
+                {
+                    const auto action = rl::duck_teacher_action(environment);
+                    const sim::StepResult step = environment.step(action);
+                    contact_seen = contact_seen || environment.duck_press_contact();
+                    seed_longest_duck = std::max(seed_longest_duck,
+                        environment.duck_seconds());
+                    seed_minimum_clearance = std::min(seed_minimum_clearance,
+                        environment.duck_clearance_margin());
+                    result.maximum_penetration = std::max(result.maximum_penetration,
+                        environment.duck_press_penetration());
+                    if (environment.duck_press_completed()
+                        && environment.duck_recoveries() >= 1u
+                        && environment.stable_stance_seconds() >= 0.75f)
+                        break;
+                    if (step.terminated)
+                        break;
+                }
+                const rl::StageMotionQualification qualification =
+                    rl::stage_motion_qualification(sim::CourseStage::duck_press, environment);
+                const bool accepted = qualification.valid
+                    && environment.body_integrity_valid()
+                    && environment.duck_press_completed()
+                    && environment.duck_recoveries() >= 1u;
+                result.accepted += accepted ? 1u : 0u;
+                result.contact_seeds += contact_seen ? 1u : 0u;
+                result.completed_seeds += environment.duck_press_completed() ? 1u : 0u;
+                result.rejection_mask |= qualification.rejection_mask;
+                result.supported_seeds += (environment.left_supported()
+                    || environment.right_supported()) ? 1u : 0u;
+                result.intact_seeds += environment.body_integrity_valid() ? 1u : 0u;
+                result.lowest_upright = std::min(result.lowest_upright,
+                    environment.uprightness());
+                if (result.first_grounded_nonfoot < 0)
+                {
+                    const auto particles = environment.particles();
+                    for (std::size_t node = 0; node < particles.size(); ++node)
+                    {
+                        if (particles[node].grounded
+                            && !environment.blueprint().is_support_seed(node))
+                        {
+                            result.first_grounded_nonfoot = static_cast<int>(node);
+                            break;
+                        }
+                    }
+                }
+                result.last_invalid = environment.invalid_reason();
+                result.shortest_duck = std::min(result.shortest_duck,
+                    seed_longest_duck);
+                result.longest_duck = std::max(result.longest_duck,
+                    seed_longest_duck);
+                result.minimum_clearance = std::min(result.minimum_clearance,
+                    seed_minimum_clearance);
+                result.fewest_recoveries = std::min(result.fewest_recoveries,
+                    environment.duck_recoveries());
+            }
+            return result;
+        }
+
+        [[nodiscard]] std::string crouch_detail(const CrouchGateResult& result)
+        {
+            std::ostringstream stream{};
+            stream << result.accepted << '/' << result.total
+                << " seeds, duck=" << result.shortest_duck << ".." << result.longest_duck
+                << ", recoveries=" << result.fewest_recoveries
+                << ", contact=" << result.contact_seeds
+                << ", completed=" << result.completed_seeds
+                << ", clearance=" << result.minimum_clearance
+                << ", penetration=" << result.maximum_penetration
+                << ", rejection=" << result.rejection_mask
+                << ", supported=" << result.supported_seeds
+                << ", intact=" << result.intact_seeds
+                << ", upright=" << result.lowest_upright
+                << ", grounded_nonfoot=" << result.first_grounded_nonfoot
+                << ", invalid=" << static_cast<int>(result.last_invalid);
+            return stream.str();
         }
 
         [[nodiscard]] std::string balance_detail(const BalanceGateResult& result)
@@ -154,7 +285,14 @@ namespace runner::acceptance
             std::ostringstream stream{};
             stream << result.accepted << '/' << result.total
                 << " seeds, shortest_stance=" << result.shortest_stance
-                << ", worst_spin=" << result.worst_spin;
+                << ", worst_spin=" << result.worst_spin
+                << ", upright=" << result.lowest_upright
+                << ", slip=" << result.worst_slip
+                << ", span=" << result.worst_support_span
+                << ", nonfoot=" << result.nonfoot_seeds
+                << ", unsupported=" << result.unsupported_seeds
+                << ", joint_speed=" << result.worst_joint_speed
+                << ", invalid=" << static_cast<int>(result.last_invalid);
             return stream.str();
         }
     }
@@ -180,7 +318,11 @@ namespace runner::acceptance
         std::string invalid_blueprints{};
         for (const NamedBlueprint& preset : presets)
         {
-            if (preset.blueprint.valid())
+            const bool active_motors_enabled = std::ranges::all_of(
+                std::span{ preset.blueprint.motors }.first(
+                    preset.blueprint.active_motor_count),
+                [](const sim::MotorConstraint& motor) { return motor.enabled; });
+            if (preset.blueprint.valid() && active_motors_enabled)
                 continue;
             blueprints_valid = false;
             if (!invalid_blueprints.empty())
@@ -241,17 +383,27 @@ namespace runner::acceptance
         add_case(report, "semantic-support-separation", supports_separate,
             support_detail.str());
 
-        const BalanceGateResult humanoid_gate = strict_balance_gate(
-            CreatureBlueprint::humanoid(), 0xE000u);
-        add_case(report, "humanoid-strict-six-seed-balance",
-            humanoid_gate.accepted == humanoid_gate.total,
-            balance_detail(humanoid_gate));
+        for (std::size_t index = 0; index < presets.size(); ++index)
+        {
+            const BalanceGateResult gate = strict_balance_gate(
+                presets[index].blueprint,
+                0xE000u + static_cast<std::uint64_t>(index) * 0x10000u);
+            add_case(report,
+                std::string{ presets[index].name } + "-strict-six-seed-stand",
+                gate.accepted == gate.total,
+                balance_detail(gate));
+        }
 
-        const BalanceGateResult chicken_gate = strict_balance_gate(
-            CreatureBlueprint::chicken(), 0xC11C000u);
-        add_case(report, "chicken-strict-six-seed-balance",
-            chicken_gate.accepted == chicken_gate.total,
-            balance_detail(chicken_gate));
+        for (std::size_t index = 0; index < presets.size(); ++index)
+        {
+            const CrouchGateResult gate = strict_crouch_gate(
+                presets[index].blueprint,
+                0xD0C700u + static_cast<std::uint64_t>(index) * 0x10000u);
+            add_case(report,
+                std::string{ presets[index].name } + "-static-crouch-hold-recover",
+                gate.accepted == gate.total,
+                crouch_detail(gate));
+        }
 
         const CreatureBlueprint humanoid = CreatureBlueprint::humanoid();
         const bool shoulder_geometry = humanoid.nodes.size() > 10u

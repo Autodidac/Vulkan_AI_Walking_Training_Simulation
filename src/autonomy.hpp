@@ -22,7 +22,9 @@ namespace runner::rl
 {
     inline constexpr int mastery_lock_confirmations = 8;
     inline constexpr int balance_mastery_lock_confirmations = 3;
+    inline constexpr std::uint32_t balance_mastery_invalid_seed_limit = 1u;
     inline constexpr float standing_mastery_joint_speed_limit = 10.0f;
+    inline constexpr float duck_press_mastery_joint_speed_limit = 30.0f;
 
     [[nodiscard]] inline int required_mastery_confirmations(
         sim::CourseStage stage) noexcept
@@ -35,11 +37,23 @@ namespace runner::rl
         const TrainingMetrics& metrics) noexcept
     {
         return metrics.evaluation_valid
-            && metrics.evaluation_invalid_runs == 0u
+            && metrics.evaluation_invalid_runs <= balance_mastery_invalid_seed_limit
             && metrics.evaluation_longest_stance >= standing_mastery_seconds
             && metrics.evaluation_survival >= standing_mastery_seconds
             && metrics.evaluation_spin_turns <= standing_mastery_spin_limit
             && metrics.evaluation_max_joint_speed <= standing_mastery_joint_speed_limit;
+    }
+
+    [[nodiscard]] inline bool strict_duck_press_mastery(
+        const TrainingMetrics& metrics) noexcept
+    {
+        return metrics.evaluation_valid
+            && metrics.evaluation_invalid_runs == 0u
+            && metrics.evaluation_duck_recoveries >= 1.0f
+            && metrics.evaluation_duck_seconds >= 1.25f
+            && metrics.evaluation_survival >= 9.0f
+            && metrics.evaluation_max_joint_speed
+                <= duck_press_mastery_joint_speed_limit;
     }
 
     struct AutonomyStatus

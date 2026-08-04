@@ -378,7 +378,9 @@ namespace runner::sim
         if (local < 0.0f)
             local += cycle;
         const float start = standing_head_top + 1.10f;
-        const float target = standing_head_top - (0.78f + clamp(difficulty, 0.0f, 1.0f) * 0.20f);
+        const float crouch_drop = clamp(standing_head_top * 0.16f, 0.78f, 0.86f)
+            + clamp(difficulty, 0.0f, 1.0f) * 0.08f;
+        const float target = standing_head_top - crouch_drop;
         if (local < settle_end)
             return { start, 0.0f, false, false, false };
         if (local < descend_end)
@@ -895,6 +897,11 @@ namespace runner::sim
         void separate_support_clusters() noexcept;
         void stabilize_passive_appendages() noexcept;
         void stabilize_balance_posture() noexcept;
+        void stabilize_duck_posture() noexcept;
+        [[nodiscard]] bool articulated_toe_motor(bool left,
+            MotorConstraint& motor) const noexcept;
+        void solve_articulated_toes(
+            std::span<const float, action_count> actions) noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
         void solve_course() noexcept;
@@ -948,6 +955,7 @@ namespace runner::sim
         float duck_obstacle_weight_{};
         float duck_clearance_margin_{};
         float duck_press_hold_seconds_{};
+        float duck_body_contact_seconds_{};
         float duck_press_max_penetration_{};
         float duck_walk_started_seconds_{};
         float crouch_walk_seconds_{};
