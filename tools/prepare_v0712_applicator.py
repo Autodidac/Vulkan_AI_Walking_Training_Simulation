@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Normalize the applicator to the current v0.7.11 curriculum source before materialization.
 path = Path(__file__).with_name("apply_v0712_runtime_fix.py")
 text = path.read_text(encoding="utf-8")
 old = '''    old = """        case sim::CourseStage::duck_press:
