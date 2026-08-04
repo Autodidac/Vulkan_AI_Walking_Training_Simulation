@@ -84,6 +84,7 @@ new_main = '''    patch_acceptance()
         "apply_v0712_round4.py",
         "apply_v0712_round5.py",
         "apply_v0712_round6.py",
+        "apply_v0712_round7.py",
     ):
         script = ROOT / "tools" / script_name
         namespace = {
