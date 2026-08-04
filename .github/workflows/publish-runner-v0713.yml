@@ -28,6 +28,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          python tools/patch_publish_selectstring_v0713.py
+          if ($LASTEXITCODE -ne 0) { throw 'Publisher PowerShell correction failed' }
           python tools/patch_publish_v0713.py
           if ($LASTEXITCODE -ne 0) { throw 'Publisher finalization failed' }
           $publisher = Get-Content tools/publish_v0713.ps1 -Raw
