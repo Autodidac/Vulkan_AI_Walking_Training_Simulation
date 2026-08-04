@@ -13,15 +13,14 @@ def write(path: str, text: str) -> None:
 
 def patch_static_press_invalid_state() -> None:
     text = read("src/simulation.cpp")
-    marker = "        const float invalid_limit = course_stage_ == CourseStage::mixed"
+    marker = '''        last_reward_ += recovery_reward - uncontrolled_spin_penalty;
+        if (invalid_reason_ != InvalidMotion::none)'''
     position = text.rfind(marker)
     if position < 0:
-        marker = "        const float invalid_limit ="
-        position = text.rfind(marker)
-    if position < 0:
-        raise RuntimeError("missing invalid-duration gate")
+        raise RuntimeError("missing final episode invalid-reason gate")
 
-    insertion = '''        // Static crouch qualification explicitly requires grounded support,
+    insertion = '''        last_reward_ += recovery_reward - uncontrolled_spin_penalty;
+        // Static crouch qualification explicitly requires grounded support,
         // a real press hold, feet-only ground contact, integrity, and recovery.
         // Do not let a flight reason recorded by the generic locomotion gate
         // terminate this supported compression lesson before those stronger
@@ -32,11 +31,10 @@ def patch_static_press_invalid_state() -> None:
             invalid_reason_ = InvalidMotion::none;
             invalid_motion_seconds_ = 0.0f;
         }
-
-'''
+        if (invalid_reason_ != InvalidMotion::none)'''
     if "Static crouch qualification explicitly requires grounded support" in text:
         raise RuntimeError("static press flight reset was already materialized")
-    text = text[:position] + insertion + text[position:]
+    text = text[:position] + insertion + text[position + len(marker):]
     write("src/simulation.cpp", text)
 
 
