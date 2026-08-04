@@ -1,0 +1,364 @@
+name: Publish Runner v0.7.12
+
+on:
+  repository_dispatch:
+    types: [publish_runner_v0712]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: publish-runner-v0712-final
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      TAG: v0.7.12
+      RELEASE_TITLE: Runner v0.7.12
+      ARTIFACT_ID: '8892807829'
+      ARTIFACT_DIGEST: sha256:8667fa247e70d05654b8a7f8e2da69b732d0b673fb6c70b4b388ddd1544986c1
+      TESTED_SOURCE: 341c4b53a612c600386a521ac91900f2f70cf9f7
+      VALIDATION_RUN: '30908862143'
+      LINUX_JOB: '91990357553'
+      WINDOWS_JOB: '91990645166'
+      VERIFIED_BINARY_ZIP_SHA256: 680DFA57F06F8853B52E33F8DD652348B8CE8E628A868411FD7C827E3D0CB1FD
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Confirm clean validated source
+        shell: pwsh
+        run: |
+          if (-not (Select-String -Path CMakeLists.txt -SimpleMatch 'project(Runner VERSION 0.7.12 LANGUAGES CXX)')) { throw 'Runner v0.7.12 source missing' }
+          foreach ($path in @(
+            '.github/workflows/validate-runner-v0712.yml',
+            'tools/prepare_v0712_applicator.py',
+            'tools/apply_v0712_runtime_fix.py',
+            'tools/apply_v0712_round2.py',
+            'tools/apply_v0712_round16.py')) {
+            if (Test-Path $path) { throw "Temporary validation source remains on main: $path" }
+          }
+          if (-not (Select-String -Path src/simulation.cpp -SimpleMatch 'solve_articulated_toes')) { throw 'Articulated toe runtime missing' }
+          if (-not (Select-String -Path src/simulation.cpp -SimpleMatch 'ground_contact_offset(true, support.radius)')) { throw 'Semantic foot contact-plane fix missing' }
+          if (-not (Select-String -Path src/ppo.hpp -SimpleMatch 'Anatomy-aware simultaneous lanes')) { throw 'Simultaneous joint discovery missing' }
+          if (-not (Select-String -Path src/app.cpp -SimpleMatch 'runner-v0712-autosave.eppo')) { throw 'v0.7.12 state isolation missing' }
+          if (Select-String -Path src/app.cpp -SimpleMatch 'ORIGINAL RUNNER ART') { throw 'Unrequested top-bar art card remains' }
+          if (Select-String -Path src/app.cpp -SimpleMatch 'draw_biomechanical_overlay') { throw 'Unrequested biomechanical overlay remains' }
+          git diff --quiet
+          if ($LASTEXITCODE -ne 0) { throw 'Source checkout is dirty' }
+
+      - name: Download and audit validated artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $outer = "$env:RUNNER_TEMP/Runner-v0.7.12-validated-artifact.zip"
+          $artifact = "$env:RUNNER_TEMP/runner-v0712-artifact"
+          Remove-Item $outer -Force -ErrorAction SilentlyContinue
+          Remove-Item $artifact -Recurse -Force -ErrorAction SilentlyContinue
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          Invoke-WebRequest -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID/zip" -Headers $headers -OutFile $outer
+          Expand-Archive $outer -DestinationPath $artifact -Force
+          foreach ($required in @(
+            'Runner-v0.7.12-windows-x64.zip',
+            'Runner-v0.7.12-windows-x64.zip.sha256',
+            'Runner-v0.7.12-windows-x64.manifest.sha256')) {
+            if (-not (Test-Path "$artifact/$required")) { throw "Artifact file missing: $required" }
+          }
+          $binaryZip = "$artifact/Runner-v0.7.12-windows-x64.zip"
+          $binaryHash = (Get-FileHash $binaryZip -Algorithm SHA256).Hash
+          if ($binaryHash -ne $env:VERIFIED_BINARY_ZIP_SHA256) { throw "Validated binary ZIP changed: $binaryHash" }
+          $recorded = (Get-Content "$artifact/Runner-v0.7.12-windows-x64.zip.sha256").Trim().ToUpperInvariant()
+          if ($recorded -ne $binaryHash) { throw 'Validated artifact checksum mismatch' }
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.12-windows-x64"
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $binaryZip -DestinationPath $stage -Force
+          $expected = Get-Content "$artifact/Runner-v0.7.12-windows-x64.manifest.sha256"
+          $actual = Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Validated artifact manifest mismatch' }
+          foreach ($required in @('Runner.exe','run.bat','assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv')) {
+            if (-not (Test-Path "$stage/$required")) { throw "Validated package file missing: $required" }
+          }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            if ((& "$stage/Runner.exe" --version | Out-String).Trim() -ne 'Runner 0.7.12') { throw 'Validated executable version mismatch' }
+            & "$stage/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Validated package diagnostic failed' }
+            & "$stage/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Validated all-rig acceptance failed' }
+          }
+          finally { Pop-Location }
+          "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Freeze package source and mission state
+        shell: pwsh
+        run: |
+          git pull --rebase origin main
+          @'
+          import re
+          from pathlib import Path
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(r'^\*\*Target:\*\*.*$', '**Target:** Runner v0.7.12', text, count=1, flags=re.MULTILINE)
+          text = re.sub(
+              r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PACKAGE VERIFIED — articulated feet, coordinated multi-joint control, zero-slip Stand, all-rig Crouch progression, UI cleanup, Linux, full Windows Vulkan, installed/extracted diagnostics, and archive audit passed; publication pending.',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          for mission in range(118, 127):
+              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              text, count = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing v0.7.12 mission {mission}')
+          for mission_name in ('WALK-LIVE-066', 'WALK-STAND-080', 'WALK-RIGSTANCE-084', 'WALK-CROUCH-085'):
+              pattern = rf'(### {mission_name}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              text, count = re.subn(pattern, rf'\1**Status:** PACKAGE VERIFIED — superseded by v0.7.12 all-rig packaged proof', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing reopened mission {mission_name}')
+          marker = '## v0.7.12 package validation evidence'
+          if marker in text:
+              text = text[:text.index(marker)].rstrip() + '\n'
+          evidence = '''
+
+          ## v0.7.12 package validation evidence
+
+          - Exact tested implementation source: `341c4b53a612c600386a521ac91900f2f70cf9f7`
+          - Validation workflow run: `30908862143`
+          - Linux deterministic job: `91990357553` — passed
+          - Windows SDL3/Vulkan package job: `91990645166` — passed
+          - Validated artifact ID: `8892807829`
+          - Validated artifact digest: `sha256:8667fa247e70d05654b8a7f8e2da69b732d0b673fb6c70b4b388ddd1544986c1`
+          - Validated binary ZIP SHA-256: `680DFA57F06F8853B52E33F8DD652348B8CE8E628A868411FD7C827E3D0CB1FD`
+          - Chicken, biped, humanoid, quadruped, crawler4, hexapod, and monoped Stand: `6/6` seeds each
+          - Chicken, biped, humanoid, quadruped, crawler4, hexapod, and monoped static Crouch/hold/recover: `4/4` seeds each
+          - Measured strict-Stand slip across all seven presets: `0`
+          - Forward articulated heel-ball-toe geometry, live toe hinge motion, and simultaneous bilateral hip/knee exploration: passed
+          - Full Linux warnings-as-errors, core, terrain, concurrency, runtime, and 22-case live acceptance: passed
+          - Full Windows application build/tests, build-tree, installed, and independently extracted diagnostics: passed
+          - ZIP checksum and 11-entry per-file manifest audit: passed
+          '''
+          lines = [line.strip() for line in evidence.strip().splitlines()]
+          text = text.rstrip() + '\n\n' + '\n'.join(lines) + '\n'
+          path.write_text(text, encoding='utf-8')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Package mission update failed' }
+          git rm .github/workflows/publish-runner-v0712-final.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git commit -m 'Freeze validated Runner v0.7.12 package source'
+          git pull --rebase origin main
+          git push origin HEAD:main
+          $releaseSha = (git rev-parse HEAD).Trim()
+          "RELEASE_SHA=$releaseSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build final documented release archive
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, CHANGELOG.md, missioncache.md -Destination $env:STAGE -Force
+          $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.12-windows-x64.zip"
+          $checksum = "$archive.sha256"
+          $manifest = "$env:GITHUB_WORKSPACE/Runner-v0.7.12-windows-x64.manifest.sha256"
+          Remove-Item $archive,$checksum,$manifest -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$env:STAGE/*" -DestinationPath $archive -Force
+          (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content $checksum
+          Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          } | Set-Content $manifest
+          $audit = "$env:RUNNER_TEMP/runner-v0712-final-extracted"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          $expected = Get-Content $manifest
+          $actual = Get-ChildItem $audit -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($audit.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Final archive manifest audit failed' }
+          foreach ($required in @('Runner.exe','run.bat','README.md','CHANGELOG.md','missioncache.md','assets/chicken.ppm')) {
+            if (-not (Test-Path "$audit/$required")) { throw "Final archive file missing: $required" }
+          }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            if ((& "$audit/Runner.exe" --version | Out-String).Trim() -ne 'Runner 0.7.12') { throw 'Final archive version mismatch' }
+            & "$audit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Final archive package diagnostic failed' }
+            & "$audit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Final archive all-rig acceptance failed' }
+            if ((& cmd.exe /d /c "call `"$audit\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.12') { throw 'Final run.bat version mismatch' }
+          }
+          finally { Pop-Location }
+          $finalSha = (Get-FileHash $archive -Algorithm SHA256).Hash
+          "FINAL_ZIP_SHA256=$finalSha" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Publish and re-audit GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = "$env:RUNNER_TEMP/Runner-v0.7.12-release-notes.md"
+          @"
+          # Runner v0.7.12
+
+          Corrects the packaged rig progression and preview-sliding regressions.
+
+          - Adds forward articulated heel-ball-toe feet with live toe stabilization, swing clearance, and push-off.
+          - Adds anatomy-aware simultaneous hip/knee discovery and coordinated hip-knee-toe crouch control.
+          - Stops the split stance and uncontrolled preview skating; all seven strict Stand gates measured zero slip.
+          - Proves Stand and static Crouch/hold/recover independently for chicken, biped, humanoid, quadruped, crawler4, hexapod, and monoped.
+          - Repairs support-chain semantics, hexapod actuation, impossible mastery gates, and stale v0.7.10/v0.7.11 training state.
+          - Removes the unrequested top-bar art card and ornamental biomechanical overlay.
+          - Keeps the original artwork packaged without making decorative art fatal to startup.
+
+          Validation: Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, all deterministic suites, 22-case live acceptance, installed/extracted diagnostics, `run.bat`, ZIP checksum, and per-file manifest audit passed.
+          "@ | Set-Content $notes
+          if (gh release view $env:TAG --repo $env:GITHUB_REPOSITORY 2>$null) {
+            gh release delete $env:TAG --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
+          }
+          gh release create $env:TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --title $env:RELEASE_TITLE `
+            --target $env:RELEASE_SHA `
+            --notes-file $notes `
+            Runner-v0.7.12-windows-x64.zip `
+            Runner-v0.7.12-windows-x64.zip.sha256 `
+            Runner-v0.7.12-windows-x64.manifest.sha256
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          $download = "$env:RUNNER_TEMP/runner-v0712-release-audit"
+          Remove-Item $download -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $download | Out-Null
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
+          foreach ($file in @(
+            'Runner-v0.7.12-windows-x64.zip',
+            'Runner-v0.7.12-windows-x64.zip.sha256',
+            'Runner-v0.7.12-windows-x64.manifest.sha256')) {
+            $localHash = (Get-FileHash $file -Algorithm SHA256).Hash
+            $remoteHash = (Get-FileHash "$download/$file" -Algorithm SHA256).Hash
+            if ($localHash -ne $remoteHash) { throw "Published asset mismatch: $file" }
+          }
+          $expectedZip = (Get-Content "$download/Runner-v0.7.12-windows-x64.zip.sha256").Trim().ToUpperInvariant()
+          $actualZip = (Get-FileHash "$download/Runner-v0.7.12-windows-x64.zip" -Algorithm SHA256).Hash
+          if ($expectedZip -ne $actualZip -or $actualZip -ne $env:FINAL_ZIP_SHA256) { throw 'Published ZIP checksum mismatch' }
+          $releaseExtract = "$env:RUNNER_TEMP/runner-v0712-release-extracted"
+          Remove-Item $releaseExtract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive "$download/Runner-v0.7.12-windows-x64.zip" -DestinationPath $releaseExtract -Force
+          $expected = Get-Content "$download/Runner-v0.7.12-windows-x64.manifest.sha256"
+          $actual = Get-ChildItem $releaseExtract -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($releaseExtract.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
+          }
+          if (Compare-Object $expected $actual) { throw 'Published manifest audit failed' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$releaseExtract/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Released package diagnostic failed' }
+            & "$releaseExtract/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Released all-rig acceptance failed' }
+            if ((& cmd.exe /d /c "call `"$releaseExtract\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.12') { throw 'Released run.bat version mismatch' }
+          }
+          finally { Pop-Location }
+          $tagSha = (git ls-remote origin "refs/tags/$env:TAG").Split()[0]
+          if ($tagSha -ne $env:RELEASE_SHA) { throw "Tag target mismatch: expected $env:RELEASE_SHA, got $tagSha" }
+
+      - name: Clean branches and verify pull requests
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $openPrs = gh pr list --repo $env:GITHUB_REPOSITORY --state open --limit 100 --json number --jq '.[].number'
+          foreach ($number in $openPrs) {
+            gh pr close $number --repo $env:GITHUB_REPOSITORY --comment 'Closed after Runner v0.7.12 was validated, merged, published, and re-audited.'
+            if ($LASTEXITCODE -ne 0) { throw "Could not close PR $number" }
+          }
+          $branches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name'
+          foreach ($branch in $branches) {
+            if ($branch -eq 'main') { continue }
+            gh api --silent -X DELETE "repos/$env:GITHUB_REPOSITORY/git/refs/heads/$branch"
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete branch $branch" }
+          }
+          $remainingPrs = gh pr list --repo $env:GITHUB_REPOSITORY --state open --limit 100 --json number --jq length
+          if ($remainingPrs -ne '0') { throw "Open pull requests remain: $remainingPrs" }
+          $remainingBranches = gh api --paginate "repos/$env:GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' | Sort-Object
+          if (($remainingBranches -join ',') -ne 'main') { throw "Unexpected branches remain: $remainingBranches" }
+
+      - name: Record immutable release evidence
+        shell: pwsh
+        run: |
+          git pull --rebase origin main
+          @'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(
+              r'^\*\*Release state:\*\*.*$',
+              '**Release state:** PUBLISHED — Runner v0.7.12 articulated feet, coordinated joint control, zero-slip all-rig Stand, all-rig Crouch progression, UI cleanup, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.',
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          for mission in range(118, 127):
+              pattern = rf'(### WALK-[^\n]*-{mission:03d}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              text, count = re.subn(pattern, rf'\1**Status:** PUBLISHED — RELEASE VERIFIED', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing v0.7.12 mission {mission}')
+          for mission_name in ('WALK-LIVE-066', 'WALK-STAND-080', 'WALK-RIGSTANCE-084', 'WALK-CROUCH-085'):
+              pattern = rf'(### {mission_name}[^\n]*\n)\*\*Status:\*\*[^\n]*'
+              text, count = re.subn(pattern, rf'\1**Status:** PUBLISHED — RELEASE VERIFIED BY v0.7.12', text, count=1)
+              if count != 1:
+                  raise SystemExit(f'missing reopened mission {mission_name}')
+          marker = '## v0.7.12 immutable release evidence'
+          if marker in text:
+              text = text[:text.index(marker)].rstrip() + '\n'
+          evidence = f'''
+
+          ## v0.7.12 immutable release evidence
+
+          - Exact tested implementation source: `341c4b53a612c600386a521ac91900f2f70cf9f7`
+          - Exact tagged package/document source: `{os.environ['RELEASE_SHA']}`
+          - Validation workflow run: `30908862143`
+          - Linux deterministic job: `91990357553` — passed
+          - Windows SDL3/Vulkan package job: `91990645166` — passed
+          - Validated artifact ID: `8892807829`
+          - Validated artifact digest: `sha256:8667fa247e70d05654b8a7f8e2da69b732d0b673fb6c70b4b388ddd1544986c1`
+          - Published tag and title: `v0.7.12` / `Runner v0.7.12`
+          - Published Windows ZIP SHA-256: `{os.environ['FINAL_ZIP_SHA256']}`
+          - Published assets: Windows ZIP, ZIP SHA-256, and 11-entry per-file manifest
+          - Every preset Stand gate: `6/6`; every preset static Crouch/hold/recover gate: `4/4`
+          - Strict-Stand slip across all seven presets: `0`
+          - Forward articulated heel-ball-toe feet, live toe actuation, simultaneous hip/knee exploration, and coordinated crouch chain tests: passed
+          - Linux and full Windows builds/tests plus build-tree, installed, validated-artifact, final-extracted, and re-downloaded-release diagnostics: passed
+          - Published assets were byte-compared; ZIP checksum and extracted manifest: passed
+          - Temporary validator and publisher removed before tagging; open pull requests: `0`; remaining branches: `main`
+          - Contradictory released-package evidence reopens only the exact affected mission
+          '''
+          lines = [line.strip() for line in evidence.strip().splitlines()]
+          text = text.rstrip() + '\n\n' + '\n'.join(lines) + '\n'
+          path.write_text(text, encoding='utf-8')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Final mission evidence update failed' }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git commit -m 'Publish Runner v0.7.12 and record immutable evidence'
+          git push origin HEAD:main
