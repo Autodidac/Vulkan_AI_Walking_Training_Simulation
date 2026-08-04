@@ -38,10 +38,45 @@ namespace runner::sim
             crouch[1] = 0.65f;
             crouch[2] = 0.45f;
             crouch[3] = -0.65f;
-            for (int iteration = 0; iteration < 24; ++iteration)
-                environment.solve_articulated_toes(crouch);
+            for (int frame = 0; frame < 48; ++frame)
+            {
+                environment.update_articulated_toe_commands(crouch, 1.0f / 60.0f);
+                for (int iteration = 0; iteration < 14; ++iteration)
+                    environment.solve_articulated_toes();
+                environment.limit_articulated_toe_rates(1.0f / 60.0f);
+            }
             return std::abs(wrap_angle(environment.joint_angle(left) - left_before)) > 0.01f
                 && std::abs(wrap_angle(environment.joint_angle(right) - right_before)) > 0.01f;
+        }
+
+        static bool articulated_toe_rate_is_bounded(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::uneven, 0.60f);
+            MotorConstraint left{};
+            if (!environment.articulated_toe_motor(true, left))
+                return false;
+            std::array<float, action_count> action{};
+            float previous = environment.joint_angle(left);
+            constexpr float dt = 1.0f / 60.0f;
+            for (int frame = 0; frame < 180; ++frame)
+            {
+                const float sign = (frame & 1) == 0 ? 1.0f : -1.0f;
+                action[0] = sign;
+                action[1] = -sign;
+                environment.update_articulated_toe_commands(action, dt);
+                for (int iteration = 0; iteration < 14; ++iteration)
+                    environment.solve_articulated_toes();
+                environment.limit_articulated_toe_rates(dt);
+                const float current = environment.joint_angle(left);
+                const float delta = std::abs(wrap_angle(current - previous));
+                const bool supported = environment.contact_supported(
+                    environment.blueprint_.left_contact_node);
+                if (delta > toe_angular_rate_limit(supported,
+                        environment.course_stage_) * dt + 0.0002f)
+                    return false;
+                previous = current;
+            }
+            return true;
         }
 
         static void collapse_upper_body(Environment& environment) noexcept
@@ -391,6 +426,15 @@ int main()
     toe_environment.set_course(sim::CourseStage::duck_press, 0.25f);
     require(sim::EnvironmentTestAccess::articulated_toes_move(toe_environment),
         "coordinated leg action does not actuate both toe hinges");
+    sim::Environment rate_limited_toes(sim::CreatureBlueprint::humanoid(), 181u);
+    require(sim::EnvironmentTestAccess::articulated_toe_rate_is_bounded(
+            rate_limited_toes),
+        "articulated toe hinge can chatter faster than its stance/swing rate gate");
+    require(std::abs(sim::rate_limited_toe_command(0.0f, 1.0f,
+                1.0f / 60.0f, true, sim::CourseStage::uneven))
+            <= sim::toe_command_slew_rate(true, sim::CourseStage::uneven)
+                / 60.0f + 0.000001f,
+        "toe command slew gate permits an instantaneous stabilization snap");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;

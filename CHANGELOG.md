@@ -2,6 +2,15 @@
 
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
+## [0.7.13] - 2026-08-04
+
+### Fixed
+
+- Added stance/swing-specific slew limits to articulated toe commands so balance corrections cannot reverse every frame.
+- Added a physical angular-velocity gate to the toe hinge after iterative solving, preserving propulsion while removing visible chatter.
+- Added a command dead zone and adversarial alternating-input regressions for natural toe motion.
+- Isolated v0.7.13 policy, rig, and autonomy state from earlier toe-control semantics.
+
 ## [0.7.12] - 2026-08-04
 
 ### Fixed

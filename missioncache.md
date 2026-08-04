@@ -4,9 +4,9 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 ## Release target
 
-**Target:** Runner v0.7.12
+**Target:** Runner v0.7.13
 
-**Release state:** PUBLISHED — Runner v0.7.12 articulated feet, coordinated joint control, zero-slip all-rig Stand, all-rig Crouch progression, UI cleanup, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.
+**Release state:** IMPLEMENTING — packaged v0.7.12 runtime evidence reopened toe-motion naturalness; v0.7.13 gates toe command slew and physical hinge angular velocity before publication.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -2441,3 +2441,16 @@ Semantic heel, ball, and toe contacts receive stance traction while retaining or
 - Published assets were byte-compared; ZIP checksum and extracted manifest: passed
 - Temporary validator and publisher removed before tagging; open pull requests: `0`; remaining branches: `main`
 - Contradictory released-package evidence reopens only the exact affected mission
+
+
+## v0.7.13 toe-motion naturalness correction
+
+### WALK-TOE-RATE-127 — Gate toe stabilization and push-off rate
+**Status:** IMPLEMENTED — VALIDATION REQUIRED
+
+The articulated toe remains available for stance stabilization, crouch dorsiflexion, swing clearance, and forward push-off. Its command passes through a dead zone and stage/contact-specific slew limiter, and the physical hinge stays below an explicit stance/swing angular-rate ceiling even under alternating frame-by-frame policy input. The correction must preserve all seven Stand and static Crouch gates and must not reintroduce preview sliding.
+
+### WALK-STATE-128 — Isolate corrected toe-control semantics
+**Status:** IMPLEMENTED — VALIDATION REQUIRED
+
+Runner v0.7.13 uses training semantics `0x0007'1300` and `runner-v0713-*` policy, rig, and autonomy-state paths so learned v0.7.12 toe chatter cannot silently resume.
