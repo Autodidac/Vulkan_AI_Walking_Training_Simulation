@@ -121,4 +121,17 @@ replace_once(
 )
 
 path.write_text(text, encoding="utf-8")
+
+# The old pressure sample landed inside the new deterministic stone ledge.
+# Keep the compaction contract on an actual granular section; hard structural
+# walls must not deform merely because a foot presses on them.
+test_path = ROOT / "tests/deformable_terrain_tests.cpp"
+test_text = test_path.read_text(encoding="utf-8")
+old_sample = "    constexpr float x=12.5f;"
+new_sample = "    constexpr float x=20.5f;"
+if test_text.count(old_sample) != 1:
+    raise RuntimeError(
+        f"granular pressure sample: expected one match, found {test_text.count(old_sample)}")
+test_path.write_text(test_text.replace(old_sample, new_sample, 1), encoding="utf-8")
+
 Path(__file__).unlink()
