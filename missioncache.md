@@ -2482,6 +2482,14 @@ Collision, observations, burial, material impacts, preview, training PIP, and li
 
 `docs/SANDHYBRID_INTEGRATION_BRIDGE.md` pins the upstream commit and ownership boundary. Runner packaging includes that bridge and the pinned SandHybrid `missioncache.md`. No upstream `OPEN`, `PARTIAL`, `REGRESSION`, or `DEFERRED` mission is copied into history, renamed away, or marked complete by integration.
 
+
+### WALK-ART-136 — Optional user armor concept assets
+**Status:** IMPLEMENTED — VALIDATION REQUIRED
+
+The four supplied modular sci-fi armor sheets are preserved as a compact optional contact sheet at `assets/optional/runner_armor_concepts/runner_armor_concepts.webp`, with provenance, hash, intended uses, and fallback rules documented beside it. The art may be cropped, repacked, recolored, separated into parts, or remade into a deterministic atlas before runtime use. Runtime adoption remains opt-in and the existing rig renderer remains the required fallback.
+
+Acceptance requires the Windows package to include the optional reference and README, verify the recorded SHA-256, and still pass package and all-rig acceptance diagnostics after the entire `assets/optional` directory is removed. Missing or invalid optional art must never abort startup, alter training, or create automatic UI panels.
+
 ### WALK-CLIMB-134 — Reachable ledge climb and backward controlled descent
 **Status:** OPEN — CARRIED FORWARD, NOT ORPHANED
 

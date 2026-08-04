@@ -33,6 +33,11 @@ The built-in presets are chicken, biped, humanoid, quadruped, four-leg crawler, 
 
 RunnerCore links the complete platform-neutral `SandHybrid::SandHybrid` library pinned at `99dd8acddfa9be1402981052b39cbf6284ed99ae`. The live map uses canonical fine cells, SandHybrid material identity, derived 8×8 macro-tile metadata, and 64×64 dirty-section scheduling. A primary humanoid is approximately 3–5 macro tiles tall. Full uniform 8×8 regions promote immediately; any changed or partial cell demotes immediately. Sand keeps irregular blob/pixel edges while structural stone may form a true vertical face or 90-degree ledge. Collision, observations, evaluation, replay, preview rendering, pressure, deposits, burial, and material impacts consume this same map state.
 
+
+## Optional concept art
+
+The package includes `assets/optional/runner_armor_concepts/runner_armor_concepts.webp`, a compact reference assembled from Adam's modular sci-fi armor sheets. It is not a startup or rendering dependency. Future skin work may crop, repack, or remake it into a deterministic atlas, while the current rig renderer remains the fallback when optional art is absent.
+
 ## Controls
 
 - `1`: Live Autopilot

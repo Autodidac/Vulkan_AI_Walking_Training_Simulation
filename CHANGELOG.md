@@ -6,6 +6,8 @@ All notable Runner changes are recorded here. The authoritative work ledger is `
 
 ### Added
 
+- Packaged the user-supplied modular armor direction as an optional, non-runtime concept contact sheet with a mandatory no-asset fallback.
+
 - Linked the complete platform-neutral `SandHybrid::SandHybrid` library at pinned commit `99dd8acddfa9be1402981052b39cbf6284ed99ae` into RunnerCore.
 - Added a live canonical fine-cell terrain with derived 8×8 macro metadata and SandHybrid 64×64 dirty-section scheduling.
 - Added package-preserved integration ownership and upstream mission-ledger bridge documentation.
