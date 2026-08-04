@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.14
 
-**Release state:** IMPLEMENTING — validated toe-rate correction is folded forward; Runner now integrates the pinned SandHybrid core and replaces its preview heightfield with the live 8x8-cell/macro training map.
+**Release state:** PACKAGE VERIFIED — Runner v0.7.14 Linux, full Windows SDL3/Vulkan, SandHybrid live-map, toe-rate gates, heap-backed terrain, optional-art fallback, installed/extracted diagnostics, checksum, and manifest passed; publication pending.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -2458,33 +2458,33 @@ Runner v0.7.13 uses training semantics `0x0007'1300` and `runner-v0713-*` policy
 ## v0.7.14 SandHybrid live-map integration
 
 ### WALK-SANDLIB-129 — Link the complete platform-neutral SandHybrid library
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 RunnerCore links `SandHybrid::SandHybrid` pinned at `99dd8acddfa9be1402981052b39cbf6284ed99ae` with SandHybrid native startup and Vulkan runtime disabled. Runner retains its SDL3/Vulkan application ownership while using SandHybrid material, terrain-generation, and sparse-section contracts. The pin, API identity, Linux/Windows builds, and static linkage must be package-verified.
 
 ### WALK-TERRAINSCALE-130 — Make rigs 3–5 macro tiles tall
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 One macro tile is exactly 8×8 fine cells. Chicken, biped, and humanoid authored height must remain between three and five macro tiles. The camera and collision world use the same scale; terrain may not be enlarged only cosmetically.
 
 ### WALK-HYBRIDMAP-131 — Canonical cells with instant macro promotion and demotion
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 Fine cells remain authoritative. A full uniform 8×8 region promotes immediately to derived macro metadata; changing or partially filling one cell demotes it immediately. Pressure, deposit, settling, material identity, structural state, volume conservation, promotion telemetry, and demotion telemetry require deterministic tests.
 
 ### WALK-LIVEMAP-132 — Train and render against the same SandHybrid map
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 Collision, observations, burial, material impacts, preview, training PIP, and live rendering consume one terrain state. The renderer batches macro-ready tiles and draws fine cells only for partial/mixed regions. No separate decorative heightfield is allowed.
 
 ### WALK-BRIDGE-133 — Preserve both canonical mission ledgers
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 `docs/SANDHYBRID_INTEGRATION_BRIDGE.md` pins the upstream commit and ownership boundary. Runner packaging includes that bridge and the pinned SandHybrid `missioncache.md`. No upstream `OPEN`, `PARTIAL`, `REGRESSION`, or `DEFERRED` mission is copied into history, renamed away, or marked complete by integration.
 
 
 ### WALK-ART-136 — Optional user armor concept assets
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 The four supplied modular sci-fi armor sheets are preserved as a compact optional contact sheet at `assets/optional/runner_armor_concepts/runner_armor_concepts.webp`, with provenance, hash, intended uses, and fallback rules documented beside it. The art may be cropped, repacked, recolored, separated into parts, or remade into a deterministic atlas before runtime use. Runtime adoption remains opt-in and the existing rig renderer remains the required fallback.
 
@@ -2496,13 +2496,31 @@ Acceptance requires the Windows package to include the optional reference and RE
 After the combined live map is accepted, add a hard-wall curriculum where a rig climbs without jumping when its hands can reach a ledge at any ledge height, and turns backward to lower itself from a ledge when the remaining fall is no greater than its standing height. Completion requires hand/ledge contact, support transfer, no powered takeoff, and controlled feet-first recovery.
 
 ### WALK-WINSTACK-137 — Heap-backed canonical terrain storage
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PACKAGE VERIFIED
 
 The canonical SandHybrid fine-cell map remains owned independently by every `Environment`, but its bulk arrays are heap-backed rather than embedded in the Windows thread stack. This preserves deterministic deep-copy value semantics and removes the default 1 MiB stack overflow reproduced by the Windows core, terrain, live-acceptance, concurrency, and runtime-pipeline tests.
 
 Acceptance requires `sizeof(DeformableTerrain) < 128 KiB`, `sizeof(Environment) < 256 KiB`, Linux warnings-as-errors and the complete Windows test matrix to pass, and installed/extracted package diagnostics to remain unchanged. Raising the linker stack limit alone does not satisfy this mission.
 
 ### WALK-RELEASE-135 — Publish the combined Runner v0.7.14 package
-**Status:** BLOCKED — IMPLEMENTATION VALIDATION AND PACKAGE ACCEPTANCE REQUIRED
+**Status:** PACKAGE VERIFIED — PUBLICATION PENDING
 
 Require pinned-library retrieval, Linux warnings-as-errors, full Windows SDL3/Vulkan build, SandHybrid API/scale/macro/fine/volume contracts, all existing Runner tests, all seven Stand and static Crouch gates, build-tree/installed/extracted diagnostics, both ledgers in the package, checksum/manifest audit, and clean branch/PR state.
+
+## v0.7.14 package validation evidence
+
+- Exact tested source: `4d7b43af2372d6f0ea3fc7739b90c8387395b51d`
+- Validation workflow run: `30933084549`
+- Validated artifact ID: `8902626678`
+- Validated artifact digest: `516142ef91ac9d7f52f6e8cf259212484a201a4ccd1cc5a9e99558806b670d36`
+- Validated Windows ZIP SHA-256: `A7A550DF7CC7E9FE7943C7856769DCC623816B6A6FB2CE8670E0479B6629149B`
+- Linux GCC 14 warnings-as-errors build and deterministic suite: passed
+- Windows Server 2025 / Visual Studio 2026 full SDL3/Vulkan build: passed
+- Complete Windows CTest matrix: `9/9` passed
+- Every preset Stand gate: `6/6` seeds, zero measured slip
+- Every preset static Crouch gate: `4/4` seeds
+- Live acceptance matrix: `22/22` passed
+- Build-tree, installed, no-optional-art fallback, and independently extracted diagnostics: passed
+- SandHybrid API, fine-cell, 8x8 macro, live-map, scale, volume, and scheduling contracts: passed
+- Optional armor concept hash and package presence: passed
+- ZIP checksum and per-file manifest audit: passed
