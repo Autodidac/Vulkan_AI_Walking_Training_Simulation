@@ -11,20 +11,17 @@ def write(path: str, text: str) -> None:
     (ROOT / path).write_text(text.replace("\r\n", "\n").rstrip() + "\n", encoding="utf-8")
 
 
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"expected one {label}, found {count}")
-    return text.replace(old, new, 1)
-
-
 def patch_static_press_invalid_state() -> None:
     text = read("src/simulation.cpp")
-    old = '''        if (invalid_reason_ != InvalidMotion::none)
-            invalid_motion_seconds_ += dt;
+    marker = "        const float invalid_limit = course_stage_ == CourseStage::mixed"
+    position = text.rfind(marker)
+    if position < 0:
+        marker = "        const float invalid_limit ="
+        position = text.rfind(marker)
+    if position < 0:
+        raise RuntimeError("missing invalid-duration gate")
 
-        const float invalid_limit = course_stage_ == CourseStage::mixed'''
-    new = '''        // Static crouch qualification explicitly requires grounded support,
+    insertion = '''        // Static crouch qualification explicitly requires grounded support,
         // a real press hold, feet-only ground contact, integrity, and recovery.
         // Do not let a flight reason recorded by the generic locomotion gate
         // terminate this supported compression lesson before those stronger
@@ -36,12 +33,10 @@ def patch_static_press_invalid_state() -> None:
             invalid_motion_seconds_ = 0.0f;
         }
 
-        if (invalid_reason_ != InvalidMotion::none)
-            invalid_motion_seconds_ += dt;
-
-        const float invalid_limit = course_stage_ == CourseStage::mixed'''
-    text = replace_once(text, old, new,
-        "static press inherited flight reset")
+'''
+    if "Static crouch qualification explicitly requires grounded support" in text:
+        raise RuntimeError("static press flight reset was already materialized")
+    text = text[:position] + insertion + text[position:]
     write("src/simulation.cpp", text)
 
 
