@@ -1,0 +1,72 @@
+name: Apply reachable ledge mission
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/climb-mission.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add v0.7.13 ledge traversal mission
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('**Target:** Runner v0.7.12', '**Target:** Runner v0.7.13', 1)
+          old_state = '**Release state:** PUBLISHED — Runner v0.7.12 articulated feet, coordinated joint control, zero-slip all-rig Stand, all-rig Crouch progression, UI cleanup, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.'
+          new_state = '**Release state:** IN DEVELOPMENT — v0.7.12 remains the latest published package. v0.7.13 adds reachable ledge climbing and controlled backward descent; implementation, deterministic acceptance, cross-platform packaging, and live runtime evidence remain required.'
+          if old_state in text:
+              text = text.replace(old_state, new_state, 1)
+
+          section = '''
+
+## v0.7.13 reachable ledge traversal
+
+### WALK-CLIMB-127 — Reachable hard-wall ledge climb and backward descent
+**Status:** OPEN — IMPLEMENTATION AND PACKAGE EVIDENCE REQUIRED
+
+Arm-capable rigs must learn a separate non-jump traversal skill after ordinary gait and crouch-walk mastery and before jump-dependent climbing. A hard vertical wall may be climbed only when its ledge is within the rig's measured standing hand reach. The policy must approach under control, establish one or two hand contacts on the lip, pull the torso and center of mass above the edge, place a foot or knee safely, and regain supported standing on top. Powered takeoff, wall tunnelling, head-first impact, detached-limb hooking, and collision impulses may not substitute for a climb.
+
+The reverse lesson starts from the upper platform. The rig must turn so its back faces the drop, establish hand support, lower feet first, and release only when the remaining vertical gap is controlled. A deliberate descent is eligible only when the total drop is no greater than the rig's measured standing height. Taller drops require another route or continued support and cannot be accepted as a successful descent.
+
+**Acceptance:**
+
+- Explicit hand/grip semantics are derived only for rigs with usable arm chains; rigs without reachable hands are not failed for an impossible task.
+- Ledge height is randomized from low reach through the maximum standing hand-reach envelope without requiring a jump.
+- Observations expose wall distance, lip height, hand-reach margin, platform depth, upper/lower landing height, facing direction, hand contacts, and remaining descent gap.
+- Climb evidence requires a real lip grip, upward body transfer, center-of-mass passage over the edge, and stable support on the upper platform.
+- Descent evidence requires facing backward, retained hand support, feet-first lowering, a drop no greater than standing body height, and a controlled landing.
+- Jump launch, uncontrolled fall, forward dive, body rolling, head contact, wall clipping, or impact-only elevation cannot seed champion, imitation, evolution, PIP, or mastery state.
+- The stage preserves previously mastered standing, gait, crouch-walk, recovery, and anti-skating gates.
+- Metrics and telemetry include reachable ledges attempted, climbs completed, backward descents completed, grip duration, invalid drops, and maximum controlled drop.
+- Deterministic tests cover low/mid/high reachable ledges, an unreachable ledge, safe backward descent, an over-height rejected drop, rigs without arms, and adversarial clipping or jump exploits.
+- Linux warnings-as-errors, the complete Windows SDL3/Vulkan build and tests, installed/extracted acceptance diagnostics, package checksum/manifest, release re-download, and live packaged-runtime observation are required before this mission can be marked verified.
+'''
+          anchor = '\n## v0.7.4 rebrand and duck-training correction\n'
+          if '### WALK-CLIMB-127' not in text:
+              if anchor not in text:
+                  raise RuntimeError('Could not locate mission insertion anchor')
+              text = text.replace(anchor, section + anchor, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+      - name: Commit ledger and remove temporary trigger
+        shell: bash
+        run: |
+          rm -f .github/climb-mission.trigger .github/workflows/apply-climb-mission.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add reachable ledge climb and descent mission'
+          git push origin main
