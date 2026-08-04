@@ -2446,12 +2446,12 @@ Semantic heel, ball, and toe contacts receive stance traction while retaining or
 ## v0.7.13 toe-motion naturalness correction
 
 ### WALK-TOE-RATE-127 — Gate toe stabilization and push-off rate
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 The articulated toe remains available for stance stabilization, crouch dorsiflexion, swing clearance, and forward push-off. Its command passes through a dead zone and stage/contact-specific slew limiter, and the physical hinge stays below an explicit stance/swing angular-rate ceiling even under alternating frame-by-frame policy input. The correction must preserve all seven Stand and static Crouch gates and must not reintroduce preview sliding.
 
 ### WALK-STATE-128 — Isolate corrected toe-control semantics
-**Status:** IMPLEMENTED — VALIDATION REQUIRED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Runner v0.7.13 uses training semantics `0x0007'1300` and `runner-v0713-*` policy, rig, and autonomy-state paths so learned v0.7.12 toe chatter cannot silently resume.
 
@@ -2533,12 +2533,13 @@ Require pinned-library retrieval, Linux warnings-as-errors, full Windows SDL3/Vu
 - Validation workflow run: `30933084549`
 - Actions artifact ID: `8902626678`
 - Actions artifact digest: `516142ef91ac9d7f52f6e8cf259212484a201a4ccd1cc5a9e99558806b670d36`
-- Published Windows ZIP SHA-256: `AA0DD3902DE6FC6E1477D3D4C134EFD074BACF0E1E78D26747B6D3FC1DD8BED2`
+- Published Windows ZIP SHA-256: `D17D3CA0EBAF05E55C76D74C277DFDAA5ECC649D296C8F685F01228A0081ECFC`
 - Published assets: Windows ZIP, ZIP SHA-256, and per-file manifest
 - Released assets re-downloaded and byte-compared: passed
 - Released ZIP checksum, manifest, executable, `run.bat`, package diagnostics, and all-rig acceptance: passed
 - Complete Windows CTest matrix: `9/9` passed
 - Live acceptance matrix: `22/22` passed
+- v0.7.13 toe-rate and isolated-state missions folded into v0.7.14 release ledger: passed
 - Optional armor concept contact sheet packaged with verified hash: passed
 - Missing `assets/optional` fallback diagnostics and all-rig acceptance: passed
 - Open pull requests after cleanup: `0`
