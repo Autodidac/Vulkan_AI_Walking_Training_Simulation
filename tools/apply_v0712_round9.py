@@ -20,10 +20,15 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def rollback_broad_stance_changes() -> None:
     text = read("src/simulation.cpp")
-    text = replace_once(text,
-        "            particles_[node].previous += applied;",
-        "            particles_[node].previous += applied * 0.94f;",
-        "original balance-guide velocity damping")
+    duck_function = text.index("    void Environment::stabilize_duck_posture() noexcept\n")
+    balance_prefix = text[:duck_function]
+    old_velocity = "            particles_[node].previous += applied;"
+    if balance_prefix.count(old_velocity) != 1:
+        raise RuntimeError(
+            f"expected one balance-guide velocity update, found {balance_prefix.count(old_velocity)}")
+    balance_prefix = balance_prefix.replace(old_velocity,
+        "            particles_[node].previous += applied * 0.94f;", 1)
+    text = balance_prefix + text[duck_function:]
 
     old = '''        float rest_support_height = 0.0f;
         float current_support_height = 0.0f;
