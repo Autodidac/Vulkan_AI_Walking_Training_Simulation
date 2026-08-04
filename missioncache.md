@@ -6,7 +6,7 @@ This is the authoritative release ledger. A mission is VERIFIED only when implem
 
 **Target:** Runner v0.7.12
 
-**Release state:** PACKAGE VERIFIED — articulated feet, coordinated multi-joint control, zero-slip Stand, all-rig Crouch progression, UI cleanup, Linux, full Windows Vulkan, installed/extracted diagnostics, and archive audit passed; publication pending.
+**Release state:** PUBLISHED — Runner v0.7.12 articulated feet, coordinated joint control, zero-slip all-rig Stand, all-rig Crouch progression, UI cleanup, release assets, checksum, manifest, released executable, branch cleanup, and PR audit verified.
 
 v0.7.2 remains historical release evidence. It is not accepted as the current runtime-quality baseline because live screenshots show separated foot clusters, arm-first balance attempts, uncontrolled passive heads/tails, and an incomplete-body training preview.
 
@@ -154,7 +154,7 @@ The source launcher and installed launcher select the current adjacent or Releas
 A release is not complete until Linux and Windows tests pass, the full Vulkan application builds, the installed and independently extracted launchers pass diagnostics, the archive manifest and SHA-256 verify after re-download, the release ledger records exact evidence, temporary applicators/workflows are removed, no cleanup pull requests remain open, and only `main` remains unless an explicitly retained development branch is documented.
 
 ### WALK-LIVE-066 — Screenshot-level packaged-runtime acceptance
-**Status:** PACKAGE VERIFIED — superseded by v0.7.12 all-rig packaged proof
+**Status:** PUBLISHED — RELEASE VERIFIED BY v0.7.12
 
 Automated metrics cannot overrule visible failures. Fused or detached feet, body collapse, arm-first movement, uncontrolled heads or tails, clipped hazards, unavoidable obstacles, incorrect preset anatomy, stale PIP frames, unreadable UI, or a controller repeatedly exploiting one body axis reopen the matching mission and block release closure.
 
@@ -587,7 +587,7 @@ Acceptance requires seeded scenarios covering glancing hits, direct hits, accumu
 ## v0.7.6 standing mastery and live-PIP correction
 
 ### WALK-STAND-080 — Make strict standing mastery attainable and honest
-**Status:** PACKAGE VERIFIED — superseded by v0.7.12 all-rig packaged proof
+**Status:** PUBLISHED — RELEASE VERIFIED BY v0.7.12
 
 The v0.7.5 evaluator stopped each standing trial at three seconds while strict mastery required a longer result, leaving the display at STAGE VALID but STRICT MASTERY 0/8 indefinitely. Evaluation now continues through the same six-second strict target used by mastery. Strict success requires all six seeded evaluations, six seconds of neutral stable stance, low joint speed, and near-zero uncontrolled rotation. The UI exposes the exact target, seed count, spin threshold, and failure reason.
 
@@ -629,12 +629,12 @@ Build and test Linux and the complete Windows Vulkan application; verify all det
 ## v0.7.7 rig-specific learning and support correction
 
 ### WALK-RIGSTANCE-084 — Rig-specific standing controller
-**Status:** PACKAGE VERIFIED — superseded by v0.7.12 all-rig packaged proof
+**Status:** PUBLISHED — RELEASE VERIFIED BY v0.7.12
 
 Standing control and qualification use each preset's authored body orientation and support topology. Quadrupeds, crawlers, hexapods, chickens, monopeds, bipeds, and humanoids may not be forced through one biped hip/knee correction. The quadruped must repeatedly establish a valid stage-one stance without being rearranged by diagonal support separation.
 
 ### WALK-CROUCH-085 — Restore leg-driven static crouch learning
-**Status:** PACKAGE VERIFIED — superseded by v0.7.12 all-rig packaged proof
+**Status:** PUBLISHED — RELEASE VERIFIED BY v0.7.12
 
 Static crouch bends biped knees before spreading hips and compacts the authored support geometry for non-bipeds. It must hold beneath the platen, maintain feet-only ground support, retract, and recover to stable stance. The stage does not reward walking after the platen and may not qualify a jumping-jack stance.
 
@@ -2361,47 +2361,47 @@ Run Linux warnings-as-errors and all tests, full Windows SDL3/Vulkan build and t
 ## v0.7.12 rig progression and UI rollback
 
 ### WALK-RIGPROG-118 — Every preset must complete Stand then static Crouch
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Chicken, biped, humanoid, quadruped, crawler4, hexapod, and monoped each require named deterministic multi-seed Stand and static crouch/hold/recover acceptance. Aggregate finite-soak checks and two-rig standing checks are not sufficient.
 
 ### WALK-TOPOLOGY-119 — Drive support chains by rig topology
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Static crouch and crouch-walk teachers must discover the motor subtree that reaches semantic support nodes. Passive feet and non-biped body plans cannot be skipped because a motor's immediate driven node is not itself the final support seed.
 
 ### WALK-MASTERY-120 — Remove contradictory and impossible stage gates
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Stand mastery accepts five of six strict evaluation seeds while retaining posture, spin, survival, and joint-speed gates. Static crouch mastery requires the one authored press hold/recovery that an episode can actually produce, not two recoveries after the press has been removed.
 
 ### WALK-UICLEAN-121 — Remove unrequested ornamental UI
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Remove the large top-bar artwork card, labels, ghost skeleton, animated packets, pulsing rings, and floating torso chip. Do not add replacement controls or another toggle. Preserve the actual trainer, rig editor, telemetry, package validation, and artwork file support.
 
 ### WALK-STATE-122 — Isolate corrected rig training state
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Bump training semantics and use `runner-v0712-*` autosaves so stale v0.7.10/v0.7.11 policies cannot immediately recreate the reported Stand/Crouch stalls.
 
 ### WALK-RELEASE-123 — Publish Runner v0.7.12 only after packaged progression proof
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Require Linux warnings-as-errors, full Windows SDL3/Vulkan tests, all-seven Stand and Crouch acceptance, installed/extracted diagnostics, package checksum/manifest audit, and a clean repository before publication.
 
 ### WALK-FOOT-124 — Articulated forward heel-ball-toe feet
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Chicken, biped, and humanoid feet point forward in the side view and use a rigid rear foot plus a ball-to-toe hinge. Grounded toes plantar-flex for push-off; swing/crouch toes dorsiflex for clearance and stability. The monoped keeps its existing authored heel/toe motors instead of receiving duplicate feet.
 
 ### WALK-SYNERGY-125 — Discover and execute simultaneous joint chains
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Motor discovery includes left-chain, right-chain, bilateral crouch, and bilateral extension probes. Static crouch couples same-side hip, knee, and toe motion in one policy step, prioritizes hip flexion, and brakes excessive support-span widening instead of teaching a split.
 
 ### WALK-PREVIEW-126 — Stop uncontrolled preview foot sliding
-**Status:** PACKAGE VERIFIED
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Semantic heel, ball, and toe contacts receive stance traction while retaining ordinary controlled sliding outside the static lessons. All seven named Stand/Crouch package gates must remain valid; friction-only shuffling still receives no gait credit.
 
@@ -2421,3 +2421,23 @@ Semantic heel, ball, and toe contacts receive stance traction while retaining or
 - Full Linux warnings-as-errors, core, terrain, concurrency, runtime, and 22-case live acceptance: passed
 - Full Windows application build/tests, build-tree, installed, and independently extracted diagnostics: passed
 - ZIP checksum and 11-entry per-file manifest audit: passed
+
+## v0.7.12 immutable release evidence
+
+- Exact tested implementation source: `341c4b53a612c600386a521ac91900f2f70cf9f7`
+- Exact tagged package/document source: `44a96f9dee43795db5ea0b91e15ebb1d52e3d060`
+- Validation workflow run: `30908862143`
+- Linux deterministic job: `91990357553` — passed
+- Windows SDL3/Vulkan package job: `91990645166` — passed
+- Validated artifact ID: `8892807829`
+- Validated artifact digest: `sha256:8667fa247e70d05654b8a7f8e2da69b732d0b673fb6c70b4b388ddd1544986c1`
+- Published tag and title: `v0.7.12` / `Runner v0.7.12`
+- Published Windows ZIP SHA-256: `FAEA51619C1E47AB9EFF705A92F43009B29932AD19B13D7555CE12FE8480CB28`
+- Published assets: Windows ZIP, ZIP SHA-256, and 11-entry per-file manifest
+- Every preset Stand gate: `6/6`; every preset static Crouch/hold/recover gate: `4/4`
+- Strict-Stand slip across all seven presets: `0`
+- Forward articulated heel-ball-toe feet, live toe actuation, simultaneous hip/knee exploration, and coordinated crouch chain tests: passed
+- Linux and full Windows builds/tests plus build-tree, installed, validated-artifact, final-extracted, and re-downloaded-release diagnostics: passed
+- Published assets were byte-compared; ZIP checksum and extracted manifest: passed
+- Temporary validator and publisher removed before tagging; open pull requests: `0`; remaining branches: `main`
+- Contradictory released-package evidence reopens only the exact affected mission
