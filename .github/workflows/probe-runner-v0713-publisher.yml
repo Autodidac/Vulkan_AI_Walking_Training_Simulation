@@ -1,0 +1,46 @@
+name: Probe Runner v0.7.13 publisher
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  probe:
+    if: github.head_ref == 'agent/v0713-publish-trigger'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Remove probe before reporting
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/probe-runner-v0713-publisher.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Remove Runner v0.7.13 publisher probe'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Report publisher run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=repository_dispatch&per_page=20" --jq '.workflow_runs[] | select(.name == "Publish Runner v0.7.13") | {id,status,conclusion,html_url,created_at} ' | head -n 1)"
+          if [ -z "$run_json" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body 'Publisher probe: no Runner v0.7.13 repository-dispatch run was found.'
+            exit 1
+          fi
+          run_id="$(printf '%s' "$run_json" | jq -r '.id')"
+          jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs" --jq '[.jobs[] | {id,name,status,conclusion}]')"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Publisher probe run: \`$run_json\`\n\nJobs: \`$jobs\`"
