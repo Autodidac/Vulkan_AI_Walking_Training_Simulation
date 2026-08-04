@@ -833,6 +833,7 @@ namespace runner::sim
         [[nodiscard]] float ground_height_at(float x) const noexcept;
         [[nodiscard]] float terrain_firmness_at(float x) const noexcept;
         [[nodiscard]] float terrain_looseness_at(float x) const noexcept;
+        [[nodiscard]] const DeformableTerrain& terrain() const noexcept { return terrain_; }
         [[nodiscard]] float burial_depth() const noexcept { return burial_depth_; }
         [[nodiscard]] float free_space_direction() const noexcept { return free_space_direction_; }
         [[nodiscard]] Vec2 incoming_material_velocity() const noexcept { return incoming_material_velocity_; }

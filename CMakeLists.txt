@@ -2,13 +2,29 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.13 LANGUAGES CXX)
+project(Runner VERSION 0.7.14 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
 option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 
 find_package(Threads REQUIRED)
+
+include(FetchContent)
+set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
+set(SANDHYBRID_BUILD_VULKAN_RUNTIME OFF CACHE BOOL "" FORCE)
+set(SANDHYBRID_WARNINGS_AS_ERRORS ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(runner_sandhybrid
+    GIT_REPOSITORY https://github.com/Autodidac/EpochSimEngine.git
+    GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae
+    GIT_SHALLOW FALSE
+    GIT_SUBMODULES ""
+    GIT_SUBMODULES_RECURSE FALSE)
+FetchContent_MakeAvailable(runner_sandhybrid)
+if(NOT TARGET SandHybrid::SandHybrid)
+    message(FATAL_ERROR "Pinned SandHybrid core target was not created")
+endif()
 
 add_library(RunnerCore STATIC
     src/simulation.cpp
@@ -26,8 +42,10 @@ add_library(RunnerCore STATIC
 )
 add_library(Runner::Core ALIAS RunnerCore)
 target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
-target_link_libraries(RunnerCore PUBLIC Threads::Threads)
+target_link_libraries(RunnerCore PUBLIC Threads::Threads SandHybrid::SandHybrid)
 target_compile_features(RunnerCore PUBLIC cxx_std_23)
+target_compile_definitions(RunnerCore PUBLIC
+    RUNNER_SANDHYBRID_SOURCE_COMMIT="99dd8acddfa9be1402981052b39cbf6284ed99ae")
 set_target_properties(RunnerCore PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
 function(runner_enable_warnings target)
@@ -88,12 +106,24 @@ if(RUNNER_BUILD_APP)
     add_custom_command(TARGET Runner POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${RUNNER_SHADER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:Runner>/shaders"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/docs"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
     install(TARGETS Runner RUNTIME DESTINATION .)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION .)
     install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
+        DESTINATION docs)
+    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
+        DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
 
 if(RUNNER_BUILD_TESTS)
@@ -131,6 +161,16 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerDeformableTerrainTests)
     add_test(NAME Runner.DeformableTerrain COMMAND RunnerDeformableTerrainTests)
     set_tests_properties(Runner.DeformableTerrain PROPERTIES TIMEOUT 45)
+
+    add_executable(RunnerSandHybridIntegrationTests
+        tests/sandhybrid_integration_tests.cpp)
+    target_link_libraries(RunnerSandHybridIntegrationTests PRIVATE Runner::Core)
+    target_compile_features(RunnerSandHybridIntegrationTests PRIVATE cxx_std_23)
+    set_target_properties(RunnerSandHybridIntegrationTests PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerSandHybridIntegrationTests)
+    add_test(NAME Runner.SandHybridIntegration COMMAND RunnerSandHybridIntegrationTests)
+    set_tests_properties(Runner.SandHybridIntegration PROPERTIES TIMEOUT 60)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

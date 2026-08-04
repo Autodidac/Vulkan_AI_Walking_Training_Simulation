@@ -302,9 +302,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0713-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0713-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0713-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0714-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0714-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0714-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -521,23 +521,102 @@ namespace runner
         void draw_course_ground(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
-            std::vector<Vec2> surface{};
-            constexpr int samples = 120;
-            surface.reserve(samples);
-            for (int sample = 0; sample < samples; ++sample)
+            const sim::DeformableTerrain& terrain = environment.terrain();
+            const float half_view = viewport.size.x * 0.5f / scale;
+            const float left = camera - half_view - sim::DeformableTerrain::macro_tile_size;
+            const float right = camera + half_view + sim::DeformableTerrain::macro_tile_size;
+            const int first_macro = static_cast<int>(std::floor(
+                left / sim::DeformableTerrain::macro_tile_size));
+            const int last_macro = static_cast<int>(std::ceil(
+                right / sim::DeformableTerrain::macro_tile_size));
+
+            auto material_color = [](sandhybrid::Material material)
             {
-                const float t = static_cast<float>(sample) / static_cast<float>(samples - 1);
-                const float x = camera + (t - 0.5f) * viewport.size.x / scale;
-                surface.push_back(world_to_screen({ x, environment.ground_height_at(x) }, viewport, camera, scale));
+                const sandhybrid::Rgb8 source = sandhybrid::material_editor_color(
+                    static_cast<std::uint32_t>(material));
+                const std::uint32_t packed = (static_cast<std::uint32_t>(source.r) << 16u)
+                    | (static_cast<std::uint32_t>(source.g) << 8u)
+                    | static_cast<std::uint32_t>(source.b);
+                return rgb(packed);
+            };
+            auto draw_world_cell = [&](float x0, float y0, float x1, float y1,
+                sandhybrid::Material material)
+            {
+                const Vec2 minimum = world_to_screen({ x0, y0 }, viewport, camera, scale);
+                const Vec2 maximum = world_to_screen({ x1, y1 }, viewport, camera, scale);
+                canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y },
+                    material_color(material));
+            };
+
+            for (int world_macro = first_macro; world_macro <= last_macro; ++world_macro)
+            {
+                const auto wrapped_macro = static_cast<std::size_t>((
+                    world_macro % static_cast<int>(sim::DeformableTerrain::macro_columns)
+                    + static_cast<int>(sim::DeformableTerrain::macro_columns))
+                    % static_cast<int>(sim::DeformableTerrain::macro_columns));
+                const float macro_x0 = static_cast<float>(world_macro)
+                    * sim::DeformableTerrain::macro_tile_size;
+                for (std::size_t macro_y = 0;
+                    macro_y < sim::DeformableTerrain::macro_rows; ++macro_y)
+                {
+                    const sim::DeformableTerrain::MacroTile& tile =
+                        terrain.macro_tile(wrapped_macro, macro_y);
+                    if (tile.occupied_mask == 0u)
+                        continue;
+                    const float macro_y0 = sim::DeformableTerrain::world_bottom
+                        + static_cast<float>(macro_y)
+                            * sim::DeformableTerrain::macro_tile_size;
+                    if (tile.macro_ready)
+                    {
+                        draw_world_cell(macro_x0, macro_y0,
+                            macro_x0 + sim::DeformableTerrain::macro_tile_size,
+                            macro_y0 + sim::DeformableTerrain::macro_tile_size,
+                            tile.uniform_material);
+                        continue;
+                    }
+
+                    for (std::size_t local_y = 0;
+                        local_y < sim::DeformableTerrain::macro_cell_side; ++local_y)
+                    {
+                        for (std::size_t local_x = 0;
+                            local_x < sim::DeformableTerrain::macro_cell_side; ++local_x)
+                        {
+                            const std::size_t fine_x = wrapped_macro
+                                * sim::DeformableTerrain::macro_cell_side + local_x;
+                            const std::size_t fine_y = macro_y
+                                * sim::DeformableTerrain::macro_cell_side + local_y;
+                            const sim::DeformableTerrain::FineCell& cell =
+                                terrain.fine_cell(fine_x, fine_y);
+                            if (!cell.occupied())
+                                continue;
+                            const float x0 = macro_x0 + static_cast<float>(local_x)
+                                * sim::DeformableTerrain::fine_cell_spacing;
+                            const float y0 = sim::DeformableTerrain::row_world_bottom(fine_y);
+                            draw_world_cell(x0, y0,
+                                x0 + sim::DeformableTerrain::fine_cell_spacing,
+                                y0 + sim::DeformableTerrain::fine_cell_spacing * cell.fill,
+                                cell.material());
+                        }
+                    }
+                }
             }
-            std::vector<Vec2> fill{};
-            fill.reserve(surface.size() + 2);
-            fill.push_back({ viewport.position.x, viewport.position.y + viewport.size.y });
-            fill.insert(fill.end(), surface.begin(), surface.end());
-            fill.push_back(viewport.position + viewport.size);
-            for (std::size_t index = 1; index + 1 < fill.size(); ++index)
-                canvas.triangle(fill[0], fill[index], fill[index + 1], rgb(0x111820));
-            canvas.polyline(surface, 3.0f, rgb(0x475762));
+
+            std::vector<Vec2> surface{};
+            const int first_column = static_cast<int>(std::floor(
+                left / sim::DeformableTerrain::fine_cell_spacing));
+            const int last_column = static_cast<int>(std::ceil(
+                right / sim::DeformableTerrain::fine_cell_spacing));
+            surface.reserve(static_cast<std::size_t>(std::max(0,
+                last_column - first_column + 1)));
+            for (int column = first_column; column <= last_column; ++column)
+            {
+                const float x = static_cast<float>(column)
+                    * sim::DeformableTerrain::fine_cell_spacing;
+                surface.push_back(world_to_screen({ x, environment.ground_height_at(x) },
+                    viewport, camera, scale));
+            }
+            if (surface.size() >= 2u)
+                canvas.polyline(surface, 1.5f, rgb(0x5d6870, 0.72f));
         }
 
         void draw_course_reference(const sim::Environment& environment, Rect viewport,

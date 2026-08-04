@@ -44,6 +44,8 @@ namespace { void require(bool ok, std::string_view message) { if (ok) return; st
 int main()
 {
     using namespace runner;
+    static_assert(sizeof(sim::DeformableTerrain) < 128u * 1024u);
+    static_assert(sizeof(sim::Environment) < 256u * 1024u);
     sim::DeformableTerrain first{}, second{};
     first.reset(0x12345678u, 0.72f); second.reset(0x12345678u, 0.72f);
     for (std::size_t i=0; i<sim::DeformableTerrain::cell_count; ++i)
@@ -51,7 +53,7 @@ int main()
         require(std::abs(first.cells()[i].height-second.cells()[i].height)<1.0e-7f, "same seed changed height");
         require(std::abs(first.cells()[i].firmness-second.cells()[i].firmness)<1.0e-7f, "same seed changed firmness");
     }
-    constexpr float x=12.5f;
+    constexpr float x=20.5f;
     const float volume=first.total_height_volume(), height=first.height_at(x), firmness=first.firmness_at(x);
     first.apply_pressure(x,2.4f,0.65f,1.0f/60.0f);
     require(first.height_at(x)<height,"pressure did not compact sand");

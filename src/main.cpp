@@ -78,7 +78,9 @@ namespace
     {
         const std::array required_files{
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
-            std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv"
+            std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv",
+            std::filesystem::path{ "docs" } / "SANDHYBRID_INTEGRATION_BRIDGE.md",
+            std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md"
         };
         std::error_code filesystem_error{};
         for (const std::filesystem::path& relative : required_files)
