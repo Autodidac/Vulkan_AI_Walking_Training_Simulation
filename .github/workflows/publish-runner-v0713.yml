@@ -1,9 +1,8 @@
 name: Publish Runner v0.7.13
 
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/publish-runner-v0713.yml]
+  repository_dispatch:
+    types: [publish_runner_v0713]
 
 permissions:
   actions: read
