@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Normalize nested fine-cell state before the combined SandHybrid materializer runs.
 ROOT = Path(__file__).resolve().parents[1]
 path = ROOT / "src/deformable_terrain.hpp"
 text = path.read_text(encoding="utf-8")
