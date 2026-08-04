@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: github.head_ref == 'release/v0713-publisher-trigger'
+    if: github.head_ref == 'agent/v0713-publish-trigger'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
