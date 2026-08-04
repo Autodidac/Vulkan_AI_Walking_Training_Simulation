@@ -36,6 +36,12 @@ round4_text = round4_text.replace(
     1,
 )
 round4_text = round4_text.replace(
+    '        "            float lowest_upright{ 1.0f };\\n"',
+    '        "            float shortest_stance{ std::numeric_limits<float>::max() };\\n"\n'
+    '        "            float lowest_upright{ 1.0f };\\n"',
+    1,
+)
+round4_text = round4_text.replace(
     '''    old = ''' + "'''" + '''                result.shortest_stance = std::min(result.shortest_stance,
                     environment.longest_stable_stance_seconds());
                 result.worst_spin = std::max(result.worst_spin,
