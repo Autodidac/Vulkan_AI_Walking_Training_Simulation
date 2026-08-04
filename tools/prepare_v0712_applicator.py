@@ -1,7 +1,9 @@
 from pathlib import Path
 
+TOOLS = Path(__file__).resolve().parent
+
 # Normalize the applicator to the current v0.7.11 curriculum source before materialization.
-path = Path(__file__).with_name("apply_v0712_runtime_fix.py")
+path = TOOLS / "apply_v0712_runtime_fix.py"
 text = path.read_text(encoding="utf-8")
 old = '''    old = """        case sim::CourseStage::duck_press:
             return metrics.evaluation_valid
@@ -22,6 +24,32 @@ new = '''    old = """        case sim::CourseStage::duck_press:
 if text.count(old) != 1:
     raise RuntimeError(f"expected one obsolete crouch applicator block, found {text.count(old)}")
 text = text.replace(old, new, 1)
+
+# The current acceptance struct stores worst_spin before shortest_stance.
+round4 = TOOLS / "apply_v0712_round4.py"
+round4_text = round4.read_text(encoding="utf-8")
+round4_text = round4_text.replace(
+    '"            float worst_spin{};\\n        };",',
+    '"            float worst_spin{};\\n"\n'
+    '        "            float shortest_stance{ std::numeric_limits<float>::max() };\\n"\n'
+    '        "        };",',
+    1,
+)
+round4_text = round4_text.replace(
+    '''    old = ''' + "'''" + '''                result.shortest_stance = std::min(result.shortest_stance,
+                    environment.longest_stable_stance_seconds());
+                result.worst_spin = std::max(result.worst_spin,
+                    environment.uncontrolled_spin_turns());''' + "'''" + '''
+''',
+    '''    old = ''' + "'''" + '''                result.worst_spin = std::max(result.worst_spin,
+                    environment.uncontrolled_spin_turns());
+                result.shortest_stance = std::min(result.shortest_stance,
+                    environment.longest_stable_stance_seconds());''' + "'''" + '''
+''',
+    1,
+)
+round4.write_text(round4_text, encoding="utf-8")
+
 old_main = '''    patch_acceptance()
     patch_docs()
     trigger = ROOT / "WORK_v0712.tmp"'''
