@@ -73,6 +73,29 @@ if round5_text.count(old_round5) != 1:
         f"expected one round-five compact teacher edit, found {round5_text.count(old_round5)}")
 round5.write_text(round5_text.replace(old_round5, new_round5, 1), encoding="utf-8")
 
+# Keep the articulated-foot test data in one array and iterate by reference so
+# GCC warnings-as-errors does not reject a copied heavyweight blueprint.
+round11 = TOOLS / "apply_v0712_round11.py"
+round11_text = round11.read_text(encoding="utf-8")
+old_round11 = '''    for (const sim::CreatureBlueprint rig : {
+            sim::CreatureBlueprint::chicken(),
+            sim::CreatureBlueprint::biped(),
+            sim::CreatureBlueprint::humanoid() })
+    {
+        require(rig.support_seed_count() == 6u'''
+new_round11 = '''    const std::array articulated_rigs{
+        sim::CreatureBlueprint::chicken(),
+        sim::CreatureBlueprint::biped(),
+        sim::CreatureBlueprint::humanoid()
+    };
+    for (const sim::CreatureBlueprint& rig : articulated_rigs)
+    {
+        require(rig.support_seed_count() == 6u'''
+if round11_text.count(old_round11) != 1:
+    raise RuntimeError(
+        f"expected one copied articulated-rig loop, found {round11_text.count(old_round11)}")
+round11.write_text(round11_text.replace(old_round11, new_round11, 1), encoding="utf-8")
+
 old_main = '''    patch_acceptance()
     patch_docs()
     trigger = ROOT / "WORK_v0712.tmp"'''
