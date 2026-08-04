@@ -28,7 +28,10 @@ old_main = '''    patch_acceptance()
 new_main = '''    patch_acceptance()
     patch_docs()
     round_two = ROOT / "tools/apply_v0712_round2.py"
-    namespace = {"__name__": "runner_v0712_round2"}
+    namespace = {
+        "__name__": "runner_v0712_round2",
+        "__file__": str(round_two),
+    }
     exec(compile(round_two.read_text(encoding="utf-8"), str(round_two), "exec"), namespace)
     namespace["main"]()
     trigger = ROOT / "WORK_v0712.tmp"'''
