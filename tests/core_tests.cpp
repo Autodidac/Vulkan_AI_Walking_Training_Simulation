@@ -24,6 +24,26 @@ namespace runner::sim
             environment.solve_motor(motor, action);
         }
 
+        static bool articulated_toes_move(Environment& environment) noexcept
+        {
+            MotorConstraint left{};
+            MotorConstraint right{};
+            if (!environment.articulated_toe_motor(true, left)
+                || !environment.articulated_toe_motor(false, right))
+                return false;
+            const float left_before = environment.joint_angle(left);
+            const float right_before = environment.joint_angle(right);
+            std::array<float, action_count> crouch{};
+            crouch[0] = -0.45f;
+            crouch[1] = 0.65f;
+            crouch[2] = 0.45f;
+            crouch[3] = -0.65f;
+            for (int iteration = 0; iteration < 24; ++iteration)
+                environment.solve_articulated_toes(crouch);
+            return std::abs(wrap_angle(environment.joint_angle(left) - left_before)) > 0.01f
+                && std::abs(wrap_angle(environment.joint_angle(right) - right_before)) > 0.01f;
+        }
+
         static void collapse_upper_body(Environment& environment) noexcept
         {
             if (environment.blueprint_.root_node >= environment.particles_.size()
@@ -103,15 +123,23 @@ namespace runner::sim
             if (!environment.valid_node(environment.blueprint_.left_contact_node)
                 || !environment.valid_node(environment.blueprint_.right_contact_node))
                 return;
-            const float center = 0.5f * (
-                environment.particles_[environment.blueprint_.left_contact_node].position.x
-                + environment.particles_[environment.blueprint_.right_contact_node].position.x);
+            const float left_anchor = environment.particles_[
+                environment.blueprint_.left_contact_node].position.x;
+            const float right_anchor = environment.particles_[
+                environment.blueprint_.right_contact_node].position.x;
+            const float center = 0.5f * (left_anchor + right_anchor);
             for (std::size_t index = 0; index < environment.particles_.size(); ++index)
             {
-                if (!environment.blueprint_.is_support_seed(index))
+                const bool left = environment.blueprint_.is_left_support_seed(index);
+                const bool right = environment.blueprint_.is_right_support_seed(index);
+                if (!left && !right)
                     continue;
-                environment.particles_[index].position.x = center;
-                environment.particles_[index].previous.x = center;
+                // Fuse the two feet by translating each complete cluster. Do
+                // not collapse heel, ball, and toe into one impossible point.
+                const float anchor = left ? left_anchor : right_anchor;
+                const float offset = environment.particles_[index].position.x - anchor;
+                environment.particles_[index].position.x = center + offset;
+                environment.particles_[index].previous.x = center + offset;
             }
         }
 
@@ -124,6 +152,32 @@ namespace runner::sim
         {
             return environment.particles_[environment.blueprint_.right_contact_node].position.x
                 - environment.particles_[environment.blueprint_.left_contact_node].position.x;
+        }
+
+        static float semantic_support_cluster_gap(
+            const Environment& environment) noexcept
+        {
+            float left = 0.0f;
+            float right = 0.0f;
+            std::size_t left_count = 0u;
+            std::size_t right_count = 0u;
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (environment.blueprint_.is_left_support_seed(index))
+                {
+                    left += environment.particles_[index].position.x;
+                    ++left_count;
+                }
+                if (environment.blueprint_.is_right_support_seed(index))
+                {
+                    right += environment.particles_[index].position.x;
+                    ++right_count;
+                }
+            }
+            if (left_count == 0u || right_count == 0u)
+                return 0.0f;
+            return std::abs(right / static_cast<float>(right_count)
+                - left / static_cast<float>(left_count));
         }
 
         static float minimum_semantic_support_clearance(
@@ -143,12 +197,11 @@ namespace runner::sim
                 {
                     const std::uint16_t lhs_index = supports[first];
                     const std::uint16_t rhs_index = supports[second];
-                    const bool same_foot = std::ranges::any_of(environment.blueprint_.bones,
-                        [lhs_index, rhs_index](const DistanceConstraint& bone)
-                        {
-                            return (bone.a == lhs_index && bone.b == rhs_index)
-                                || (bone.a == rhs_index && bone.b == lhs_index);
-                        });
+                    const bool same_foot =
+                        (environment.blueprint_.is_left_support_seed(lhs_index)
+                            && environment.blueprint_.is_left_support_seed(rhs_index))
+                        || (environment.blueprint_.is_right_support_seed(lhs_index)
+                            && environment.blueprint_.is_right_support_seed(rhs_index));
                     if (same_foot)
                         continue;
                     const Particle& lhs = environment.particles_[lhs_index];
@@ -295,6 +348,57 @@ int main()
         "duck press does not hold a meaningful crouch target");
     require(press_retract.retracting && press_retract.vertical_velocity > 0.0f,
         "duck press does not retract after the hold");
+    auto articulated_forward_foot = [](const sim::CreatureBlueprint& rig,
+        bool left)
+    {
+        const std::uint16_t heel = left ? rig.left_contact_node : rig.right_contact_node;
+        const auto& extra = left
+            ? rig.additional_left_contact_nodes : rig.additional_right_contact_nodes;
+        if (heel >= rig.nodes.size() || extra.size() < 2u
+            || extra[0] >= rig.nodes.size() || extra[1] >= rig.nodes.size())
+            return false;
+        const std::uint16_t ball = extra[0];
+        const std::uint16_t toe = extra[1];
+        const bool toe_hinge = std::ranges::any_of(rig.bones,
+            [ball, toe](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == ball && bone.b == toe)
+                    || (bone.a == toe && bone.b == ball);
+            });
+        const bool rigid_heel_to_toe = std::ranges::any_of(rig.bones,
+            [heel, toe](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == heel && bone.b == toe)
+                    || (bone.a == toe && bone.b == heel);
+            });
+        return rig.nodes[heel].x < rig.nodes[ball].x
+            && rig.nodes[ball].x < rig.nodes[toe].x
+            && toe_hinge && !rigid_heel_to_toe;
+    };
+    const std::array articulated_rigs{
+        sim::CreatureBlueprint::chicken(),
+        sim::CreatureBlueprint::biped(),
+        sim::CreatureBlueprint::humanoid()
+    };
+    for (const sim::CreatureBlueprint& rig : articulated_rigs)
+    {
+        require(rig.support_seed_count() == 6u
+                && articulated_forward_foot(rig, true)
+                && articulated_forward_foot(rig, false),
+            "paired rig lacks forward articulated heel-ball-toe feet");
+    }
+    sim::Environment toe_environment(sim::CreatureBlueprint::biped(), 79u);
+    toe_environment.set_course(sim::CourseStage::duck_press, 0.25f);
+    require(sim::EnvironmentTestAccess::articulated_toes_move(toe_environment),
+        "coordinated leg action does not actuate both toe hinges");
+    const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
+    const std::size_t crouch_lane = 2u
+        * discovery_environment.blueprint().active_motor_count + 6u;
+    const rl::MotorDiscoveryProbe crouch_probe = rl::motor_discovery_probe(
+        discovery_environment, crouch_lane, 120u, 0u);
+    require(crouch_probe.action[0] < 0.0f && crouch_probe.action[1] > 0.0f
+            && crouch_probe.action[2] > 0.0f && crouch_probe.action[3] < 0.0f,
+        "motor discovery does not explore simultaneous bilateral hip-knee flexion");
     sim::Environment press_collision_environment(sim::CreatureBlueprint::humanoid(), 71u);
     require(sim::EnvironmentTestAccess::press_collision_resolves_below(
             press_collision_environment),
@@ -570,9 +674,9 @@ int main()
         sim::EnvironmentTestAccess::force_fused_supports(environment);
         for (int iteration = 0; iteration < 64; ++iteration)
             sim::EnvironmentTestAccess::separate_supports(environment);
-        require(sim::EnvironmentTestAccess::minimum_semantic_support_clearance(environment)
-                > -0.005f,
-            "a preset can retain fused semantic supports");
+        require(sim::EnvironmentTestAccess::semantic_support_cluster_gap(environment)
+                > 0.18f,
+            "a preset can retain fused left/right foot clusters");
     }
 
     const sim::CreatureBlueprint humanoid_rig = sim::CreatureBlueprint::humanoid();
@@ -878,9 +982,9 @@ int main()
     require(humanoid.left_contact_node != humanoid.motors[1].c
             && humanoid.right_contact_node != humanoid.motors[3].c,
         "semantic feet are still the lower-leg motor endpoints");
-    require(humanoid.additional_left_contact_nodes.size() == 1u
-            && humanoid.additional_right_contact_nodes.size() == 1u,
-        "dedicated foot plates do not include heel and toe contacts");
+    require(humanoid.additional_left_contact_nodes.size() == 2u
+            && humanoid.additional_right_contact_nodes.size() == 2u,
+        "articulated foot does not include heel, ball, and toe contacts");
     require(humanoid.nodes[humanoid.motors[1].c].y
             - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
             && humanoid.nodes[humanoid.motors[3].c].y
@@ -1139,9 +1243,7 @@ int main()
     }
 
     {
-        require(humanoid.support_seed_count() == 4u,
-            "humanoid feet are not two rigid heel-toe contact plates");
-        sim::Environment intact{ humanoid, 0x1A7E6u };
+            sim::Environment intact{ humanoid, 0x1A7E6u };
         require(intact.body_integrity_valid(),
             "fresh humanoid body fails the full skeleton integrity gate");
         sim::EnvironmentTestAccess::qualify_stable_stance(intact);
@@ -1220,8 +1322,11 @@ int main()
         require(rl::strict_balance_mastery(strict),
             "strict standing values cannot advance mastery");
         strict.evaluation_invalid_runs = 1u;
+        require(rl::strict_balance_mastery(strict),
+            "five-of-six strict standing seeds cannot advance robust mastery");
+        strict.evaluation_invalid_runs = 2u;
         require(!rl::strict_balance_mastery(strict),
-            "partial seed success still advances strict standing mastery");
+            "four-of-six standing seeds incorrectly advance mastery");
     }
 
     {

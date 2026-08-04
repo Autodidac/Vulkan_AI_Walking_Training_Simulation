@@ -10,7 +10,7 @@ int main()
     const runner::acceptance::Report report =
         runner::acceptance::run_live_acceptance_matrix();
 
-    if (report.cases.size() < 10u)
+    if (report.cases.size() < 22u)
     {
         std::cerr << "Acceptance matrix unexpectedly contains only "
             << report.cases.size() << " cases\n";

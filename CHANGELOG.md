@@ -2,6 +2,21 @@
 
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
+## [0.7.12] - 2026-08-04
+
+### Fixed
+
+- Replaced impossible two-recovery static-crouch mastery with the single authored press hold/recovery cycle.
+- Made Stand mastery use an explicit five-of-six robust seed gate instead of contradicting evaluation validity.
+- Added topology-aware support-chain teaching for passive-foot, monoped, quadruped, crawler, and hexapod rigs.
+- Added named Stand and static Crouch acceptance for all seven presets.
+- Removed the unrequested top-bar artwork card and ornamental biomechanical overlay without adding more controls.
+- Isolated corrected training with v0.7.12 semantics and autosave names.
+- Rebuilt paired feet as forward-facing articulated heel-ball-toe chains with automatic toe stabilization and push-off.
+- Added anatomy-aware simultaneous hip/knee discovery lanes and strong same-side crouch coordination.
+- Narrowed the authored biped, humanoid, and chicken neutral stance and removed duplicate monoped feet.
+- Added stance traction to semantic foot contacts to stop uncontrolled preview skating without crediting friction-only gait.
+
 ## [0.7.11] - 2026-08-03
 
 ### Fixed

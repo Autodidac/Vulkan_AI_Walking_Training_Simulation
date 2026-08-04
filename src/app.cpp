@@ -72,25 +72,6 @@ namespace runner
         constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
         constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
 
-        void draw_pixel_art(render::Canvas& canvas, const art::PixelArt& artwork,
-            Vec2 position, float pixel_size)
-        {
-            if (!artwork.loaded() || pixel_size <= 0.0f)
-                return;
-            for (int y = 0; y < artwork.height; ++y)
-            {
-                for (int x = 0; x < artwork.width; ++x)
-                {
-                    const Vec2 minimum = position
-                        + Vec2{ static_cast<float>(x) * pixel_size,
-                            static_cast<float>(y) * pixel_size };
-                    canvas.quad(minimum, minimum + Vec2{ pixel_size, pixel_size },
-                        artwork.pixels[static_cast<std::size_t>(
-                            y * artwork.width + x)]);
-                }
-            }
-        }
-
         void fill_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color color)
         {
             if (rect.size.x <= 0.0f || rect.size.y <= 0.0f)
@@ -321,9 +302,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0710-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0710-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0710-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0712-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0712-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0712-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -527,25 +508,6 @@ namespace runner
             if (width >= 1080)
                 add_text(canvas, { 20.0f, 50.0f }, "AUTONOMOUS PHYSICS LOCOMOTION LAB", 1.05f, muted);
 
-            if (original_runner_art.loaded() && width >= 1280)
-            {
-                constexpr float art_scale = 2.35f;
-                const Rect art_frame{
-                    { 315.0f, 8.0f },
-                    { static_cast<float>(original_runner_art.width) * art_scale + 12.0f,
-                      static_cast<float>(original_runner_art.height) * art_scale + 12.0f }
-                };
-                add_rounded_rect(canvas, art_frame, 7.0f, rgb(0x0a1018), accent_dim, 1.0f);
-                draw_pixel_art(canvas, original_runner_art,
-                    art_frame.position + Vec2{ 6.0f, 6.0f }, art_scale);
-                add_text(canvas,
-                    { art_frame.position.x + art_frame.size.x + 12.0f, 18.0f },
-                    "ORIGINAL RUNNER ART", 1.10f, body_light);
-                add_text(canvas,
-                    { art_frame.position.x + art_frame.size.x + 12.0f, 45.0f },
-                    "PACKAGED / LIVE", 0.95f, muted);
-            }
-
             const float tab_width = width >= 1080 ? 184.0f : 164.0f;
             const float start_x = static_cast<float>(width) - tab_width * 2.0f - 18.0f;
             if (button({ { start_x, 16.0f }, { tab_width - 7.0f, 50.0f } },
@@ -670,83 +632,6 @@ namespace runner
             }
         }
 
-        void draw_biomechanical_overlay(const sim::Environment& environment,
-            Rect viewport, float camera, float scale)
-        {
-            const auto& particles = environment.particles();
-            const auto& rig = environment.blueprint();
-            if (particles.empty())
-                return;
-
-            auto point = [&](std::size_t index)
-            {
-                return world_to_screen(particles[index].position, viewport, camera, scale);
-            };
-            auto ring = [&](Vec2 center, float radius, Color color)
-            {
-                std::array<Vec2, 33> points{};
-                for (std::size_t index = 0; index < points.size(); ++index)
-                {
-                    const float angle = static_cast<float>(index)
-                        / static_cast<float>(points.size() - 1u) * pi * 2.0f;
-                    points[index] = center + Vec2{ std::cos(angle), std::sin(angle) } * radius;
-                }
-                canvas.polyline(points, 1.35f, color);
-            };
-
-            const float phase = session_runtime_seconds;
-            const Vec2 ghost_offset{ 18.0f, -8.0f };
-            for (std::size_t index = 0; index < rig.bones.size(); ++index)
-            {
-                const sim::DistanceConstraint& bone = rig.bones[index];
-                if (bone.a >= particles.size() || bone.b >= particles.size())
-                    continue;
-                const Vec2 a = point(bone.a);
-                const Vec2 b = point(bone.b);
-                canvas.line(a, b, 1.25f, with_alpha(accent, 0.22f));
-                canvas.line(a + ghost_offset, b + ghost_offset, 0.85f,
-                    with_alpha(body_light, 0.10f));
-                const float packet_phase = std::fmod(phase * 0.62f
-                    + static_cast<float>(index) * 0.173f, 1.0f);
-                canvas.circle(a + (b - a) * packet_phase, 2.2f,
-                    with_alpha(accent, 0.62f), 12);
-            }
-
-            for (std::size_t index = 0; index < particles.size(); ++index)
-            {
-                const bool semantic = index == rig.root_node || index == rig.torso_node
-                    || index == rig.head_node || rig.is_support_seed(index);
-                if (!semantic)
-                    continue;
-                const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f)
-                    * scale + 7.0f + std::sin(phase * 2.4f
-                        + static_cast<float>(index)) * 1.8f;
-                ring(point(index), radius, with_alpha(
-                    index == rig.head_node ? body_light : accent, 0.42f));
-            }
-
-            if (rig.torso_node < particles.size())
-            {
-                const Vec2 center = point(rig.torso_node) + Vec2{ 24.0f, -28.0f };
-                const Rect chip{ center - Vec2{ 18.0f, 12.0f }, { 36.0f, 24.0f } };
-                add_rounded_rect(canvas, chip, 4.0f, rgb(0x091923, 0.72f),
-                    with_alpha(accent, 0.62f), 1.0f);
-                canvas.line(center - Vec2{ 8.0f, 0.0f }, center + Vec2{ 8.0f, 0.0f },
-                    1.3f, with_alpha(accent, 0.72f));
-                canvas.line(center - Vec2{ 0.0f, 7.0f }, center + Vec2{ 0.0f, 7.0f },
-                    1.3f, with_alpha(accent, 0.72f));
-                for (int pin = -1; pin <= 1; ++pin)
-                {
-                    const float y = center.y + static_cast<float>(pin) * 7.0f;
-                    canvas.line({ chip.position.x - 5.0f, y }, { chip.position.x, y },
-                        1.0f, with_alpha(body_light, 0.52f));
-                    canvas.line({ chip.position.x + chip.size.x, y },
-                        { chip.position.x + chip.size.x + 5.0f, y },
-                        1.0f, with_alpha(body_light, 0.52f));
-                }
-            }
-        }
-
         void draw_creature(const sim::Environment& environment, Rect viewport, float camera,
             float scale, bool show_nodes = false)
         {
@@ -758,7 +643,6 @@ namespace runner
             {
                 return world_to_screen(particles[index].position, viewport, camera, scale);
             };
-            draw_biomechanical_overlay(environment, viewport, camera, scale);
             for (const sim::DistanceConstraint& bone : rig.bones)
             {
                 if (bone.a >= particles.size() || bone.b >= particles.size())
