@@ -34,8 +34,10 @@ jobs:
       - name: Materialize combined v0.7.14 source
         run: |
           set -euo pipefail
+          python3 tools/prepare_v0714_sandhybrid_integration.py
           python3 tools/apply_v0714_sandhybrid_integration.py
           git diff --check
+          test ! -f tools/prepare_v0714_sandhybrid_integration.py
           test ! -f tools/apply_v0714_sandhybrid_integration.py
           test ! -f .github/workflows/publish-runner-v0713.yml
           test ! -f tools/publish_v0713.ps1
