@@ -34,8 +34,10 @@ jobs:
       - name: Materialize v0.7.13 toe-rate correction
         run: |
           set -euo pipefail
+          python3 tools/prepare_v0713_toe_rate_gate.py
           python3 tools/apply_v0713_toe_rate_gate.py
           git diff --check
+          test ! -f tools/prepare_v0713_toe_rate_gate.py
           test ! -f tools/apply_v0713_toe_rate_gate.py
           grep -F 'project(Runner VERSION 0.7.13 LANGUAGES CXX)' CMakeLists.txt
           grep -F "training_semantics_version = 0x0007'1300u" src/ppo.hpp
