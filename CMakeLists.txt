@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.14 LANGUAGES CXX)
+project(Runner VERSION 0.7.15 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -26,6 +26,29 @@ if(NOT TARGET SandHybrid::SandHybrid)
     message(FATAL_ERROR "Pinned SandHybrid core target was not created")
 endif()
 
+set(RUNNER_GENERATED_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/v0715")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/app.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/autonomy_curriculum.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_runner_v0715_sources.cmake")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DRUNNER_OUTPUT_DIR=${RUNNER_GENERATED_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_runner_v0715_sources.cmake"
+    RESULT_VARIABLE RUNNER_SOURCE_GENERATION_RESULT
+    OUTPUT_VARIABLE RUNNER_SOURCE_GENERATION_OUTPUT
+    ERROR_VARIABLE RUNNER_SOURCE_GENERATION_ERROR)
+if(NOT RUNNER_SOURCE_GENERATION_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "Runner v0.7.15 source generation failed:\n"
+        "${RUNNER_SOURCE_GENERATION_OUTPUT}\n${RUNNER_SOURCE_GENERATION_ERROR}")
+endif()
+set_source_files_properties(
+    "${RUNNER_GENERATED_SOURCE_DIR}/app.cpp"
+    "${RUNNER_GENERATED_SOURCE_DIR}/autonomy_curriculum.cpp"
+    PROPERTIES GENERATED TRUE)
+
 add_library(RunnerCore STATIC
     src/simulation.cpp
     src/pixel_art.cpp
@@ -37,7 +60,7 @@ add_library(RunnerCore STATIC
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
     src/autonomy_commands.cpp
-    src/autonomy_curriculum.cpp
+    "${RUNNER_GENERATED_SOURCE_DIR}/autonomy_curriculum.cpp"
     src/autonomy_persistence.cpp
 )
 add_library(Runner::Core ALIAS RunnerCore)
@@ -89,7 +112,7 @@ if(RUNNER_BUILD_APP)
     add_custom_target(RunnerShaders DEPENDS ${RUNNER_SHADER_OUTPUTS})
 
     add_executable(Runner
-        src/main.cpp src/app.cpp src/canvas.cpp src/renderer.cpp
+        src/main.cpp "${RUNNER_GENERATED_SOURCE_DIR}/app.cpp" src/canvas.cpp src/renderer.cpp
         src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp src/ui_font.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
