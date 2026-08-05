@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 
 namespace runner::ui_layout
 {
@@ -93,10 +94,10 @@ namespace runner::ui_layout
 
     [[nodiscard]] constexpr Box training_pip_box(Box world) noexcept
     {
-        const float width = std::clamp(world.width * 0.42f, 190.0f, 390.0f);
+        const float width = std::clamp(world.width * 0.46f, 240.0f, 440.0f);
         const float available_height = std::max(150.0f,
             world.height - pip_top_padding - bottom_telemetry_height - 18.0f);
-        const float height = std::min(std::clamp(world.height * 0.27f, 170.0f, 245.0f),
+        const float height = std::min(std::clamp(world.height * 0.30f, 190.0f, 270.0f),
             available_height);
         return { world.x + world.width - width - 18.0f,
             world.y + pip_top_padding, width, height };

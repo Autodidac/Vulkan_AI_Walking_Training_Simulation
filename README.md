@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.15 is a combined C++23 SDL3/Vulkan locomotion, morphology-evolution, and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
+Runner 0.7.16 is a combined C++23 SDL3/Vulkan locomotion, morphology-evolution, and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
 
 ## Current curriculum
 
@@ -43,7 +43,9 @@ The package includes `assets/optional/runner_armor_concepts/runner_armor_concept
 - `1`: Live Autopilot
 - `2` or `3`: Rig Lab
 - `Space`: Pause or resume background training
-- `R`: Reset the live preview
+- Mouse wheel over Live Autopilot: zoom the world view without changing physical scale
+- Live panel `ZOOM OUT` / `AUTO VIEW` / `ZOOM IN`: direct camera controls
+- `R`: Reset the live preview and restore automatic camera fitting
 - `S`: Save the current rig
 - `L`: Load a rig
 - `Delete`: Remove the selected non-required node
@@ -86,14 +88,17 @@ Runner.exe --version
 Runner.exe --diagnose-vulkan
 Runner.exe --diagnose-package
 Runner.exe --diagnose-acceptance
+Runner.exe --diagnose-camera
 ```
 
-`--diagnose-acceptance` runs the same deterministic rig and curriculum matrix used by CTest and release-package auditing.
+`--diagnose-acceptance` runs the same deterministic rig and curriculum matrix used by CTest and release-package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale without opening a window.
 
 ## Repository records
 
+- [`AGENTS.md`](AGENTS.md) defines cache-first implementation, validation, documentation, and release rules.
 - [`CHANGELOG.md`](CHANGELOG.md) is the single release-history document.
 - [`missioncache.md`](missioncache.md) is Runner's single authoritative mission ledger with status, acceptance criteria, and immutable release evidence.
 - [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library and preserves ownership of both canonical ledgers.
+- [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive live and PIP camera contract.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
