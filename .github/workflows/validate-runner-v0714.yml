@@ -67,6 +67,69 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f tools/apply_v0715_rig_evolution.py ]]; then
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/apply_v0715_rig_evolution.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('sim::Vec2{', 'Vec2{')
+
+          old = '''                const std::size_t bone_index = static_cast<std::size_t>(
+                    generation % candidate.bones.size());
+                const sim::DistanceConstraint original = candidate.bones[bone_index];
+          '''
+          new = '''                std::vector<std::size_t> splittable{};
+                for (std::size_t index = 0; index < candidate.bones.size(); ++index)
+                {
+                    const sim::DistanceConstraint& bone = candidate.bones[index];
+                    if (bone.stiffness < 0.20f
+                        || candidate.is_support_seed(bone.a)
+                        || candidate.is_support_seed(bone.b))
+                        continue;
+                    splittable.push_back(index);
+                }
+                if (splittable.empty())
+                    break;
+                const std::size_t bone_index = splittable[static_cast<std::size_t>(
+                    generation % splittable.size())];
+                const sim::DistanceConstraint original = candidate.bones[bone_index];
+          '''
+          if old not in text:
+              raise SystemExit('split-bone selection anchor was not found')
+          text = text.replace(old, new, 1)
+
+          old = '''        require(mutation.blueprint.valid(),
+            "rig evolution published a structurally invalid candidate");
+        topology_mutation_seen = topology_mutation_seen || mutation.topology_changed;
+          '''
+          new = '''        require(mutation.blueprint.valid(),
+            "rig evolution published a structurally invalid candidate");
+        const auto foot_topology_intact = [](const sim::CreatureBlueprint& rig,
+            bool left)
+        {
+            const auto& extra = left ? rig.additional_left_contact_nodes
+                : rig.additional_right_contact_nodes;
+            if (extra.size() < 2u)
+                return true;
+            const std::uint16_t ball = extra[0];
+            const std::uint16_t toe = extra[1];
+            return std::ranges::any_of(rig.bones,
+                [ball, toe](const sim::DistanceConstraint& bone)
+                {
+                    return (bone.a == ball && bone.b == toe)
+                        || (bone.a == toe && bone.b == ball);
+                });
+        };
+        require(foot_topology_intact(mutation.blueprint, true)
+                && foot_topology_intact(mutation.blueprint, false),
+            "topology evolution broke articulated ball-to-toe semantics");
+        topology_mutation_seen = topology_mutation_seen || mutation.topology_changed;
+          '''
+          if old not in text:
+              raise SystemExit('topology test anchor was not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
             python3 tools/apply_v0715_rig_evolution.py
           fi
           rm -f tools/apply_v0715_rig_evolution.py tools/v0715-evolution-retry.txt
@@ -84,10 +147,12 @@ jobs:
           grep -F 'constexpr float terrain_world_x' src/simulation.hpp
           grep -F 'static CreatureBlueprint scaffold();' src/simulation.hpp
           grep -F 'RigMutationCandidate evolve_rig_candidate' src/autonomy_curriculum.cpp
+          grep -F 'std::vector<std::size_t> splittable' src/autonomy_curriculum.cpp
           grep -F 'TOPOLOGY NURSERY' src/autonomy_curriculum.cpp
           grep -F 'PpoTrainer nursery(candidate, 16, false);' src/autonomy_curriculum.cpp
           grep -F "training_semantics_version = 0x0007'1501u" src/ppo.hpp
           grep -F 'SCAFFOLD' src/app.cpp
+          grep -F 'topology evolution broke articulated ball-to-toe semantics' tests/core_tests.cpp
           test ! -f tools/apply_v0715_rig_evolution.py
           test ! -f tools/materialize_runner_v0715.py
           test ! -f cmake/generate_runner_v0715_sources.cmake
