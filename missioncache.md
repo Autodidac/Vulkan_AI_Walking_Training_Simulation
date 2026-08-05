@@ -15,7 +15,7 @@
 9. Merge, tag, publish, re-download, verify, and clean branches only after the ledger records exact evidence.
 
 ### WALK-PROCESS-138 — Cache-first dependency and regression discipline
-**Status:** ACTIVE — RELEASE BLOCKING
+**Status:** VERIFIED — CACHE-FIRST HISTORY AND OPEN v0.7.16 CARRY-FORWARD RECORDED
 
 The process above applies to this repository and is the required pattern for future project work. A release is blocked if implementation precedes mission capture, if a known interaction lacks an acceptance test, if an unfinished item disappears, or if evidence is described more strongly than it supports.
 
@@ -32,10 +32,10 @@ This split is a risk boundary, not a silent deferral. Both release targets remai
 
 # Runner v0.7.15 locomotion, terrain, and structural-evolution completion
 
-**Release state:** ACTIVE — no publication claim until every v0.7.15 release gate below passes.
+**Release state:** PRE-PUBLICATION VALIDATED — final installed/extracted package, release-asset round-trip, and cleanup gates remain.
 
 ### WALK-TERRAIN-139 — One visible and physical terrain state
-**Status:** IMPLEMENTED — REVALIDATION REQUIRED
+**Status:** VERIFIED — DETERMINISTIC AND CROSS-PLATFORM; RELEASED VISUAL/PACKAGE REVIEW PENDING
 
 Flat lessons render their actual y=0 collision plane. Deformable lessons render the same treadmill-transformed fine-cell map used by collision, pressure, deposits, observations, and obstacles. Exposed/active surface regions remain granular; only deep inactive uniform regions may render as macro tiles. Duplicate height lines, fake moving ground, zero-distance columns, and stale coordinate transforms are forbidden.
 
@@ -44,7 +44,7 @@ Flat lessons render their actual y=0 collision plane. Deformable lessons render 
 **Acceptance:** deterministic coordinate round-trip and render/collision sampling tests; Linux and Windows suites; live screenshot shows feet, terrain cells, obstacles, and pressure marks locked together with no duplicate ground.
 
 ### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** IMPLEMENTED — GROUND-SOLVER STATIC-FRICTION MANIFOLD; FULL VALIDATION REQUIRED
+**Status:** VERIFIED — PHYSICAL STATIC-FRICTION MANIFOLD AND ALL-PRESET HOLD/RECOVERY PASS; RELEASED VISUAL REVIEW PENDING
 
 A crouch must lower the pelvis through bilateral leg compression. Clearing the platen by folding the torso forward is invalid even when feet remain on the ground.
 
@@ -63,7 +63,7 @@ Required evidence:
 **Acceptance:** an adversarial hip-hinge pose that clears the press is rejected; a bilateral squat passes repeated seeded hold/recovery tests without forced foot coordinates; all eight presets retain valid Stand behavior; released screenshot visibly shows pelvis-down/knees-bent posture.
 
 ### WALK-SIDEGAIT-141 — Normal side-view limb crossing and alternating steps
-**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
+**Status:** VERIFIED — DETERMINISTIC AND CROSS-PLATFORM; RELEASED VISUAL REVIEW PENDING
 
 Near and far legs may pass one another in screen space. One foot must be able to land ahead of the other without a support-separation solver forcing a split, fused plate, or jumping-jack pose. Semantic identity stays distinct even while silhouettes overlap.
 
@@ -79,7 +79,7 @@ Required evidence:
 **Acceptance:** deterministic gait-cycle fixture proves alternating crossing, forward progress, and nonzero swing clearance; adversarial sliding and same-side strike fixtures fail; live view shows one leg passing in front of the other.
 
 ### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** IMPLEMENTED — MEASURED CONTACT ANCHORS WITH MOVING RELEASE; FULL VALIDATION REQUIRED
+**Status:** VERIFIED — MEASURED STATIC CONTACTS, MOVING RELEASE, AND ADVERSARIAL TESTS PASS; RELEASED VISUAL REVIEW PENDING
 
 Bipeds use explicit ankle, heel, ball, and toe geometry. The rear foot is a stable plate; the toe is an articulated segment. Contact transitions support heel strike, flat-foot loading, toe roll, toe-off, and swing clearance.
 
@@ -99,7 +99,7 @@ Traction must be physical and state-aware rather than an unconditional position 
 **Acceptance:** heel/ball/toe phase tests, planted-foot static-slip bound, dynamic breakaway test, toe angular-rate test, loose/firm terrain traction comparison, no wheel-skating qualification, all-preset finite and Stand acceptance.
 
 ### WALK-EVOLUTION-143 — Structural rig evolution with nursery adaptation
-**Status:** IMPLEMENTED — ACTIVE JOINT GROWTH, NEUTRAL SLOT TRANSFER, AND PACKAGE VALIDATION REQUIRED
+**Status:** VERIFIED — ACTIVE JOINT GROWTH, NEUTRAL TRANSFER, NURSERY, AND CROSS-PLATFORM TESTS PASS; PACKAGE REVIEW PENDING
 
 Evolution must begin from a minimal valid scaffold option and support real topology changes, not only strength and coordinate micro-tuning.
 
@@ -123,7 +123,7 @@ A topology candidate must receive a bounded nursery adaptation period before com
 **Acceptance:** scaffold is selectable and editable; each operator has positive/negative tests; candidate adaptation is bounded and deterministic; accepted/rejected/rollback counters update; live rig changes only after valid improvement; all existing presets remain valid.
 
 ### WALK-EDITOR-144 — Complete controls for gait, feet, evolution, and diagnostics
-**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
+**Status:** VERIFIED — DETERMINISTIC AND CROSS-PLATFORM; RELEASED VISUAL REVIEW PENDING
 
 The rig lab must expose enough control to inspect and reproduce every active locomotion mission without editing files:
 - preset and minimal scaffold selection;
@@ -141,12 +141,12 @@ The rig lab must expose enough control to inspect and reproduce every active loc
 **Acceptance:** editor controls remain responsive under MAX training; invalid edits are rejected nonblockingly; deterministic UI-layout/control tests and packaged visual review pass.
 
 ### WALK-STATE-145 — Isolate corrected locomotion/evolution semantics
-**Status:** IMPLEMENTED — CROSS-PLATFORM AND PACKAGE VALIDATION REQUIRED
+**Status:** VERIFIED — CROSS-PLATFORM RESUME/TRANSFER ISOLATION PASSES; PACKAGE REVIEW PENDING
 
 Any change to crouch qualification, gait evidence, foot traction, topology evolution, policy output mapping, or observations requires a new training-semantics value and isolated autosave/checkpoint/state paths. v0.7.14 and earlier policies may be explicitly imported as transfer weights only when dimensions match; they cannot silently resume as valid mastery.
 
 ### WALK-REGRESSION-146 — Exhaustive interaction audit for v0.7.15
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VALIDATED — FULL LINUX/WINDOWS SUITES AND RUNTIME DIAGNOSTICS PASS; FINAL PACKAGE AUDIT PENDING
 
 **Second-audit finding:** the static crouch stabilizer still wrote authored x positions, floor y positions, previous positions, and `grounded=true` into every semantic foot contact several times per solver iteration. That invalidated the claimed friction-only support model and could manufacture the very crouch being evaluated. The release remains blocked until those assignments are removed and adversarial tests prove support, squat shape, recovery, and bounded slip still pass through the real ground solver.
 
@@ -157,6 +157,10 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 **MSVC portability finding:** exact-source Windows run `31016262550`, job `92341400943`, built `RunnerCore`, `Runner.exe`, and the other native targets but failed `RunnerDeformableTerrainTests` because MSVC 19.51 does not treat `std::abs(float)` as constexpr in the terrain transform `static_assert`. This is a test-only cross-platform defect. The correction must preserve compile-time transform verification without relying on library constexpr coverage, then rerun Linux, Windows, the complete acceptance matrix, and runtime diagnostics.
 
 **MSVC portability correction:** the transform round-trip remains a compile-time assertion, but now compares the signed constexpr error directly against positive and negative epsilon bounds. This avoids implementation-dependent `std::abs` constexpr support without weakening the invariant. Full cross-platform revalidation remains required.
+
+**Exact-source cross-platform validation:** refinement run `31018349657` tested commit `7778180ec754e0faa430af29918b804656554030`. Linux GCC 14 job `92348344345` passed the complete deterministic suite. Windows Server 2025 / VS 2026 MSVC 19.51 job `92348748327` built the SDL3/Vulkan application and every test target, passed 9/9 CTest suites, passed all eight preset Stand cases, all eight static crouch hold/recovery cases, the ordered curriculum evidence, and the complete 24/24 live acceptance matrix. `Runner.exe --diagnose-package` and `Runner.exe --diagnose-acceptance` also passed from an unrelated temporary directory. The hosted runner lacked a Vulkan presentation surface, but the Vulkan backend, loader/runtime files, shaders, executable, and noninteractive diagnostics were present and valid. No authored-coordinate crouch foot pinning remains.
+
+**Remaining v0.7.15 gate:** run the clean script-free PR workflow, install and audit the package, test `run.bat` from an unrelated directory, verify optional artwork/assets and fallback behavior, create checksums and a per-file manifest, merge, publish `v0.7.15`, re-download and byte-compare the release asset, then remove obsolete PRs/branches. Visual appearance remains subject to released screenshot/manual review and must reopen the exact mission if contradicted.
 
 Before release, re-evaluate at minimum:
 - all eight preset Stand and static-crouch behavior;
