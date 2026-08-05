@@ -1,4 +1,4 @@
-name: Validate Runner v0.7.15 viewport and recovery
+name: Validate Runner v0.7.15 viewport and terrain sync
 
 on:
   pull_request:
@@ -18,6 +18,8 @@ jobs:
     if: github.head_ref == 'agent/v0715-ground-camera-character-scale'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,28 +31,38 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
+      - name: Apply staged terrain synchronization repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f tools/apply_v0715_terrain_sync.py ]]; then
+            python3 tools/apply_v0715_terrain_sync.py
+          fi
+          rm -f tools/apply_v0715_terrain_sync.py
+          git diff --check
+
       - name: Verify v0.7.15 source contracts
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
           grep -F 'project(Runner VERSION 0.7.15 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
+          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' src/app.cpp
+          ! grep -F 'std::vector<Vec2> surface' src/app.cpp
+          grep -F 'if (index <= 0)' src/app.cpp
+          grep -F 'runner-v0715-autosave.eppo' src/app.cpp
+          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
+          grep -F 'reset_policy(0x715000u' src/autonomy_curriculum.cpp
+          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
+          grep -F 'terrain_sample_x' src/simulation.hpp
+          grep -F 'terrain_world_x' src/simulation.hpp
+          grep -F 'stage_uses_deformable_terrain(environment.course_stage())' src/app.cpp
+          grep -F 'const float source_left = sim::terrain_sample_x(left, progress);' src/app.cpp
           test ! -f tools/apply_v0715_patch.py
+          test ! -f tools/materialize_runner_v0715.py
+          test ! -f tools/apply_v0715_terrain_sync.py
+          test ! -f cmake/generate_runner_v0715_sources.cmake
           test ! -f .github/workflows/patch-runner-v0715.yml
-          if [[ -f cmake/generate_runner_v0715_sources.cmake ]]; then
-            grep -F 'generate_runner_v0715_sources.cmake' CMakeLists.txt
-            grep -F 'live_pixels_per_meter = 22.0f' cmake/generate_runner_v0715_sources.cmake
-            grep -F 'surface-aware macro-tile renderer' cmake/generate_runner_v0715_sources.cmake
-            grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' cmake/generate_runner_v0715_sources.cmake
-          else
-            grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
-            ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' src/app.cpp
-            ! grep -F 'std::vector<Vec2> surface' src/app.cpp
-            grep -F 'if (index <= 0)' src/app.cpp
-            grep -F 'runner-v0715-autosave.eppo' src/app.cpp
-            grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
-            grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
-          fi
 
       - name: Configure Linux deterministic suite
         env:
@@ -58,46 +70,24 @@ jobs:
           CXX: g++-14
         run: cmake -S . -B build/linux-v0715 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 
-      - name: Verify compiled source selection
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f build/linux-v0715/generated/v0715/app.cpp ]]; then
-            app=build/linux-v0715/generated/v0715/app.cpp
-            curriculum=build/linux-v0715/generated/v0715/autonomy_curriculum.cpp
-          else
-            app=src/app.cpp
-            curriculum=src/autonomy_curriculum.cpp
-          fi
-          grep -F 'live_pixels_per_meter = 22.0f' "$app"
-          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' "$app"
-          ! grep -F 'std::vector<Vec2> surface' "$app"
-          grep -F 'if (index <= 0)' "$app"
-          grep -F 'runner-v0715-autosave.eppo' "$app"
-          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' "$curriculum"
-
       - name: Build and test Linux deterministic suite
         run: |
           cmake --build build/linux-v0715 --parallel
           ctest --test-dir build/linux-v0715 --output-on-failure -V --timeout 1800
 
-      - name: Materialize tested v0.7.15 source
-        if: hashFiles('tools/materialize_runner_v0715.py') != ''
+      - name: Commit exact tested source
+        id: source
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/materialize_runner_v0715.py build/linux-v0715/generated/v0715
-          git diff --check
-          test ! -f tools/materialize_runner_v0715.py
-          test ! -f cmake/generate_runner_v0715_sources.cmake
-          grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
-          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
-          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Materialize Runner v0.7.15 viewport terrain and recovery fixes'
-          git push origin HEAD:agent/v0715-ground-camera-character-scale
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add -A
+            git commit -m '[skip ci] Synchronize Runner v0.7.15 terrain rendering with physics'
+            git push origin HEAD:agent/v0715-ground-camera-character-scale
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   windows-package:
     needs: linux-source
@@ -109,7 +99,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ needs.linux-source.outputs.source_sha }}
           fetch-depth: 0
 
       - name: Checkout pinned vcpkg
@@ -172,7 +162,8 @@ jobs:
           foreach ($required in @(
             'Runner.exe','run.bat','README.md','CHANGELOG.md','missioncache.md',
             'assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv',
-            'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md')) {
+            'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
+            'docs/RUNNER_V0715_VIEWPORT_RECOVERY.md')) {
             if (-not (Test-Path "$stage/$required")) { throw "Missing package file: $required" }
           }
           Push-Location $env:RUNNER_TEMP
