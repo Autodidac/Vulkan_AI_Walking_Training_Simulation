@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.14 is a combined C++23 SDL3/Vulkan locomotion and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
+Runner 0.7.15 is a combined C++23 SDL3/Vulkan locomotion, morphology-evolution, and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
 
 ## Current curriculum
 
@@ -19,7 +19,7 @@ Scalar reward cannot skip prerequisites. Wheel-sliding, body rolling, detached o
 
 ## Authored rigs
 
-The built-in presets are chicken, biped, humanoid, quadruped, four-leg crawler, hexapod, and monoped. Every preset has explicit support semantics and a rig-specific control path. The monoped uses a single-leg gait cycle rather than fake alternating biped steps.
+The built-in presets are scaffold, chicken, biped, humanoid, quadruped, four-leg crawler, hexapod, and monoped. Every preset has explicit support semantics and a rig-specific control path. The scaffold is the minimal topology-evolution seed; valid bone splitting may activate a previously unused neutral policy slot and train it in a bounded nursery. The monoped uses a single-leg gait cycle rather than fake alternating biped steps.
 
 ## Runtime model
 
@@ -49,6 +49,8 @@ The package includes `assets/optional/runner_armor_concepts/runner_armor_concept
 - `Delete`: Remove the selected non-required node
 - `Shift + click`: Add a node
 - `Ctrl + click`: Connect the selected node to another node
+- `Alt + click`: Select a bone for stiffness inspection or safe deletion
+- Rig Lab buttons: scaffold/presets, near-leg depth, champion restore, fresh policy, crouch/gait-cycle preview, and firm/loose traction diagnostics
 
 ## Build and test
 

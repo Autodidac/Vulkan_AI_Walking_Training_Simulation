@@ -246,7 +246,6 @@ namespace runner::rl
         std::uint8_t stage{};
         if (!input || magic != checkpoint_magic
             || !read_value(input, data.training_semantics)
-            || data.training_semantics != training_semantics_version
             || !read_value(input, data.rig_signature)
             || !read_value(input, data.optimizer_step)
             || !read_value(input, data.random_state)
@@ -262,7 +261,7 @@ namespace runner::rl
             || stage >= sim::course_stage_count
             || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
-            error = "Invalid or incompatible Runner v0.7.1 training-semantics checkpoint.";
+            error = "Invalid or truncated Runner checkpoint.";
             return false;
         }
         data.stage = static_cast<sim::CourseStage>(stage);
@@ -273,16 +272,17 @@ namespace runner::rl
     bool PpoTrainer::apply_checkpoint_data(CheckpointData data, std::string& error,
         bool transfer_only)
     {
-        if (data.training_semantics != training_semantics_version)
+        if (!transfer_only && data.training_semantics != training_semantics_version)
         {
-            error = "INCOMPATIBLE TRAINING SEMANTICS - START FRESH OR IMPORT WEIGHTS EXPLICITLY";
+            error = "INCOMPATIBLE TRAINING SEMANTICS - RESUME BLOCKED; USE EXPLICIT WEIGHT TRANSFER";
             return false;
         }
         const std::size_t expected = policy_.parameter_count();
+        const bool optimizer_dimensions_valid = data.first_moment.size() == expected
+            && data.second_moment.size() == expected
+            && (data.best_parameters.empty() || data.best_parameters.size() == expected);
         if (data.parameters.size() != expected
-            || data.first_moment.size() != expected
-            || data.second_moment.size() != expected
-            || (!data.best_parameters.empty() && data.best_parameters.size() != expected))
+            || (!transfer_only && !optimizer_dimensions_valid))
         {
             error = "Invalid or incompatible checkpoint dimensions.";
             return false;
@@ -298,7 +298,9 @@ namespace runner::rl
         {
             reset_training_state();
             controller_state_ = ControllerState::transferred;
-            error = "WEIGHTS TRANSFERRED - OPTIMIZER AND BEST STATE RESET";
+            error = data.training_semantics == training_semantics_version
+                ? "WEIGHTS TRANSFERRED - OPTIMIZER AND BEST STATE RESET"
+                : "LEGACY WEIGHTS TRANSFERRED - SEMANTICS, OPTIMIZER, BEST, AND MASTERY RESET";
             return true;
         }
         adam_.first_moment = std::move(data.first_moment);

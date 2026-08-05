@@ -1,5 +1,55 @@
 # Changelog
 
+## Runner v0.7.15 — measured static-friction contacts
+
+- Kept terrain coordinate round-trip verification compile-time portable across GCC 14 and MSVC 19.51 without depending on `std::abs(float)` constexpr support.
+- Removed all authored-coordinate foot pinning from the crouch curriculum.
+- Added ground-solver contact anchors captured from actual heel/ball/toe collisions.
+- Static support resolves zero-slip friction against the measured contact; moving stages retain bounded release for swing, toe-off, and jumping.
+- Added adversarial tests proving the curriculum cannot touch feet and moving contacts are not magnetic.
+
+## Runner v0.7.15 — active joint growth and state transfer
+
+- Bone-split mutations may now activate one free anatomy action slot as a real articulated joint.
+- Newly activated slots have their transferred actor row and bias zeroed before bounded nursery adaptation, preventing stale unused-output motion.
+- Normal resume rejects older training semantics, while explicit dimension-compatible transfer imports weights only and clears optimizer, champion, curriculum, and mastery state.
+- Expanded deterministic and executable acceptance from seven presets to eight by including the scaffold.
+
+## Runner v0.7.15 — locomotion and evolution editor
+
+- Added ALT-click bone selection, stiffness editing, selected-bone highlighting, and safe connected-rig deletion checks.
+- Added near/far leg display control, explicit champion restore and fresh-policy controls, and live generation/accept/reject/rollback telemetry.
+- Added manual, sweep, squat, and alternating gait-cycle previews plus firm/loose-ground traction diagnostics and heel/ball/toe labels.
+
+## Runner v0.7.15 — side-view gait and traction
+
+- Allowed near/far legs to cross during locomotion while retaining fused-foot separation in static lessons.
+- Required paired-leg step credit to include a genuine lifted swing crossing before the next strike.
+- Added terrain-aware static/dynamic foot friction, heel/flat/toe-off phases, crossing and slip telemetry, and readable near/far leg rendering.
+- Added an alternating gait teacher and deterministic crossing, contact-phase, and firm-versus-loose traction tests.
+
+## Runner v0.7.15 — real crouch correction
+
+- Replaced head-clearance-only duck evidence with pelvis drop, bilateral knee flexion, bounded torso pitch, center-of-mass support, feet-only contact, held crouch, and upright recovery evidence.
+- Reworked the paired-leg crouch guide to lower the pelvis and upper body as a unit while driving knees into a squat instead of shrinking the torso into a forward bow.
+- Added explicit hip-hinge rejection, adversarial posture tests, and isolated autosaves for the corrected training semantics.
+
+## Runner v0.7.15 — structural evolution completion
+
+- Added a selectable minimal scaffold rig with two articulated leg joints per side and proper semantic feet.
+- Added deterministic topology mutations for bone splitting, branch growth/removal, and support duplication alongside parameter evolution.
+- Added a bounded 16-environment topology nursery that transfers the champion policy, adapts candidates before evaluation, accepts only stage-valid improvement, and restores the exact champion on failed application.
+- Isolated the expanded evolution semantics from earlier v0.7.15 checkpoints.
+
+## v0.7.15 - Viewport, terrain, and failed-policy recovery
+
+- Pulled the live course camera back and reframed the terrain so the rig appears as a small training subject with meaningful course visibility.
+- Removed the duplicate surface polyline, moving pseudo-ground dashes, and zero-distance obstruction.
+- Preserved fine granular cells at exposed and active terrain while restricting macro-tile quads to deep inactive uniform material.
+- Synchronized rendered terrain with the treadmill-space collision map and rendered flat lessons from their actual y=0 collision plane.
+- Added automatic champion restoration for catastrophic invalid or backward generations and nursery reset when no valid champion exists.
+- Isolated v0.7.15 autosaves and policy semantics from failed v0.7.14 training state.
+
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
 ## [0.7.14] - 2026-08-04

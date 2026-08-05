@@ -39,6 +39,18 @@ namespace runner::sim
             || stage == CourseStage::moving_hazards;
     }
 
+    [[nodiscard]] constexpr float terrain_sample_x(float world_x,
+        float course_progress) noexcept
+    {
+        return world_x + course_progress;
+    }
+
+    [[nodiscard]] constexpr float terrain_world_x(float terrain_x,
+        float course_progress) noexcept
+    {
+        return terrain_x - course_progress;
+    }
+
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven
@@ -444,6 +456,43 @@ namespace runner::sim
         return 0.0f;
     }
 
+    struct CrouchPostureEvidence
+    {
+        bool paired_leg_chains{};
+        bool horizontal_body{};
+        bool feet_supported{};
+        bool non_foot_grounded{};
+        float pelvis_drop{};
+        float left_knee_flex{};
+        float right_knee_flex{};
+        float torso_pitch{};
+        float support_margin{ -1.0f };
+    };
+
+    [[nodiscard]] inline bool crouch_posture_qualified(
+        const CrouchPostureEvidence& evidence) noexcept
+    {
+        if (!evidence.feet_supported || evidence.non_foot_grounded)
+            return false;
+        if (evidence.paired_leg_chains)
+        {
+            return evidence.pelvis_drop >= 0.30f
+                && evidence.left_knee_flex >= 0.16f
+                && evidence.right_knee_flex >= 0.16f
+                && evidence.torso_pitch <= 0.55f
+                && evidence.support_margin >= -0.08f;
+        }
+        if (evidence.horizontal_body)
+        {
+            return evidence.pelvis_drop >= 0.18f
+                && evidence.torso_pitch <= 0.75f
+                && evidence.support_margin >= -0.15f;
+        }
+        return evidence.pelvis_drop >= 0.22f
+            && evidence.torso_pitch <= 0.65f
+            && evidence.support_margin >= -0.10f;
+    }
+
     enum class InvalidMotion : std::uint8_t
     {
         none,
@@ -463,7 +512,8 @@ namespace runner::sim
         robotic_torso_swing,
         press_penetration,
         duck_body_contact,
-        buried_no_escape
+        buried_no_escape,
+        duck_hip_hinge
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -488,6 +538,7 @@ namespace runner::sim
         case InvalidMotion::press_penetration: return "DUCK PRESS PENETRATION";
         case InvalidMotion::duck_body_contact: return "DUCK CONTACT - FEET ONLY";
         case InvalidMotion::buried_no_escape: return "BURIED / NO ESCAPE SPACE";
+        case InvalidMotion::duck_hip_hinge: return "HIP HINGE - NOT A CROUCH";
         }
         return "INVALID";
     }
@@ -554,6 +605,51 @@ namespace runner::sim
         return traction_contact ? 0.0f : 0.985f;
     }
 
+    [[nodiscard]] inline float foot_friction_retention(float horizontal_speed,
+        float firmness, float looseness, bool static_lesson,
+        bool toe_contact) noexcept
+    {
+        firmness = clamp(firmness, 0.0f, 1.0f);
+        looseness = clamp(looseness, 0.0f, 1.0f);
+        const float static_limit = std::max(0.035f,
+            0.08f + firmness * 0.18f - looseness * 0.06f);
+        if (std::abs(horizontal_speed) <= static_limit)
+            return 0.0f;
+        float retention = 0.30f - firmness * 0.22f + looseness * 0.10f;
+        if (static_lesson)
+            retention *= 0.35f;
+        if (toe_contact)
+            retention = std::max(retention, 0.060f);
+        return clamp(retention, 0.0f, 0.42f);
+    }
+
+    inline constexpr float moving_contact_slop_m = 0.032f;
+    inline constexpr float moving_contact_release_speed_mps = 0.24f;
+
+    [[nodiscard]] inline bool planted_contact_persists(bool contact_latched,
+        bool semantic_support, bool static_support, float separation,
+        float upward_speed, bool release_requested) noexcept
+    {
+        if (!contact_latched || !semantic_support || release_requested)
+            return false;
+        if (static_support)
+            return true;
+        return separation > 0.0025f
+            && separation <= moving_contact_slop_m
+            && upward_speed <= moving_contact_release_speed_mps;
+    }
+
+    [[nodiscard]] inline bool qualifies_crossing_step(int previous_side,
+        int strike_side, float seconds_since_previous, float root_displacement,
+        float swing_air_seconds, float swing_clearance, bool swing_crossed,
+        bool crossing_required) noexcept
+    {
+        return (!crossing_required || swing_crossed)
+            && qualifies_supported_step(previous_side, strike_side,
+                seconds_since_previous, root_displacement,
+                swing_air_seconds, swing_clearance);
+    }
+
     inline constexpr float course_marker_spacing_m = 8.0f;
     inline constexpr int course_safe_runway_markers = 5;
     inline constexpr int course_feature_cycle_length = 5;
@@ -610,6 +706,70 @@ namespace runner::sim
         case 3: return CourseFeatureKind::moving_hazard;
         default: return CourseFeatureKind::projectile;
         }
+    }
+
+    enum class RigTestPattern : std::uint8_t
+    {
+        manual,
+        crouch,
+        gait
+    };
+
+    [[nodiscard]] inline float rig_test_motor_input(RigTestPattern pattern,
+        std::size_t motor_index, float phase, float manual_input) noexcept
+    {
+        if (pattern == RigTestPattern::manual)
+            return clamp(manual_input, -1.0f, 1.0f);
+        if (pattern == RigTestPattern::crouch)
+        {
+            constexpr std::array<float, action_count> crouch{
+                -0.22f, 0.70f, 0.22f, -0.70f, 0.0f, 0.0f, 0.0f, 0.0f
+            };
+            return crouch[std::min(motor_index, crouch.size() - 1u)];
+        }
+        const float swing = std::sin(phase);
+        const std::array<float, action_count> gait{
+            0.58f * swing,
+            0.48f * std::max(0.0f, swing),
+            -0.58f * swing,
+            -0.48f * std::max(0.0f, -swing),
+            -0.16f * swing, 0.08f * swing,
+            0.16f * swing, -0.08f * swing
+        };
+        return gait[std::min(motor_index, gait.size() - 1u)];
+    }
+
+    enum class FootContactPhase : std::uint8_t
+    {
+        airborne,
+        heel_strike,
+        flat,
+        toe_off
+    };
+
+    [[nodiscard]] inline std::string_view foot_contact_phase_name(
+        FootContactPhase phase) noexcept
+    {
+        switch (phase)
+        {
+        case FootContactPhase::airborne: return "AIR";
+        case FootContactPhase::heel_strike: return "HEEL";
+        case FootContactPhase::flat: return "FLAT";
+        case FootContactPhase::toe_off: return "TOE";
+        }
+        return "UNKNOWN";
+    }
+
+    [[nodiscard]] inline FootContactPhase classify_foot_contact_phase(
+        bool heel, bool ball, bool toe) noexcept
+    {
+        if (!heel && !ball && !toe)
+            return FootContactPhase::airborne;
+        if (heel && !toe)
+            return FootContactPhase::heel_strike;
+        if (toe && !heel)
+            return FootContactPhase::toe_off;
+        return FootContactPhase::flat;
     }
 
     struct Particle
@@ -775,6 +935,7 @@ namespace runner::sim
                 && std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
         }
 
+        [[nodiscard]] static CreatureBlueprint scaffold();
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();
         [[nodiscard]] static CreatureBlueprint humanoid();
@@ -866,6 +1027,17 @@ namespace runner::sim
         [[nodiscard]] float collision_count() const noexcept { return collision_count_; }
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
+        [[nodiscard]] std::uint32_t limb_crossings() const noexcept { return limb_crossings_; }
+        [[nodiscard]] std::uint32_t heel_strikes() const noexcept { return heel_strike_count_; }
+        [[nodiscard]] std::uint32_t toe_offs() const noexcept { return toe_off_count_; }
+        [[nodiscard]] FootContactPhase left_foot_phase() const noexcept
+        {
+            return left_foot_phase_;
+        }
+        [[nodiscard]] FootContactPhase right_foot_phase() const noexcept
+        {
+            return right_foot_phase_;
+        }
         [[nodiscard]] std::uint32_t gait_cycles() const noexcept
         {
             return blueprint_.monopedal_gait()
@@ -883,6 +1055,15 @@ namespace runner::sim
         [[nodiscard]] float duck_clearance_margin() const noexcept
         {
             return duck_clearance_margin_;
+        }
+        [[nodiscard]] CrouchPostureEvidence current_crouch_posture() const noexcept;
+        [[nodiscard]] bool crouch_posture_valid() const noexcept
+        {
+            return crouch_posture_qualified(current_crouch_posture());
+        }
+        [[nodiscard]] float longest_valid_crouch_seconds() const noexcept
+        {
+            return longest_valid_crouch_seconds_;
         }
         [[nodiscard]] bool duck_press_contact() const noexcept { return duck_press_contact_this_step_; }
         [[nodiscard]] bool duck_press_completed() const noexcept { return duck_press_completed_; }
@@ -971,11 +1152,15 @@ namespace runner::sim
         [[nodiscard]] float contact_cluster_top_y(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] float contact_cluster_horizontal_speed(std::uint16_t contact_node,
             float dt) const noexcept;
+        [[nodiscard]] float contact_cluster_center_x(std::uint16_t contact_node) const noexcept;
+        [[nodiscard]] FootContactPhase detect_foot_contact_phase(bool left) const noexcept;
         [[nodiscard]] float contact_cluster_clearance(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] bool knee_before_foot_fault() const noexcept;
 
         CreatureBlueprint blueprint_{};
         std::vector<Particle> particles_{};
+        std::vector<std::uint8_t> support_contact_latch_{};
+        std::vector<float> support_contact_anchor_x_{};
         std::vector<CourseFeature> course_features_{};
         DeformableTerrain terrain_{};
         std::vector<MaterialParticle> material_particles_{};
@@ -1003,6 +1188,9 @@ namespace runner::sim
         float duck_clearance_margin_{};
         float duck_press_hold_seconds_{};
         float duck_body_contact_seconds_{};
+        float duck_posture_failure_seconds_{};
+        float current_valid_crouch_seconds_{};
+        float longest_valid_crouch_seconds_{};
         float duck_press_max_penetration_{};
         float duck_walk_started_seconds_{};
         float crouch_walk_seconds_{};
@@ -1048,6 +1236,13 @@ namespace runner::sim
         float right_swing_seconds_{};
         float left_swing_clearance_{};
         float right_swing_clearance_{};
+        bool left_swing_crossed_{};
+        bool right_swing_crossed_{};
+        std::uint32_t limb_crossings_{};
+        std::uint32_t heel_strike_count_{};
+        std::uint32_t toe_off_count_{};
+        FootContactPhase left_foot_phase_{ FootContactPhase::airborne };
+        FootContactPhase right_foot_phase_{ FootContactPhase::airborne };
         float action_change_energy_{};
         bool alternating_step_this_step_{};
         float maximum_speed_kmh_{};

@@ -110,6 +110,122 @@ namespace runner::sim
             environment.duck_obstacle_weight_ = pressure;
         }
 
+        static bool hip_hinge_is_rejected(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            auto pin = [&](std::size_t node)
+            {
+                if (node >= environment.particles_.size())
+                    return;
+                Particle& particle = environment.particles_[node];
+                particle.position.y = environment.ground_height_at(particle.position.x)
+                    + ground_contact_offset(true, particle.radius);
+                particle.previous = particle.position;
+                particle.grounded = true;
+            };
+            pin(environment.blueprint_.left_contact_node);
+            pin(environment.blueprint_.right_contact_node);
+            for (const std::uint16_t node : environment.blueprint_.additional_left_contact_nodes)
+                pin(node);
+            for (const std::uint16_t node : environment.blueprint_.additional_right_contact_nodes)
+                pin(node);
+            const Vec2 root = environment.particles_[environment.blueprint_.root_node].position;
+            environment.particles_[environment.blueprint_.torso_node].position =
+                root + Vec2{ 1.05f, 0.42f };
+            environment.particles_[environment.blueprint_.head_node].position =
+                root + Vec2{ 1.72f, 0.58f };
+            environment.particles_[environment.blueprint_.torso_node].previous =
+                environment.particles_[environment.blueprint_.torso_node].position;
+            environment.particles_[environment.blueprint_.head_node].previous =
+                environment.particles_[environment.blueprint_.head_node].position;
+            return !environment.crouch_posture_valid();
+        }
+
+        static bool guided_squat_is_valid(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            environment.elapsed_seconds_ = 6.0f;
+            environment.duck_press_contact_seen_ = true;
+            for (int iteration = 0; iteration < 48; ++iteration)
+            {
+                environment.stabilize_duck_posture();
+                environment.solve_ground(1.0f / 60.0f);
+            }
+            const CrouchPostureEvidence evidence =
+                environment.current_crouch_posture();
+            return crouch_posture_qualified(evidence)
+                && evidence.pelvis_drop >= 0.30f
+                && evidence.left_knee_flex >= 0.16f
+                && evidence.right_knee_flex >= 0.16f
+                && evidence.torso_pitch <= 0.55f;
+        }
+
+        static bool crouch_guide_preserves_support_dynamics(
+            Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            environment.elapsed_seconds_ = 6.0f;
+            environment.duck_press_contact_seen_ = true;
+            if (!environment.valid_node(environment.blueprint_.left_contact_node))
+                return false;
+            Particle& support = environment.particles_[
+                environment.blueprint_.left_contact_node];
+            support.position.x += 0.093f;
+            support.position.y += 0.017f;
+            support.previous.x = support.position.x - 0.041f;
+            support.previous.y = support.position.y + 0.006f;
+            support.grounded = false;
+            const Vec2 position_before = support.position;
+            const Vec2 previous_before = support.previous;
+            const bool grounded_before = support.grounded;
+            environment.stabilize_duck_posture();
+            return length(support.position - position_before) < 1.0e-7f
+                && length(support.previous - previous_before) < 1.0e-7f
+                && support.grounded == grounded_before;
+        }
+
+        static bool static_friction_anchor_is_physical(
+            Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.25f);
+            if (!environment.valid_node(environment.blueprint_.left_contact_node))
+                return false;
+            constexpr float dt = 1.0f / 60.0f;
+            const std::size_t node = environment.blueprint_.left_contact_node;
+            Particle& support = environment.particles_[node];
+            const float ground = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = ground;
+            support.previous = support.position;
+            support.grounded = true;
+            environment.solve_ground(dt);
+            const float anchor_x = support.position.x;
+
+            support.position += Vec2{ 0.14f, 0.55f };
+            support.previous = support.position - Vec2{ 0.05f, 0.20f };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            const bool static_held = support.grounded
+                && std::abs(support.position.x - anchor_x) < 0.05f
+                && std::abs(support.position.y
+                    - (environment.ground_height_at(support.position.x)
+                        + ground_contact_offset(true, support.radius))) < 1.0e-6f
+                && length(support.position - support.previous) < 1.0e-7f;
+
+            environment.set_course(CourseStage::uneven, 0.25f);
+            const float moving_ground = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = moving_ground;
+            support.previous = support.position;
+            support.grounded = true;
+            environment.solve_ground(dt);
+            support.position += Vec2{ 0.0f, 0.040f };
+            support.previous = support.position - Vec2{ 0.0f, 0.42f * dt };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            return static_held && !support.grounded;
+        }
+
         static bool press_collision_resolves_below(Environment& environment) noexcept
         {
             if (!environment.valid_node(environment.blueprint_.head_node))
@@ -181,6 +297,37 @@ namespace runner::sim
         static void separate_supports(Environment& environment) noexcept
         {
             environment.separate_support_clusters();
+        }
+
+        static bool moving_stage_allows_leg_crossing(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::uneven, 0.45f);
+            if (!environment.valid_node(environment.blueprint_.left_contact_node)
+                || !environment.valid_node(environment.blueprint_.right_contact_node))
+                return false;
+            const float left_before = environment.particles_[
+                environment.blueprint_.left_contact_node].position.x;
+            const float right_before = environment.particles_[
+                environment.blueprint_.right_contact_node].position.x;
+            const float left_shift = right_before - left_before + 0.36f;
+            const float right_shift = left_before - right_before - 0.36f;
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (environment.blueprint_.is_left_support_seed(index))
+                {
+                    environment.particles_[index].position.x += left_shift;
+                    environment.particles_[index].previous.x += left_shift;
+                }
+                if (environment.blueprint_.is_right_support_seed(index))
+                {
+                    environment.particles_[index].position.x += right_shift;
+                    environment.particles_[index].previous.x += right_shift;
+                }
+            }
+            const float crossed_gap = primary_support_gap(environment);
+            environment.separate_support_clusters();
+            return crossed_gap < 0.0f
+                && primary_support_gap(environment) < 0.0f;
         }
 
         static float primary_support_gap(const Environment& environment) noexcept
@@ -372,6 +519,73 @@ int main()
 {
     using namespace runner;
 
+    const sim::CreatureBlueprint scaffold = sim::CreatureBlueprint::scaffold();
+    require(scaffold.valid() && scaffold.active_motor_count == 4u
+            && scaffold.paired_leg_chains(),
+        "minimal scaffold is not a valid two-joint-per-side training rig");
+    bool topology_mutation_seen = false;
+    bool parametric_mutation_seen = false;
+    for (std::uint64_t generation = 0; generation < 22u; ++generation)
+    {
+        const rl::RigMutationCandidate mutation = rl::evolve_rig_candidate(
+            scaffold, generation);
+        if (!mutation.changed)
+            continue;
+        require(mutation.blueprint.valid(),
+            "rig evolution published a structurally invalid candidate");
+        const auto articulated_foot_intact = [](const sim::CreatureBlueprint& rig,
+            bool left)
+        {
+            const auto& support_nodes = left
+                ? rig.additional_left_contact_nodes
+                : rig.additional_right_contact_nodes;
+            if (support_nodes.size() < 2u)
+                return true;
+            const std::uint16_t ball = support_nodes[0];
+            const std::uint16_t toe = support_nodes[1];
+            return std::ranges::any_of(rig.bones,
+                [ball, toe](const sim::DistanceConstraint& bone)
+                {
+                    return (bone.a == ball && bone.b == toe)
+                        || (bone.a == toe && bone.b == ball);
+                });
+        };
+        require(mutation.blueprint.support_seed_count() >= scaffold.support_seed_count(),
+            "topology evolution removed a semantic foot contact");
+        require(articulated_foot_intact(mutation.blueprint, true)
+                && articulated_foot_intact(mutation.blueprint, false),
+            "topology evolution split or detached an articulated toe edge");
+        topology_mutation_seen = topology_mutation_seen || mutation.topology_changed;
+        parametric_mutation_seen = parametric_mutation_seen || !mutation.topology_changed;
+    }
+    require(topology_mutation_seen && parametric_mutation_seen,
+        "rig evolution does not produce both topology and parameter candidates");
+    const rl::RigMutationCandidate articulated_growth =
+        rl::evolve_rig_candidate(scaffold, 5u);
+    require(articulated_growth.changed && articulated_growth.topology_changed
+            && articulated_growth.blueprint.active_motor_count
+                == scaffold.active_motor_count + 1u
+            && articulated_growth.activated_motor_mask
+                == static_cast<std::uint8_t>(1u << scaffold.active_motor_count),
+        "bone split does not activate one neutral trainable joint slot");
+    const std::size_t grown_slot = scaffold.active_motor_count;
+    require(articulated_growth.blueprint.motors[grown_slot].enabled
+            && articulated_growth.blueprint.motors[grown_slot].a
+                < articulated_growth.blueprint.nodes.size()
+            && articulated_growth.blueprint.motors[grown_slot].pivot
+                < articulated_growth.blueprint.nodes.size()
+            && articulated_growth.blueprint.motors[grown_slot].c
+                < articulated_growth.blueprint.nodes.size(),
+        "newly activated topology motor is not structurally valid");
+
+    rl::PolicyNetwork neutral_policy{ 0xA4710u };
+    std::array<float, sim::observation_count> neutral_observation{};
+    neutral_observation.fill(0.5f);
+    neutral_policy.neutralize_action_slot(grown_slot);
+    require(std::abs(neutral_policy.evaluate(neutral_observation).mean[grown_slot])
+            < 1.0e-7f,
+        "new topology action slot retains stale actor motion after neutralization");
+
     const sim::DuckPressProfile press_clear = sim::duck_press_profile(1.0f, 0.5f, 5.0f);
     const sim::DuckPressProfile press_descend = sim::duck_press_profile(3.5f, 0.5f, 5.0f);
     const sim::DuckPressProfile press_hold = sim::duck_press_profile(5.5f, 0.5f, 5.0f);
@@ -557,6 +771,26 @@ int main()
             && sim::duck_ground_contact_allowed(true, false)
             && sim::duck_ground_contact_allowed(false, true),
         "foot-only duck contact rule is not strict");
+    sim::CrouchPostureEvidence hinge{};
+    hinge.paired_leg_chains = true;
+    hinge.feet_supported = true;
+    hinge.pelvis_drop = 0.08f;
+    hinge.left_knee_flex = 0.03f;
+    hinge.right_knee_flex = 0.02f;
+    hinge.torso_pitch = 1.10f;
+    hinge.support_margin = 0.12f;
+    require(!sim::crouch_posture_qualified(hinge),
+        "forward hip hinge is accepted as a crouch");
+    sim::CrouchPostureEvidence squat{};
+    squat.paired_leg_chains = true;
+    squat.feet_supported = true;
+    squat.pelvis_drop = 0.44f;
+    squat.left_knee_flex = 0.32f;
+    squat.right_knee_flex = 0.31f;
+    squat.torso_pitch = 0.20f;
+    squat.support_margin = 0.14f;
+    require(sim::crouch_posture_qualified(squat),
+        "bilateral pelvis-down squat cannot satisfy crouch evidence");
     require(sim::stage_skill_evidence(sim::CourseStage::balance,
             0u, 0.0f, 0u, 0.0f, 0u, 0u),
         "standing incorrectly requires movement");
@@ -614,6 +848,39 @@ int main()
         "tiny contact wiggle still counts as a supported walking step");
     require(sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.16f, 0.12f),
         "real lifted swing and landing is rejected as a walking step");
+    require(!sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+            0.16f, 0.12f, false, true)
+            && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+                0.16f, 0.12f, true, true)
+            && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+                0.16f, 0.12f, false, false),
+        "paired gait crossing is either optional or incorrectly forced on nonpaired rigs");
+    require(sim::classify_foot_contact_phase(false, false, false)
+                == sim::FootContactPhase::airborne
+            && sim::classify_foot_contact_phase(true, false, false)
+                == sim::FootContactPhase::heel_strike
+            && sim::classify_foot_contact_phase(true, true, true)
+                == sim::FootContactPhase::flat
+            && sim::classify_foot_contact_phase(false, true, true)
+                == sim::FootContactPhase::toe_off,
+        "heel, flat-foot, toe-off, and airborne phases are not distinct");
+    require(sim::foot_friction_retention(0.04f, 1.0f, 0.0f, false, false) == 0.0f,
+        "loaded low-speed foot does not enter static friction");
+    require(sim::foot_friction_retention(0.45f, 1.0f, 0.0f, false, false)
+            < sim::foot_friction_retention(0.45f, 0.25f, 0.75f, false, false),
+        "firm ground does not provide more dynamic traction than loose ground");
+    require(sim::foot_friction_retention(0.45f, 1.0f, 0.0f, true, false)
+            < sim::foot_friction_retention(0.45f, 1.0f, 0.0f, false, false),
+        "static lessons do not apply stronger planted-foot friction");
+    require(sim::rig_test_motor_input(sim::RigTestPattern::crouch,
+                0u, 0.0f, 0.0f) < 0.0f
+            && sim::rig_test_motor_input(sim::RigTestPattern::crouch,
+                1u, 0.0f, 0.0f) > 0.0f
+            && sim::rig_test_motor_input(sim::RigTestPattern::gait,
+                0u, pi * 0.5f, 0.0f)
+                * sim::rig_test_motor_input(sim::RigTestPattern::gait,
+                    2u, pi * 0.5f, 0.0f) < 0.0f,
+        "rig lab crouch and alternating gait test patterns are incorrect");
 
     const sim::CourseFeature rock_feature{
         sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
@@ -697,6 +964,10 @@ int main()
             "chicken balance still reproduces the live 0/6 valid-seed regression");
     }
 
+    sim::Environment crossing_feet(sim::CreatureBlueprint::humanoid(), 18);
+    require(sim::EnvironmentTestAccess::moving_stage_allows_leg_crossing(crossing_feet),
+        "support separation prevents one side-view leg from passing the other");
+
     sim::Environment fused_feet(sim::CreatureBlueprint::humanoid(), 19);
     sim::EnvironmentTestAccess::force_fused_supports(fused_feet);
     sim::EnvironmentTestAccess::separate_supports(fused_feet);
@@ -722,6 +993,13 @@ int main()
                 > 0.18f,
             "a preset can retain fused left/right foot clusters");
     }
+
+    sim::CreatureBlueprint editor_bone_rig = sim::CreatureBlueprint::scaffold();
+    require(editor_bone_rig.valid(), "editor scaffold starts invalid");
+    editor_bone_rig.bones.front().stiffness = 0.42f;
+    require(editor_bone_rig.valid()
+            && std::abs(editor_bone_rig.bones.front().stiffness - 0.42f) < 0.0001f,
+        "editor bone stiffness control cannot preserve a valid rig");
 
     const sim::CreatureBlueprint humanoid_rig = sim::CreatureBlueprint::humanoid();
     const sim::CreatureBlueprint quad_rig = sim::CreatureBlueprint::quadruped();
@@ -750,9 +1028,40 @@ int main()
             }),
         "quadruped standing receives biped-like forced leg motion");
 
+    sim::Environment hinge_humanoid(humanoid_rig, 139);
+    require(sim::EnvironmentTestAccess::hip_hinge_is_rejected(hinge_humanoid),
+        "live humanoid forward bow passes the physical crouch gate");
+    sim::Environment guided_squat(humanoid_rig, 140);
+    require(sim::EnvironmentTestAccess::guided_squat_is_valid(guided_squat),
+        "authored crouch guide cannot produce a pelvis-down bilateral squat");
+
+    require(sim::planted_contact_persists(
+            true, true, true, 0.55f, 2.0f, false),
+        "static support manifold did not retain a measured ground contact");
+    require(!sim::planted_contact_persists(
+            true, true, false, 0.040f, 0.42f, false),
+        "moving foot remained magnetically planted");
+    require(!sim::planted_contact_persists(
+            true, true, true, 0.018f, 0.08f, true),
+        "explicit powered release was ignored");
+
+    sim::Environment unpinned_squat(humanoid_rig, 1401);
+    require(sim::EnvironmentTestAccess::crouch_guide_preserves_support_dynamics(
+            unpinned_squat),
+        "crouch curriculum directly pins semantic foot coordinates or support state");
+    sim::Environment static_anchor(humanoid_rig, 1402);
+    require(sim::EnvironmentTestAccess::static_friction_anchor_is_physical(
+            static_anchor),
+        "ground solver failed measured static-friction anchoring or moving release");
+
     sim::Environment crouch_humanoid(humanoid_rig, 141);
     crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);
     sim::EnvironmentTestAccess::set_duck_pressure(crouch_humanoid, 1.0f);
+    const auto walk_teacher = rl::walking_teacher_action(neutral_humanoid);
+    require(walk_teacher[0] * walk_teacher[2] < 0.0f
+            || walk_teacher[1] * walk_teacher[3] < 0.0f,
+        "walking teacher does not alternate the near and far leg chains");
+
     const auto crouch_teacher = rl::duck_teacher_action(crouch_humanoid);
     require(std::abs(crouch_teacher[0]) < std::abs(crouch_teacher[1])
             && std::abs(crouch_teacher[2]) < std::abs(crouch_teacher[3]),
@@ -971,7 +1280,8 @@ int main()
     require(sim::first_course_feature_sequence(0.0f, 29.9f) <= 3,
         "a contacted obstacle is culled like a pickup before it passes behind the actor");
 
-    const std::array<sim::CreatureBlueprint, 7> presets{
+    const std::array<sim::CreatureBlueprint, 8> presets{
+        sim::CreatureBlueprint::scaffold(),
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid(),
@@ -1606,6 +1916,32 @@ int main()
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
     require(resumed.course_stage() == trainer.course_stage(), "checkpoint curriculum stage was not restored");
+
+    rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
+    legacy.training_semantics = rl::training_semantics_version - 1u;
+    legacy.first_moment.clear();
+    legacy.second_moment.clear();
+    legacy.best_parameters.clear();
+    rl::PpoTrainer blocked_legacy{ humanoid, 16 };
+    require(!blocked_legacy.apply_checkpoint_data(legacy, error, false),
+        "legacy semantics resumed as valid mastery instead of requiring transfer");
+    rl::PpoTrainer transferred_legacy{ humanoid, 16 };
+    require(transferred_legacy.apply_checkpoint_data(legacy, error, true),
+        "explicit dimension-compatible legacy weight transfer failed: " + error);
+    require(transferred_legacy.policy().parameters() == trainer.policy().parameters()
+            && transferred_legacy.metrics().update == 0u
+            && transferred_legacy.optimizer_step() == 0u
+            && transferred_legacy.controller_state() == rl::ControllerState::transferred,
+        "legacy transfer retained optimizer, mastery, or non-transfer controller state");
+    const std::filesystem::path legacy_path =
+        std::filesystem::temp_directory_path() / "runner-v0715-legacy-transfer-test.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, legacy_path, error),
+        "failed to write legacy transfer fixture: " + error);
+    rl::PpoTrainer loaded_legacy{ humanoid, 16 };
+    require(!loaded_legacy.load_checkpoint(legacy_path, error, false)
+            && loaded_legacy.load_checkpoint(legacy_path, error, true),
+        "file-based legacy checkpoint is not resume-blocked and transfer-enabled");
+    std::filesystem::remove(legacy_path);
 
     rl::PpoTrainer wrong_rig{ sim::CreatureBlueprint::quadruped(), 16 };
     require(!wrong_rig.load_checkpoint(temporary, error, false), "mismatched rig checkpoint resumed silently");

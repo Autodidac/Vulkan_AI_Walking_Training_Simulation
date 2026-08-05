@@ -23,7 +23,7 @@ namespace runner::sim
         static void deposit_world(Environment& environment, float world_x,
             float amount, float firmness) noexcept
         {
-            environment.terrain_.deposit(world_x + environment.course_progress(),
+            environment.terrain_.deposit(terrain_sample_x(world_x, environment.course_progress()),
                 amount, firmness);
         }
 
@@ -46,6 +46,15 @@ int main()
     using namespace runner;
     static_assert(sizeof(sim::DeformableTerrain) < 128u * 1024u);
     static_assert(sizeof(sim::Environment) < 256u * 1024u);
+    constexpr float transform_world_x = 3.25f;
+    constexpr float transform_progress = 11.75f;
+    constexpr float transform_source_x = sim::terrain_sample_x(
+        transform_world_x, transform_progress);
+    constexpr float transform_round_trip_error =
+        sim::terrain_world_x(transform_source_x, transform_progress)
+        - transform_world_x;
+    static_assert(transform_round_trip_error > -1.0e-6f
+        && transform_round_trip_error < 1.0e-6f);
     sim::DeformableTerrain first{}, second{};
     first.reset(0x12345678u, 0.72f); second.reset(0x12345678u, 0.72f);
     for (std::size_t i=0; i<sim::DeformableTerrain::cell_count; ++i)
@@ -68,6 +77,12 @@ int main()
     sim::Environment environment(sim::CreatureBlueprint::quadruped(),0x5a17u);
     environment.set_course(sim::CourseStage::moving_hazards,0.80f);
     std::array<float,sim::action_count> idle{};
+    for(int frame=0;frame<90;++frame) static_cast<void>(environment.step(idle));
+    const float sync_world_x=1.75f;
+    const float sync_source_x=sim::terrain_sample_x(sync_world_x,environment.course_progress());
+    require(std::abs(environment.ground_height_at(sync_world_x)
+        - environment.terrain().height_at(sync_source_x))<1.0e-6f,
+        "render/world terrain transform disagrees with collision sampling");
     for(int frame=0;frame<240;++frame) static_cast<void>(environment.step(idle));
     require(environment.material_event_count()>0u,"moving hazards spawned no persistent material");
     const auto observation=environment.observation(); static_assert(observation.size()==50u);

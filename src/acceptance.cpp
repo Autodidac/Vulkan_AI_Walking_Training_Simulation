@@ -26,9 +26,10 @@ namespace runner::acceptance
             CreatureBlueprint blueprint{};
         };
 
-        [[nodiscard]] std::array<NamedBlueprint, 7> all_presets()
+        [[nodiscard]] std::array<NamedBlueprint, 8> all_presets()
         {
             return {
+                NamedBlueprint{ "scaffold", CreatureBlueprint::scaffold() },
                 NamedBlueprint{ "chicken", CreatureBlueprint::chicken() },
                 NamedBlueprint{ "biped", CreatureBlueprint::biped() },
                 NamedBlueprint{ "humanoid", CreatureBlueprint::humanoid() },
