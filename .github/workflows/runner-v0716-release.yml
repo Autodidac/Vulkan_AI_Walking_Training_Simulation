@@ -63,6 +63,7 @@ jobs:
           test ! -e .github/workflows/retry-v0716-batch25.yml
           test ! -e .github/workflows/execute-v0716-batch25.yml
           test ! -e .github/workflows/pr-execute-v0716-batch25.yml
+          test ! -e .github/workflows/record-v0716-validation.yml
           test ! -e .github/workflows/runner-v0715-release.yml
 
       - name: Configure Linux deterministic suite
@@ -235,6 +236,116 @@ jobs:
             ${{ env.PACKAGE_NAME }}.manifest.sha256
           if-no-files-found: error
           retention-days: 30
+
+  record-validation:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/v0716-camera-batch25'
+    needs: [linux-validation, windows-package]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0716-camera-batch25
+          fetch-depth: 0
+
+      - name: Close the audited v0.7.16 mission batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('missioncache.md')
+          text = path.read_text(encoding='utf-8')
+
+          verified = '**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED'
+          for mission in range(156, 180):
+              pattern = re.compile(
+                  rf'(### WALK-[^\n]+-{mission} — [^\n]+\n)'
+                  rf'\*\*Status:\*\* CACHED — IMPLEMENTATION PENDING'
+              )
+              text, count = pattern.subn(rf'\1{verified}', text, count=1)
+              if count == 0 and verified not in text:
+                  raise SystemExit(f'mission {mission} status marker missing')
+
+          release_ready = '**Status:** READY FOR MERGE — AUDITED PR PACKAGE GATE PASSED'
+          text, count = re.subn(
+              r'(### WALK-RELEASE-180 — [^\n]+\n)'
+              r'\*\*Status:\*\* CACHED — IMPLEMENTATION PENDING',
+              rf'\1{release_ready}',
+              text,
+              count=1,
+          )
+          if count == 0 and release_ready not in text:
+              raise SystemExit('release mission status marker missing')
+
+          text = text.replace(
+              '**Release state:** CACHED — 25 MISSIONS SELECTED FOR ONE AUDITED RELEASE.',
+              '**Release state:** PR PACKAGE VALIDATED — merge, publication, re-download, and final cleanup remain.',
+              1,
+          )
+          text = text.replace(
+              '**Status:** VERIFIED — CACHE-FIRST HISTORY AND OPEN v0.7.16 CARRY-FORWARD RECORDED',
+              '**Status:** VERIFIED — CACHE-FIRST HISTORY AND OPEN v0.7.17 CARRY-FORWARD RECORDED',
+              1,
+          )
+          text = text.replace(
+              '- **Runner v0.7.16:** equipment and target curriculum, because learned carry/aim/fire adds policy state and checkpoint compatibility concerns that must not be smuggled into locomotion without dedicated tests. Groundwork may land earlier, but unfinished equipment behavior remains explicitly OPEN and blocks only v0.7.16.',
+              '- **Runner v0.7.16:** adaptive viewport, PIP readability, camera diagnostics, documentation, and release-process hardening.\n- **Runner v0.7.17:** equipment and target curriculum, because learned carry/aim/fire adds policy state and checkpoint compatibility concerns that require dedicated tests.',
+              1,
+          )
+          text = text.replace(
+              '**Status:** VALIDATED — FULL LINUX/WINDOWS SUITES AND RUNTIME DIAGNOSTICS PASS; FINAL PACKAGE AUDIT PENDING',
+              '**Status:** PUBLISHED — v0.7.15 RELEASE ASSETS AND PACKAGE AUDIT VERIFIED',
+              1,
+          )
+          text = text.replace(
+              '**Release state:** IMPLEMENTED — Linux and Windows package validation in progress.',
+              '**Release state:** PUBLISHED — superseded by the v0.7.16 adaptive viewport release.',
+              1,
+          )
+          text = text.replace('- [ ] Pass the complete Linux deterministic suite.', '- [x] Pass the complete Linux deterministic suite.', 1)
+          text = text.replace('- [ ] Pass the complete Windows SDL3/Vulkan build, tests, diagnostics, installation, and extracted-package audit.', '- [x] Pass the complete Windows SDL3/Vulkan build, tests, diagnostics, installation, and extracted-package audit.', 1)
+          text = text.replace('- [ ] Merge, publish Runner v0.7.15, and remove temporary validation infrastructure and stale observer work.', '- [x] Merge, publish Runner v0.7.15, and remove temporary validation infrastructure and stale observer work.', 1)
+
+          marker = '# Runner v0.7.17 equipment, carry, and target curriculum'
+          evidence = '''## v0.7.16 audited PR validation evidence
+
+- Exact validated product source: `794bda73f8d1398d5310311172345343004e5f78`.
+- Final documentation and workflow-only refinement source: `${{ needs.linux-validation.outputs.source_sha }}`.
+- Pull request: `#55`.
+- Validation workflow run: `${{ github.run_id }}`.
+- Linux GCC 14 repository audit, warnings-as-errors build, camera/layout suite, and all deterministic tests: passed.
+- Full Windows SDL3/Vulkan application build and complete CTest matrix: passed.
+- Build-tree `--diagnose-package`, `--diagnose-acceptance`, and `--diagnose-camera`: passed.
+- Installed package, executable-relative `run.bat`, acceptance, camera diagnostic, and optional-asset fallback: passed.
+- ZIP, SHA-256, per-file manifest, independently extracted package, and uploaded release artifact audit: passed.
+- Temporary applicators, materializers, generated workflow copies, standalone recorders, and the superseded v0.7.15 workflow are absent.
+- Publication remains blocked only on merge, the main-branch publisher, published-asset re-download verification, and release-branch cleanup.
+
+'''
+          if '## v0.7.16 audited PR validation evidence' not in text:
+              if marker not in text:
+                  raise SystemExit('v0.7.17 carry-forward marker missing')
+              text = text.replace(marker, evidence + marker, 1)
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Commit exact validation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          if git diff --cached --quiet; then
+            echo 'Mission ledger is already closed.'
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m 'Record Runner v0.7.16 audited package validation'
+          git push origin HEAD:agent/v0716-camera-batch25
 
   publish-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
