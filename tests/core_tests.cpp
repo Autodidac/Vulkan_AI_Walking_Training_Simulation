@@ -160,6 +160,72 @@ namespace runner::sim
                 && evidence.torso_pitch <= 0.55f;
         }
 
+        static bool crouch_guide_preserves_support_dynamics(
+            Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            environment.elapsed_seconds_ = 6.0f;
+            environment.duck_press_contact_seen_ = true;
+            if (!environment.valid_node(environment.blueprint_.left_contact_node))
+                return false;
+            Particle& support = environment.particles_[
+                environment.blueprint_.left_contact_node];
+            support.position.x += 0.093f;
+            support.position.y += 0.017f;
+            support.previous.x = support.position.x - 0.041f;
+            support.previous.y = support.position.y + 0.006f;
+            support.grounded = false;
+            const Vec2 position_before = support.position;
+            const Vec2 previous_before = support.previous;
+            const bool grounded_before = support.grounded;
+            environment.stabilize_duck_posture();
+            return length(support.position - position_before) < 1.0e-7f
+                && length(support.previous - previous_before) < 1.0e-7f
+                && support.grounded == grounded_before;
+        }
+
+        static bool static_friction_anchor_is_physical(
+            Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.25f);
+            if (!environment.valid_node(environment.blueprint_.left_contact_node))
+                return false;
+            constexpr float dt = 1.0f / 60.0f;
+            const std::size_t node = environment.blueprint_.left_contact_node;
+            Particle& support = environment.particles_[node];
+            const float ground = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = ground;
+            support.previous = support.position;
+            support.grounded = true;
+            environment.solve_ground(dt);
+            const float anchor_x = support.position.x;
+
+            support.position += Vec2{ 0.14f, 0.55f };
+            support.previous = support.position - Vec2{ 0.05f, 0.20f };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            const bool static_held = support.grounded
+                && std::abs(support.position.x - anchor_x) < 0.05f
+                && std::abs(support.position.y
+                    - (environment.ground_height_at(support.position.x)
+                        + ground_contact_offset(true, support.radius))) < 1.0e-6f
+                && length(support.position - support.previous) < 1.0e-7f;
+
+            environment.set_course(CourseStage::uneven, 0.25f);
+            const float moving_ground = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = moving_ground;
+            support.previous = support.position;
+            support.grounded = true;
+            environment.solve_ground(dt);
+            support.position += Vec2{ 0.0f, 0.040f };
+            support.previous = support.position - Vec2{ 0.0f, 0.42f * dt };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            return static_held && !support.grounded;
+        }
+
         static bool press_collision_resolves_below(Environment& environment) noexcept
         {
             if (!environment.valid_node(environment.blueprint_.head_node))
@@ -968,6 +1034,25 @@ int main()
     sim::Environment guided_squat(humanoid_rig, 140);
     require(sim::EnvironmentTestAccess::guided_squat_is_valid(guided_squat),
         "authored crouch guide cannot produce a pelvis-down bilateral squat");
+
+    require(sim::planted_contact_persists(
+            true, true, true, 0.55f, 2.0f, false),
+        "static support manifold did not retain a measured ground contact");
+    require(!sim::planted_contact_persists(
+            true, true, false, 0.040f, 0.42f, false),
+        "moving foot remained magnetically planted");
+    require(!sim::planted_contact_persists(
+            true, true, true, 0.018f, 0.08f, true),
+        "explicit powered release was ignored");
+
+    sim::Environment unpinned_squat(humanoid_rig, 1401);
+    require(sim::EnvironmentTestAccess::crouch_guide_preserves_support_dynamics(
+            unpinned_squat),
+        "crouch curriculum directly pins semantic foot coordinates or support state");
+    sim::Environment static_anchor(humanoid_rig, 1402);
+    require(sim::EnvironmentTestAccess::static_friction_anchor_is_physical(
+            static_anchor),
+        "ground solver failed measured static-friction anchoring or moving release");
 
     sim::Environment crouch_humanoid(humanoid_rig, 141);
     crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);

@@ -623,6 +623,22 @@ namespace runner::sim
         return clamp(retention, 0.0f, 0.42f);
     }
 
+    inline constexpr float moving_contact_slop_m = 0.032f;
+    inline constexpr float moving_contact_release_speed_mps = 0.24f;
+
+    [[nodiscard]] inline bool planted_contact_persists(bool contact_latched,
+        bool semantic_support, bool static_support, float separation,
+        float upward_speed, bool release_requested) noexcept
+    {
+        if (!contact_latched || !semantic_support || release_requested)
+            return false;
+        if (static_support)
+            return true;
+        return separation > 0.0025f
+            && separation <= moving_contact_slop_m
+            && upward_speed <= moving_contact_release_speed_mps;
+    }
+
     [[nodiscard]] inline bool qualifies_crossing_step(int previous_side,
         int strike_side, float seconds_since_previous, float root_displacement,
         float swing_air_seconds, float swing_clearance, bool swing_crossed,
@@ -1143,6 +1159,8 @@ namespace runner::sim
 
         CreatureBlueprint blueprint_{};
         std::vector<Particle> particles_{};
+        std::vector<std::uint8_t> support_contact_latch_{};
+        std::vector<float> support_contact_anchor_x_{};
         std::vector<CourseFeature> course_features_{};
         DeformableTerrain terrain_{};
         std::vector<MaterialParticle> material_particles_{};

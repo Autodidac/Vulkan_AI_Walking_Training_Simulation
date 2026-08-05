@@ -44,7 +44,7 @@ Flat lessons render their actual y=0 collision plane. Deformable lessons render 
 **Acceptance:** deterministic coordinate round-trip and render/collision sampling tests; Linux and Windows suites; live screenshot shows feet, terrain cells, obstacles, and pressure marks locked together with no duplicate ground.
 
 ### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** PARTIAL — HARD PIN REMOVAL EXPOSED GENERAL PLANTED-CONTACT PERSISTENCE FAILURE
+**Status:** IMPLEMENTED — GROUND-SOLVER STATIC-FRICTION MANIFOLD; FULL VALIDATION REQUIRED
 
 A crouch must lower the pelvis through bilateral leg compression. Clearing the platen by folding the torso forward is invalid even when feet remain on the ground.
 
@@ -79,7 +79,7 @@ Required evidence:
 **Acceptance:** deterministic gait-cycle fixture proves alternating crossing, forward progress, and nonzero swing clearance; adversarial sliding and same-side strike fixtures fail; live view shows one leg passing in front of the other.
 
 ### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** PARTIAL — HARD PIN REMOVAL EXPOSED PHYSICAL CONTACT-PERSISTENCE GAP
+**Status:** IMPLEMENTED — MEASURED CONTACT ANCHORS WITH MOVING RELEASE; FULL VALIDATION REQUIRED
 
 Bipeds use explicit ankle, heel, ball, and toe geometry. The rear foot is a stable plate; the toe is an articulated segment. Contact transitions support heel strike, flat-foot loading, toe roll, toe-off, and swing clearance.
 
@@ -151,6 +151,8 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 **Second-audit finding:** the static crouch stabilizer still wrote authored x positions, floor y positions, previous positions, and `grounded=true` into every semantic foot contact several times per solver iteration. That invalidated the claimed friction-only support model and could manufacture the very crouch being evaluated. The release remains blocked until those assignments are removed and adversarial tests prove support, squat shape, recovery, and bounded slip still pass through the real ground solver.
 
 **Removal validation:** Linux run `31004249303`, job `92300237503`, proved the guide no longer overwrote semantic support nodes, but the live acceptance matrix fell from 24/24 to 16/24. Every static-crouch case failed because tiny constraint lifts cleared the ground solver's 0.0025 m threshold, leaving feet unsupported while the press descended. The next correction must be a general planted-contact persistence/slop rule in `solve_ground`, not a duck-specific pin. It may retain a previously planted support only through bounded numerical separation and bounded upward speed; deliberate toe-off, jump launch, and real swing clearance must release promptly.
+
+**Static-friction implementation:** the ground solver records each semantic foot's measured contact x when collision first occurs. Static balance/crouch support is resolved against that physical contact anchor and the terrain height, with velocity removed as a zero-slip constraint. The crouch curriculum cannot write feet or contact memory. Moving stages do not use the static anchor and release through tight separation/upward-speed gates; powered launch releases immediately.
 
 Before release, re-evaluate at minimum:
 - all eight preset Stand and static-crouch behavior;

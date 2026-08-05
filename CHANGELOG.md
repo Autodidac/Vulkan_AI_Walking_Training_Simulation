@@ -1,5 +1,12 @@
 # Changelog
 
+## Runner v0.7.15 — measured static-friction contacts
+
+- Removed all authored-coordinate foot pinning from the crouch curriculum.
+- Added ground-solver contact anchors captured from actual heel/ball/toe collisions.
+- Static support resolves zero-slip friction against the measured contact; moving stages retain bounded release for swing, toe-off, and jumping.
+- Added adversarial tests proving the curriculum cannot touch feet and moving contacts are not magnetic.
+
 ## Runner v0.7.15 — active joint growth and state transfer
 
 - Bone-split mutations may now activate one free anatomy action slot as a real articulated joint.

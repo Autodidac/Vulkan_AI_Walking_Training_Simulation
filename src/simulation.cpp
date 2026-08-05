@@ -1253,6 +1253,10 @@ namespace runner::sim
             particles_.push_back({ position, position, inverse_mass, radius, false });
         }
 
+        support_contact_latch_.assign(particles_.size(), 0u);
+        support_contact_anchor_x_.resize(particles_.size());
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+            support_contact_anchor_x_[index] = particles_[index].position.x;
         previous_pelvis_ = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position : Vec2{};
         previous_torso_angle_ = torso_roll_angle();
         previous_angles_.fill(0.0f);
@@ -1666,25 +1670,6 @@ namespace runner::sim
             && requested_drop <= 0.001f;
         const float phase_strength = (recovery_guide || settle_guide)
             ? 1.0f : clamp(requested_drop / 0.48f, 0.0f, 1.0f);
-
-        auto pin_support = [&](std::size_t node)
-        {
-            if (node >= particles_.size() || node >= blueprint_.nodes.size())
-                return;
-            Particle& support = particles_[node];
-            const float authored_x = blueprint_.nodes[node].x;
-            support.position.x = lerp(support.position.x, authored_x, 0.72f);
-            support.position.y = ground_height_at(support.position.x)
-                + ground_contact_offset(true, support.radius);
-            support.previous = support.position;
-            support.grounded = true;
-        };
-        pin_support(blueprint_.left_contact_node);
-        pin_support(blueprint_.right_contact_node);
-        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
-            pin_support(node);
-        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
-            pin_support(node);
 
         Vec2 current_support{};
         auto accumulate_current_support = [&](std::size_t node)
@@ -2309,13 +2294,37 @@ namespace runner::sim
 
     void Environment::solve_ground(float dt) noexcept
     {
+        const float safe_dt = std::max(dt, 1.0e-5f);
+        if (support_contact_latch_.size() != particles_.size())
+            support_contact_latch_.assign(particles_.size(), 0u);
+        if (support_contact_anchor_x_.size() != particles_.size())
+        {
+            support_contact_anchor_x_.resize(particles_.size());
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+                support_contact_anchor_x_[index] = particles_[index].position.x;
+        }
+
+        float root_upward_speed = 0.0f;
+        if (valid_node(blueprint_.root_node))
+        {
+            const Particle& root = particles_[blueprint_.root_node];
+            root_upward_speed = (root.position.y - root.previous.y) / safe_dt;
+        }
+        const bool powered_release = powered_joint_launch(
+            course_stage_, root_upward_speed, action_change_energy_);
+        const bool static_support = course_stage_ == CourseStage::balance
+            || course_stage_ == CourseStage::duck_press;
+
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
             Particle& particle = particles_[index];
+            const bool was_grounded = particle.grounded;
+            const Vec2 velocity = (particle.position - particle.previous) / safe_dt;
             particle.grounded = false;
             const bool traction_contact = contact_cluster_contains(
                 blueprint_.left_contact_node, index)
                 || contact_cluster_contains(blueprint_.right_contact_node, index);
+            const bool semantic_support = blueprint_.is_support_seed(index);
             const float firmness = terrain_firmness_at(particle.position.x);
             const float looseness = terrain_looseness_at(particle.position.x);
             const float burial_allowance = stage_uses_deformable_terrain(course_stage_)
@@ -2325,11 +2334,39 @@ namespace runner::sim
                 : 0.0f;
             const float minimum_y = ground_height_at(particle.position.x)
                 + ground_contact_offset(traction_contact, particle.radius) - burial_allowance;
-            if (particle.position.y <= minimum_y + 0.0025f)
+            const float separation = particle.position.y - minimum_y;
+            const bool release_requested = semantic_support && powered_release
+                && velocity.y > 0.0f;
+            const bool contact_latched = semantic_support
+                && (was_grounded || support_contact_latch_[index] != 0u);
+            const bool actual_contact = separation <= 0.0025f
+                && !release_requested;
+            const bool persistent_contact = planted_contact_persists(
+                contact_latched, semantic_support, static_support,
+                separation, velocity.y, release_requested);
+            if (actual_contact || persistent_contact)
             {
+                if (semantic_support && support_contact_latch_[index] == 0u)
+                    support_contact_anchor_x_[index] = particle.position.x;
+                if (semantic_support && static_support)
+                {
+                    particle.position.x = lerp(particle.position.x,
+                        support_contact_anchor_x_[index], 0.72f);
+                    particle.position.y = ground_height_at(particle.position.x)
+                        + ground_contact_offset(true, particle.radius);
+                    particle.previous = particle.position;
+                    particle.grounded = true;
+                    support_contact_latch_[index] = 1u;
+                    continue;
+                }
+
                 particle.position.y = minimum_y;
                 particle.grounded = true;
-                const Vec2 velocity = (particle.position - particle.previous) / dt;
+                if (semantic_support)
+                {
+                    support_contact_latch_[index] = 1u;
+                    support_contact_anchor_x_[index] = particle.position.x;
+                }
                 float retention = ground_velocity_retention(traction_contact, velocity.y);
                 if (traction_contact)
                 {
@@ -2337,17 +2374,24 @@ namespace runner::sim
                         && index == blueprint_.additional_left_contact_nodes[1];
                     const bool right_toe = blueprint_.additional_right_contact_nodes.size() >= 2u
                         && index == blueprint_.additional_right_contact_nodes[1];
-                    const bool static_lesson = course_stage_ == CourseStage::balance
-                        || course_stage_ == CourseStage::duck_press;
                     retention = foot_friction_retention(velocity.x,
-                        firmness, looseness, static_lesson,
+                        firmness, looseness, false,
                         left_toe || right_toe);
                 }
-                particle.previous.x = particle.position.x - velocity.x * retention * dt;
+                particle.previous.x = particle.position.x
+                    - velocity.x * retention * safe_dt;
                 if (traction_contact)
                     particle.previous.y = particle.position.y;
                 else if (velocity.y < 0.0f)
-                    particle.previous.y = particle.position.y + velocity.y * dt * 0.05f;
+                    particle.previous.y = particle.position.y
+                        + velocity.y * safe_dt * 0.05f;
+            }
+            else if (semantic_support && !static_support
+                && (release_requested
+                    || separation > moving_contact_slop_m
+                    || velocity.y > moving_contact_release_speed_mps))
+            {
+                support_contact_latch_[index] = 0u;
             }
         }
     }
@@ -3167,8 +3211,9 @@ step_not_qualified:
             if (course_stage_ == CourseStage::duck_press)
                 stabilize_duck_posture();
             // Separation and toe rotation are the final operations capable of
-            // shifting a semantic contact. End every solver iteration with the
-            // same grounded foot state that preview and gait metrics observe.
+            // shifting a semantic contact. Only the ground solver may establish
+            // support; static friction retains its measured contact anchor while
+            // moving stages release through bounded distance and speed gates.
             solve_ground(dt);
         }
         // The iterative solver can otherwise reverse the toe between
