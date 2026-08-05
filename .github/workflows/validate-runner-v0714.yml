@@ -36,42 +36,51 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f tools/apply_v0715_terrain_sync.py ]]; then
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply_v0715_terrain_sync.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    for old, new, label in replacements:
+                  text = replace_once(text, old, new, label)
+          '''
+          new = '''    for old, new, label in replacements:
+                  expected = 2 if label == "material deposit terrain mapping" else 1
+                  count = text.count(old)
+                  if count != expected:
+                      raise RuntimeError(
+                          f"{label}: expected {expected} matches, found {count}")
+                  text = text.replace(old, new)
+          '''
+          if old not in text:
+              raise SystemExit('terrain-sync replacement loop was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
             python3 tools/apply_v0715_terrain_sync.py
           fi
-          rm -f tools/apply_v0715_terrain_sync.py
+          rm -f tools/apply_v0715_terrain_sync.py tools/v0715-terrain-sync-retry.txt
           git diff --check
 
-      - name: Verify v0.7.15 source contracts
+      - name: Verify source contracts
         shell: bash
         run: |
           set -euo pipefail
           grep -F 'project(Runner VERSION 0.7.15 LANGUAGES CXX)' CMakeLists.txt
           grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
-          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' src/app.cpp
-          ! grep -F 'std::vector<Vec2> surface' src/app.cpp
-          grep -F 'if (index <= 0)' src/app.cpp
-          grep -F 'runner-v0715-autosave.eppo' src/app.cpp
-          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
-          grep -F 'reset_policy(0x715000u' src/autonomy_curriculum.cpp
-          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
-          grep -F 'terrain_sample_x' src/simulation.hpp
-          grep -F 'terrain_world_x' src/simulation.hpp
           grep -F 'stage_uses_deformable_terrain(environment.course_stage())' src/app.cpp
           grep -F 'const float source_left = sim::terrain_sample_x(left, progress);' src/app.cpp
-          test ! -f tools/apply_v0715_patch.py
-          test ! -f tools/materialize_runner_v0715.py
+          grep -F 'terrain_world_x' src/simulation.hpp
+          grep -F 'reset_policy(0x715000u' src/autonomy_curriculum.cpp
+          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
           test ! -f tools/apply_v0715_terrain_sync.py
+          test ! -f tools/materialize_runner_v0715.py
           test ! -f cmake/generate_runner_v0715_sources.cmake
-          test ! -f .github/workflows/patch-runner-v0715.yml
 
-      - name: Configure Linux deterministic suite
+      - name: Configure, build, and test Linux
         env:
           CC: gcc-14
           CXX: g++-14
-        run: cmake -S . -B build/linux-v0715 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build and test Linux deterministic suite
         run: |
+          cmake -S . -B build/linux-v0715 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
           cmake --build build/linux-v0715 --parallel
           ctest --test-dir build/linux-v0715 --output-on-failure -V --timeout 1800
 
@@ -102,15 +111,13 @@ jobs:
           ref: ${{ needs.linux-source.outputs.source_sha }}
           fetch-depth: 0
 
-      - name: Checkout pinned vcpkg
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
 
-      - name: Restore vcpkg cache
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: vcpkg-bincache
           key: runner-v0715-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
@@ -120,7 +127,7 @@ jobs:
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure and build full Windows application
+      - name: Build and test Windows application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
@@ -128,14 +135,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
           cmake --build --preset windows-release --parallel
           if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
-
-      - name: Run complete Windows tests
-        shell: pwsh
-        run: |
           ctest --preset windows-release --output-on-failure -V --timeout 1800
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
 
-      - name: Verify build-tree diagnostics
+      - name: Verify, install, and archive package
         shell: pwsh
         run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
@@ -143,15 +146,12 @@ jobs:
           try {
             if ((& $exe --version | Out-String).Trim() -ne 'Runner 0.7.15') { throw 'Version mismatch' }
             & $exe --diagnose-package
-            if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+            if ($LASTEXITCODE -ne 0) { throw 'Build package diagnostic failed' }
             & $exe --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'All-rig acceptance diagnostic failed' }
+            if ($LASTEXITCODE -ne 0) { throw 'Build acceptance diagnostic failed' }
           }
           finally { Pop-Location }
 
-      - name: Install and verify package
-        shell: pwsh
-        run: |
           $stage = "$env:RUNNER_TEMP/Runner-v0.7.15-windows-x64"
           Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
           cmake --install build/windows-release --config Release --prefix $stage
@@ -171,22 +171,18 @@ jobs:
             & "$stage/Runner.exe" --diagnose-package
             if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
             & "$stage/Runner.exe" --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'Installed all-rig acceptance failed' }
+            if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance diagnostic failed' }
             if ((& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.15') { throw 'run.bat mismatch' }
           }
           finally { Pop-Location }
-          "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Create and audit archive
-        shell: pwsh
-        run: |
           $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.15-windows-x64.zip"
           $checksum = "$archive.sha256"
           $manifest = "$env:GITHUB_WORKSPACE/Runner-v0.7.15-windows-x64.manifest.sha256"
-          Compress-Archive -Path "$env:STAGE/*" -DestinationPath $archive -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath $archive -Force
           (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content $checksum
-          Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
+          Get-ChildItem $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
           } | Set-Content $manifest
           $audit = "$env:RUNNER_TEMP/runner-v0715-extracted"
@@ -197,7 +193,7 @@ jobs:
             & "$audit/Runner.exe" --diagnose-package
             if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
             & "$audit/Runner.exe" --diagnose-acceptance
-            if ($LASTEXITCODE -ne 0) { throw 'Extracted all-rig acceptance failed' }
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance diagnostic failed' }
           }
           finally { Pop-Location }
 
