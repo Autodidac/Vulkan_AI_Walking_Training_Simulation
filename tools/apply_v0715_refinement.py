@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Human-authored execution trigger after the cache-first ledger commit.
 ROOT = Path(__file__).resolve().parents[1]
 MISSION = ROOT / "missioncache.md"
 STALE_TRIGGER = ROOT / ".github/workflows/trigger-v0.1.3.txt"
