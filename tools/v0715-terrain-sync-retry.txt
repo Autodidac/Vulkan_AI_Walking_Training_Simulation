@@ -1,1 +1,1 @@
-Retry the terrain synchronization materialization with the corrected validator.
+Retry the terrain synchronization materialization after making the coordinate helpers constexpr.
