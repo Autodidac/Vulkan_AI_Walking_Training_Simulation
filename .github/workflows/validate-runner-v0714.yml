@@ -57,6 +57,18 @@ jobs:
           PY
             python3 tools/apply_v0715_terrain_sync.py
           fi
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/simulation.hpp')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '[[nodiscard]] inline float terrain_sample_x',
+              '[[nodiscard]] constexpr float terrain_sample_x', 1)
+          text = text.replace(
+              '[[nodiscard]] inline float terrain_world_x',
+              '[[nodiscard]] constexpr float terrain_world_x', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
           rm -f tools/apply_v0715_terrain_sync.py tools/v0715-terrain-sync-retry.txt
           git diff --check
 
@@ -68,7 +80,8 @@ jobs:
           grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
           grep -F 'stage_uses_deformable_terrain(environment.course_stage())' src/app.cpp
           grep -F 'const float source_left = sim::terrain_sample_x(left, progress);' src/app.cpp
-          grep -F 'terrain_world_x' src/simulation.hpp
+          grep -F 'constexpr float terrain_sample_x' src/simulation.hpp
+          grep -F 'constexpr float terrain_world_x' src/simulation.hpp
           grep -F 'reset_policy(0x715000u' src/autonomy_curriculum.cpp
           grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
           test ! -f tools/apply_v0715_terrain_sync.py
