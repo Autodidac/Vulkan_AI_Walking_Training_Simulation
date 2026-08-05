@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: read
 
 concurrency:
@@ -35,12 +35,22 @@ jobs:
           set -euo pipefail
           git diff --check
           grep -F 'project(Runner VERSION 0.7.15 LANGUAGES CXX)' CMakeLists.txt
-          grep -F 'generate_runner_v0715_sources.cmake' CMakeLists.txt
-          grep -F 'live_pixels_per_meter = 22.0f' cmake/generate_runner_v0715_sources.cmake
-          grep -F 'surface-aware macro-tile renderer' cmake/generate_runner_v0715_sources.cmake
-          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' cmake/generate_runner_v0715_sources.cmake
           test ! -f tools/apply_v0715_patch.py
           test ! -f .github/workflows/patch-runner-v0715.yml
+          if [[ -f cmake/generate_runner_v0715_sources.cmake ]]; then
+            grep -F 'generate_runner_v0715_sources.cmake' CMakeLists.txt
+            grep -F 'live_pixels_per_meter = 22.0f' cmake/generate_runner_v0715_sources.cmake
+            grep -F 'surface-aware macro-tile renderer' cmake/generate_runner_v0715_sources.cmake
+            grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' cmake/generate_runner_v0715_sources.cmake
+          else
+            grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
+            ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' src/app.cpp
+            ! grep -F 'std::vector<Vec2> surface' src/app.cpp
+            grep -F 'if (index <= 0)' src/app.cpp
+            grep -F 'runner-v0715-autosave.eppo' src/app.cpp
+            grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
+            grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
+          fi
 
       - name: Configure Linux deterministic suite
         env:
@@ -48,22 +58,46 @@ jobs:
           CXX: g++-14
         run: cmake -S . -B build/linux-v0715 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 
-      - name: Verify generated source
+      - name: Verify compiled source selection
         shell: bash
         run: |
           set -euo pipefail
-          generated=build/linux-v0715/generated/v0715
-          grep -F 'live_pixels_per_meter = 22.0f' "$generated/app.cpp"
-          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' "$generated/app.cpp"
-          ! grep -F 'std::vector<Vec2> surface' "$generated/app.cpp"
-          grep -F 'if (index <= 0)' "$generated/app.cpp"
-          grep -F 'runner-v0715-autosave.eppo' "$generated/app.cpp"
-          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' "$generated/autonomy_curriculum.cpp"
+          if [[ -f build/linux-v0715/generated/v0715/app.cpp ]]; then
+            app=build/linux-v0715/generated/v0715/app.cpp
+            curriculum=build/linux-v0715/generated/v0715/autonomy_curriculum.cpp
+          else
+            app=src/app.cpp
+            curriculum=src/autonomy_curriculum.cpp
+          fi
+          grep -F 'live_pixels_per_meter = 22.0f' "$app"
+          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' "$app"
+          ! grep -F 'std::vector<Vec2> surface' "$app"
+          grep -F 'if (index <= 0)' "$app"
+          grep -F 'runner-v0715-autosave.eppo' "$app"
+          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' "$curriculum"
 
       - name: Build and test Linux deterministic suite
         run: |
           cmake --build build/linux-v0715 --parallel
           ctest --test-dir build/linux-v0715 --output-on-failure -V --timeout 1800
+
+      - name: Materialize tested v0.7.15 source
+        if: hashFiles('tools/materialize_runner_v0715.py') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/materialize_runner_v0715.py build/linux-v0715/generated/v0715
+          git diff --check
+          test ! -f tools/materialize_runner_v0715.py
+          test ! -f cmake/generate_runner_v0715_sources.cmake
+          grep -F 'live_pixels_per_meter = 22.0f' src/app.cpp
+          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' src/autonomy_curriculum.cpp
+          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Materialize Runner v0.7.15 viewport terrain and recovery fixes'
+          git push origin HEAD:agent/v0715-ground-camera-character-scale
 
   windows-package:
     needs: linux-source
