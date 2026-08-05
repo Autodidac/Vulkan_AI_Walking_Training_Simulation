@@ -1,4 +1,4 @@
-name: Validate Runner v0.7.14 SandHybrid live map
+name: Validate Runner v0.7.15 viewport and recovery
 
 on:
   pull_request:
@@ -6,20 +6,18 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 
 concurrency:
-  group: validate-runner-v0714-${{ github.event.pull_request.number }}
+  group: validate-runner-v0715-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   linux-source:
-    if: github.head_ref == 'agent/v0714-sandhybrid-live-map-integration'
+    if: github.head_ref == 'agent/v0715-ground-camera-character-scale'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
-    outputs:
-      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,45 +29,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Materialize combined v0.7.14 source
+      - name: Verify v0.7.15 source contracts
+        shell: bash
         run: |
           set -euo pipefail
-          python3 tools/prepare_v0714_sandhybrid_integration.py
-          python3 tools/apply_v0714_sandhybrid_integration.py
           git diff --check
-          test ! -f tools/prepare_v0714_sandhybrid_integration.py
-          test ! -f tools/apply_v0714_sandhybrid_integration.py
-          test ! -f .github/workflows/publish-runner-v0713.yml
-          test ! -f tools/publish_v0713.ps1
-          grep -F 'project(Runner VERSION 0.7.14 LANGUAGES CXX)' CMakeLists.txt
-          grep -F 'GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae' CMakeLists.txt
-          grep -F 'SandHybrid::SandHybrid' CMakeLists.txt
-          grep -F "training_semantics_version = 0x0007'1400u" src/ppo.hpp
-          grep -F 'macro_cell_side = sandhybrid::terrain::tile_size' src/deformable_terrain.hpp
-          grep -F 'SANDHYBRID_INTEGRATION_BRIDGE.md' missioncache.md
-          grep -F 'WALK-CLIMB-134' missioncache.md
+          grep -F 'project(Runner VERSION 0.7.15 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'generate_runner_v0715_sources.cmake' CMakeLists.txt
+          grep -F 'live_pixels_per_meter = 22.0f' cmake/generate_runner_v0715_sources.cmake
+          grep -F 'surface-aware macro-tile renderer' cmake/generate_runner_v0715_sources.cmake
+          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' cmake/generate_runner_v0715_sources.cmake
+          test ! -f tools/apply_v0715_patch.py
+          test ! -f .github/workflows/patch-runner-v0715.yml
 
-      - name: Configure Linux combined deterministic suite
+      - name: Configure Linux deterministic suite
         env:
           CC: gcc-14
           CXX: g++-14
-        run: cmake -S . -B build/linux-v0714 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build/linux-v0715 -G Ninja -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build and test Linux combined suite
-        run: |
-          cmake --build build/linux-v0714 --parallel
-          ctest --test-dir build/linux-v0714 --output-on-failure -V --timeout 1800
-
-      - name: Commit exact tested source
-        id: source
+      - name: Verify generated source
+        shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'Integrate SandHybrid live terrain into Runner training'
-          git push origin HEAD:agent/v0714-sandhybrid-live-map-integration
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          generated=build/linux-v0715/generated/v0715
+          grep -F 'live_pixels_per_meter = 22.0f' "$generated/app.cpp"
+          ! grep -F 'draw_course_ground(environment, viewport, camera_x, 90.0f)' "$generated/app.cpp"
+          ! grep -F 'std::vector<Vec2> surface' "$generated/app.cpp"
+          grep -F 'if (index <= 0)' "$generated/app.cpp"
+          grep -F 'runner-v0715-autosave.eppo' "$generated/app.cpp"
+          grep -F 'RESTORED CHAMPION AND RESTARTED LESSON' "$generated/autonomy_curriculum.cpp"
+
+      - name: Build and test Linux deterministic suite
+        run: |
+          cmake --build build/linux-v0715 --parallel
+          ctest --test-dir build/linux-v0715 --output-on-failure -V --timeout 1800
 
   windows-package:
     needs: linux-source
@@ -81,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.linux-source.outputs.source_sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Checkout pinned vcpkg
@@ -95,14 +89,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0714-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: runner-v0714-vcpkg-${{ runner.os }}-
+          key: runner-v0715-vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0715-vcpkg-${{ runner.os }}-
 
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
 
-      - name: Configure and build full Windows combined application
+      - name: Configure and build full Windows application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
@@ -123,7 +117,7 @@ jobs:
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
           Push-Location $env:RUNNER_TEMP
           try {
-            if ((& $exe --version | Out-String).Trim() -ne 'Runner 0.7.14') { throw 'Version mismatch' }
+            if ((& $exe --version | Out-String).Trim() -ne 'Runner 0.7.15') { throw 'Version mismatch' }
             & $exe --diagnose-package
             if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
             & $exe --diagnose-acceptance
@@ -131,10 +125,10 @@ jobs:
           }
           finally { Pop-Location }
 
-      - name: Install and verify combined package
+      - name: Install and verify package
         shell: pwsh
         run: |
-          $stage = "$env:RUNNER_TEMP/Runner-v0.7.14-windows-x64"
+          $stage = "$env:RUNNER_TEMP/Runner-v0.7.15-windows-x64"
           Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
           cmake --install build/windows-release --config Release --prefix $stage
           if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
@@ -153,7 +147,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
             & "$stage/Runner.exe" --diagnose-acceptance
             if ($LASTEXITCODE -ne 0) { throw 'Installed all-rig acceptance failed' }
-            if ((& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.14') { throw 'run.bat mismatch' }
+            if ((& cmd.exe /d /c "call `"$stage\run.bat`" --version" | Out-String).Trim() -ne 'Runner 0.7.15') { throw 'run.bat mismatch' }
           }
           finally { Pop-Location }
           "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -161,16 +155,17 @@ jobs:
       - name: Create and audit archive
         shell: pwsh
         run: |
-          $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.14-windows-x64.zip"
+          $archive = "$env:GITHUB_WORKSPACE/Runner-v0.7.15-windows-x64.zip"
           $checksum = "$archive.sha256"
-          $manifest = "$env:GITHUB_WORKSPACE/Runner-v0.7.14-windows-x64.manifest.sha256"
+          $manifest = "$env:GITHUB_WORKSPACE/Runner-v0.7.15-windows-x64.manifest.sha256"
           Compress-Archive -Path "$env:STAGE/*" -DestinationPath $archive -Force
           (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content $checksum
           Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName | ForEach-Object {
             $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash)  $relative"
           } | Set-Content $manifest
-          $audit = "$env:RUNNER_TEMP/runner-v0714-extracted"
+          $audit = "$env:RUNNER_TEMP/runner-v0715-extracted"
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $archive -DestinationPath $audit -Force
           Push-Location $env:RUNNER_TEMP
           try {
@@ -183,10 +178,10 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Runner-v0.7.14-windows-x64
+          name: Runner-v0.7.15-windows-x64
           path: |
-            Runner-v0.7.14-windows-x64.zip
-            Runner-v0.7.14-windows-x64.zip.sha256
-            Runner-v0.7.14-windows-x64.manifest.sha256
+            Runner-v0.7.15-windows-x64.zip
+            Runner-v0.7.15-windows-x64.zip.sha256
+            Runner-v0.7.15-windows-x64.manifest.sha256
           if-no-files-found: error
           retention-days: 14
