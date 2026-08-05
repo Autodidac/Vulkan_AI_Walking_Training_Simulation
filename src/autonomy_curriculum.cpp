@@ -362,8 +362,21 @@ namespace runner::rl
             if (!candidate.bones.empty() && candidate.nodes.size() < 128u
                 && candidate.bones.size() < 256u)
             {
-                const std::size_t bone_index = static_cast<std::size_t>(
-                    generation % candidate.bones.size());
+                std::vector<std::size_t> splittable{};
+                splittable.reserve(candidate.bones.size());
+                for (std::size_t index = 0; index < candidate.bones.size(); ++index)
+                {
+                    const sim::DistanceConstraint& bone = candidate.bones[index];
+                    const bool semantic_contact_edge = candidate.is_support_seed(bone.a)
+                        || candidate.is_support_seed(bone.b);
+                    if (bone.stiffness < 0.20f || semantic_contact_edge)
+                        continue;
+                    splittable.push_back(index);
+                }
+                if (splittable.empty())
+                    break;
+                const std::size_t bone_index = splittable[static_cast<std::size_t>(
+                    generation % splittable.size())];
                 const sim::DistanceConstraint original = candidate.bones[bone_index];
                 const auto inserted = static_cast<std::uint16_t>(candidate.nodes.size());
                 candidate.nodes.push_back((candidate.nodes[original.a]

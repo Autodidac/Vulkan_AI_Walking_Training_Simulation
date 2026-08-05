@@ -109,6 +109,7 @@ Required operators:
 - rebuild rest lengths and calibrate motors;
 - preserve existing motor slots where possible and initialize new slots neutrally;
 - reject disconnected, cyclically invalid, unsupported, nonfinite, or semantically ambiguous candidates.
+- protect semantic heel/ball/toe edges and weak visual braces from destructive bone splitting.
 
 A topology candidate must receive a bounded nursery adaptation period before comparison. The champion rig and policy remain immutable rollback anchors. Repeated invalid candidates reset the nursery rather than poisoning live training. Accepted rigs synchronize to live view, editor, autosave, statistics, and the current lesson without restarting the application process.
 

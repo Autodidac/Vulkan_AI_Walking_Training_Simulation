@@ -386,6 +386,28 @@ int main()
             continue;
         require(mutation.blueprint.valid(),
             "rig evolution published a structurally invalid candidate");
+        const auto articulated_foot_intact = [](const sim::CreatureBlueprint& rig,
+            bool left)
+        {
+            const auto& support_nodes = left
+                ? rig.additional_left_contact_nodes
+                : rig.additional_right_contact_nodes;
+            if (support_nodes.size() < 2u)
+                return true;
+            const std::uint16_t ball = support_nodes[0];
+            const std::uint16_t toe = support_nodes[1];
+            return std::ranges::any_of(rig.bones,
+                [ball, toe](const sim::DistanceConstraint& bone)
+                {
+                    return (bone.a == ball && bone.b == toe)
+                        || (bone.a == toe && bone.b == ball);
+                });
+        };
+        require(mutation.blueprint.support_seed_count() >= scaffold.support_seed_count(),
+            "topology evolution removed a semantic foot contact");
+        require(articulated_foot_intact(mutation.blueprint, true)
+                && articulated_foot_intact(mutation.blueprint, false),
+            "topology evolution split or detached an articulated toe edge");
         topology_mutation_seen = topology_mutation_seen || mutation.topology_changed;
         parametric_mutation_seen = parametric_mutation_seen || !mutation.topology_changed;
     }
