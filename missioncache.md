@@ -15,7 +15,7 @@
 9. Merge, tag, publish, re-download, verify, and clean branches only after the ledger records exact evidence.
 
 ### WALK-PROCESS-138 — Cache-first dependency and regression discipline
-**Status:** VERIFIED — CACHE-FIRST HISTORY AND OPEN v0.7.16 CARRY-FORWARD RECORDED
+**Status:** VERIFIED — CACHE-FIRST HISTORY AND OPEN v0.7.17 CARRY-FORWARD RECORDED
 
 The process above applies to this repository and is the required pattern for future project work. A release is blocked if implementation precedes mission capture, if a known interaction lacks an acceptance test, if an unfinished item disappears, or if evidence is described more strongly than it supports.
 
@@ -26,7 +26,8 @@ The process above applies to this repository and is the required pattern for fut
 The repository currently contains one obsolete observer branch and one active v0.7.15 branch that diverged from workflow-only commits on `main`. The observer branch contains no product source and must be discarded after its historical purpose is confirmed. The active source branch must absorb the useful v0.7.15 work without losing mainline validation changes.
 
 - **Runner v0.7.15:** terrain/render synchronization, camera scale, failed-policy recovery, structural rig evolution, real crouch qualification, side-view gait crossing, proper feet/traction, and related editor/diagnostic controls.
-- **Runner v0.7.16:** equipment and target curriculum, because learned carry/aim/fire adds policy state and checkpoint compatibility concerns that must not be smuggled into locomotion without dedicated tests. Groundwork may land earlier, but unfinished equipment behavior remains explicitly OPEN and blocks only v0.7.16.
+- **Runner v0.7.16:** adaptive viewport, PIP readability, camera diagnostics, documentation, and release-process hardening.
+- **Runner v0.7.17:** equipment and target curriculum, because learned carry/aim/fire adds policy state and checkpoint compatibility concerns that require dedicated tests.
 
 This split is a risk boundary, not a silent deferral. Both release targets remain in this ledger until published or explicitly superseded.
 
@@ -146,7 +147,7 @@ The rig lab must expose enough control to inspect and reproduce every active loc
 Any change to crouch qualification, gait evidence, foot traction, topology evolution, policy output mapping, or observations requires a new training-semantics value and isolated autosave/checkpoint/state paths. v0.7.14 and earlier policies may be explicitly imported as transfer weights only when dimensions match; they cannot silently resume as valid mastery.
 
 ### WALK-REGRESSION-146 — Exhaustive interaction audit for v0.7.15
-**Status:** VALIDATED — FULL LINUX/WINDOWS SUITES AND RUNTIME DIAGNOSTICS PASS; FINAL PACKAGE AUDIT PENDING
+**Status:** PUBLISHED — v0.7.15 RELEASE ASSETS AND PACKAGE AUDIT VERIFIED
 
 **Second-audit finding:** the static crouch stabilizer still wrote authored x positions, floor y positions, previous positions, and `grounded=true` into every semantic foot contact several times per solver iteration. That invalidated the claimed friction-only support model and could manufacture the very crouch being evaluated. The release remains blocked until those assignments are removed and adversarial tests prove support, squat shape, recovery, and bounded slip still pass through the real ground solver.
 
@@ -187,134 +188,148 @@ Required evidence: clean consolidated source branch; obsolete observer branch re
 
 # Runner v0.7.16 adaptive viewport and usability batch
 
-**Release state:** CACHED — 25 MISSIONS SELECTED FOR ONE AUDITED RELEASE.
+**Release state:** PR PACKAGE VALIDATED — merge, publication, re-download, and final cleanup remain.
 
 The v0.7.15 world scale is physically correct, but its fixed 22 px/m live camera makes the rig unnecessarily small. This batch keeps the corrected world scale and terrain synchronization while restoring a readable, user-adjustable view. Equipment, target, policy-extension, and combined carry/fire work remains intact below and moves to v0.7.17 rather than being partially smuggled into this viewport release.
 
 ### WALK-VIEW-156 — Correct the default live zoom
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Replace the fixed 22 px/m live view with a substantially closer default that keeps the corrected world scale. The rig must be immediately readable without returning to the oversized pre-v0.7.15 framing.
 
 ### WALK-VIEW-157 — Fit zoom to current rig height
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Derive the automatic live scale from the current finite particle bounds so scaffold, humanoid, chicken, quadruped, crawler, hexapod, and monoped remain readable without sharing a misleading one-size camera.
 
 ### WALK-VIEW-158 — Add mouse-wheel live zoom
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Mouse-wheel input over the live viewport adjusts zoom without changing simulation scale, training state, terrain coordinates, or the side panel.
 
 ### WALK-VIEW-159 — Restore automatic view on reset
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 The existing reset command also restores automatic camera fitting, default zoom bias, and a clean follow state.
 
 ### WALK-VIEW-160 — Bound manual and automatic zoom
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Clamp all camera scale paths to tested minimum and maximum values so the rig cannot become a dot or explode beyond the viewport.
 
 ### WALK-VIEW-161 — Route zoom only through the world viewport
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Wheel activity over controls or the side panel must not alter the world camera.
 
 ### WALK-VIEW-162 — Preserve useful forward lookahead
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Calculate course lookahead from viewport width and current scale so the rig remains left of center with useful terrain and hazards ahead.
 
 ### WALK-VIEW-163 — Use frame-rate-independent camera smoothing
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Follow and zoom smoothing use elapsed time rather than a fixed per-frame interpolation coefficient.
 
 ### WALK-VIEW-164 — Add a camera dead zone
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Small root jitter inside a bounded screen-space dead zone must not shake the camera.
 
 ### WALK-VIEW-165 — Keep ground framing consistent
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Live world conversion and inverse conversion share one camera ground fraction so editing and rendering do not disagree vertically.
 
 ### WALK-PIP-166 — Increase training-PIP readable area
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Give the training PIP more usable width and height while preserving telemetry and panel separation.
 
 ### WALK-PIP-167 — Fit PIP scale through the shared camera contract
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Use tested PIP scale limits and a tighter local course window instead of shrinking the rig to include distant obstacles.
 
 ### WALK-VIEW-168 — Expose live camera telemetry
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 The live footer reports current px/m and whether the view is automatic or manually adjusted.
 
 ### WALK-VIEW-169 — Add direct zoom controls
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 The live side panel exposes Zoom Out, Auto View, and Zoom In controls in addition to the wheel.
 
 ### WALK-TEST-170 — Deterministic camera math tests
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Test automatic fitting, clamps, wheel direction, reset defaults, lookahead, dead-zone behavior, and frame-rate-independent convergence.
 
 ### WALK-TEST-171 — Viewport and PIP layout regression tests
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Test supported-window containment and prove the enlarged PIP still avoids primary and bottom telemetry.
 
 ### WALK-DIAG-172 — Add packaged camera diagnostic
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 `Runner.exe --diagnose-camera` validates the compiled camera contract without opening a window and is exercised from build-tree, installed, and extracted packages.
 
 ### WALK-STATE-173 — Isolate v0.7.16 training semantics
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Bump training semantics even though camera state is not learned, preventing any later viewport-associated acceptance or diagnostic change from silently sharing ambiguous v0.7.15 state.
 
 ### WALK-STATE-174 — Isolate v0.7.16 autosave paths
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Policy, evolved-rig, and autonomy-state autosaves use `runner-v0716-*` paths.
 
 ### WALK-BUILD-175 — Bump Runner package version
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 CMake, runtime version output, window title, package name, diagnostics, and release workflow use 0.7.16.
 
 ### WALK-DOC-176 — Update user-facing controls and behavior
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 README documents adaptive view, wheel zoom, side-panel zoom controls, reset behavior, camera diagnostics, and retained world scale.
 
 ### WALK-DOC-177 — Record the release in the changelog
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 CHANGELOG receives one consolidated v0.7.16 entry rather than a separate release-notes file.
 
 ### WALK-PROCESS-178 — Add repository AGENTS.md
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Create root `AGENTS.md` with cache-first scope capture, regression inventory, test expectations, documentation obligations, release gates, visual-feedback reopening, and cleanup rules.
 
 ### WALK-PROCESS-179 — Reconcile current release ledger and audit rules
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** VERIFIED — LINUX, WINDOWS, PACKAGE, AND DIAGNOSTIC GATES PASSED
 
 Close stale v0.7.15 publication text, move the untouched equipment batch to v0.7.17, require AGENTS.md and the camera document in repository/package audits, and forbid temporary applicators from the final branch.
 
 ### WALK-RELEASE-180 — Publish audited Runner v0.7.16
-**Status:** CACHED — IMPLEMENTATION PENDING
+**Status:** READY FOR MERGE — AUDITED PR PACKAGE GATE PASSED
 
 Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, every deterministic suite, camera diagnostic, 24-case locomotion acceptance, installed/extracted package diagnostics, run.bat, checksum, manifest, release re-download, branch cleanup, and zero open PRs.
+
+## v0.7.16 audited PR validation evidence
+
+- Exact validated product source: `794bda73f8d1398d5310311172345343004e5f78`.
+- Exact final PR validation source: `914487a3e47bbb2a07c50b97f9a43edb1bdb96b5`.
+- Pull request: `#55`.
+- Validation workflow run: `31030378702`.
+- Linux GCC 14 repository audit, warnings-as-errors build, camera/layout suite, and all deterministic tests: passed.
+- Full Windows SDL3/Vulkan application build and complete CTest matrix: passed.
+- Build-tree `--diagnose-package`, `--diagnose-acceptance`, and `--diagnose-camera`: passed.
+- Installed package, executable-relative `run.bat`, acceptance, camera diagnostic, and optional-asset fallback: passed.
+- ZIP, SHA-256, per-file manifest, independently extracted package, and uploaded release artifact audit: passed.
+- Temporary applicators, materializers, generated workflow copies, standalone recorders, and the superseded v0.7.15 workflow are absent.
+- Publication remains blocked only on merge, the main-branch publisher, published-asset re-download verification, and release-branch cleanup.
 
 # Runner v0.7.17 equipment, carry, and target curriculum
 
@@ -380,7 +395,7 @@ Requires all equipment missions above or an explicitly documented reduced releas
 
 # Runner v0.7.15 viewport, terrain, and failed-policy recovery
 
-**Release state:** IMPLEMENTED — Linux and Windows package validation in progress.
+**Release state:** PUBLISHED — superseded by the v0.7.16 adaptive viewport release.
 
 - [x] Pull the live world camera from 90 to 22 pixels per meter so the rig is a small course subject instead of filling the viewport.
 - [x] Move the live ground framing upward and place the rig left of center with more course visible ahead.
@@ -393,9 +408,9 @@ Requires all equipment missions above or an explicitly documented reduced releas
 - [x] Restore the verified champion after catastrophic invalid or backward evaluations.
 - [x] Reset a failed policy nursery after three catastrophic evaluations when no champion exists.
 - [x] Bump the policy-training semantics to v0.7.15.
-- [ ] Pass the complete Linux deterministic suite.
-- [ ] Pass the complete Windows SDL3/Vulkan build, tests, diagnostics, installation, and extracted-package audit.
-- [ ] Merge, publish Runner v0.7.15, and remove temporary validation infrastructure and stale observer work.
+- [x] Pass the complete Linux deterministic suite.
+- [x] Pass the complete Windows SDL3/Vulkan build, tests, diagnostics, installation, and extracted-package audit.
+- [x] Merge, publish Runner v0.7.15, and remove temporary validation infrastructure and stale observer work.
 
 # Runner mission cache
 
