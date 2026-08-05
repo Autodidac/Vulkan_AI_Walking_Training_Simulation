@@ -601,8 +601,6 @@ text = regex_once(
                         }
                         else
                         {
-                            // Asymmetric +X procedural boot. Unlike the old
-                            // capsule it visibly communicates forward direction.
                             const float height = std::max(7.0f, radius * 0.55f);
                             canvas.capsule(center - Vec2{ radius * 0.18f, 0.0f },
                                 center + Vec2{ radius * 1.45f, 0.0f },
@@ -702,7 +700,6 @@ toggle_repl = toggle_marker + '''                cursor.y += 43.0f;
 text = replace_once(text, toggle_marker, toggle_repl, "rig lab art controls")
 write(path, text)
 
-# --- Version and package ---
 path = "CMakeLists.txt"
 text = read(path)
 text = replace_once(text, "project(Runner VERSION 0.7.16 LANGUAGES CXX)",
@@ -934,3 +931,5 @@ new.write_text(workflow, encoding="utf-8", newline="\n")
 old.unlink()
 
 print("v0.7.17 applicator completed")
+
+# Triggered after the workflow exists.
