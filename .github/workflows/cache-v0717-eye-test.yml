@@ -1,0 +1,33 @@
+name: Cache Runner v0.7.17 eye-test missions
+
+on:
+  push:
+    branches:
+      - agent/v0717-eye-test-feet-gait-batch25
+
+permissions:
+  contents: write
+
+jobs:
+  cache:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0717-eye-test-feet-gait-batch25
+          fetch-depth: 0
+      - name: Record missions before implementation
+        run: python tools/cache_v0717_eye_test.py
+      - name: Commit authoritative cache first
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/cache_v0717_eye_test.py
+          rm .github/workflows/cache-v0717-eye-test.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Cache Runner v0.7.17 released eye-test failures and 25 more missions'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
