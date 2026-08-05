@@ -32,7 +32,7 @@ This split is a risk boundary, not a silent deferral. Both release targets remai
 
 # Runner v0.7.15 locomotion, terrain, and structural-evolution completion
 
-**Release state:** PRE-PUBLICATION VALIDATED — final installed/extracted package, release-asset round-trip, and cleanup gates remain.
+**Release state:** PUBLISHED — v0.7.15 package, release assets, and cleanup verified; visual feedback remains authoritative.
 
 ### WALK-TERRAIN-139 — One visible and physical terrain state
 **Status:** VERIFIED — DETERMINISTIC AND CROSS-PLATFORM; RELEASED VISUAL/PACKAGE REVIEW PENDING
@@ -180,13 +180,145 @@ Before release, re-evaluate at minimum:
 The audit must be repeated after final fixes, followed by a diff/ledger reread. Newly discovered consequences are added here rather than waived.
 
 ### WALK-RELEASE-147 — Publish audited Runner v0.7.15
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — RELEASE VERIFIED
 
 Required evidence: clean consolidated source branch; obsolete observer branch removed; no hidden applicators; Linux GCC 14 warnings-as-errors; full Windows SDL3/Vulkan build; every deterministic suite; build-tree/installed/extracted diagnostics; `run.bat` from unrelated working directory; acceptance matrix; package checksum and per-file manifest; release asset re-download and comparison; exact ledger evidence; zero open cleanup PRs; only `main` unless a documented next-release branch remains.
 
-# Runner v0.7.16 equipment, carry, and target curriculum
 
-**Release state:** CACHED AND OPEN — must not disappear if v0.7.15 publishes first.
+# Runner v0.7.16 adaptive viewport and usability batch
+
+**Release state:** CACHED — 25 MISSIONS SELECTED FOR ONE AUDITED RELEASE.
+
+The v0.7.15 world scale is physically correct, but its fixed 22 px/m live camera makes the rig unnecessarily small. This batch keeps the corrected world scale and terrain synchronization while restoring a readable, user-adjustable view. Equipment, target, policy-extension, and combined carry/fire work remains intact below and moves to v0.7.17 rather than being partially smuggled into this viewport release.
+
+### WALK-VIEW-156 — Correct the default live zoom
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Replace the fixed 22 px/m live view with a substantially closer default that keeps the corrected world scale. The rig must be immediately readable without returning to the oversized pre-v0.7.15 framing.
+
+### WALK-VIEW-157 — Fit zoom to current rig height
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Derive the automatic live scale from the current finite particle bounds so scaffold, humanoid, chicken, quadruped, crawler, hexapod, and monoped remain readable without sharing a misleading one-size camera.
+
+### WALK-VIEW-158 — Add mouse-wheel live zoom
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Mouse-wheel input over the live viewport adjusts zoom without changing simulation scale, training state, terrain coordinates, or the side panel.
+
+### WALK-VIEW-159 — Restore automatic view on reset
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+The existing reset command also restores automatic camera fitting, default zoom bias, and a clean follow state.
+
+### WALK-VIEW-160 — Bound manual and automatic zoom
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Clamp all camera scale paths to tested minimum and maximum values so the rig cannot become a dot or explode beyond the viewport.
+
+### WALK-VIEW-161 — Route zoom only through the world viewport
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Wheel activity over controls or the side panel must not alter the world camera.
+
+### WALK-VIEW-162 — Preserve useful forward lookahead
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Calculate course lookahead from viewport width and current scale so the rig remains left of center with useful terrain and hazards ahead.
+
+### WALK-VIEW-163 — Use frame-rate-independent camera smoothing
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Follow and zoom smoothing use elapsed time rather than a fixed per-frame interpolation coefficient.
+
+### WALK-VIEW-164 — Add a camera dead zone
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Small root jitter inside a bounded screen-space dead zone must not shake the camera.
+
+### WALK-VIEW-165 — Keep ground framing consistent
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Live world conversion and inverse conversion share one camera ground fraction so editing and rendering do not disagree vertically.
+
+### WALK-PIP-166 — Increase training-PIP readable area
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Give the training PIP more usable width and height while preserving telemetry and panel separation.
+
+### WALK-PIP-167 — Fit PIP scale through the shared camera contract
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Use tested PIP scale limits and a tighter local course window instead of shrinking the rig to include distant obstacles.
+
+### WALK-VIEW-168 — Expose live camera telemetry
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+The live footer reports current px/m and whether the view is automatic or manually adjusted.
+
+### WALK-VIEW-169 — Add direct zoom controls
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+The live side panel exposes Zoom Out, Auto View, and Zoom In controls in addition to the wheel.
+
+### WALK-TEST-170 — Deterministic camera math tests
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Test automatic fitting, clamps, wheel direction, reset defaults, lookahead, dead-zone behavior, and frame-rate-independent convergence.
+
+### WALK-TEST-171 — Viewport and PIP layout regression tests
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Test supported-window containment and prove the enlarged PIP still avoids primary and bottom telemetry.
+
+### WALK-DIAG-172 — Add packaged camera diagnostic
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+`Runner.exe --diagnose-camera` validates the compiled camera contract without opening a window and is exercised from build-tree, installed, and extracted packages.
+
+### WALK-STATE-173 — Isolate v0.7.16 training semantics
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Bump training semantics even though camera state is not learned, preventing any later viewport-associated acceptance or diagnostic change from silently sharing ambiguous v0.7.15 state.
+
+### WALK-STATE-174 — Isolate v0.7.16 autosave paths
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Policy, evolved-rig, and autonomy-state autosaves use `runner-v0716-*` paths.
+
+### WALK-BUILD-175 — Bump Runner package version
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+CMake, runtime version output, window title, package name, diagnostics, and release workflow use 0.7.16.
+
+### WALK-DOC-176 — Update user-facing controls and behavior
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+README documents adaptive view, wheel zoom, side-panel zoom controls, reset behavior, camera diagnostics, and retained world scale.
+
+### WALK-DOC-177 — Record the release in the changelog
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+CHANGELOG receives one consolidated v0.7.16 entry rather than a separate release-notes file.
+
+### WALK-PROCESS-178 — Add repository AGENTS.md
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Create root `AGENTS.md` with cache-first scope capture, regression inventory, test expectations, documentation obligations, release gates, visual-feedback reopening, and cleanup rules.
+
+### WALK-PROCESS-179 — Reconcile current release ledger and audit rules
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Close stale v0.7.15 publication text, move the untouched equipment batch to v0.7.17, require AGENTS.md and the camera document in repository/package audits, and forbid temporary applicators from the final branch.
+
+### WALK-RELEASE-180 — Publish audited Runner v0.7.16
+**Status:** CACHED — IMPLEMENTATION PENDING
+
+Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, every deterministic suite, camera diagnostic, 24-case locomotion acceptance, installed/extracted package diagnostics, run.bat, checksum, manifest, release re-download, branch cleanup, and zero open PRs.
+
+# Runner v0.7.17 equipment, carry, and target curriculum
+
+**Release state:** CACHED AND OPEN — carried intact after the v0.7.16 viewport release.
 
 ### WALK-EQUIPMENT-148 — Unarmed, unequipped, safe, ready, and disarmed states
 **Status:** OPEN
@@ -241,7 +373,7 @@ The eight motor slots remain anatomy controls. Equipment state, aim, and trigger
 
 Test every supported humanoid/biped equipment state plus honest rejection for rigs without usable hands. Re-run unarmed locomotion, crouch, gait, terrain, evolution, persistence, editor, renderer, and package acceptance with equipment disabled to prove the new subsystem is optional and nonregressing.
 
-### WALK-RELEASE-155 — Publish audited Runner v0.7.16
+### WALK-RELEASE-155 — Publish audited Runner v0.7.17
 **Status:** OPEN
 
 Requires all equipment missions above or an explicitly documented reduced release whose unfinished items remain OPEN; Linux/Windows/package/re-download evidence; clean repository and branch state; exact mission-cache closure evidence.
