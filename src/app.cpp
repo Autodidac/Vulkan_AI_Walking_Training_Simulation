@@ -4,6 +4,7 @@
 #include "simulation.hpp"
 #include "ui_layout.hpp"
 #include "ui_font.hpp"
+#include "view_camera.hpp"
 
 #include <algorithm>
 #include <array>
@@ -212,7 +213,8 @@ namespace runner
         }
 
         [[nodiscard]] Vec2 world_to_screen(Vec2 world, Rect viewport, float camera_x,
-            float pixels_per_meter, float ground_fraction = 0.72f) noexcept
+            float pixels_per_meter,
+            float ground_fraction = view_camera::live_ground_fraction) noexcept
         {
             const float ground_y = viewport.position.y + viewport.size.y * ground_fraction;
             return {
@@ -224,7 +226,8 @@ namespace runner
         [[nodiscard]] Vec2 screen_to_world(Vec2 screen, Rect viewport, float camera_x,
             float pixels_per_meter) noexcept
         {
-            const float ground_y = viewport.position.y + viewport.size.y * 0.72f;
+            const float ground_y = viewport.position.y
+                + viewport.size.y * view_camera::live_ground_fraction;
             return {
                 camera_x + (screen.x - (viewport.position.x + viewport.size.x * 0.50f)) / pixels_per_meter,
                 (ground_y - screen.y) / pixels_per_meter
@@ -300,15 +303,18 @@ namespace runner
         float joint_test_input{};
         float joint_test_phase{};
         float camera_x{};
+        float live_pixels_per_meter{ view_camera::default_pixels_per_meter };
+        float live_zoom_factor{ 1.0f };
+        bool live_zoom_auto{ true };
         art::PixelArt original_runner_art{};
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0715-gait-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0715-gait-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0715-gait-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0716-gait-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0716-gait-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0716-gait-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -897,11 +903,11 @@ namespace runner
                 body_max_y = std::max(body_max_y, particle.position.y + particle.radius);
             }
 
-            // Keep the rig large and readable. Show roughly 2 m behind and 4 m
-            // ahead; a distant obstacle gets a distance label instead of forcing
-            // the camera to zoom the body into a tiny cluster.
-            float view_min_x = std::min(root_x - 2.0f, body_min_x - 0.35f);
-            float view_max_x = std::max(root_x + 4.2f, body_max_x + 0.50f);
+            // Keep the rig large and readable. Show a compact local course window;
+            // a distant obstacle gets a distance label instead of forcing the
+            // camera to zoom the body into a tiny cluster.
+            float view_min_x = std::min(root_x - 1.55f, body_min_x - 0.28f);
+            float view_max_x = std::max(root_x + 3.35f, body_max_x + 0.42f);
             float view_min_y = std::min(body_min_y - 0.18f,
                 environment.ground_height_at(root_x) - 0.18f);
             float view_max_y = body_max_y + 0.32f;
@@ -909,8 +915,8 @@ namespace runner
             const float world_height = std::max(1.5f, view_max_y - view_min_y);
             const float horizontal_scale = (inner.size.x - 12.0f) / world_width;
             const float vertical_scale = (inner.size.y * 0.78f) / world_height;
-            const float scale = std::clamp(
-                std::min(horizontal_scale, vertical_scale), 20.0f, 48.0f);
+            const float scale = view_camera::pip_pixels_per_meter(
+                horizontal_scale, vertical_scale);
             const float camera = (view_min_x + view_max_x) * 0.5f;
 
             std::vector<Vec2> ground_points{};
@@ -1054,6 +1060,24 @@ namespace runner
                 "MAX CPU", input, trainer.updates_per_cycle() == 4))
                 trainer.set_updates_per_cycle(4);
             cursor.y += 48.0f;
+            if (button({ cursor, { third, 38.0f } }, "ZOOM OUT", input))
+            {
+                live_zoom_factor = view_camera::apply_wheel_zoom(live_zoom_factor, -1.0f);
+                live_zoom_auto = false;
+            }
+            if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 38.0f } },
+                "AUTO VIEW", input, live_zoom_auto))
+            {
+                live_zoom_factor = 1.0f;
+                live_zoom_auto = true;
+            }
+            if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 38.0f } },
+                "ZOOM IN", input))
+            {
+                live_zoom_factor = view_camera::apply_wheel_zoom(live_zoom_factor, 1.0f);
+                live_zoom_auto = false;
+            }
+            cursor.y += 46.0f;
             const float half = (usable_width - 6.0f) * 0.5f;
             if (button({ cursor, { half, 36.0f } }, "METRIC / 0.25 KM", input,
                 distance_units == ui_layout::DistanceUnits::metric))
@@ -1228,15 +1252,54 @@ namespace runner
             }
         }
 
-        void draw_live_world(Rect viewport, float dt)
+        void draw_live_world(Rect viewport, float dt, const InputState& input)
         {
             if (!run_paused)
                 trainer.step_preview(dt);
             const sim::Environment& environment = trainer.preview();
-            constexpr float live_pixels_per_meter = 22.0f;
-            if (!environment.particles().empty())
-                camera_x = lerp(camera_x,
-                    environment.particles()[environment.blueprint().root_node].position.x + 5.5f, 0.035f);
+            const auto& particles = environment.particles();
+
+            if (contains(viewport, input.mouse) && std::abs(input.wheel) >= 0.01f)
+            {
+                live_zoom_factor = view_camera::apply_wheel_zoom(
+                    live_zoom_factor, input.wheel);
+                live_zoom_auto = false;
+            }
+
+            float rig_height = 2.4f;
+            if (!particles.empty())
+            {
+                float minimum_y = std::numeric_limits<float>::infinity();
+                float maximum_y = -std::numeric_limits<float>::infinity();
+                for (const sim::Particle& particle : particles)
+                {
+                    minimum_y = std::min(minimum_y,
+                        particle.position.y - particle.radius);
+                    maximum_y = std::max(maximum_y,
+                        particle.position.y + particle.radius);
+                }
+                if (std::isfinite(minimum_y) && std::isfinite(maximum_y))
+                    rig_height = std::max(0.75f, maximum_y - minimum_y);
+            }
+            const float target_pixels_per_meter =
+                view_camera::fitted_pixels_per_meter(
+                    viewport.size.y, rig_height, live_zoom_factor);
+            live_pixels_per_meter = view_camera::smooth_zoom(
+                live_pixels_per_meter, target_pixels_per_meter, dt);
+
+            if (!particles.empty())
+            {
+                const std::size_t root = environment.blueprint().root_node;
+                if (root < particles.size())
+                {
+                    const float target_camera = particles[root].position.x
+                        + view_camera::lookahead_meters(
+                            viewport.size.x, live_pixels_per_meter);
+                    camera_x = view_camera::smooth_camera(
+                        camera_x, target_camera, live_pixels_per_meter, dt);
+                }
+            }
+
             add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
             draw_course_ground(environment, viewport, camera_x, live_pixels_per_meter);
             draw_course_reference(environment, viewport, camera_x, live_pixels_per_meter);
@@ -1271,10 +1334,14 @@ namespace runner
                     environment.landed_jumps(), environment.obstacles_passed()),
                 0.96f, muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
-                trainer.has_best_policy()
-                    ? "BEST STAGE-VALID CONTROLLER   v" RUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
-                    : "CURRENT POLICY UNVERIFIED   v" RUNNER_VERSION "   SEARCHING FOR VALID STANCE",
-                1.05f, trainer.has_best_policy() ? muted : danger, overlay_width, 1.00f);
+                std::format("{}   v{}   VIEW {:.0f} PX/M {}",
+                    trainer.has_best_policy()
+                        ? "BEST STAGE-VALID CONTROLLER"
+                        : "CURRENT POLICY UNVERIFIED",
+                    RUNNER_VERSION, live_pixels_per_meter,
+                    live_zoom_auto ? "AUTO" : "MANUAL"),
+                1.05f, trainer.has_best_policy() ? muted : danger,
+                overlay_width, 1.00f);
 
             const ui_layout::Box pip = ui_layout::training_pip_box({
                 viewport.position.x, viewport.position.y, viewport.size.x, viewport.size.y });
@@ -1977,6 +2044,9 @@ namespace runner
             {
                 trainer.reset_preview();
                 camera_x = 0.0f;
+                live_pixels_per_meter = view_camera::default_pixels_per_meter;
+                live_zoom_factor = 1.0f;
+                live_zoom_auto = true;
             }
             if (input.delete_pressed && mode == Mode::rig_lab)
                 delete_selected_node();
@@ -2067,7 +2137,7 @@ namespace runner
                     { layout_world.width, layout_world.height } };
                 const Rect side{ { layout_side.x, layout_side.y },
                     { layout_side.width, layout_side.height } };
-                draw_live_world(world, dt);
+                draw_live_world(world, dt, input);
                 draw_live_panel(side, input);
             }
             else

@@ -1,5 +1,16 @@
 # Changelog
 
+
+## Runner v0.7.16 — Adaptive viewport and 25-mission usability batch
+
+- Replaced the overly distant fixed 22 px/m live view with bounded rig-height fitting and a closer corrected default.
+- Added viewport-only mouse-wheel zoom, Zoom Out/Auto View/Zoom In panel controls, reset-to-auto behavior, live px/m telemetry, forward lookahead, elapsed-time smoothing, and a screen-space dead zone.
+- Enlarged the training PIP and tightened its local course window while preserving distant-hazard labels.
+- Added shared camera math, deterministic camera/layout tests, and `Runner.exe --diagnose-camera` in build-tree, installed, and extracted package gates.
+- Isolated v0.7.16 training semantics and autosave paths.
+- Added `AGENTS.md`, the focused camera document, updated README, mission ledger, repository audit, package contents, and release automation.
+- Preserved the equipment, target, policy-extension, and combined carry/fire curriculum intact for Runner v0.7.17.
+
 ## Runner v0.7.15 — measured static-friction contacts
 
 - Kept terrain coordinate round-trip verification compile-time portable across GCC 14 and MSVC 19.51 without depending on `std::abs(float)` constexpr support.

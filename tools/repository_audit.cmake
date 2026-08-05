@@ -2,7 +2,9 @@ if(NOT DEFINED RUNNER_SOURCE_DIR)
     message(FATAL_ERROR "RUNNER_SOURCE_DIR was not provided")
 endif()
 
-foreach(required IN ITEMS CHANGELOG.md missioncache.md README.md docs/SANDHYBRID_INTEGRATION_BRIDGE.md)
+foreach(required IN ITEMS AGENTS.md CHANGELOG.md missioncache.md README.md
+        docs/SANDHYBRID_INTEGRATION_BRIDGE.md
+        docs/RUNNER_V0716_CAMERA_BATCH.md)
     if(NOT EXISTS "${RUNNER_SOURCE_DIR}/${required}")
         message(FATAL_ERROR "Missing required repository document: ${required}")
     endif()
@@ -41,13 +43,15 @@ if(EXISTS "${RUNNER_SOURCE_DIR}/src/autonomy.cpp")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
-string(FIND "${cmake_text}" "project(Runner VERSION 0.7.15 LANGUAGES CXX)" version_position)
+string(FIND "${cmake_text}" "project(Runner VERSION 0.7.16 LANGUAGES CXX)" version_position)
 if(version_position EQUAL -1)
-    message(FATAL_ERROR "CMake project version is not 0.7.15")
+    message(FATAL_ERROR "CMake project version is not 0.7.16")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/README.md" readme_text)
-foreach(reference IN ITEMS "CHANGELOG.md" "missioncache.md" "SANDHYBRID_INTEGRATION_BRIDGE.md" "--diagnose-acceptance")
+foreach(reference IN ITEMS "AGENTS.md" "CHANGELOG.md" "missioncache.md"
+        "SANDHYBRID_INTEGRATION_BRIDGE.md" "RUNNER_V0716_CAMERA_BATCH.md"
+        "--diagnose-acceptance" "--diagnose-camera")
     string(FIND "${readme_text}" "${reference}" reference_position)
     if(reference_position EQUAL -1)
         message(FATAL_ERROR "README is missing required reference: ${reference}")
@@ -61,4 +65,13 @@ foreach(reference IN ITEMS "std::hypot" "!cases.empty()" "8. MIXED GOAL COURSE")
         message(FATAL_ERROR "Acceptance hardening is missing: ${reference}")
     endif()
 endforeach()
+
+foreach(stale IN ITEMS
+        tools/apply_v0716_batch25.py
+        .github/workflows/apply-v0716-batch25.yml)
+    if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
+        message(FATAL_ERROR "Temporary v0.7.16 applicator remains: ${stale}")
+    endif()
+endforeach()
+
 message(STATUS "Runner repository hygiene passed")

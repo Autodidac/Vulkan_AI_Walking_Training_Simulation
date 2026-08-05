@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.15 LANGUAGES CXX)
+project(Runner VERSION 0.7.16 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -90,7 +90,8 @@ if(RUNNER_BUILD_APP)
 
     add_executable(Runner
         src/main.cpp src/app.cpp src/canvas.cpp src/renderer.cpp
-        src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp src/ui_font.hpp)
+        src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
+        src/ui_font.hpp src/view_camera.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
@@ -114,6 +115,9 @@ if(RUNNER_BUILD_APP)
             "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
             "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0716_CAMERA_BATCH.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
             "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
@@ -125,6 +129,7 @@ if(RUNNER_BUILD_APP)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
         DESTINATION docs RENAME SandHybrid-missioncache.md)
@@ -149,6 +154,17 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerPixelArtTests)
     add_test(NAME Runner.PixelArt COMMAND RunnerPixelArtTests)
     set_tests_properties(Runner.PixelArt PROPERTIES TIMEOUT 30)
+
+
+add_executable(RunnerViewCameraTests tests/view_camera_tests.cpp)
+target_include_directories(RunnerViewCameraTests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(RunnerViewCameraTests PRIVATE cxx_std_23)
+set_target_properties(RunnerViewCameraTests PROPERTIES
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+runner_enable_warnings(RunnerViewCameraTests)
+add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
+set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
@@ -208,5 +224,7 @@ if(RUNNER_BUILD_TESTS)
     if(TARGET Runner)
         add_test(NAME Runner.PackageLayout COMMAND $<TARGET_FILE:Runner> --diagnose-package)
         set_tests_properties(Runner.PackageLayout PROPERTIES TIMEOUT 30)
+        add_test(NAME Runner.CameraDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-camera)
+        set_tests_properties(Runner.CameraDiagnostic PROPERTIES TIMEOUT 30)
     endif()
 endif()

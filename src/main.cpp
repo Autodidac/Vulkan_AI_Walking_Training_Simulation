@@ -2,6 +2,7 @@
 #include "app.hpp"
 #include "pixel_art.hpp"
 #include "renderer.hpp"
+#include "view_camera.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_filesystem.h>
@@ -63,6 +64,14 @@ namespace
             && argv != nullptr
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--diagnose-acceptance";
+    }
+
+    [[nodiscard]] bool wants_camera_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-camera";
     }
 
     [[nodiscard]] std::filesystem::path executable_directory()
@@ -133,6 +142,34 @@ int main(int argc, char** argv)
         std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
     }
+
+if (wants_camera_diagnostic(argc, argv))
+{
+    const float automatic = runner::view_camera::automatic_pixels_per_meter(
+        820.0f, 3.0f);
+    const float fitted = runner::view_camera::fitted_pixels_per_meter(
+        820.0f, 3.0f, 1.0f);
+    const float zoomed = runner::view_camera::apply_wheel_zoom(1.0f, 1.0f);
+    const float lookahead = runner::view_camera::lookahead_meters(
+        900.0f, fitted);
+    const float followed = runner::view_camera::smooth_camera(
+        0.0f, 4.0f, fitted, 1.0f / 60.0f);
+    const bool valid = automatic > 22.0f
+        && fitted >= runner::view_camera::default_pixels_per_meter
+        && zoomed > 1.0f
+        && lookahead > 2.0f
+        && followed > 0.0f && followed < 4.0f
+        && runner::view_camera::pip_pixels_per_meter(10.0f, 80.0f)
+            == runner::view_camera::pip_minimum_pixels_per_meter;
+    std::printf(
+        "Runner %s camera diagnostic: %s; default=%.1f px/m fitted=%.1f "
+        "zoom=%.3f lookahead=%.2f follow=%.3f\n",
+        RUNNER_VERSION, valid ? "passed" : "failed",
+        runner::view_camera::default_pixels_per_meter,
+        fitted, zoomed, lookahead, followed);
+    return valid ? 0 : 1;
+}
+
     if (wants_acceptance_diagnostic(argc, argv))
     {
         const runner::acceptance::Report report =
