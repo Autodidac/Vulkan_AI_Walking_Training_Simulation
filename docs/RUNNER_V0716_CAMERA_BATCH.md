@@ -37,4 +37,4 @@ The clean v0.7.16 source at `794bda73f8d1398d5310311172345343004e5f78` passed Gi
 - optional-asset fallback;
 - ZIP, SHA-256, per-file manifest, independent extraction, and release-artifact upload.
 
-Publication still requires merge, the main-branch publisher, published-asset re-download verification, and release-branch cleanup.
+The permanent release workflow repeats these gates for the final source, records mission closure only after both platform jobs pass, and then requires merge, main-branch publication, published-asset re-download verification, and release-branch cleanup.
