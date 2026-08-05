@@ -4,6 +4,9 @@ on:
   push:
     branches: [agent/v0715-ground-camera-character-scale]
     paths: [.github/workflows/patch-runner-v0715.yml]
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/patch-runner-v0715.yml]
 
 permissions:
   contents: write
@@ -15,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: agent/v0715-ground-camera-character-scale
 
       - name: Apply v0.7.15 repair pass
         shell: bash
