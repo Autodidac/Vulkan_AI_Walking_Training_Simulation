@@ -24,7 +24,7 @@ def main() -> int:
         '    text = replace_all_checked(text, "0.7.15", "0.7.16", 10, "workflow version")\n'
         '    text = replace_all_checked(text, "v0.7.15", "v0.7.16", 4, "workflow tag")',
         '    text = replace_all_checked(text, "v0.7.15", "v0.7.16", 4, "workflow tag")\n'
-        '    text = replace_all_checked(text, "0.7.15", "0.7.16", 10, "workflow version")',
+        '    text = replace_all_checked(text, "0.7.15", "0.7.16", 5, "workflow version")',
         "workflow replacement order",
     )
 
