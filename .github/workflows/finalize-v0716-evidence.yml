@@ -1,0 +1,39 @@
+name: Finalize Runner v0.7.16 publication evidence
+
+on:
+  push:
+    branches:
+      - agent/v0716-release-evidence
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-runner-v0716-publication-evidence
+  cancel-in-progress: false
+
+jobs:
+  cleanup-after-main:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for evidence to reach main and remove temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            git fetch origin main
+            if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/git/refs/heads/agent%2Fv0716-release-evidence"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Publication evidence did not reach main before cleanup timeout.'
+          exit 1
