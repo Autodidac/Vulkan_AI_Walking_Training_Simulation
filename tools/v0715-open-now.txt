@@ -1,1 +1,1 @@
-Trigger fresh PR now.
+Trigger the minimal cache-first bootstrap validator after it was added to main.
