@@ -1,0 +1,35 @@
+name: Record Runner v0.7.16 publication evidence
+
+on:
+  push:
+    branches:
+      - agent/v0716-release-evidence
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-runner-v0716-publication
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0716-release-evidence
+          fetch-depth: 0
+
+      - name: Record tag, publication, verification, and cleanup
+        run: python tools/record_v0716_publication.py
+
+      - name: Remove one-use publication recorder and commit
+        run: |
+          rm tools/record_v0716_publication.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Record Runner v0.7.16 published release evidence'
+          git push origin HEAD:agent/v0716-release-evidence
