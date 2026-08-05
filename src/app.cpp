@@ -251,9 +251,13 @@ namespace runner
         RigPanelPage rig_panel_page{ RigPanelPage::body };
         LivePanelPage live_panel_page{ LivePanelPage::results };
         int selected_node{ -1 };
+        int selected_bone{ -1 };
         int selected_motor{};
         bool dragging_node{};
         bool joint_auto_sweep{};
+        bool right_leg_near{ true };
+        bool rig_test_loose_ground{};
+        sim::RigTestPattern rig_test_pattern{ sim::RigTestPattern::manual };
         bool run_paused{};
         ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::metric };
         float session_runtime_seconds{};
@@ -347,6 +351,41 @@ namespace runner
             const std::uint64_t minutes = (total / 60u) % 60u;
             const std::uint64_t remaining = total % 60u;
             return std::format("{:02}:{:02}:{:02}", hours, minutes, remaining);
+        }
+
+        [[nodiscard]] static bool blueprint_connected(
+            const sim::CreatureBlueprint& rig) noexcept
+        {
+            if (rig.nodes.empty())
+                return false;
+            std::vector<bool> visited(rig.nodes.size(), false);
+            std::vector<std::uint16_t> stack{ rig.root_node };
+            if (rig.root_node >= rig.nodes.size())
+                return false;
+            visited[rig.root_node] = true;
+            while (!stack.empty())
+            {
+                const std::uint16_t node = stack.back();
+                stack.pop_back();
+                for (const sim::DistanceConstraint& bone : rig.bones)
+                {
+                    std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                    if (bone.a == node) next = bone.b;
+                    else if (bone.b == node) next = bone.a;
+                    if (next < visited.size() && !visited[next])
+                    {
+                        visited[next] = true;
+                        stack.push_back(next);
+                    }
+                }
+            }
+            return std::ranges::all_of(visited, [](bool value) { return value; });
+        }
+
+        [[nodiscard]] float test_input_for_motor(std::size_t motor_index) const noexcept
+        {
+            return sim::rig_test_motor_input(rig_test_pattern, motor_index,
+                session_runtime_seconds * 2.0f * pi * 1.05f, joint_test_input);
         }
 
         [[nodiscard]] bool has_direct_bone(std::uint16_t a, std::uint16_t b) const noexcept
@@ -471,6 +510,7 @@ namespace runner
             case RigPreset::custom: break;
             }
             selected_node = -1;
+            selected_bone = -1;
             selected_motor = 0;
             dragging_node = false;
             trainer.set_blueprint(blueprint, false);
@@ -766,8 +806,10 @@ namespace runner
                 const float radius_b = bone.b < rig.radii.size() ? rig.radii[bone.b] : 0.15f;
                 const float radius = std::max(0.055f, std::min(radius_a, radius_b) * 0.55f) * scale;
                 const int side = leg_side(bone.a) != 0 ? leg_side(bone.a) : leg_side(bone.b);
-                const Color color = side < 0 ? rgb(0x765033)
-                    : side > 0 ? leg : body;
+                const bool near = side != 0
+                    && ((side > 0) == right_leg_near);
+                const Color color = side == 0 ? body
+                    : near ? leg : rgb(0x765033);
                 canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
             }
             for (std::size_t index = 0; index < particles.size(); ++index)
@@ -775,14 +817,14 @@ namespace runner
                 const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f) * scale;
                 Color color = index == rig.head_node ? body_light : body;
                 const int side = leg_side(index);
-                if (side < 0)
-                    color = rgb(0x765033);
-                else if (side > 0)
-                    color = leg;
+                if (side != 0)
+                    color = ((side > 0) == right_leg_near)
+                        ? leg : rgb(0x765033);
                 const bool primary_foot = rig.is_support_seed(index);
                 if (primary_foot)
                 {
-                    color = side < 0 ? rgb(0x765033) : leg;
+                    color = side != 0 && ((side > 0) == right_leg_near)
+                        ? leg : rgb(0x765033);
                     const Vec2 center = point(index);
                     canvas.capsule(center - Vec2{ radius * 0.82f, 0.0f },
                         center + Vec2{ radius * 0.82f, 0.0f }, radius * 0.44f, color, 16);
@@ -994,6 +1036,13 @@ namespace runner
                 metrics.evaluation_valid || metrics.evaluation_count == 0 ? muted : danger,
                 usable_width, 4.0f);
             cursor.y += 15.0f;
+            add_text_fit(canvas, cursor,
+                std::format("RIG GEN {}  ACCEPT {}  REJECT {}  RB {}  {}",
+                    autonomy.rig_generation, autonomy.accepted_rig_changes,
+                    autonomy.rejected_rig_changes, autonomy.rollback_count,
+                    autonomy.pipeline_stage),
+                0.80f, accent, usable_width, 0.66f);
+            cursor.y += 25.0f;
 
             const float third = (usable_width - 12.0f) / 3.0f;
             if (button({ cursor, { third, 40.0f } }, "NORMAL", input, trainer.updates_per_cycle() == 1))
@@ -1256,24 +1305,58 @@ namespace runner
             row.y += 39.0f;
             if (button({ row, { group_width - 4.0f, 31.0f } }, "MIN", input))
             {
+                rig_test_pattern = sim::RigTestPattern::manual;
                 joint_auto_sweep = false;
                 joint_test_input = -1.0f;
             }
             if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "REST", input))
             {
+                rig_test_pattern = sim::RigTestPattern::manual;
                 joint_auto_sweep = false;
                 joint_test_input = 0.0f;
             }
             if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "MAX", input))
             {
+                rig_test_pattern = sim::RigTestPattern::manual;
                 joint_auto_sweep = false;
                 joint_test_input = 1.0f;
             }
             if (button({ row + Vec2{ group_width * 3.0f, 0.0f }, { group_width - 4.0f, 31.0f } },
                 joint_auto_sweep ? "STOP" : "SWEEP", input, joint_auto_sweep))
+            {
+                rig_test_pattern = sim::RigTestPattern::manual;
                 joint_auto_sweep = !joint_auto_sweep;
-            joint_test_input = slider({ rect.position + Vec2{ 14.0f, 119.0f }, { rect.size.x - 28.0f, 36.0f } },
-                "TEST INPUT  -1 MIN / 0 REST / +1 MAX", joint_test_input, -1.0f, 1.0f, input);
+            }
+
+            row.y += 39.0f;
+            if (button({ row, { group_width - 4.0f, 31.0f } }, "CROUCH", input,
+                rig_test_pattern == sim::RigTestPattern::crouch))
+            {
+                joint_auto_sweep = false;
+                rig_test_pattern = sim::RigTestPattern::crouch;
+            }
+            if (button({ row + Vec2{ group_width, 0.0f }, { group_width - 4.0f, 31.0f } }, "GAIT CYCLE", input,
+                rig_test_pattern == sim::RigTestPattern::gait))
+            {
+                joint_auto_sweep = false;
+                rig_test_pattern = sim::RigTestPattern::gait;
+            }
+            if (button({ row + Vec2{ group_width * 2.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "FIRM GROUND", input,
+                !rig_test_loose_ground))
+                rig_test_loose_ground = false;
+            if (button({ row + Vec2{ group_width * 3.0f, 0.0f }, { group_width - 4.0f, 31.0f } }, "LOOSE GROUND", input,
+                rig_test_loose_ground))
+                rig_test_loose_ground = true;
+
+            const float friction = sim::foot_friction_retention(0.45f,
+                rig_test_loose_ground ? 0.25f : 1.0f,
+                rig_test_loose_ground ? 0.75f : 0.0f, false, false);
+            add_text(canvas, rect.position + Vec2{ 14.0f, 119.0f },
+                std::format("TRACTION TEST RETENTION {:.3f}  {}",
+                    friction, rig_test_loose_ground ? "LOOSE" : "FIRM"),
+                0.92f, rig_test_loose_ground ? yellow : green);
+            joint_test_input = slider({ rect.position + Vec2{ 14.0f, 157.0f }, { rect.size.x - 28.0f, 36.0f } },
+                "MANUAL INPUT  -1 MIN / 0 REST / +1 MAX", joint_test_input, -1.0f, 1.0f, input);
         }
 
         void draw_blueprint(Rect viewport, const InputState& input)
@@ -1298,7 +1381,8 @@ namespace runner
                     continue;
                 const Vec2 pivot = preview[motor.pivot];
                 const float current = signed_angle(preview[motor.a] - pivot, preview[motor.c] - pivot);
-                const float delta = wrap_angle(sim::motor_target_angle(motor, joint_test_input) - current);
+                const float delta = wrap_angle(sim::motor_target_angle(
+                    motor, test_input_for_motor(static_cast<std::size_t>(motor_index))) - current);
                 std::vector<std::uint16_t> stack{ motor.c };
                 std::vector<bool> visited(preview.size(), false);
                 visited[motor.pivot] = true;
@@ -1366,10 +1450,13 @@ namespace runner
                     canvas.line(preview_screen(bone.a), preview_screen(bone.b), 9.0f, with_alpha(accent, 0.34f));
             }
 
-            for (const sim::DistanceConstraint& bone : blueprint.bones)
+            for (std::size_t bone_index = 0; bone_index < blueprint.bones.size(); ++bone_index)
             {
+                const sim::DistanceConstraint& bone = blueprint.bones[bone_index];
                 if (bone.a < blueprint.nodes.size() && bone.b < blueprint.nodes.size())
-                    canvas.line(screen(bone.a), screen(bone.b), 17.0f, rgb(0x835927));
+                    canvas.line(screen(bone.a), screen(bone.b),
+                        bone_index == static_cast<std::size_t>(selected_bone) ? 22.0f : 17.0f,
+                        bone_index == static_cast<std::size_t>(selected_bone) ? accent : rgb(0x835927));
             }
             for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
             {
@@ -1430,10 +1517,41 @@ namespace runner
                 add_text(canvas, screen(motor.c) + Vec2{ 8.0f, -15.0f }, "C / DRIVEN", 1.05f, yellow);
             }
 
-            const Rect joint_rect{ { viewport.position.x + 20.0f, viewport.position.y + viewport.size.y - 174.0f },
-                { std::min(850.0f, viewport.size.x - 40.0f), 154.0f } };
+            const Rect joint_rect{ { viewport.position.x + 20.0f, viewport.position.y + viewport.size.y - 220.0f },
+                { std::min(850.0f, viewport.size.x - 40.0f), 200.0f } };
             const bool over_joint_lab = contains(joint_rect, input.mouse);
-            if (input.left_pressed && contains(viewport, input.mouse) && !over_joint_lab)
+            if (input.left_pressed && input.alt
+                && contains(viewport, input.mouse) && !over_joint_lab)
+            {
+                auto segment_distance = [](Vec2 point, Vec2 a, Vec2 b) noexcept
+                {
+                    const Vec2 segment = b - a;
+                    const float denominator = dot(segment, segment);
+                    const float t = denominator > 1.0e-6f
+                        ? clamp(dot(point - a, segment) / denominator, 0.0f, 1.0f)
+                        : 0.0f;
+                    return length(point - (a + segment * t));
+                };
+                selected_bone = -1;
+                float best_distance = 16.0f;
+                for (std::size_t index = 0; index < blueprint.bones.size(); ++index)
+                {
+                    const sim::DistanceConstraint& bone = blueprint.bones[index];
+                    if (bone.a >= blueprint.nodes.size() || bone.b >= blueprint.nodes.size())
+                        continue;
+                    const float distance = segment_distance(
+                        input.mouse, screen(bone.a), screen(bone.b));
+                    if (distance < best_distance)
+                    {
+                        best_distance = distance;
+                        selected_bone = static_cast<int>(index);
+                    }
+                }
+                selected_node = -1;
+                dragging_node = false;
+            }
+            if (input.left_pressed && !input.alt
+                && contains(viewport, input.mouse) && !over_joint_lab)
             {
                 int hit = -1;
                 float best = 20.0f;
@@ -1551,6 +1669,7 @@ namespace runner
                     item.enabled = false;
             }
             selected_node = -1;
+            selected_bone = -1;
             apply_small_rig_change("NODE DELETED; AFFECTED MOTORS DISABLED");
             return true;
         }
@@ -1558,6 +1677,7 @@ namespace runner
         void draw_rig_panel(Rect rect, const InputState& input)
         {
             add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
+            const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
             add_text(canvas, cursor, "GUIDED RIG LAB", 1.80f, white);
             cursor.y += 38.0f;
@@ -1625,6 +1745,27 @@ namespace runner
                     set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
                 }
                 cursor.y += 50.0f;
+                const float control_third = (rect.size.x - 48.0f) / 3.0f;
+                if (button({ cursor, { control_third, 35.0f } },
+                    right_leg_near ? "NEAR LEG: RIGHT" : "NEAR LEG: LEFT",
+                    input, right_leg_near))
+                    right_leg_near = !right_leg_near;
+                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
+                    { control_third, 35.0f } }, "RESTORE CHAMPION", input,
+                    trainer.has_best_policy(), trainer.has_best_policy()))
+                {
+                    set_status(trainer.restore_best_policy()
+                        ? "VERIFIED CHAMPION RESTORE QUEUED"
+                        : "NO VERIFIED CHAMPION AVAILABLE");
+                }
+                if (button({ cursor + Vec2{ (control_third + 6.0f) * 2.0f, 0.0f },
+                    { control_third, 35.0f } }, "FRESH POLICY", input))
+                {
+                    trainer.reset_policy(0x715300u
+                        + autonomy.rig_generation * 0x9E3779B97F4A7C15ULL);
+                    set_status("FRESH POLICY NURSERY QUEUED FOR CURRENT RIG");
+                }
+                cursor.y += 46.0f;
 
                 add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
                 if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
@@ -1662,7 +1803,46 @@ namespace runner
                     role(4, "FOOT R", blueprint.right_contact_node);
                     cursor.y += 44.0f;
                 }
-                add_text(canvas, cursor, "SELECT OR DRAG NODES IN THE VIEW. SHIFT ADDS; CTRL CONNECTS.", 1.00f, muted);
+                cursor.y += 5.0f;
+                add_text(canvas, cursor, std::format("SELECTED BONE: {}", selected_bone), 1.10f, muted);
+                cursor.y += 27.0f;
+                if (selected_bone >= 0
+                    && static_cast<std::size_t>(selected_bone) < blueprint.bones.size())
+                {
+                    sim::DistanceConstraint& selected = blueprint.bones[
+                        static_cast<std::size_t>(selected_bone)];
+                    const float stiffness = slider({ cursor, { rect.size.x - 170.0f, 38.0f } },
+                        "BONE STIFFNESS", selected.stiffness, 0.20f, 1.0f, input);
+                    if (stiffness != selected.stiffness)
+                    {
+                        selected.stiffness = stiffness;
+                        queue_rig_change("BONE STIFFNESS UPDATED");
+                    }
+                    if (button({ cursor + Vec2{ rect.size.x - 152.0f, -5.0f },
+                        { 116.0f, 31.0f } }, "DELETE BONE", input))
+                    {
+                        sim::CreatureBlueprint candidate = blueprint;
+                        candidate.bones.erase(candidate.bones.begin() + selected_bone);
+                        if (candidate.valid() && blueprint_connected(candidate))
+                        {
+                            blueprint = std::move(candidate);
+                            selected_bone = -1;
+                            apply_small_rig_change("BONE DELETED");
+                        }
+                        else
+                        {
+                            set_status("BONE DELETE REJECTED - RIG OR MOTOR WOULD DISCONNECT");
+                        }
+                    }
+                    cursor.y += 47.0f;
+                }
+                add_text(canvas, cursor,
+                    std::format("GEN {}  ACCEPT {}  REJECT {}  ROLLBACK {}",
+                        autonomy.rig_generation, autonomy.accepted_rig_changes,
+                        autonomy.rejected_rig_changes, autonomy.rollback_count),
+                    0.92f, accent);
+                cursor.y += 25.0f;
+                add_text(canvas, cursor, "SELECT/DRAG NODES. SHIFT ADDS, CTRL CONNECTS, ALT SELECTS BONE.", 0.92f, muted);
             }
             else
             {
@@ -1900,7 +2080,7 @@ namespace runner
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
                 draw_blueprint(world, input);
                 add_text(canvas, world.position + Vec2{ 20.0f, 18.0f },
-                    "CLICK SELECT / DRAG MOVE / SHIFT ADD / CTRL CONNECT / DELETE REMOVE", 1.12f, muted);
+                    "CLICK/DRAG NODE / SHIFT ADD / CTRL CONNECT / ALT SELECT BONE / DELETE NODE", 1.02f, muted);
             }
 
             if (input.left_released && rig_edit_pending)

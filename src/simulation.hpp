@@ -692,6 +692,37 @@ namespace runner::sim
         }
     }
 
+    enum class RigTestPattern : std::uint8_t
+    {
+        manual,
+        crouch,
+        gait
+    };
+
+    [[nodiscard]] inline float rig_test_motor_input(RigTestPattern pattern,
+        std::size_t motor_index, float phase, float manual_input) noexcept
+    {
+        if (pattern == RigTestPattern::manual)
+            return clamp(manual_input, -1.0f, 1.0f);
+        if (pattern == RigTestPattern::crouch)
+        {
+            constexpr std::array<float, action_count> crouch{
+                -0.22f, 0.70f, 0.22f, -0.70f, 0.0f, 0.0f, 0.0f, 0.0f
+            };
+            return crouch[std::min(motor_index, crouch.size() - 1u)];
+        }
+        const float swing = std::sin(phase);
+        const std::array<float, action_count> gait{
+            0.58f * swing,
+            0.48f * std::max(0.0f, swing),
+            -0.58f * swing,
+            -0.48f * std::max(0.0f, -swing),
+            -0.16f * swing, 0.08f * swing,
+            0.16f * swing, -0.08f * swing
+        };
+        return gait[std::min(motor_index, gait.size() - 1u)];
+    }
+
     enum class FootContactPhase : std::uint8_t
     {
         airborne,

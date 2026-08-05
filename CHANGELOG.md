@@ -1,5 +1,11 @@
 # Changelog
 
+## Runner v0.7.15 — locomotion and evolution editor
+
+- Added ALT-click bone selection, stiffness editing, selected-bone highlighting, and safe connected-rig deletion checks.
+- Added near/far leg display control, explicit champion restore and fresh-policy controls, and live generation/accept/reject/rollback telemetry.
+- Added manual, sweep, squat, and alternating gait-cycle previews plus firm/loose-ground traction diagnostics and heel/ball/toe labels.
+
 ## Runner v0.7.15 — side-view gait and traction
 
 - Allowed near/far legs to cross during locomotion while retaining fused-foot separation in static lessons.

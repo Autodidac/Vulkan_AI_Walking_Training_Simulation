@@ -118,7 +118,7 @@ A topology candidate must receive a bounded nursery adaptation period before com
 **Acceptance:** scaffold is selectable and editable; each operator has positive/negative tests; candidate adaptation is bounded and deterministic; accepted/rejected/rollback counters update; live rig changes only after valid improvement; all existing presets remain valid.
 
 ### WALK-EDITOR-144 — Complete controls for gait, feet, evolution, and diagnostics
-**Status:** OPEN
+**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
 
 The rig lab must expose enough control to inspect and reproduce every active locomotion mission without editing files:
 - preset and minimal scaffold selection;

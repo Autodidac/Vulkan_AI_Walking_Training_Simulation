@@ -781,6 +781,15 @@ int main()
     require(sim::foot_friction_retention(0.45f, 1.0f, 0.0f, true, false)
             < sim::foot_friction_retention(0.45f, 1.0f, 0.0f, false, false),
         "static lessons do not apply stronger planted-foot friction");
+    require(sim::rig_test_motor_input(sim::RigTestPattern::crouch,
+                0u, 0.0f, 0.0f) < 0.0f
+            && sim::rig_test_motor_input(sim::RigTestPattern::crouch,
+                1u, 0.0f, 0.0f) > 0.0f
+            && sim::rig_test_motor_input(sim::RigTestPattern::gait,
+                0u, pi * 0.5f, 0.0f)
+                * sim::rig_test_motor_input(sim::RigTestPattern::gait,
+                    2u, pi * 0.5f, 0.0f) < 0.0f,
+        "rig lab crouch and alternating gait test patterns are incorrect");
 
     const sim::CourseFeature rock_feature{
         sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
@@ -893,6 +902,13 @@ int main()
                 > 0.18f,
             "a preset can retain fused left/right foot clusters");
     }
+
+    sim::CreatureBlueprint editor_bone_rig = sim::CreatureBlueprint::scaffold();
+    require(editor_bone_rig.valid(), "editor scaffold starts invalid");
+    editor_bone_rig.bones.front().stiffness = 0.42f;
+    require(editor_bone_rig.valid()
+            && std::abs(editor_bone_rig.bones.front().stiffness - 0.42f) < 0.0001f,
+        "editor bone stiffness control cannot preserve a valid rig");
 
     const sim::CreatureBlueprint humanoid_rig = sim::CreatureBlueprint::humanoid();
     const sim::CreatureBlueprint quad_rig = sim::CreatureBlueprint::quadruped();
