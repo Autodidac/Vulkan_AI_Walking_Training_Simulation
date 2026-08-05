@@ -1,0 +1,33 @@
+name: Cache Runner v0.7.17 eye-test batch
+
+on:
+  push:
+    branches:
+      - agent/v0717-eye-test-batch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cache-runner-v0717-eye-test
+  cancel-in-progress: false
+
+jobs:
+  cache:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0717-eye-test-batch
+          fetch-depth: 0
+      - name: Update authoritative mission cache
+        run: python tools/cache_v0717_eye_test.py
+      - name: Commit cache before implementation
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git diff --cached --check
+          git commit -m 'Cache Runner v0.7.17 eye-test regression batch'
+          git push origin HEAD:agent/v0717-eye-test-batch
