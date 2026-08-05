@@ -96,7 +96,7 @@ Traction must be physical and state-aware rather than an unconditional position 
 **Acceptance:** heel/ball/toe phase tests, planted-foot static-slip bound, dynamic breakaway test, toe angular-rate test, loose/firm terrain traction comparison, no wheel-skating qualification, all-preset finite and Stand acceptance.
 
 ### WALK-EVOLUTION-143 — Structural rig evolution with nursery adaptation
-**Status:** PARTIAL — TOPOLOGY OPERATORS PASS; NEW ACTIVE JOINT SLOT GROWTH REOPENED BEFORE RELEASE
+**Status:** IMPLEMENTED — ACTIVE JOINT GROWTH, NEUTRAL SLOT TRANSFER, AND PACKAGE VALIDATION REQUIRED
 
 Evolution must begin from a minimal valid scaffold option and support real topology changes, not only strength and coordinate micro-tuning.
 
@@ -138,7 +138,7 @@ The rig lab must expose enough control to inspect and reproduce every active loc
 **Acceptance:** editor controls remain responsive under MAX training; invalid edits are rejected nonblockingly; deterministic UI-layout/control tests and packaged visual review pass.
 
 ### WALK-STATE-145 — Isolate corrected locomotion/evolution semantics
-**Status:** OPEN
+**Status:** IMPLEMENTED — CROSS-PLATFORM AND PACKAGE VALIDATION REQUIRED
 
 Any change to crouch qualification, gait evidence, foot traction, topology evolution, policy output mapping, or observations requires a new training-semantics value and isolated autosave/checkpoint/state paths. v0.7.14 and earlier policies may be explicitly imported as transfer weights only when dimensions match; they cannot silently resume as valid mastery.
 
@@ -248,9 +248,9 @@ Requires all equipment missions above or an explicitly documented reduced releas
 
 This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, packaged-runtime behavior, and release evidence agree. Contradictory runtime evidence reopens the mission.
 
-## Release target
+## Historical v0.7.14 release evidence
 
-**Target:** Runner v0.7.14
+**Historical target:** Runner v0.7.14
 
 **Release state:** PACKAGE VERIFIED — v0.7.14 Linux, Windows SDL3/Vulkan, live SandHybrid terrain, natural toe-motion gates, optional armor reference, missing-asset fallback, installed/extracted diagnostics, checksum, and manifest passed; publication in progress.
 

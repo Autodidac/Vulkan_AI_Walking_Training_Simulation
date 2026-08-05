@@ -1,5 +1,12 @@
 # Changelog
 
+## Runner v0.7.15 — active joint growth and state transfer
+
+- Bone-split mutations may now activate one free anatomy action slot as a real articulated joint.
+- Newly activated slots have their transferred actor row and bias zeroed before bounded nursery adaptation, preventing stale unused-output motion.
+- Normal resume rejects older training semantics, while explicit dimension-compatible transfer imports weights only and clears optimizer, champion, curriculum, and mastery state.
+- Expanded deterministic and executable acceptance from seven presets to eight by including the scaffold.
+
 ## Runner v0.7.15 — locomotion and evolution editor
 
 - Added ALT-click bone selection, stiffness editing, selected-bone highlighting, and safe connected-rig deletion checks.

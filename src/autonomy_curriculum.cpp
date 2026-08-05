@@ -395,6 +395,20 @@ namespace runner::rl
                     if (same_edge(motor.pivot, motor.c, original.a, original.b))
                         motor.c = inserted;
                 }
+                if (candidate.active_motor_count < sim::action_count)
+                {
+                    const std::size_t slot = candidate.active_motor_count;
+                    candidate.motors[slot] = sim::MotorConstraint{
+                        original.a, inserted, original.b
+                    };
+                    candidate.motors[slot].enabled = true;
+                    negative[slot] = 24.0f * pi / 180.0f;
+                    positive[slot] = 24.0f * pi / 180.0f;
+                    power[slot] = 0.034f;
+                    ++candidate.active_motor_count;
+                    result.activated_motor_mask = static_cast<std::uint8_t>(
+                        result.activated_motor_mask | (1u << slot));
+                }
                 result.topology_changed = true;
             }
             break;
@@ -495,6 +509,7 @@ namespace runner::rl
         {
             result.blueprint = source;
             result.topology_changed = false;
+            result.activated_motor_mask = 0u;
         }
         return result;
     }
@@ -602,6 +617,11 @@ namespace runner::rl
                 rig_generation_);
             return;
         }
+        for (std::size_t slot = 0; slot < sim::action_count; ++slot)
+        {
+            if ((mutation.activated_motor_mask & (1u << slot)) != 0u)
+                nursery.neutralize_action_slot(slot);
+        }
         nursery.set_course(stage_, difficulty_, false);
         nursery.set_exploration(std::max(0.10f, worker_.exploration()));
         constexpr int nursery_updates = 4;
@@ -635,8 +655,9 @@ namespace runner::rl
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             worker_message_ = std::format(
-                "TOPOLOGY NURSERY {} ACCEPTED {}  {:+.3f} VALID SCORE",
+                "TOPOLOGY NURSERY {} ACCEPTED {}{}  {:+.3f} VALID SCORE",
                 rig_generation_, mutation_name(mutation.kind),
+                mutation.activated_motor_mask != 0u ? " + ACTIVE JOINT" : "",
                 candidate_score - (std::isfinite(baseline) ? baseline : 0.0f));
             queue_autosave();
         }

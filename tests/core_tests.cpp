@@ -494,6 +494,31 @@ int main()
     }
     require(topology_mutation_seen && parametric_mutation_seen,
         "rig evolution does not produce both topology and parameter candidates");
+    const rl::RigMutationCandidate articulated_growth =
+        rl::evolve_rig_candidate(scaffold, 5u);
+    require(articulated_growth.changed && articulated_growth.topology_changed
+            && articulated_growth.blueprint.active_motor_count
+                == scaffold.active_motor_count + 1u
+            && articulated_growth.activated_motor_mask
+                == static_cast<std::uint8_t>(1u << scaffold.active_motor_count),
+        "bone split does not activate one neutral trainable joint slot");
+    const std::size_t grown_slot = scaffold.active_motor_count;
+    require(articulated_growth.blueprint.motors[grown_slot].enabled
+            && articulated_growth.blueprint.motors[grown_slot].a
+                < articulated_growth.blueprint.nodes.size()
+            && articulated_growth.blueprint.motors[grown_slot].pivot
+                < articulated_growth.blueprint.nodes.size()
+            && articulated_growth.blueprint.motors[grown_slot].c
+                < articulated_growth.blueprint.nodes.size(),
+        "newly activated topology motor is not structurally valid");
+
+    rl::PolicyNetwork neutral_policy{ 0xA4710u };
+    std::array<float, sim::observation_count> neutral_observation{};
+    neutral_observation.fill(0.5f);
+    neutral_policy.neutralize_action_slot(grown_slot);
+    require(std::abs(neutral_policy.evaluate(neutral_observation).mean[grown_slot])
+            < 1.0e-7f,
+        "new topology action slot retains stale actor motion after neutralization");
 
     const sim::DuckPressProfile press_clear = sim::duck_press_profile(1.0f, 0.5f, 5.0f);
     const sim::DuckPressProfile press_descend = sim::duck_press_profile(3.5f, 0.5f, 5.0f);
@@ -1170,7 +1195,8 @@ int main()
     require(sim::first_course_feature_sequence(0.0f, 29.9f) <= 3,
         "a contacted obstacle is culled like a pickup before it passes behind the actor");
 
-    const std::array<sim::CreatureBlueprint, 7> presets{
+    const std::array<sim::CreatureBlueprint, 8> presets{
+        sim::CreatureBlueprint::scaffold(),
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid(),
@@ -1805,6 +1831,32 @@ int main()
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
     require(resumed.course_stage() == trainer.course_stage(), "checkpoint curriculum stage was not restored");
+
+    rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
+    legacy.training_semantics = rl::training_semantics_version - 1u;
+    legacy.first_moment.clear();
+    legacy.second_moment.clear();
+    legacy.best_parameters.clear();
+    rl::PpoTrainer blocked_legacy{ humanoid, 16 };
+    require(!blocked_legacy.apply_checkpoint_data(legacy, error, false),
+        "legacy semantics resumed as valid mastery instead of requiring transfer");
+    rl::PpoTrainer transferred_legacy{ humanoid, 16 };
+    require(transferred_legacy.apply_checkpoint_data(legacy, error, true),
+        "explicit dimension-compatible legacy weight transfer failed: " + error);
+    require(transferred_legacy.policy().parameters() == trainer.policy().parameters()
+            && transferred_legacy.metrics().update == 0u
+            && transferred_legacy.optimizer_step() == 0u
+            && transferred_legacy.controller_state() == rl::ControllerState::transferred,
+        "legacy transfer retained optimizer, mastery, or non-transfer controller state");
+    const std::filesystem::path legacy_path =
+        std::filesystem::temp_directory_path() / "runner-v0715-legacy-transfer-test.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, legacy_path, error),
+        "failed to write legacy transfer fixture: " + error);
+    rl::PpoTrainer loaded_legacy{ humanoid, 16 };
+    require(!loaded_legacy.load_checkpoint(legacy_path, error, false)
+            && loaded_legacy.load_checkpoint(legacy_path, error, true),
+        "file-based legacy checkpoint is not resume-blocked and transfer-enabled");
+    std::filesystem::remove(legacy_path);
 
     rl::PpoTrainer wrong_rig{ sim::CreatureBlueprint::quadruped(), 16 };
     require(!wrong_rig.load_checkpoint(temporary, error, false), "mismatched rig checkpoint resumed silently");

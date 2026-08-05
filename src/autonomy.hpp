@@ -98,6 +98,7 @@ namespace runner::rl
         RigMutationKind kind{ RigMutationKind::motor_strength };
         bool changed{};
         bool topology_changed{};
+        std::uint8_t activated_motor_mask{};
     };
 
     [[nodiscard]] RigMutationCandidate evolve_rig_candidate(

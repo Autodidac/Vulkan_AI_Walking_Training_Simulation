@@ -123,6 +123,21 @@ namespace runner::rl
             parameters_[layout_.log_std + index] = value;
     }
 
+    void PolicyNetwork::neutralize_action_slot(std::size_t slot) noexcept
+    {
+        if (slot >= output_size)
+            return;
+        const std::size_t actor_base = layout_.actor_w + slot * hidden_size;
+        std::fill(parameters_.begin() + static_cast<std::ptrdiff_t>(actor_base),
+            parameters_.begin() + static_cast<std::ptrdiff_t>(actor_base + hidden_size), 0.0f);
+        std::fill(gradients_.begin() + static_cast<std::ptrdiff_t>(actor_base),
+            gradients_.begin() + static_cast<std::ptrdiff_t>(actor_base + hidden_size), 0.0f);
+        parameters_[layout_.actor_b + slot] = 0.0f;
+        gradients_[layout_.actor_b + slot] = 0.0f;
+        parameters_[layout_.log_std + slot] = std::log(0.08f);
+        gradients_[layout_.log_std + slot] = 0.0f;
+    }
+
     float PolicyNetwork::mean_exploration() const noexcept
     {
         const auto values = standard_deviation();

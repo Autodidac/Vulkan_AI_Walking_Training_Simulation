@@ -956,6 +956,7 @@ namespace runner::rl
         [[nodiscard]] std::vector<float>& gradients() noexcept { return gradients_; }
         [[nodiscard]] std::array<float, output_size> standard_deviation() const noexcept;
         void set_exploration(float standard_deviation) noexcept;
+        void neutralize_action_slot(std::size_t slot) noexcept;
         [[nodiscard]] float mean_exploration() const noexcept;
         [[nodiscard]] float log_probability(
             std::span<const float, output_size> action,
@@ -1033,6 +1034,10 @@ namespace runner::rl
         void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
+        void neutralize_action_slot(std::size_t slot) noexcept
+        {
+            policy_.neutralize_action_slot(slot);
+        }
         void set_cpu_mode(int mode) noexcept;
         [[nodiscard]] int cpu_mode() const noexcept { return cpu_mode_; }
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error) const;

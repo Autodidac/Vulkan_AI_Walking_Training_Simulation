@@ -653,7 +653,7 @@ namespace runner::sim
         if (!input || magic != "RUNRIG"
             || (version != 1 && version != 2 && version != 3 && version != 4)
             || node_count < 3 || node_count > 128 || bone_count > 256
-            || (motor_count != 4 && motor_count != action_count))
+            || motor_count == 0u || motor_count > action_count)
         {
             error = "Invalid or unsupported Runner rig file.";
             return humanoid();
