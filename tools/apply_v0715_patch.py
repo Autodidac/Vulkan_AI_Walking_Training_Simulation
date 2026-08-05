@@ -1,0 +1,202 @@
+from pathlib import Path
+
+
+def replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+app = Path("src/app.cpp")
+replace_once(
+    app,
+    "float pixels_per_meter, float ground_fraction = 0.84f) noexcept",
+    "float pixels_per_meter, float ground_fraction = 0.72f) noexcept",
+)
+replace_once(
+    app,
+    "const float ground_y = viewport.position.y + viewport.size.y * 0.84f;",
+    "const float ground_y = viewport.position.y + viewport.size.y * 0.72f;",
+)
+
+replace_once(
+    app,
+    """                    if (tile.macro_ready)
+                    {
+                        draw_world_cell(macro_x0, macro_y0,
+                            macro_x0 + sim::DeformableTerrain::macro_tile_size,
+                            macro_y0 + sim::DeformableTerrain::macro_tile_size,
+                            tile.uniform_material);
+                        continue;
+                    }
+""",
+    """                    const float macro_y1 = macro_y0
+                        + sim::DeformableTerrain::macro_tile_size;
+                    bool near_surface = false;
+                    for (std::size_t local_x = 0;
+                        local_x < sim::DeformableTerrain::macro_cell_side; ++local_x)
+                    {
+                        const float sample_x = macro_x0
+                            + (static_cast<float>(local_x) + 0.5f)
+                                * sim::DeformableTerrain::fine_cell_spacing;
+                        if (macro_y1 >= environment.ground_height_at(sample_x)
+                            - sim::DeformableTerrain::fine_cell_spacing * 3.0f)
+                        {
+                            near_surface = true;
+                            break;
+                        }
+                    }
+                    if (tile.macro_ready && !tile.active && !near_surface)
+                    {
+                        draw_world_cell(macro_x0, macro_y0,
+                            macro_x0 + sim::DeformableTerrain::macro_tile_size,
+                            macro_y1, tile.uniform_material);
+                        continue;
+                    }
+""",
+)
+
+replace_once(
+    app,
+    """
+            std::vector<Vec2> surface{};
+            const int first_column = static_cast<int>(std::floor(
+                left / sim::DeformableTerrain::fine_cell_spacing));
+            const int last_column = static_cast<int>(std::ceil(
+                right / sim::DeformableTerrain::fine_cell_spacing));
+            surface.reserve(static_cast<std::size_t>(std::max(0,
+                last_column - first_column + 1)));
+            for (int column = first_column; column <= last_column; ++column)
+            {
+                const float x = static_cast<float>(column)
+                    * sim::DeformableTerrain::fine_cell_spacing;
+                surface.push_back(world_to_screen({ x, environment.ground_height_at(x) },
+                    viewport, camera, scale));
+            }
+            if (surface.size() >= 2u)
+                canvas.polyline(surface, 1.5f, rgb(0x5d6870, 0.72f));
+""",
+    "\n",
+)
+
+replace_once(
+    app,
+    """
+            constexpr float dash_spacing = 1.6f;
+            const int first_dash = static_cast<int>(std::floor((left + progress) / dash_spacing));
+            const int last_dash = static_cast<int>(std::ceil((right + progress) / dash_spacing));
+            for (int index = first_dash; index <= last_dash; ++index)
+            {
+                const float x0 = static_cast<float>(index) * dash_spacing - progress;
+                const float x1 = x0 + 0.72f;
+                const Vec2 start = world_to_screen(
+                    { x0, environment.ground_height_at(x0) + 0.035f }, viewport, camera, scale);
+                const Vec2 end = world_to_screen(
+                    { x1, environment.ground_height_at(x1) + 0.035f }, viewport, camera, scale);
+                canvas.line(start, end, 3.0f, rgb(0xd6d9c4, 0.82f));
+            }
+""",
+    "\n",
+)
+replace_once(app, "                if (index < 0)\n", "                if (index <= 0)\n")
+
+replace_once(
+    app,
+    """            if (!environment.particles().empty())
+                camera_x = lerp(camera_x,
+                    environment.particles()[environment.blueprint().root_node].position.x + 1.8f, 0.045f);
+            add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
+            draw_course_ground(environment, viewport, camera_x, 90.0f);
+            draw_course_reference(environment, viewport, camera_x, 90.0f);
+            draw_course_features(environment, viewport, camera_x, 90.0f);
+            draw_creature(environment, viewport, camera_x, 90.0f);
+""",
+    """            constexpr float live_pixels_per_meter = 22.0f;
+            if (!environment.particles().empty())
+                camera_x = lerp(camera_x,
+                    environment.particles()[environment.blueprint().root_node].position.x + 5.5f, 0.035f);
+            add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
+            draw_course_ground(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_course_reference(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_course_features(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_creature(environment, viewport, camera_x, live_pixels_per_meter);
+""",
+)
+replace_once(app, "runner-v0714-autosave.eppo", "runner-v0715-autosave.eppo")
+replace_once(app, "runner-v0714-evolved.rig", "runner-v0715-evolved.rig")
+replace_once(app, "runner-v0714-autonomy.state", "runner-v0715-autonomy.state")
+
+curriculum = Path("src/autonomy_curriculum.cpp")
+replace_once(
+    curriculum,
+    """        if (!metrics.evaluation_valid)
+        {
+            worker_message_ = std::format("INVALID RUN REJECTED - {} / {}",
+                metrics.evaluation_invalid_runs,
+                primary_motion_rejection_name(metrics.evaluation_rejection_mask));
+        }
+""",
+    """        if (!metrics.evaluation_valid)
+        {
+            const bool catastrophic_invalid = metrics.evaluation_quality_key == 0u
+                || metrics.evaluation_distance < -0.25f
+                || metrics.evaluation_invalid_runs >= 3u;
+            if (catastrophic_invalid && worker_.has_best_policy()
+                && worker_.restore_best_policy())
+            {
+                ++rollback_count_;
+                mastery_streak_ = 0;
+                degradation_streak_ = 0;
+                worker_.set_course(stage_, difficulty_, false);
+                worker_message_ = "INVALID/BACKWARD GENERATION - RESTORED CHAMPION AND RESTARTED LESSON";
+                queue_autosave();
+                return;
+            }
+            if (catastrophic_invalid && !worker_.has_best_policy()
+                && metrics.evaluation_count % 3u == 0u)
+            {
+                worker_.set_blueprint(worker_.blueprint(), false);
+                worker_.set_course(stage_, difficulty_, false);
+                mastery_streak_ = 0;
+                degradation_streak_ = 0;
+                worker_message_ = "NO VALID CHAMPION AFTER THREE EVALUATIONS - RESET POLICY NURSERY";
+                queue_autosave();
+                return;
+            }
+            worker_message_ = std::format("INVALID RUN REJECTED - {} / {}",
+                metrics.evaluation_invalid_runs,
+                primary_motion_rejection_name(metrics.evaluation_rejection_mask));
+        }
+""",
+)
+
+replace_once(
+    Path("src/ppo.hpp"),
+    "inline constexpr std::uint32_t training_semantics_version = 0x0007'1400u;",
+    "inline constexpr std::uint32_t training_semantics_version = 0x0007'1500u;",
+)
+replace_once(
+    Path("CMakeLists.txt"),
+    "project(Runner VERSION 0.7.14 LANGUAGES CXX)",
+    "project(Runner VERSION 0.7.15 LANGUAGES CXX)",
+)
+
+mission = Path("missioncache.md")
+old = mission.read_text(encoding="utf-8")
+header = """# Runner v0.7.15 viewport, terrain, and failed-policy recovery
+
+- [x] Pull the live camera back from 90 to 22 pixels per meter and frame the actor left of center.
+- [x] Raise the live ground plane to remove the mostly-empty-sky composition.
+- [x] Remove the duplicate interpolated surface polyline and moving course dashes.
+- [x] Keep exposed/active terrain rendered as fine granular cells; reserve macro tiles for deep inactive uniform material.
+- [x] Suppress the meaningless zero-distance course sign.
+- [x] Restore the best controller after catastrophic invalid/backward evaluations.
+- [x] Reset a policy nursery after three catastrophic evaluations when no champion exists.
+- [x] Bump training semantics and autosave names so v0.7.14 failed policies are not silently reused.
+- [ ] Validate the Windows Vulkan application package and publish v0.7.15.
+
+"""
+if not old.startswith("# Runner v0.7.15 viewport"):
+    mission.write_text(header + old, encoding="utf-8")
