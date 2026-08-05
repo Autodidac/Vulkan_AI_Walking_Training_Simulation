@@ -39,6 +39,18 @@ namespace runner::sim
             || stage == CourseStage::moving_hazards;
     }
 
+    [[nodiscard]] constexpr float terrain_sample_x(float world_x,
+        float course_progress) noexcept
+    {
+        return world_x + course_progress;
+    }
+
+    [[nodiscard]] constexpr float terrain_world_x(float terrain_x,
+        float course_progress) noexcept
+    {
+        return terrain_x - course_progress;
+    }
+
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven

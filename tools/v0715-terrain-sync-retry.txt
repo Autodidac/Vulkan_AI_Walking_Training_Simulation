@@ -1,1 +1,0 @@
-Retry the terrain synchronization materialization after making the coordinate helpers constexpr.

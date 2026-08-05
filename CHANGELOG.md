@@ -5,6 +5,7 @@
 - Pulled the live course camera back and reframed the terrain so the rig appears as a small training subject with meaningful course visibility.
 - Removed the duplicate surface polyline, moving pseudo-ground dashes, and zero-distance obstruction.
 - Preserved fine granular cells at exposed and active terrain while restricting macro-tile quads to deep inactive uniform material.
+- Synchronized rendered terrain with the treadmill-space collision map and rendered flat lessons from their actual y=0 collision plane.
 - Added automatic champion restoration for catastrophic invalid or backward generations and nursery reset when no valid champion exists.
 - Isolated v0.7.15 autosaves and policy semantics from failed v0.7.14 training state.
 

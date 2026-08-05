@@ -789,19 +789,19 @@ namespace runner::sim
     {
         if (!stage_uses_deformable_terrain(course_stage_))
             return 0.0f;
-        return terrain_.height_at(x + course_progress());
+        return terrain_.height_at(terrain_sample_x(x, course_progress()));
     }
 
     float Environment::terrain_firmness_at(float x) const noexcept
     {
         return stage_uses_deformable_terrain(course_stage_)
-            ? terrain_.firmness_at(x + course_progress()) : 1.0f;
+            ? terrain_.firmness_at(terrain_sample_x(x, course_progress())) : 1.0f;
     }
 
     float Environment::terrain_looseness_at(float x) const noexcept
     {
         return stage_uses_deformable_terrain(course_stage_)
-            ? terrain_.looseness_at(x + course_progress()) : 0.0f;
+            ? terrain_.looseness_at(terrain_sample_x(x, course_progress())) : 0.0f;
     }
 
     void Environment::update_materials(float dt) noexcept
@@ -860,7 +860,7 @@ namespace runner::sim
             item.position.y = ground + item.radius;
             if (item.kind == MaterialKind::sand)
             {
-                terrain_.deposit(item.position.x + course_progress(),
+                terrain_.deposit(terrain_sample_x(item.position.x, course_progress()),
                     std::clamp(item.radius * item.radius * 2.8f, 0.004f, 0.025f), 0.18f);
                 item.active = false;
             }
@@ -870,7 +870,7 @@ namespace runner::sim
                 item.velocity.x *= 0.72f;
                 if (std::abs(item.velocity.x) < 0.08f && std::abs(item.velocity.y) < 0.08f)
                 {
-                    terrain_.deposit(item.position.x + course_progress(), item.radius * 0.12f, item.density);
+                    terrain_.deposit(terrain_sample_x(item.position.x, course_progress()), item.radius * 0.12f, item.density);
                     item.active = false;
                 }
             }
@@ -907,7 +907,8 @@ namespace runner::sim
             const float slip = std::abs((particle.position.x - particle.previous.x)
                 / std::max(dt, 1.0e-5f));
             const float load = std::clamp(1.0f / std::max(particle.inverse_mass, 0.15f), 0.5f, 3.5f);
-            terrain_.apply_pressure(particle.position.x + course_progress(), load, slip, dt);
+            terrain_.apply_pressure(terrain_sample_x(particle.position.x, course_progress()),
+                load, slip, dt);
         }
     }
 

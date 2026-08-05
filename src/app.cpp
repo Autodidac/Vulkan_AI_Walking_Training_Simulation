@@ -525,10 +525,6 @@ namespace runner
             const float half_view = viewport.size.x * 0.5f / scale;
             const float left = camera - half_view - sim::DeformableTerrain::macro_tile_size;
             const float right = camera + half_view + sim::DeformableTerrain::macro_tile_size;
-            const int first_macro = static_cast<int>(std::floor(
-                left / sim::DeformableTerrain::macro_tile_size));
-            const int last_macro = static_cast<int>(std::ceil(
-                right / sim::DeformableTerrain::macro_tile_size));
 
             auto material_color = [](sandhybrid::Material material)
             {
@@ -547,15 +543,55 @@ namespace runner
                 canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y },
                     material_color(material));
             };
+            auto draw_world_color = [&](float x0, float y0, float x1, float y1,
+                Color color)
+            {
+                const Vec2 minimum = world_to_screen({ x0, y0 }, viewport, camera, scale);
+                const Vec2 maximum = world_to_screen({ x1, y1 }, viewport, camera, scale);
+                canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y }, color);
+            };
 
-            for (int world_macro = first_macro; world_macro <= last_macro; ++world_macro)
+            if (!sim::stage_uses_deformable_terrain(environment.course_stage()))
+            {
+                const Vec2 surface = world_to_screen({ camera, 0.0f }, viewport, camera, scale);
+                canvas.quad({ viewport.position.x, surface.y },
+                    viewport.position + viewport.size, rgb(0x4d392c));
+
+                const float cell = sim::DeformableTerrain::fine_cell_spacing;
+                const int first_cell = static_cast<int>(std::floor(left / cell));
+                const int last_cell = static_cast<int>(std::ceil(right / cell));
+                for (int column = first_cell; column <= last_cell; ++column)
+                {
+                    const float x0 = static_cast<float>(column) * cell;
+                    const std::uint32_t hash = static_cast<std::uint32_t>(column) * 2654435761u;
+                    const Color upper = (hash & 1u) == 0u
+                        ? rgb(0x77543a) : rgb(0x6b4a34);
+                    const Color lower = (hash & 2u) == 0u
+                        ? rgb(0x604330) : rgb(0x593d2d);
+                    draw_world_color(x0, -cell, x0 + cell, 0.0f, upper);
+                    draw_world_color(x0, -cell * 2.0f, x0 + cell, -cell, lower);
+                }
+                return;
+            }
+
+            const float progress = environment.course_progress();
+            const float source_left = sim::terrain_sample_x(left, progress);
+            const float source_right = sim::terrain_sample_x(right, progress);
+            const int first_source_macro = static_cast<int>(std::floor(
+                source_left / sim::DeformableTerrain::macro_tile_size));
+            const int last_source_macro = static_cast<int>(std::ceil(
+                source_right / sim::DeformableTerrain::macro_tile_size));
+
+            for (int source_macro = first_source_macro;
+                source_macro <= last_source_macro; ++source_macro)
             {
                 const auto wrapped_macro = static_cast<std::size_t>((
-                    world_macro % static_cast<int>(sim::DeformableTerrain::macro_columns)
+                    source_macro % static_cast<int>(sim::DeformableTerrain::macro_columns)
                     + static_cast<int>(sim::DeformableTerrain::macro_columns))
                     % static_cast<int>(sim::DeformableTerrain::macro_columns));
-                const float macro_x0 = static_cast<float>(world_macro)
+                const float source_macro_x0 = static_cast<float>(source_macro)
                     * sim::DeformableTerrain::macro_tile_size;
+                const float macro_x0 = sim::terrain_world_x(source_macro_x0, progress);
                 for (std::size_t macro_y = 0;
                     macro_y < sim::DeformableTerrain::macro_rows; ++macro_y)
                 {
@@ -615,7 +651,6 @@ namespace runner
                     }
                 }
             }
-
         }
 
         void draw_course_reference(const sim::Environment& environment, Rect viewport,

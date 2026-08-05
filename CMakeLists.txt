@@ -111,6 +111,9 @@ if(RUNNER_BUILD_APP)
             "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
             "$<TARGET_FILE_DIR:Runner>/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
             "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
@@ -121,6 +124,7 @@ if(RUNNER_BUILD_APP)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
         DESTINATION docs RENAME SandHybrid-missioncache.md)

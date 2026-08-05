@@ -7,6 +7,8 @@
 - [x] Remove the duplicate interpolated terrain polyline and moving dashed pseudo-ground.
 - [x] Suppress the zero-distance sign that rendered as a large opaque column.
 - [x] Render exposed, active, and near-surface terrain as fine granular cells while retaining deep inactive uniform macro tiles.
+- [x] Render flat lessons from the same y=0 collision plane instead of showing the hidden deformable course map.
+- [x] Use one canonical world-to-terrain treadmill transform for collision, pressure, deposits, sampling, and rendering.
 - [x] Isolate v0.7.15 autosaves from poisoned v0.7.14 policies.
 - [x] Restore the verified champion after catastrophic invalid or backward evaluations.
 - [x] Reset a failed policy nursery after three catastrophic evaluations when no champion exists.
