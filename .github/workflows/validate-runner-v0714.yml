@@ -1,4 +1,4 @@
-name: Validate Runner v0.7.15 viewport and terrain sync
+name: Validate Runner v0.7.15 terrain and rig evolution
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ jobs:
   linux-source:
     if: github.head_ref == 'agent/v0715-ground-camera-character-scale'
     runs-on: ubuntu-24.04
-    timeout-minutes: 80
+    timeout-minutes: 100
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
     steps:
@@ -31,45 +31,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Apply staged terrain synchronization repair
+      - name: Apply staged v0.7.15 completion patches
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -f tools/apply_v0715_terrain_sync.py ]]; then
-            python3 - <<'PY'
-          from pathlib import Path
-          path = Path('tools/apply_v0715_terrain_sync.py')
-          text = path.read_text(encoding='utf-8')
-          old = '''    for old, new, label in replacements:
-                  text = replace_once(text, old, new, label)
-          '''
-          new = '''    for old, new, label in replacements:
-                  expected = 2 if label == "material deposit terrain mapping" else 1
-                  count = text.count(old)
-                  if count != expected:
-                      raise RuntimeError(
-                          f"{label}: expected {expected} matches, found {count}")
-                  text = text.replace(old, new)
-          '''
-          if old not in text:
-              raise SystemExit('terrain-sync replacement loop was not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-            python3 tools/apply_v0715_terrain_sync.py
+          if [[ -f tools/apply_v0715_rig_evolution.py ]]; then
+            python3 tools/apply_v0715_rig_evolution.py
           fi
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('src/simulation.hpp')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              '[[nodiscard]] inline float terrain_sample_x',
-              '[[nodiscard]] constexpr float terrain_sample_x', 1)
-          text = text.replace(
-              '[[nodiscard]] inline float terrain_world_x',
-              '[[nodiscard]] constexpr float terrain_world_x', 1)
-          path.write_text(text, encoding='utf-8')
-          PY
-          rm -f tools/apply_v0715_terrain_sync.py tools/v0715-terrain-sync-retry.txt
+          rm -f tools/apply_v0715_rig_evolution.py tools/v0715-evolution-retry.txt
           git diff --check
 
       - name: Verify source contracts
@@ -82,9 +51,13 @@ jobs:
           grep -F 'const float source_left = sim::terrain_sample_x(left, progress);' src/app.cpp
           grep -F 'constexpr float terrain_sample_x' src/simulation.hpp
           grep -F 'constexpr float terrain_world_x' src/simulation.hpp
-          grep -F 'reset_policy(0x715000u' src/autonomy_curriculum.cpp
-          grep -F "training_semantics_version = 0x0007'1500u" src/ppo.hpp
-          test ! -f tools/apply_v0715_terrain_sync.py
+          grep -F 'static CreatureBlueprint scaffold();' src/simulation.hpp
+          grep -F 'RigMutationCandidate evolve_rig_candidate' src/autonomy_curriculum.cpp
+          grep -F 'TOPOLOGY NURSERY' src/autonomy_curriculum.cpp
+          grep -F 'PpoTrainer nursery(candidate, 16, false);' src/autonomy_curriculum.cpp
+          grep -F "training_semantics_version = 0x0007'1501u" src/ppo.hpp
+          grep -F 'SCAFFOLD' src/app.cpp
+          test ! -f tools/apply_v0715_rig_evolution.py
           test ! -f tools/materialize_runner_v0715.py
           test ! -f cmake/generate_runner_v0715_sources.cmake
 
@@ -106,7 +79,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if [[ -n "$(git status --porcelain)" ]]; then
             git add -A
-            git commit -m '[skip ci] Synchronize Runner v0.7.15 terrain rendering with physics'
+            git commit -m '[skip ci] Complete Runner v0.7.15 structural rig evolution'
             git push origin HEAD:agent/v0715-ground-camera-character-scale
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -114,7 +87,7 @@ jobs:
   windows-package:
     needs: linux-source
     runs-on: windows-2025
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
       VCPKG_ROOT: ${{ github.workspace }}\vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
