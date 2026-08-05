@@ -33,7 +33,9 @@ jobs:
         run: cp .github/workflows/runner-v0716-release.yml tools/runner-v0716-release.generated.yml
 
       - name: Restore workflow directory for token-safe source push
-        run: git checkout HEAD -- .github/workflows
+        run: |
+          git checkout HEAD -- .github/workflows
+          rm -f .github/workflows/runner-v0716-release.yml
 
       - name: Remove consumed source applicators
         run: |
