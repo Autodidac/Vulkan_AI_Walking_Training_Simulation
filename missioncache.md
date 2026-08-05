@@ -44,7 +44,7 @@ Flat lessons render their actual y=0 collision plane. Deformable lessons render 
 **Acceptance:** deterministic coordinate round-trip and render/collision sampling tests; Linux and Windows suites; live screenshot shows feet, terrain cells, obstacles, and pressure marks locked together with no duplicate ground.
 
 ### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
+**Status:** PARTIAL — POSTURE EVIDENCE PASSES; FORCED FOOT-PIN REMOVAL REOPENED BEFORE RELEASE
 
 A crouch must lower the pelvis through bilateral leg compression. Clearing the platen by folding the torso forward is invalid even when feet remain on the ground.
 
@@ -60,7 +60,7 @@ Required evidence:
 
 **Affected systems:** duck teacher, posture stabilizer, gait metrics, stage qualification, evaluation quality key, PIP selection, rig evolution score, observations, telemetry, autosave semantics, tests.
 
-**Acceptance:** an adversarial hip-hinge pose that clears the press is rejected; a bilateral squat passes repeated seeded hold/recovery tests; all seven presets retain valid Stand behavior; released screenshot visibly shows pelvis-down/knees-bent posture.
+**Acceptance:** an adversarial hip-hinge pose that clears the press is rejected; a bilateral squat passes repeated seeded hold/recovery tests without forced foot coordinates; all eight presets retain valid Stand behavior; released screenshot visibly shows pelvis-down/knees-bent posture.
 
 ### WALK-SIDEGAIT-141 — Normal side-view limb crossing and alternating steps
 **Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
@@ -79,11 +79,12 @@ Required evidence:
 **Acceptance:** deterministic gait-cycle fixture proves alternating crossing, forward progress, and nonzero swing clearance; adversarial sliding and same-side strike fixtures fail; live view shows one leg passing in front of the other.
 
 ### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
+**Status:** PARTIAL — GROUND FRICTION PASSES; STATIC CROUCH HARD-PIN REOPENED BEFORE RELEASE
 
 Bipeds use explicit ankle, heel, ball, and toe geometry. The rear foot is a stable plate; the toe is an articulated segment. Contact transitions support heel strike, flat-foot loading, toe roll, toe-off, and swing clearance.
 
 Traction must be physical and state-aware rather than an unconditional position pin or cosmetic anti-slide gate:
+- no curriculum stabilizer may assign semantic heel/ball/toe x/y coordinates, erase their velocity, or mark them grounded; only collision and the ground/friction solver may establish support;
 - static friction holds a loaded planted foot below a bounded tangential threshold;
 - dynamic friction permits controlled breakaway, toe roll, crouch adjustment, and unstable-ground recovery;
 - terrain firmness/looseness modifies traction consistently;
@@ -145,8 +146,10 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 ### WALK-REGRESSION-146 — Exhaustive interaction audit for v0.7.15
 **Status:** OPEN — RELEASE BLOCKING
 
+**Second-audit finding:** the static crouch stabilizer still wrote authored x positions, floor y positions, previous positions, and `grounded=true` into every semantic foot contact several times per solver iteration. That invalidated the claimed friction-only support model and could manufacture the very crouch being evaluated. The release remains blocked until those assignments are removed and adversarial tests prove support, squat shape, recovery, and bounded slip still pass through the real ground solver.
+
 Before release, re-evaluate at minimum:
-- all seven preset Stand and static-crouch behavior;
+- all eight preset Stand and static-crouch behavior;
 - monoped single-support semantics;
 - quadruped/crawler/hexapod multi-contact behavior;
 - chicken anatomy and passive appendages;
