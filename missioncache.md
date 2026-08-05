@@ -156,6 +156,8 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 
 **MSVC portability finding:** exact-source Windows run `31016262550`, job `92341400943`, built `RunnerCore`, `Runner.exe`, and the other native targets but failed `RunnerDeformableTerrainTests` because MSVC 19.51 does not treat `std::abs(float)` as constexpr in the terrain transform `static_assert`. This is a test-only cross-platform defect. The correction must preserve compile-time transform verification without relying on library constexpr coverage, then rerun Linux, Windows, the complete acceptance matrix, and runtime diagnostics.
 
+**MSVC portability correction:** the transform round-trip remains a compile-time assertion, but now compares the signed constexpr error directly against positive and negative epsilon bounds. This avoids implementation-dependent `std::abs` constexpr support without weakening the invariant. Full cross-platform revalidation remains required.
+
 Before release, re-evaluate at minimum:
 - all eight preset Stand and static-crouch behavior;
 - monoped single-support semantics;

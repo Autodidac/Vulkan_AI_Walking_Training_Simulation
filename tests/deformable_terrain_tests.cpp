@@ -50,8 +50,11 @@ int main()
     constexpr float transform_progress = 11.75f;
     constexpr float transform_source_x = sim::terrain_sample_x(
         transform_world_x, transform_progress);
-    static_assert(std::abs(sim::terrain_world_x(transform_source_x,
-        transform_progress) - transform_world_x) < 1.0e-6f);
+    constexpr float transform_round_trip_error =
+        sim::terrain_world_x(transform_source_x, transform_progress)
+        - transform_world_x;
+    static_assert(transform_round_trip_error > -1.0e-6f
+        && transform_round_trip_error < 1.0e-6f);
     sim::DeformableTerrain first{}, second{};
     first.reset(0x12345678u, 0.72f); second.reset(0x12345678u, 0.72f);
     for (std::size_t i=0; i<sim::DeformableTerrain::cell_count; ++i)

@@ -2,6 +2,7 @@
 
 ## Runner v0.7.15 — measured static-friction contacts
 
+- Kept terrain coordinate round-trip verification compile-time portable across GCC 14 and MSVC 19.51 without depending on `std::abs(float)` constexpr support.
 - Removed all authored-coordinate foot pinning from the crouch curriculum.
 - Added ground-solver contact anchors captured from actual heel/ball/toe collisions.
 - Static support resolves zero-slip friction against the measured contact; moving stages retain bounded release for swing, toe-off, and jumping.
