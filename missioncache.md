@@ -63,7 +63,7 @@ Required evidence:
 **Acceptance:** an adversarial hip-hinge pose that clears the press is rejected; a bilateral squat passes repeated seeded hold/recovery tests; all seven presets retain valid Stand behavior; released screenshot visibly shows pelvis-down/knees-bent posture.
 
 ### WALK-SIDEGAIT-141 — Normal side-view limb crossing and alternating steps
-**Status:** OPEN — SCREENSHOT REOPENED
+**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
 
 Near and far legs may pass one another in screen space. One foot must be able to land ahead of the other without a support-separation solver forcing a split, fused plate, or jumping-jack pose. Semantic identity stays distinct even while silhouettes overlap.
 
@@ -79,7 +79,7 @@ Required evidence:
 **Acceptance:** deterministic gait-cycle fixture proves alternating crossing, forward progress, and nonzero swing clearance; adversarial sliding and same-side strike fixtures fail; live view shows one leg passing in front of the other.
 
 ### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** OPEN — SCREENSHOT REOPENED
+**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
 
 Bipeds use explicit ankle, heel, ball, and toe geometry. The rear foot is a stable plate; the toe is an articulated segment. Contact transitions support heel strike, flat-foot loading, toe roll, toe-off, and swing clearance.
 

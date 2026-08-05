@@ -1,5 +1,12 @@
 # Changelog
 
+## Runner v0.7.15 — side-view gait and traction
+
+- Allowed near/far legs to cross during locomotion while retaining fused-foot separation in static lessons.
+- Required paired-leg step credit to include a genuine lifted swing crossing before the next strike.
+- Added terrain-aware static/dynamic foot friction, heel/flat/toe-off phases, crossing and slip telemetry, and readable near/far leg rendering.
+- Added an alternating gait teacher and deterministic crossing, contact-phase, and firm-versus-loose traction tests.
+
 ## Runner v0.7.15 — real crouch correction
 
 - Replaced head-clearance-only duck evidence with pelvis drop, bilateral knee flexion, bounded torso pitch, center-of-mass support, feet-only contact, held crouch, and upright recovery evidence.

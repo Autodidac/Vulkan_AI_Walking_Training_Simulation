@@ -605,6 +605,35 @@ namespace runner::sim
         return traction_contact ? 0.0f : 0.985f;
     }
 
+    [[nodiscard]] inline float foot_friction_retention(float horizontal_speed,
+        float firmness, float looseness, bool static_lesson,
+        bool toe_contact) noexcept
+    {
+        firmness = clamp(firmness, 0.0f, 1.0f);
+        looseness = clamp(looseness, 0.0f, 1.0f);
+        const float static_limit = std::max(0.035f,
+            0.08f + firmness * 0.18f - looseness * 0.06f);
+        if (std::abs(horizontal_speed) <= static_limit)
+            return 0.0f;
+        float retention = 0.30f - firmness * 0.22f + looseness * 0.10f;
+        if (static_lesson)
+            retention *= 0.35f;
+        if (toe_contact)
+            retention = std::max(retention, 0.060f);
+        return clamp(retention, 0.0f, 0.42f);
+    }
+
+    [[nodiscard]] inline bool qualifies_crossing_step(int previous_side,
+        int strike_side, float seconds_since_previous, float root_displacement,
+        float swing_air_seconds, float swing_clearance, bool swing_crossed,
+        bool crossing_required) noexcept
+    {
+        return (!crossing_required || swing_crossed)
+            && qualifies_supported_step(previous_side, strike_side,
+                seconds_since_previous, root_displacement,
+                swing_air_seconds, swing_clearance);
+    }
+
     inline constexpr float course_marker_spacing_m = 8.0f;
     inline constexpr int course_safe_runway_markers = 5;
     inline constexpr int course_feature_cycle_length = 5;
@@ -661,6 +690,39 @@ namespace runner::sim
         case 3: return CourseFeatureKind::moving_hazard;
         default: return CourseFeatureKind::projectile;
         }
+    }
+
+    enum class FootContactPhase : std::uint8_t
+    {
+        airborne,
+        heel_strike,
+        flat,
+        toe_off
+    };
+
+    [[nodiscard]] inline std::string_view foot_contact_phase_name(
+        FootContactPhase phase) noexcept
+    {
+        switch (phase)
+        {
+        case FootContactPhase::airborne: return "AIR";
+        case FootContactPhase::heel_strike: return "HEEL";
+        case FootContactPhase::flat: return "FLAT";
+        case FootContactPhase::toe_off: return "TOE";
+        }
+        return "UNKNOWN";
+    }
+
+    [[nodiscard]] inline FootContactPhase classify_foot_contact_phase(
+        bool heel, bool ball, bool toe) noexcept
+    {
+        if (!heel && !ball && !toe)
+            return FootContactPhase::airborne;
+        if (heel && !toe)
+            return FootContactPhase::heel_strike;
+        if (toe && !heel)
+            return FootContactPhase::toe_off;
+        return FootContactPhase::flat;
     }
 
     struct Particle
@@ -918,6 +980,17 @@ namespace runner::sim
         [[nodiscard]] float collision_count() const noexcept { return collision_count_; }
         [[nodiscard]] float airborne_ratio() const noexcept;
         [[nodiscard]] std::uint32_t alternating_steps() const noexcept { return alternating_steps_; }
+        [[nodiscard]] std::uint32_t limb_crossings() const noexcept { return limb_crossings_; }
+        [[nodiscard]] std::uint32_t heel_strikes() const noexcept { return heel_strike_count_; }
+        [[nodiscard]] std::uint32_t toe_offs() const noexcept { return toe_off_count_; }
+        [[nodiscard]] FootContactPhase left_foot_phase() const noexcept
+        {
+            return left_foot_phase_;
+        }
+        [[nodiscard]] FootContactPhase right_foot_phase() const noexcept
+        {
+            return right_foot_phase_;
+        }
         [[nodiscard]] std::uint32_t gait_cycles() const noexcept
         {
             return blueprint_.monopedal_gait()
@@ -1032,6 +1105,8 @@ namespace runner::sim
         [[nodiscard]] float contact_cluster_top_y(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] float contact_cluster_horizontal_speed(std::uint16_t contact_node,
             float dt) const noexcept;
+        [[nodiscard]] float contact_cluster_center_x(std::uint16_t contact_node) const noexcept;
+        [[nodiscard]] FootContactPhase detect_foot_contact_phase(bool left) const noexcept;
         [[nodiscard]] float contact_cluster_clearance(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] bool knee_before_foot_fault() const noexcept;
 
@@ -1112,6 +1187,13 @@ namespace runner::sim
         float right_swing_seconds_{};
         float left_swing_clearance_{};
         float right_swing_clearance_{};
+        bool left_swing_crossed_{};
+        bool right_swing_crossed_{};
+        std::uint32_t limb_crossings_{};
+        std::uint32_t heel_strike_count_{};
+        std::uint32_t toe_off_count_{};
+        FootContactPhase left_foot_phase_{ FootContactPhase::airborne };
+        FootContactPhase right_foot_phase_{ FootContactPhase::airborne };
         float action_change_energy_{};
         bool alternating_step_this_step_{};
         float maximum_speed_kmh_{};

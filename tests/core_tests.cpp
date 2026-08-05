@@ -233,6 +233,37 @@ namespace runner::sim
             environment.separate_support_clusters();
         }
 
+        static bool moving_stage_allows_leg_crossing(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::uneven, 0.45f);
+            if (!environment.valid_node(environment.blueprint_.left_contact_node)
+                || !environment.valid_node(environment.blueprint_.right_contact_node))
+                return false;
+            const float left_before = environment.particles_[
+                environment.blueprint_.left_contact_node].position.x;
+            const float right_before = environment.particles_[
+                environment.blueprint_.right_contact_node].position.x;
+            const float left_shift = right_before - left_before + 0.36f;
+            const float right_shift = left_before - right_before - 0.36f;
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (environment.blueprint_.is_left_support_seed(index))
+                {
+                    environment.particles_[index].position.x += left_shift;
+                    environment.particles_[index].previous.x += left_shift;
+                }
+                if (environment.blueprint_.is_right_support_seed(index))
+                {
+                    environment.particles_[index].position.x += right_shift;
+                    environment.particles_[index].previous.x += right_shift;
+                }
+            }
+            const float crossed_gap = primary_support_gap(environment);
+            environment.separate_support_clusters();
+            return crossed_gap < 0.0f
+                && primary_support_gap(environment) < 0.0f;
+        }
+
         static float primary_support_gap(const Environment& environment) noexcept
         {
             return environment.particles_[environment.blueprint_.right_contact_node].position.x
@@ -726,6 +757,30 @@ int main()
         "tiny contact wiggle still counts as a supported walking step");
     require(sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.16f, 0.12f),
         "real lifted swing and landing is rejected as a walking step");
+    require(!sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+            0.16f, 0.12f, false, true)
+            && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+                0.16f, 0.12f, true, true)
+            && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
+                0.16f, 0.12f, false, false),
+        "paired gait crossing is either optional or incorrectly forced on nonpaired rigs");
+    require(sim::classify_foot_contact_phase(false, false, false)
+                == sim::FootContactPhase::airborne
+            && sim::classify_foot_contact_phase(true, false, false)
+                == sim::FootContactPhase::heel_strike
+            && sim::classify_foot_contact_phase(true, true, true)
+                == sim::FootContactPhase::flat
+            && sim::classify_foot_contact_phase(false, true, true)
+                == sim::FootContactPhase::toe_off,
+        "heel, flat-foot, toe-off, and airborne phases are not distinct");
+    require(sim::foot_friction_retention(0.04f, 1.0f, 0.0f, false, false) == 0.0f,
+        "loaded low-speed foot does not enter static friction");
+    require(sim::foot_friction_retention(0.45f, 1.0f, 0.0f, false, false)
+            < sim::foot_friction_retention(0.45f, 0.25f, 0.75f, false, false),
+        "firm ground does not provide more dynamic traction than loose ground");
+    require(sim::foot_friction_retention(0.45f, 1.0f, 0.0f, true, false)
+            < sim::foot_friction_retention(0.45f, 1.0f, 0.0f, false, false),
+        "static lessons do not apply stronger planted-foot friction");
 
     const sim::CourseFeature rock_feature{
         sim::CourseFeatureKind::rock, {}, {}, 0.27f, {}
@@ -809,6 +864,10 @@ int main()
             "chicken balance still reproduces the live 0/6 valid-seed regression");
     }
 
+    sim::Environment crossing_feet(sim::CreatureBlueprint::humanoid(), 18);
+    require(sim::EnvironmentTestAccess::moving_stage_allows_leg_crossing(crossing_feet),
+        "support separation prevents one side-view leg from passing the other");
+
     sim::Environment fused_feet(sim::CreatureBlueprint::humanoid(), 19);
     sim::EnvironmentTestAccess::force_fused_supports(fused_feet);
     sim::EnvironmentTestAccess::separate_supports(fused_feet);
@@ -872,6 +931,11 @@ int main()
     sim::Environment crouch_humanoid(humanoid_rig, 141);
     crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);
     sim::EnvironmentTestAccess::set_duck_pressure(crouch_humanoid, 1.0f);
+    const auto walk_teacher = rl::walking_teacher_action(neutral_humanoid);
+    require(walk_teacher[0] * walk_teacher[2] < 0.0f
+            || walk_teacher[1] * walk_teacher[3] < 0.0f,
+        "walking teacher does not alternate the near and far leg chains");
+
     const auto crouch_teacher = rl::duck_teacher_action(crouch_humanoid);
     require(std::abs(crouch_teacher[0]) < std::abs(crouch_teacher[1])
             && std::abs(crouch_teacher[2]) < std::abs(crouch_teacher[3]),

@@ -302,9 +302,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0715-squat-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0715-squat-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0715-squat-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0715-gait-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0715-gait-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0715-gait-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -746,6 +746,18 @@ namespace runner
             {
                 return world_to_screen(particles[index].position, viewport, camera, scale);
             };
+            auto leg_side = [&](std::size_t index) noexcept
+            {
+                if (!rig.paired_leg_chains())
+                    return 0;
+                if (rig.is_left_support_seed(index)
+                    || index == rig.motors[0].c || index == rig.motors[1].c)
+                    return -1;
+                if (rig.is_right_support_seed(index)
+                    || index == rig.motors[2].c || index == rig.motors[3].c)
+                    return 1;
+                return 0;
+            };
             for (const sim::DistanceConstraint& bone : rig.bones)
             {
                 if (bone.a >= particles.size() || bone.b >= particles.size())
@@ -753,16 +765,24 @@ namespace runner
                 const float radius_a = bone.a < rig.radii.size() ? rig.radii[bone.a] : 0.15f;
                 const float radius_b = bone.b < rig.radii.size() ? rig.radii[bone.b] : 0.15f;
                 const float radius = std::max(0.055f, std::min(radius_a, radius_b) * 0.55f) * scale;
-                canvas.capsule(point(bone.a), point(bone.b), radius, body, 16);
+                const int side = leg_side(bone.a) != 0 ? leg_side(bone.a) : leg_side(bone.b);
+                const Color color = side < 0 ? rgb(0x765033)
+                    : side > 0 ? leg : body;
+                canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
             }
             for (std::size_t index = 0; index < particles.size(); ++index)
             {
                 const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f) * scale;
                 Color color = index == rig.head_node ? body_light : body;
+                const int side = leg_side(index);
+                if (side < 0)
+                    color = rgb(0x765033);
+                else if (side > 0)
+                    color = leg;
                 const bool primary_foot = rig.is_support_seed(index);
                 if (primary_foot)
                 {
-                    color = leg;
+                    color = side < 0 ? rgb(0x765033) : leg;
                     const Vec2 center = point(index);
                     canvas.capsule(center - Vec2{ radius * 0.82f, 0.0f },
                         center + Vec2{ radius * 0.82f, 0.0f }, radius * 0.44f, color, 16);
@@ -1189,12 +1209,18 @@ namespace runner
                     sim::invalid_motion_name(environment.invalid_reason())),
                 1.16f, environment.valid_motion() ? green : danger, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 119.0f },
-                std::format("STEPS {}  DUCK {:.1f} S  JUMP {}/{}  FLIP {:.1f}  SPIN {:.1f}  PASSED {}",
-                    environment.alternating_steps(), environment.duck_seconds(),
-                    environment.powered_jumps(), environment.landed_jumps(),
-                    environment.maximum_flip_turns(), environment.uncontrolled_spin_turns(),
-                    environment.obstacles_passed()),
+                std::format("STEPS {}  CROSS {}  HEEL {}  TOE {}  SLIP {:.2f}",
+                    environment.alternating_steps(), environment.limb_crossings(),
+                    environment.heel_strikes(), environment.toe_offs(),
+                    environment.stance_slip_speed()),
                 1.02f, environment.recovering() ? yellow : muted, overlay_width);
+            add_text_fit(canvas, viewport.position + Vec2{ 24.0f, 147.0f },
+                std::format("L {}  R {}  DUCK {:.1f} S  JUMP {}/{}  PASSED {}",
+                    sim::foot_contact_phase_name(environment.left_foot_phase()),
+                    sim::foot_contact_phase_name(environment.right_foot_phase()),
+                    environment.duck_seconds(), environment.powered_jumps(),
+                    environment.landed_jumps(), environment.obstacles_passed()),
+                0.96f, muted, overlay_width);
             add_text_fit(canvas, viewport.position + Vec2{ 24.0f, viewport.size.y - 38.0f },
                 trainer.has_best_policy()
                     ? "BEST STAGE-VALID CONTROLLER   v" RUNNER_VERSION "   BACKGROUND TRAINING ACTIVE"
@@ -1355,6 +1381,19 @@ namespace runner
                 canvas.circle(screen(index), 7.0f,
                     index == static_cast<std::size_t>(selected_node) ? accent : white, 18);
                 add_text(canvas, screen(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
+                std::string_view foot_label{};
+                if (index == blueprint.left_contact_node) foot_label = "L HEEL";
+                else if (index == blueprint.right_contact_node) foot_label = "R HEEL";
+                else if (blueprint.additional_left_contact_nodes.size() >= 1u
+                    && index == blueprint.additional_left_contact_nodes[0]) foot_label = "L BALL";
+                else if (blueprint.additional_left_contact_nodes.size() >= 2u
+                    && index == blueprint.additional_left_contact_nodes[1]) foot_label = "L TOE";
+                else if (blueprint.additional_right_contact_nodes.size() >= 1u
+                    && index == blueprint.additional_right_contact_nodes[0]) foot_label = "R BALL";
+                else if (blueprint.additional_right_contact_nodes.size() >= 2u
+                    && index == blueprint.additional_right_contact_nodes[1]) foot_label = "R TOE";
+                if (!foot_label.empty())
+                    add_text(canvas, screen(index) + Vec2{ 10.0f, 10.0f }, foot_label, 0.82f, yellow);
             }
 
             const sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];

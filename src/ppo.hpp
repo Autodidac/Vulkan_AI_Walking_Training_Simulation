@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1502u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1503u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -350,6 +350,23 @@ namespace runner::rl
             sim::CourseStage::duck_press);
     }
 
+    [[nodiscard]] inline std::array<float, sim::action_count> walking_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        auto action = balance_teacher_action(environment);
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        if (!rig.paired_leg_chains())
+            return action;
+        const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.12f;
+        const float swing = std::sin(phase);
+        action[0] = clamp(action[0] + 0.42f * swing, -0.82f, 0.82f);
+        action[1] = clamp(action[1] + 0.34f * std::max(0.0f, swing), -0.88f, 0.88f);
+        action[2] = clamp(action[2] - 0.42f * swing, -0.82f, 0.82f);
+        action[3] = clamp(action[3] - 0.34f * std::max(0.0f, -swing), -0.88f, 0.88f);
+        return bilateral_joint_synergy_action(environment, action,
+            sim::CourseStage::uneven);
+    }
+
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
         const sim::Environment& environment) noexcept
     {
@@ -416,6 +433,14 @@ namespace runner::rl
                 policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
                 policy_action[index] = lerp(policy_action[index], 0.0f, 0.995f);
+        }
+        else if (stage == sim::CourseStage::uneven)
+        {
+            const auto teacher = walking_teacher_action(environment);
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.34f);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], 0.42f);
         }
         else if (stage == sim::CourseStage::crouch_walk)
         {
@@ -647,7 +672,9 @@ namespace runner::rl
         case sim::CourseStage::uneven:
             if (environment.longest_stable_stance_seconds() < 1.25f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.gait_cycles() < 4u)
+            if (environment.gait_cycles() < 4u
+                || (environment.blueprint().paired_leg_chains()
+                    && environment.limb_crossings() < 4u))
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             if (environment.distance_travelled() < 1.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
@@ -658,6 +685,8 @@ namespace runner::rl
             if (environment.longest_valid_crouch_seconds() < 0.30f)
                 rejection |= evidence_bit(MotionEvidenceFailure::invalid_crouch_posture);
             if (environment.gait_cycles() < 4u
+                || (environment.blueprint().paired_leg_chains()
+                    && environment.limb_crossings() < 4u)
                 || environment.crouch_walk_seconds() < 2.0f
                 || environment.crouch_walk_distance() < 0.75f
                 || environment.obstacles_passed() < 3u)
@@ -676,6 +705,8 @@ namespace runner::rl
             if (environment.longest_stable_stance_seconds() < 1.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.alternating_steps() < 3u
+                || (environment.blueprint().paired_leg_chains()
+                    && environment.limb_crossings() < 3u)
                 || environment.obstacles_passed() < 1u
                 || (environment.duck_recoveries() < 1u && environment.landed_jumps() < 1u))
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);

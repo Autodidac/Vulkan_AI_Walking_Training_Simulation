@@ -1330,6 +1330,13 @@ namespace runner::sim
         right_swing_seconds_ = 0.0f;
         left_swing_clearance_ = 0.0f;
         right_swing_clearance_ = 0.0f;
+        left_swing_crossed_ = false;
+        right_swing_crossed_ = false;
+        limb_crossings_ = 0u;
+        heel_strike_count_ = 0u;
+        toe_off_count_ = 0u;
+        left_foot_phase_ = FootContactPhase::airborne;
+        right_foot_phase_ = FootContactPhase::airborne;
         action_change_energy_ = 0.0f;
         alternating_step_this_step_ = false;
         maximum_speed_kmh_ = 0.0f;
@@ -1399,6 +1406,12 @@ namespace runner::sim
 
     void Environment::separate_support_clusters() noexcept
     {
+        // Side-view locomotion requires the near and far legs to pass through
+        // the same screen-space lane. Preserve the fused-foot guard for static
+        // lessons, but never push a legitimate swing foot away from the stance
+        // foot during walking, crouch-walking, hurdles, or the mixed course.
+        if (stage_requires_forward_gait(course_stage_))
+            return;
         std::array<std::uint16_t, 32> supports{};
         std::size_t support_count = 0;
         auto append = [&](std::uint16_t node)
@@ -2223,6 +2236,39 @@ namespace runner::sim
         return count == 0 ? 0.0f : accumulated / static_cast<float>(count);
     }
 
+    float Environment::contact_cluster_center_x(
+        std::uint16_t contact_node) const noexcept
+    {
+        float accumulated = 0.0f;
+        std::size_t count = 0u;
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (!contact_cluster_contains(contact_node, index))
+                continue;
+            accumulated += particles_[index].position.x;
+            ++count;
+        }
+        return count == 0u ? 0.0f : accumulated / static_cast<float>(count);
+    }
+
+    FootContactPhase Environment::detect_foot_contact_phase(bool left) const noexcept
+    {
+        const std::uint16_t heel = left
+            ? blueprint_.left_contact_node : blueprint_.right_contact_node;
+        const auto& extra = left
+            ? blueprint_.additional_left_contact_nodes
+            : blueprint_.additional_right_contact_nodes;
+        const bool heel_grounded = valid_node(heel) && particles_[heel].grounded;
+        if (extra.size() < 2u)
+            return heel_grounded ? FootContactPhase::flat : FootContactPhase::airborne;
+        const std::uint16_t ball = extra[0];
+        const std::uint16_t toe = extra[1];
+        const bool ball_grounded = valid_node(ball) && particles_[ball].grounded;
+        const bool toe_grounded = valid_node(toe) && particles_[toe].grounded;
+        return classify_foot_contact_phase(
+            heel_grounded, ball_grounded, toe_grounded);
+    }
+
     float Environment::contact_cluster_clearance(std::uint16_t contact_node) const noexcept
     {
         float maximum = 0.0f;
@@ -2285,14 +2331,17 @@ namespace runner::sim
                 particle.grounded = true;
                 const Vec2 velocity = (particle.position - particle.previous) / dt;
                 float retention = ground_velocity_retention(traction_contact, velocity.y);
-                if (traction_contact && stage_uses_deformable_terrain(course_stage_))
-                    retention = std::lerp(0.24f, 0.015f, firmness);
-                if (blueprint_.is_support_seed(index))
+                if (traction_contact)
                 {
-                    const float stance_retention = (course_stage_ == CourseStage::balance
-                            || course_stage_ == CourseStage::duck_press)
-                        ? 0.004f : 0.024f;
-                    retention = std::min(retention, stance_retention);
+                    const bool left_toe = blueprint_.additional_left_contact_nodes.size() >= 2u
+                        && index == blueprint_.additional_left_contact_nodes[1];
+                    const bool right_toe = blueprint_.additional_right_contact_nodes.size() >= 2u
+                        && index == blueprint_.additional_right_contact_nodes[1];
+                    const bool static_lesson = course_stage_ == CourseStage::balance
+                        || course_stage_ == CourseStage::duck_press;
+                    retention = foot_friction_retention(velocity.x,
+                        firmness, looseness, static_lesson,
+                        left_toe || right_toe);
                 }
                 particle.previous.x = particle.position.x - velocity.x * retention * dt;
                 if (traction_contact)
@@ -2481,16 +2530,43 @@ namespace runner::sim
         const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float left_clearance = contact_cluster_clearance(blueprint_.left_contact_node);
         const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
+        const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
+        const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
+        if (!left && previous_left_grounded_)
+            left_swing_crossed_ = false;
+        if (!right && previous_right_grounded_)
+            right_swing_crossed_ = false;
         if (!left)
         {
             left_swing_seconds_ += dt;
             left_swing_clearance_ = std::max(left_swing_clearance_, left_clearance);
+            left_swing_crossed_ = left_swing_crossed_
+                || (left_clearance >= 0.065f && left_center > right_center + 0.035f);
         }
         if (!right)
         {
             right_swing_seconds_ += dt;
             right_swing_clearance_ = std::max(right_swing_clearance_, right_clearance);
+            right_swing_crossed_ = right_swing_crossed_
+                || (right_clearance >= 0.065f && right_center > left_center + 0.035f);
         }
+
+        const FootContactPhase next_left_phase = detect_foot_contact_phase(true);
+        const FootContactPhase next_right_phase = detect_foot_contact_phase(false);
+        if (next_left_phase == FootContactPhase::heel_strike
+            && left_foot_phase_ != FootContactPhase::heel_strike)
+            ++heel_strike_count_;
+        if (next_right_phase == FootContactPhase::heel_strike
+            && right_foot_phase_ != FootContactPhase::heel_strike)
+            ++heel_strike_count_;
+        if (next_left_phase == FootContactPhase::toe_off
+            && left_foot_phase_ != FootContactPhase::toe_off)
+            ++toe_off_count_;
+        if (next_right_phase == FootContactPhase::toe_off
+            && right_foot_phase_ != FootContactPhase::toe_off)
+            ++toe_off_count_;
+        left_foot_phase_ = next_left_phase;
+        right_foot_phase_ = next_right_phase;
 
         alternating_step_this_step_ = false;
         if (strike_side != 0)
@@ -2503,17 +2579,30 @@ namespace runner::sim
                 last_step_time_ = elapsed_seconds_;
                 last_step_x_ = root_x;
             }
-            else if (qualifies_supported_step(last_contact_side_, strike_side,
-                elapsed_seconds_ - last_step_time_, root_x - last_step_x_,
-                swing_air_seconds, swing_clearance))
+            else
             {
+                const bool swing_crossed = new_left
+                    ? left_swing_crossed_ : right_swing_crossed_;
+                const bool crossing_required = blueprint_.paired_leg_chains();
+                if (!qualifies_crossing_step(last_contact_side_, strike_side,
+                    elapsed_seconds_ - last_step_time_, root_x - last_step_x_,
+                    swing_air_seconds, swing_clearance,
+                    swing_crossed, crossing_required))
+                    goto step_not_qualified;
                 ++alternating_steps_;
+                if (crossing_required)
+                    ++limb_crossings_;
                 alternating_step_this_step_ = true;
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
                 last_step_x_ = root_x;
+                if (new_left)
+                    left_swing_crossed_ = false;
+                else
+                    right_swing_crossed_ = false;
             }
         }
+step_not_qualified:
         if (left)
         {
             left_swing_seconds_ = 0.0f;
