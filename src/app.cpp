@@ -212,7 +212,7 @@ namespace runner
         }
 
         [[nodiscard]] Vec2 world_to_screen(Vec2 world, Rect viewport, float camera_x,
-            float pixels_per_meter, float ground_fraction = 0.84f) noexcept
+            float pixels_per_meter, float ground_fraction = 0.72f) noexcept
         {
             const float ground_y = viewport.position.y + viewport.size.y * ground_fraction;
             return {
@@ -224,7 +224,7 @@ namespace runner
         [[nodiscard]] Vec2 screen_to_world(Vec2 screen, Rect viewport, float camera_x,
             float pixels_per_meter) noexcept
         {
-            const float ground_y = viewport.position.y + viewport.size.y * 0.84f;
+            const float ground_y = viewport.position.y + viewport.size.y * 0.72f;
             return {
                 camera_x + (screen.x - (viewport.position.x + viewport.size.x * 0.50f)) / pixels_per_meter,
                 (ground_y - screen.y) / pixels_per_meter
@@ -302,9 +302,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0714-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0714-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0714-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0715-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0715-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0715-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -566,12 +566,27 @@ namespace runner
                     const float macro_y0 = sim::DeformableTerrain::world_bottom
                         + static_cast<float>(macro_y)
                             * sim::DeformableTerrain::macro_tile_size;
-                    if (tile.macro_ready)
+                    const float macro_y1 = macro_y0
+                        + sim::DeformableTerrain::macro_tile_size;
+                    bool near_surface = false;
+                    for (std::size_t local_x = 0;
+                        local_x < sim::DeformableTerrain::macro_cell_side; ++local_x)
+                    {
+                        const float sample_x = macro_x0
+                            + (static_cast<float>(local_x) + 0.5f)
+                                * sim::DeformableTerrain::fine_cell_spacing;
+                        if (macro_y1 >= environment.ground_height_at(sample_x)
+                            - sim::DeformableTerrain::fine_cell_spacing * 3.0f)
+                        {
+                            near_surface = true;
+                            break;
+                        }
+                    }
+                    if (tile.macro_ready && !tile.active && !near_surface)
                     {
                         draw_world_cell(macro_x0, macro_y0,
                             macro_x0 + sim::DeformableTerrain::macro_tile_size,
-                            macro_y0 + sim::DeformableTerrain::macro_tile_size,
-                            tile.uniform_material);
+                            macro_y1, tile.uniform_material);
                         continue;
                     }
 
@@ -601,22 +616,6 @@ namespace runner
                 }
             }
 
-            std::vector<Vec2> surface{};
-            const int first_column = static_cast<int>(std::floor(
-                left / sim::DeformableTerrain::fine_cell_spacing));
-            const int last_column = static_cast<int>(std::ceil(
-                right / sim::DeformableTerrain::fine_cell_spacing));
-            surface.reserve(static_cast<std::size_t>(std::max(0,
-                last_column - first_column + 1)));
-            for (int column = first_column; column <= last_column; ++column)
-            {
-                const float x = static_cast<float>(column)
-                    * sim::DeformableTerrain::fine_cell_spacing;
-                surface.push_back(world_to_screen({ x, environment.ground_height_at(x) },
-                    viewport, camera, scale));
-            }
-            if (surface.size() >= 2u)
-                canvas.polyline(surface, 1.5f, rgb(0x5d6870, 0.72f));
         }
 
         void draw_course_reference(const sim::Environment& environment, Rect viewport,
@@ -627,26 +626,13 @@ namespace runner
             const float left = camera - half_view - 2.0f;
             const float right = camera + half_view + 2.0f;
 
-            constexpr float dash_spacing = 1.6f;
-            const int first_dash = static_cast<int>(std::floor((left + progress) / dash_spacing));
-            const int last_dash = static_cast<int>(std::ceil((right + progress) / dash_spacing));
-            for (int index = first_dash; index <= last_dash; ++index)
-            {
-                const float x0 = static_cast<float>(index) * dash_spacing - progress;
-                const float x1 = x0 + 0.72f;
-                const Vec2 start = world_to_screen(
-                    { x0, environment.ground_height_at(x0) + 0.035f }, viewport, camera, scale);
-                const Vec2 end = world_to_screen(
-                    { x1, environment.ground_height_at(x1) + 0.035f }, viewport, camera, scale);
-                canvas.line(start, end, 3.0f, rgb(0xd6d9c4, 0.82f));
-            }
 
             const float marker_spacing = ui_layout::course_reference_marker_spacing_m(distance_units);
             const int first_marker = static_cast<int>(std::floor((left + progress) / marker_spacing));
             const int last_marker = static_cast<int>(std::ceil((right + progress) / marker_spacing));
             for (int index = first_marker; index <= last_marker; ++index)
             {
-                if (index < 0)
+                if (index <= 0)
                     continue;
                 const float distance = static_cast<float>(index) * marker_spacing;
                 const float x = distance - progress;
@@ -1140,14 +1126,15 @@ namespace runner
             if (!run_paused)
                 trainer.step_preview(dt);
             const sim::Environment& environment = trainer.preview();
+            constexpr float live_pixels_per_meter = 22.0f;
             if (!environment.particles().empty())
                 camera_x = lerp(camera_x,
-                    environment.particles()[environment.blueprint().root_node].position.x + 1.8f, 0.045f);
+                    environment.particles()[environment.blueprint().root_node].position.x + 5.5f, 0.035f);
             add_rounded_rect(canvas, viewport, 11.0f, rgb(0x09101a), border, 1.0f);
-            draw_course_ground(environment, viewport, camera_x, 90.0f);
-            draw_course_reference(environment, viewport, camera_x, 90.0f);
-            draw_course_features(environment, viewport, camera_x, 90.0f);
-            draw_creature(environment, viewport, camera_x, 90.0f);
+            draw_course_ground(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_course_reference(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_course_features(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_creature(environment, viewport, camera_x, live_pixels_per_meter);
 
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
             const float overlay_width = std::max(260.0f, viewport.size.x - 48.0f);

@@ -1,3 +1,20 @@
+# Runner v0.7.15 viewport, terrain, and failed-policy recovery
+
+**Release state:** IMPLEMENTED — Linux and Windows package validation in progress.
+
+- [x] Pull the live world camera from 90 to 22 pixels per meter so the rig is a small course subject instead of filling the viewport.
+- [x] Move the live ground framing upward and place the rig left of center with more course visible ahead.
+- [x] Remove the duplicate interpolated terrain polyline and moving dashed pseudo-ground.
+- [x] Suppress the zero-distance sign that rendered as a large opaque column.
+- [x] Render exposed, active, and near-surface terrain as fine granular cells while retaining deep inactive uniform macro tiles.
+- [x] Isolate v0.7.15 autosaves from poisoned v0.7.14 policies.
+- [x] Restore the verified champion after catastrophic invalid or backward evaluations.
+- [x] Reset a failed policy nursery after three catastrophic evaluations when no champion exists.
+- [x] Bump the policy-training semantics to v0.7.15.
+- [ ] Pass the complete Linux deterministic suite.
+- [ ] Pass the complete Windows SDL3/Vulkan build, tests, diagnostics, installation, and extracted-package audit.
+- [ ] Merge, publish Runner v0.7.15, and remove temporary validation infrastructure and stale observer work.
+
 # Runner mission cache
 
 This is the authoritative release ledger. A mission is VERIFIED only when implementation, deterministic acceptance, cross-platform validation, packaged-runtime behavior, and release evidence agree. Contradictory runtime evidence reopens the mission.

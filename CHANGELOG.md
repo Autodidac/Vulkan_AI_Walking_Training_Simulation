@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.15 - Viewport, terrain, and failed-policy recovery
+
+- Pulled the live course camera back and reframed the terrain so the rig appears as a small training subject with meaningful course visibility.
+- Removed the duplicate surface polyline, moving pseudo-ground dashes, and zero-distance obstruction.
+- Preserved fine granular cells at exposed and active terrain while restricting macro-tile quads to deep inactive uniform material.
+- Added automatic champion restoration for catastrophic invalid or backward generations and nursery reset when no valid champion exists.
+- Isolated v0.7.15 autosaves and policy semantics from failed v0.7.14 training state.
+
 All notable Runner changes are recorded here. The authoritative work ledger is `missioncache.md`; this file is the single release-history document.
 
 ## [0.7.14] - 2026-08-04

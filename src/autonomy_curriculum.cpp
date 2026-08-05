@@ -89,6 +89,31 @@ namespace runner::rl
 
         if (!metrics.evaluation_valid)
         {
+            const bool catastrophic_invalid = metrics.evaluation_quality_key == 0u
+                || metrics.evaluation_distance < -0.25f
+                || metrics.evaluation_invalid_runs >= 3u;
+            if (catastrophic_invalid && worker_.has_best_policy()
+                && worker_.restore_best_policy())
+            {
+                ++rollback_count_;
+                mastery_streak_ = 0;
+                degradation_streak_ = 0;
+                worker_.set_course(stage_, difficulty_, false);
+                worker_message_ = "INVALID/BACKWARD GENERATION - RESTORED CHAMPION AND RESTARTED LESSON";
+                queue_autosave();
+                return;
+            }
+            if (catastrophic_invalid && !worker_.has_best_policy()
+                && metrics.evaluation_count % 3u == 0u)
+            {
+                worker_.set_blueprint(worker_.blueprint(), false);
+                worker_.set_course(stage_, difficulty_, false);
+                mastery_streak_ = 0;
+                degradation_streak_ = 0;
+                worker_message_ = "NO VALID CHAMPION AFTER THREE EVALUATIONS - RESET POLICY NURSERY";
+                queue_autosave();
+                return;
+            }
             worker_message_ = std::format("INVALID RUN REJECTED - {} / {}",
                 metrics.evaluation_invalid_runs,
                 primary_motion_rejection_name(metrics.evaluation_rejection_mask));
