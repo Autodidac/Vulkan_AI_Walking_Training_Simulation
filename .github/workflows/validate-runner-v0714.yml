@@ -14,8 +14,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-source:
+  cache-first:
     if: github.head_ref == 'agent/v0715-ground-camera-character-scale'
+    runs-on: ubuntu-24.04
+    outputs:
+      materialized: ${{ steps.cache.outputs.materialized }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Materialize mission cache before implementation
+        id: cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f tools/apply_v0716_missioncache.py ]]; then
+            echo 'materialized=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 tools/apply_v0716_missioncache.py
+          rm -f tools/apply_v0716_missioncache.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md tools/apply_v0716_missioncache.py
+          git commit -m 'Cache Runner v0.7.16 missions before implementation'
+          git push origin HEAD:agent/v0715-ground-camera-character-scale
+          echo 'materialized=true' >> "$GITHUB_OUTPUT"
+
+  linux-source:
+    needs: cache-first
+    if: needs.cache-first.outputs.materialized != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     outputs:
@@ -79,7 +110,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if [[ -n "$(git status --porcelain)" ]]; then
             git add -A
-            git commit -m '[skip ci] Complete Runner v0.7.15 structural rig evolution'
+            git commit -m 'Complete Runner v0.7.15 structural rig evolution'
             git push origin HEAD:agent/v0715-ground-camera-character-scale
           fi
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
