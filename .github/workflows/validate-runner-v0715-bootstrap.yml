@@ -37,6 +37,39 @@ jobs:
           set -euo pipefail
           if [[ -f tools/apply_v0715_rig_evolution.py ]]; then
             sed -i 's/sim::Vec2{/Vec2{/g' tools/apply_v0715_rig_evolution.py
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/apply_v0715_rig_evolution.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    text = replace_once(text,
+                  ''' + "'''" + '''        const std::array<NamedRig, 7> all_presets{
+                      NamedRig{ "CHICKEN", sim::CreatureBlueprint::chicken() },
+          ''' + "'''" + ''',
+                  ''' + "'''" + '''        const std::array<NamedRig, 8> all_presets{
+                      NamedRig{ "SCAFFOLD", sim::CreatureBlueprint::scaffold() },
+                      NamedRig{ "CHICKEN", sim::CreatureBlueprint::chicken() },
+          ''' + "'''" + ''',
+                  'scaffold live acceptance matrix')
+          '''
+          new = '''    text = replace_once(text,
+                  ''' + "'''" + '''        [[nodiscard]] std::array<NamedBlueprint, 7> all_presets()
+                  {
+                      return {
+                          NamedBlueprint{ "chicken", CreatureBlueprint::chicken() },
+          ''' + "'''" + ''',
+                  ''' + "'''" + '''        [[nodiscard]] std::array<NamedBlueprint, 8> all_presets()
+                  {
+                      return {
+                          NamedBlueprint{ "scaffold", CreatureBlueprint::scaffold() },
+                          NamedBlueprint{ "chicken", CreatureBlueprint::chicken() },
+          ''' + "'''" + ''',
+                  'scaffold live acceptance matrix')
+          '''
+          if old not in text:
+              raise SystemExit('outdated acceptance applicator anchor was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
             python3 tools/apply_v0715_rig_evolution.py
           fi
           rm -f tools/apply_v0715_rig_evolution.py
