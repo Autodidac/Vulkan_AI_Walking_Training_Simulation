@@ -1282,6 +1282,9 @@ namespace runner::sim
         duck_clearance_margin_ = 0.0f;
         duck_press_hold_seconds_ = 0.0f;
         duck_body_contact_seconds_ = 0.0f;
+        duck_posture_failure_seconds_ = 0.0f;
+        current_valid_crouch_seconds_ = 0.0f;
+        longest_valid_crouch_seconds_ = 0.0f;
         duck_press_max_penetration_ = 0.0f;
         duck_walk_started_seconds_ = 0.0f;
         crouch_walk_seconds_ = 0.0f;
@@ -1619,26 +1622,23 @@ namespace runner::sim
             return;
 
         Vec2 rest_support{};
-        Vec2 current_support{};
         std::size_t support_count = 0u;
-        auto accumulate_support = [&](std::size_t node)
+        auto accumulate_rest_support = [&](std::size_t node)
         {
             if (node >= blueprint_.nodes.size() || node >= particles_.size())
                 return;
             rest_support += blueprint_.nodes[node];
-            current_support += particles_[node].position;
             ++support_count;
         };
-        accumulate_support(blueprint_.left_contact_node);
-        accumulate_support(blueprint_.right_contact_node);
+        accumulate_rest_support(blueprint_.left_contact_node);
+        accumulate_rest_support(blueprint_.right_contact_node);
         for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
-            accumulate_support(node);
+            accumulate_rest_support(node);
         for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
-            accumulate_support(node);
+            accumulate_rest_support(node);
         if (support_count == 0u)
             return;
         rest_support /= static_cast<float>(support_count);
-        current_support /= static_cast<float>(support_count);
 
         const float rest_head_top = blueprint_.nodes[blueprint_.head_node].y
             + particles_[blueprint_.head_node].radius;
@@ -1651,10 +1651,6 @@ namespace runner::sim
             && requested_drop <= 0.001f;
         const bool settle_guide = !duck_press_contact_seen_
             && requested_drop <= 0.001f;
-
-        const float vertical_scale = clamp(
-            (rest_height - requested_drop) / rest_height, 0.52f, 1.0f);
-        const float horizontal_scale = 1.0f + (1.0f - vertical_scale) * 0.12f;
         const float phase_strength = (recovery_guide || settle_guide)
             ? 1.0f : clamp(requested_drop / 0.48f, 0.0f, 1.0f);
 
@@ -1677,6 +1673,73 @@ namespace runner::sim
         for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
             pin_support(node);
 
+        Vec2 current_support{};
+        auto accumulate_current_support = [&](std::size_t node)
+        {
+            if (node < particles_.size())
+                current_support += particles_[node].position;
+        };
+        accumulate_current_support(blueprint_.left_contact_node);
+        accumulate_current_support(blueprint_.right_contact_node);
+        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+            accumulate_current_support(node);
+        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+            accumulate_current_support(node);
+        current_support /= static_cast<float>(support_count);
+
+        if (blueprint_.paired_leg_chains())
+        {
+            const std::uint16_t left_knee = blueprint_.motors[1].pivot;
+            const std::uint16_t right_knee = blueprint_.motors[3].pivot;
+            const std::uint16_t left_ankle = blueprint_.motors[1].c;
+            const std::uint16_t right_ankle = blueprint_.motors[3].c;
+            const float guide_strength = 0.28f + phase_strength * 0.36f;
+
+            for (std::size_t node = 0; node < particles_.size(); ++node)
+            {
+                if (node >= blueprint_.nodes.size() || blueprint_.is_support_seed(node))
+                    continue;
+                const Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+                Vec2 target = current_support + rest_offset;
+                if (node == left_knee || node == right_knee)
+                {
+                    target.y -= requested_drop * 0.48f;
+                    const float direction = node == left_knee ? -1.0f : 1.0f;
+                    target.x += direction * requested_drop * 0.18f;
+                }
+                else if (node == left_ankle || node == right_ankle)
+                {
+                    target.y -= requested_drop * 0.04f;
+                }
+                else
+                {
+                    // Translate the pelvis and complete upper body downward as
+                    // one unit. This preserves the authored torso axis instead
+                    // of shrinking it into the forward bow seen in v0.7.14.
+                    target.y -= requested_drop;
+                }
+                const float floor = ground_height_at(target.x)
+                    + particles_[node].radius + 0.08f;
+                target.y = std::max(target.y, floor);
+                if (!recovery_guide && node == blueprint_.head_node)
+                    target.y = std::min(target.y,
+                        profile.bottom_y - particles_[node].radius - 0.035f);
+
+                Vec2 correction = target - particles_[node].position;
+                const float magnitude = length(correction);
+                constexpr float maximum_step = 0.22f;
+                if (magnitude > maximum_step && magnitude > 1.0e-6f)
+                    correction *= maximum_step / magnitude;
+                const Vec2 applied = correction * guide_strength;
+                particles_[node].position += applied;
+                particles_[node].previous += applied * 0.94f;
+            }
+            return;
+        }
+
+        const float vertical_scale = clamp(
+            (rest_height - requested_drop) / rest_height, 0.52f, 1.0f);
+        const float horizontal_scale = 1.0f + (1.0f - vertical_scale) * 0.12f;
         for (std::size_t node = 0; node < particles_.size(); ++node)
         {
             if (node >= blueprint_.nodes.size() || blueprint_.is_support_seed(node))
@@ -1691,10 +1754,7 @@ namespace runner::sim
             if (!recovery_guide)
                 target.y = std::min(target.y,
                     profile.bottom_y - particles_[node].radius - 0.035f);
-            // Floor authority is final. The old order could force knees and
-            // torso nodes below ground after they had already been clamped.
             target.y = std::max(target.y, floor);
-
             Vec2 correction = target - particles_[node].position;
             const float magnitude = length(correction);
             constexpr float maximum_step = 0.60f;
@@ -2030,6 +2090,88 @@ namespace runner::sim
                 std::abs(wrap_angle(joint_angle(motor) - motor.neutral_angle)));
         }
         return maximum;
+    }
+
+    CrouchPostureEvidence Environment::current_crouch_posture() const noexcept
+    {
+        CrouchPostureEvidence evidence{};
+        evidence.paired_leg_chains = blueprint_.paired_leg_chains();
+        evidence.horizontal_body = blueprint_.horizontal_body_plan();
+        const bool left = left_supported();
+        const bool right = right_supported();
+        evidence.feet_supported = evidence.paired_leg_chains
+            ? left && right : left || right;
+        evidence.non_foot_grounded = non_foot_ground_contact();
+        evidence.torso_pitch = std::abs(torso_roll_angle());
+
+        Vec2 rest_support{};
+        Vec2 current_support{};
+        std::size_t support_count = 0u;
+        float minimum_support_x = std::numeric_limits<float>::infinity();
+        float maximum_support_x = -std::numeric_limits<float>::infinity();
+        auto accumulate = [&](std::size_t node)
+        {
+            if (node >= blueprint_.nodes.size() || node >= particles_.size())
+                return;
+            rest_support += blueprint_.nodes[node];
+            current_support += particles_[node].position;
+            minimum_support_x = std::min(minimum_support_x,
+                particles_[node].position.x - particles_[node].radius);
+            maximum_support_x = std::max(maximum_support_x,
+                particles_[node].position.x + particles_[node].radius);
+            ++support_count;
+        };
+        accumulate(blueprint_.left_contact_node);
+        accumulate(blueprint_.right_contact_node);
+        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+            accumulate(node);
+        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+            accumulate(node);
+        if (support_count > 0u && valid_node(blueprint_.root_node))
+        {
+            rest_support /= static_cast<float>(support_count);
+            current_support /= static_cast<float>(support_count);
+            const float rest_height = blueprint_.nodes[blueprint_.root_node].y
+                - rest_support.y;
+            const float current_height = particles_[blueprint_.root_node].position.y
+                - current_support.y;
+            evidence.pelvis_drop = std::max(0.0f, rest_height - current_height);
+
+            double weighted_x = 0.0;
+            double total_mass = 0.0;
+            for (const Particle& particle : particles_)
+            {
+                const double mass = 1.0 / static_cast<double>(
+                    std::max(particle.inverse_mass, 1.0e-5f));
+                weighted_x += static_cast<double>(particle.position.x) * mass;
+                total_mass += mass;
+            }
+            if (total_mass > 1.0e-9
+                && std::isfinite(minimum_support_x)
+                && std::isfinite(maximum_support_x))
+            {
+                const float center_of_mass_x = static_cast<float>(weighted_x / total_mass);
+                evidence.support_margin = std::min(
+                    center_of_mass_x - minimum_support_x,
+                    maximum_support_x - center_of_mass_x);
+            }
+        }
+
+        if (evidence.paired_leg_chains)
+        {
+            const MotorConstraint& left_knee = blueprint_.motors[1];
+            const MotorConstraint& right_knee = blueprint_.motors[3];
+            evidence.left_knee_flex = std::max(0.0f, wrap_angle(
+                joint_angle(left_knee) - left_knee.neutral_angle));
+            evidence.right_knee_flex = std::max(0.0f, wrap_angle(
+                right_knee.neutral_angle - joint_angle(right_knee)));
+        }
+        else
+        {
+            evidence.left_knee_flex = evidence.pelvis_drop;
+            evidence.right_knee_flex = evidence.pelvis_drop;
+        }
+        return evidence;
     }
 
     float Environment::torso_roll_angle() const noexcept
@@ -2448,14 +2590,27 @@ namespace runner::sim
             duck_clearance_margin_ = clearance;
         }
 
-        const bool generic_duck = feet_supported
+        const CrouchPostureEvidence crouch_posture = current_crouch_posture();
+        const bool physical_crouch = crouch_posture_qualified(crouch_posture);
+        const bool generic_duck = physical_crouch
             && current_uprightness > 0.60f && duck_depth_ >= 0.48f;
         const bool press_duck = course_stage_ == CourseStage::duck_press
-            && feet_supported && !non_foot_grounded_
+            && physical_crouch
             && duck_obstacle_weight_ >= 0.64f
             && duck_clearance_margin_ >= -0.10f
-            && current_uprightness > 0.20f;
+            && current_uprightness > 0.45f;
         duck_active_ = generic_duck || press_duck;
+
+        const bool crouch_challenge = (course_stage_ == CourseStage::duck_press
+                || course_stage_ == CourseStage::crouch_walk)
+            && duck_obstacle_weight_ >= 0.72f
+            && duck_depth_ >= 0.30f
+            && feet_supported && !non_foot_grounded_;
+        duck_posture_failure_seconds_ = crouch_challenge && !physical_crouch
+            ? duck_posture_failure_seconds_ + dt
+            : std::max(0.0f, duck_posture_failure_seconds_ - dt * 2.0f);
+        if (duck_posture_failure_seconds_ > 1.10f)
+            invalidate(InvalidMotion::duck_hip_hinge);
 
         const bool disallowed_duck_contact = !duck_ground_contact_allowed(
             duck_active_, non_foot_grounded_);
@@ -2472,7 +2627,16 @@ namespace runner::sim
             invalidate(InvalidMotion::duck_body_contact);
         }
         if (duck_active_ && !non_foot_grounded_)
+        {
             duck_seconds_ += dt;
+            current_valid_crouch_seconds_ += dt;
+            longest_valid_crouch_seconds_ = std::max(
+                longest_valid_crouch_seconds_, current_valid_crouch_seconds_);
+        }
+        else
+        {
+            current_valid_crouch_seconds_ = 0.0f;
+        }
         if (course_stage_ == CourseStage::crouch_walk
             && duck_active_ && !non_foot_grounded_ && feet_supported)
         {
@@ -2576,7 +2740,10 @@ namespace runner::sim
                 && duck_obstacle_weight_ < 0.15f
                 && feet_supported && !non_foot_grounded_
                 && body_integrity_valid()
-                && current_uprightness >= 0.50f
+                && current_uprightness >= 0.78f
+                && head_height_ratio >= 0.82f
+                && std::abs(torso_angle) <= 0.40f
+                && stance_slip_speed_ <= 0.16f
                 && !duck_press_completed_)
             {
                 duck_press_completed_ = true;

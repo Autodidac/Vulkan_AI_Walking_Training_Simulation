@@ -456,6 +456,43 @@ namespace runner::sim
         return 0.0f;
     }
 
+    struct CrouchPostureEvidence
+    {
+        bool paired_leg_chains{};
+        bool horizontal_body{};
+        bool feet_supported{};
+        bool non_foot_grounded{};
+        float pelvis_drop{};
+        float left_knee_flex{};
+        float right_knee_flex{};
+        float torso_pitch{};
+        float support_margin{ -1.0f };
+    };
+
+    [[nodiscard]] inline bool crouch_posture_qualified(
+        const CrouchPostureEvidence& evidence) noexcept
+    {
+        if (!evidence.feet_supported || evidence.non_foot_grounded)
+            return false;
+        if (evidence.paired_leg_chains)
+        {
+            return evidence.pelvis_drop >= 0.30f
+                && evidence.left_knee_flex >= 0.16f
+                && evidence.right_knee_flex >= 0.16f
+                && evidence.torso_pitch <= 0.55f
+                && evidence.support_margin >= -0.08f;
+        }
+        if (evidence.horizontal_body)
+        {
+            return evidence.pelvis_drop >= 0.18f
+                && evidence.torso_pitch <= 0.75f
+                && evidence.support_margin >= -0.15f;
+        }
+        return evidence.pelvis_drop >= 0.22f
+            && evidence.torso_pitch <= 0.65f
+            && evidence.support_margin >= -0.10f;
+    }
+
     enum class InvalidMotion : std::uint8_t
     {
         none,
@@ -475,7 +512,8 @@ namespace runner::sim
         robotic_torso_swing,
         press_penetration,
         duck_body_contact,
-        buried_no_escape
+        buried_no_escape,
+        duck_hip_hinge
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -500,6 +538,7 @@ namespace runner::sim
         case InvalidMotion::press_penetration: return "DUCK PRESS PENETRATION";
         case InvalidMotion::duck_body_contact: return "DUCK CONTACT - FEET ONLY";
         case InvalidMotion::buried_no_escape: return "BURIED / NO ESCAPE SPACE";
+        case InvalidMotion::duck_hip_hinge: return "HIP HINGE - NOT A CROUCH";
         }
         return "INVALID";
     }
@@ -897,6 +936,15 @@ namespace runner::sim
         {
             return duck_clearance_margin_;
         }
+        [[nodiscard]] CrouchPostureEvidence current_crouch_posture() const noexcept;
+        [[nodiscard]] bool crouch_posture_valid() const noexcept
+        {
+            return crouch_posture_qualified(current_crouch_posture());
+        }
+        [[nodiscard]] float longest_valid_crouch_seconds() const noexcept
+        {
+            return longest_valid_crouch_seconds_;
+        }
         [[nodiscard]] bool duck_press_contact() const noexcept { return duck_press_contact_this_step_; }
         [[nodiscard]] bool duck_press_completed() const noexcept { return duck_press_completed_; }
         [[nodiscard]] float duck_press_penetration() const noexcept { return duck_press_max_penetration_; }
@@ -1016,6 +1064,9 @@ namespace runner::sim
         float duck_clearance_margin_{};
         float duck_press_hold_seconds_{};
         float duck_body_contact_seconds_{};
+        float duck_posture_failure_seconds_{};
+        float current_valid_crouch_seconds_{};
+        float longest_valid_crouch_seconds_{};
         float duck_press_max_penetration_{};
         float duck_walk_started_seconds_{};
         float crouch_walk_seconds_{};

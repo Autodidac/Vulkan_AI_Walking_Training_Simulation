@@ -110,6 +110,56 @@ namespace runner::sim
             environment.duck_obstacle_weight_ = pressure;
         }
 
+        static bool hip_hinge_is_rejected(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            auto pin = [&](std::size_t node)
+            {
+                if (node >= environment.particles_.size())
+                    return;
+                Particle& particle = environment.particles_[node];
+                particle.position.y = environment.ground_height_at(particle.position.x)
+                    + ground_contact_offset(true, particle.radius);
+                particle.previous = particle.position;
+                particle.grounded = true;
+            };
+            pin(environment.blueprint_.left_contact_node);
+            pin(environment.blueprint_.right_contact_node);
+            for (const std::uint16_t node : environment.blueprint_.additional_left_contact_nodes)
+                pin(node);
+            for (const std::uint16_t node : environment.blueprint_.additional_right_contact_nodes)
+                pin(node);
+            const Vec2 root = environment.particles_[environment.blueprint_.root_node].position;
+            environment.particles_[environment.blueprint_.torso_node].position =
+                root + Vec2{ 1.05f, 0.42f };
+            environment.particles_[environment.blueprint_.head_node].position =
+                root + Vec2{ 1.72f, 0.58f };
+            environment.particles_[environment.blueprint_.torso_node].previous =
+                environment.particles_[environment.blueprint_.torso_node].position;
+            environment.particles_[environment.blueprint_.head_node].previous =
+                environment.particles_[environment.blueprint_.head_node].position;
+            return !environment.crouch_posture_valid();
+        }
+
+        static bool guided_squat_is_valid(Environment& environment) noexcept
+        {
+            environment.set_course(CourseStage::duck_press, 0.50f);
+            environment.elapsed_seconds_ = 6.0f;
+            environment.duck_press_contact_seen_ = true;
+            for (int iteration = 0; iteration < 48; ++iteration)
+            {
+                environment.stabilize_duck_posture();
+                environment.solve_ground(1.0f / 60.0f);
+            }
+            const CrouchPostureEvidence evidence =
+                environment.current_crouch_posture();
+            return crouch_posture_qualified(evidence)
+                && evidence.pelvis_drop >= 0.30f
+                && evidence.left_knee_flex >= 0.16f
+                && evidence.right_knee_flex >= 0.16f
+                && evidence.torso_pitch <= 0.55f;
+        }
+
         static bool press_collision_resolves_below(Environment& environment) noexcept
         {
             if (!environment.valid_node(environment.blueprint_.head_node))
@@ -599,6 +649,26 @@ int main()
             && sim::duck_ground_contact_allowed(true, false)
             && sim::duck_ground_contact_allowed(false, true),
         "foot-only duck contact rule is not strict");
+    sim::CrouchPostureEvidence hinge{};
+    hinge.paired_leg_chains = true;
+    hinge.feet_supported = true;
+    hinge.pelvis_drop = 0.08f;
+    hinge.left_knee_flex = 0.03f;
+    hinge.right_knee_flex = 0.02f;
+    hinge.torso_pitch = 1.10f;
+    hinge.support_margin = 0.12f;
+    require(!sim::crouch_posture_qualified(hinge),
+        "forward hip hinge is accepted as a crouch");
+    sim::CrouchPostureEvidence squat{};
+    squat.paired_leg_chains = true;
+    squat.feet_supported = true;
+    squat.pelvis_drop = 0.44f;
+    squat.left_knee_flex = 0.32f;
+    squat.right_knee_flex = 0.31f;
+    squat.torso_pitch = 0.20f;
+    squat.support_margin = 0.14f;
+    require(sim::crouch_posture_qualified(squat),
+        "bilateral pelvis-down squat cannot satisfy crouch evidence");
     require(sim::stage_skill_evidence(sim::CourseStage::balance,
             0u, 0.0f, 0u, 0.0f, 0u, 0u),
         "standing incorrectly requires movement");
@@ -791,6 +861,13 @@ int main()
                 return std::abs(value) < 0.30f;
             }),
         "quadruped standing receives biped-like forced leg motion");
+
+    sim::Environment hinge_humanoid(humanoid_rig, 139);
+    require(sim::EnvironmentTestAccess::hip_hinge_is_rejected(hinge_humanoid),
+        "live humanoid forward bow passes the physical crouch gate");
+    sim::Environment guided_squat(humanoid_rig, 140);
+    require(sim::EnvironmentTestAccess::guided_squat_is_valid(guided_squat),
+        "authored crouch guide cannot produce a pelvis-down bilateral squat");
 
     sim::Environment crouch_humanoid(humanoid_rig, 141);
     crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);

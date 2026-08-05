@@ -302,9 +302,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0715-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0715-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0715-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0715-squat-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0715-squat-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0715-squat-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {

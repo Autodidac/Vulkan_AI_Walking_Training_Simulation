@@ -1,5 +1,11 @@
 # Changelog
 
+## Runner v0.7.15 — real crouch correction
+
+- Replaced head-clearance-only duck evidence with pelvis drop, bilateral knee flexion, bounded torso pitch, center-of-mass support, feet-only contact, held crouch, and upright recovery evidence.
+- Reworked the paired-leg crouch guide to lower the pelvis and upper body as a unit while driving knees into a squat instead of shrinking the torso into a forward bow.
+- Added explicit hip-hinge rejection, adversarial posture tests, and isolated autosaves for the corrected training semantics.
+
 ## Runner v0.7.15 — structural evolution completion
 
 - Added a selectable minimal scaffold rig with two articulated leg joints per side and proper semantic feet.

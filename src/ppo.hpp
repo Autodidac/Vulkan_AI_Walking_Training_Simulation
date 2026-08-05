@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1501u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1502u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -270,16 +270,15 @@ namespace runner::rl
 
         if (stage == sim::CourseStage::duck_press)
         {
-            const float left_flex = std::max(0.0f,
-                0.5f * (-action[0] + action[1]));
-            const float right_flex = std::max(0.0f,
-                0.5f * (action[2] - action[3]));
-            const float shared_flex = 0.5f * (left_flex + right_flex);
-            constexpr float chain_strength = 0.78f;
-            action[0] = lerp(action[0], -shared_flex, chain_strength);
-            action[1] = lerp(action[1], shared_flex, chain_strength);
-            action[2] = lerp(action[2], shared_flex, chain_strength);
-            action[3] = lerp(action[3], -shared_flex, chain_strength);
+            const float shared_hip_flex = 0.5f
+                * (std::max(0.0f, -action[0]) + std::max(0.0f, action[2]));
+            const float shared_knee_flex = 0.5f
+                * (std::max(0.0f, action[1]) + std::max(0.0f, -action[3]));
+            constexpr float chain_strength = 0.88f;
+            action[0] = lerp(action[0], -shared_hip_flex, chain_strength);
+            action[1] = lerp(action[1], shared_knee_flex, chain_strength);
+            action[2] = lerp(action[2], shared_hip_flex, chain_strength);
+            action[3] = lerp(action[3], -shared_knee_flex, chain_strength);
         }
         else if (stage != sim::CourseStage::balance)
         {
@@ -333,9 +332,13 @@ namespace runner::rl
             const float span_ratio = environment.primary_support_span_ratio();
             const float span_brake = clamp((span_ratio - 1.02f) * 0.34f,
                 0.0f, 0.24f);
-            const float hip_flex = std::max(0.06f,
-                0.18f * pressure - span_brake);
-            const float knee_flex = 0.46f * pressure;
+            const sim::CrouchPostureEvidence posture =
+                environment.current_crouch_posture();
+            const float drop_deficit = clamp(
+                (0.42f - posture.pelvis_drop) / 0.42f, 0.0f, 1.0f);
+            const float hip_flex = std::max(0.025f,
+                0.10f * pressure - span_brake);
+            const float knee_flex = (0.60f + drop_deficit * 0.10f) * pressure;
             action[0] = clamp(action[0] - hip_flex, -0.62f, 0.62f);
             action[1] = clamp(action[1] + knee_flex, -0.82f, 0.82f);
             action[2] = clamp(action[2] + hip_flex, -0.62f, 0.62f);
@@ -539,7 +542,8 @@ namespace runner::rl
         unstable_joints = 1u << 5u,
         body_contact = 1u << 6u,
         non_neutral_posture = 1u << 7u,
-        excessive_rotation = 1u << 8u
+        excessive_rotation = 1u << 8u,
+        invalid_crouch_posture = 1u << 9u
     };
 
     struct StageMotionQualification
@@ -565,6 +569,8 @@ namespace runner::rl
             return "ARMS NOT NEUTRAL";
         if ((mask & evidence_bit(MotionEvidenceFailure::excessive_rotation)) != 0u)
             return "UNCONTROLLED STANDING SPIN";
+        if ((mask & evidence_bit(MotionEvidenceFailure::invalid_crouch_posture)) != 0u)
+            return "HIP HINGE - NOT A CROUCH";
         if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
             return "NO SUSTAINED STANCE";
         if ((mask & evidence_bit(MotionEvidenceFailure::missing_recovery)) != 0u)
@@ -628,6 +634,8 @@ namespace runner::rl
             if (environment.non_foot_grounded()
                 || (!environment.left_supported() && !environment.right_supported()))
                 rejection |= evidence_bit(MotionEvidenceFailure::body_contact);
+            if (environment.longest_valid_crouch_seconds() < 0.55f)
+                rejection |= evidence_bit(MotionEvidenceFailure::invalid_crouch_posture);
             if (environment.blueprint().paired_leg_chains()
                 && (environment.primary_support_span_ratio() < 0.42f
                     || environment.primary_support_span_ratio() > 1.82f))
@@ -647,6 +655,8 @@ namespace runner::rl
         case sim::CourseStage::crouch_walk:
             if (environment.longest_stable_stance_seconds() < 1.25f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.longest_valid_crouch_seconds() < 0.30f)
+                rejection |= evidence_bit(MotionEvidenceFailure::invalid_crouch_posture);
             if (environment.gait_cycles() < 4u
                 || environment.crouch_walk_seconds() < 2.0f
                 || environment.crouch_walk_distance() < 0.75f

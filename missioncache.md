@@ -44,7 +44,7 @@ Flat lessons render their actual y=0 collision plane. Deformable lessons render 
 **Acceptance:** deterministic coordinate round-trip and render/collision sampling tests; Linux and Windows suites; live screenshot shows feet, terrain cells, obstacles, and pressure marks locked together with no duplicate ground.
 
 ### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** OPEN — SCREENSHOT REOPENED
+**Status:** IMPLEMENTED — DETERMINISTIC, CROSS-PLATFORM, AND SCREENSHOT VALIDATION REQUIRED
 
 A crouch must lower the pelvis through bilateral leg compression. Clearing the platen by folding the torso forward is invalid even when feet remain on the ground.
 
