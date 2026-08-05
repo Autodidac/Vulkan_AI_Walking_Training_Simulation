@@ -30,22 +30,48 @@ def patch_header() -> None:
     text = read('src/simulation.hpp')
     anchor = '''    [[nodiscard]] inline bool qualifies_crossing_step(int previous_side,
 '''
-    addition = '''    inline constexpr float planted_contact_slop_m = 0.032f;
-    inline constexpr float planted_contact_release_speed_mps = 0.24f;
-
-    [[nodiscard]] inline bool planted_contact_persists(bool was_grounded,
-        bool semantic_support, float separation, float upward_speed,
-        bool release_requested) noexcept
+    addition = '''    struct PlantedContactLimits
     {
-        return was_grounded && semantic_support && !release_requested
+        float separation{};
+        float upward_speed{};
+    };
+
+    [[nodiscard]] inline PlantedContactLimits planted_contact_limits(
+        bool static_support, float radius) noexcept
+    {
+        if (static_support)
+        {
+            return {
+                clamp(radius * 2.25f, 0.12f, 0.22f),
+                3.0f
+            };
+        }
+        return { 0.032f, 0.24f };
+    }
+
+    [[nodiscard]] inline bool planted_contact_persists(bool contact_latched,
+        bool semantic_support, float separation, float upward_speed,
+        bool release_requested, PlantedContactLimits limits) noexcept
+    {
+        return contact_latched && semantic_support && !release_requested
             && separation > 0.0025f
-            && separation <= planted_contact_slop_m
-            && upward_speed <= planted_contact_release_speed_mps;
+            && separation <= limits.separation
+            && upward_speed <= limits.upward_speed;
     }
 
 ''' + anchor
     text = replace_once(text, anchor, addition,
-        'planted-contact persistence helper')
+        'persistent contact manifold helpers')
+
+    member_anchor = '''        std::vector<Particle> particles_{};
+        std::vector<CourseFeature> course_features_{};
+'''
+    member_addition = '''        std::vector<Particle> particles_{};
+        std::vector<std::uint8_t> support_contact_latch_{};
+        std::vector<CourseFeature> course_features_{};
+'''
+    text = replace_once(text, member_anchor, member_addition,
+        'support contact manifold storage')
     write('src/simulation.hpp', text)
 
 
@@ -73,6 +99,14 @@ def patch_simulation() -> None:
 '''
     text = replace_once(text, forced_pin, '',
         'remove forced semantic-foot coordinates')
+
+    reset_anchor = '''        previous_pelvis_ = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position : Vec2{};
+'''
+    reset_addition = '''        support_contact_latch_.assign(particles_.size(), 0u);
+        previous_pelvis_ = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position : Vec2{};
+'''
+    text = replace_once(text, reset_anchor, reset_addition,
+        'reset support contact manifold')
 
     old_ground = '''    void Environment::solve_ground(float dt) noexcept
     {
@@ -122,6 +156,9 @@ def patch_simulation() -> None:
     new_ground = '''    void Environment::solve_ground(float dt) noexcept
     {
         const float safe_dt = std::max(dt, 1.0e-5f);
+        if (support_contact_latch_.size() != particles_.size())
+            support_contact_latch_.assign(particles_.size(), 0u);
+
         float root_upward_speed = 0.0f;
         if (valid_node(blueprint_.root_node))
         {
@@ -130,6 +167,8 @@ def patch_simulation() -> None:
         }
         const bool powered_release = powered_joint_launch(
             course_stage_, root_upward_speed, action_change_energy_);
+        const bool static_support = course_stage_ == CourseStage::balance
+            || course_stage_ == CourseStage::duck_press;
 
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
@@ -153,15 +192,21 @@ def patch_simulation() -> None:
             const float separation = particle.position.y - minimum_y;
             const bool release_requested = semantic_support && powered_release
                 && velocity.y > 0.0f;
+            const bool contact_latched = semantic_support
+                && (was_grounded || support_contact_latch_[index] != 0u);
+            const PlantedContactLimits limits = planted_contact_limits(
+                static_support, particle.radius);
             const bool actual_contact = separation <= 0.0025f
                 && !release_requested;
             const bool persistent_contact = planted_contact_persists(
-                was_grounded, semantic_support, separation, velocity.y,
-                release_requested);
+                contact_latched, semantic_support, separation, velocity.y,
+                release_requested, limits);
             if (actual_contact || persistent_contact)
             {
                 particle.position.y = minimum_y;
                 particle.grounded = true;
+                if (semantic_support)
+                    support_contact_latch_[index] = 1u;
                 float retention = ground_velocity_retention(traction_contact, velocity.y);
                 if (traction_contact)
                 {
@@ -169,10 +214,8 @@ def patch_simulation() -> None:
                         && index == blueprint_.additional_left_contact_nodes[1];
                     const bool right_toe = blueprint_.additional_right_contact_nodes.size() >= 2u
                         && index == blueprint_.additional_right_contact_nodes[1];
-                    const bool static_lesson = course_stage_ == CourseStage::balance
-                        || course_stage_ == CourseStage::duck_press;
                     retention = foot_friction_retention(velocity.x,
-                        firmness, looseness, static_lesson,
+                        firmness, looseness, static_support,
                         left_toe || right_toe);
                 }
                 particle.previous.x = particle.position.x
@@ -183,11 +226,18 @@ def patch_simulation() -> None:
                     particle.previous.y = particle.position.y
                         + velocity.y * safe_dt * 0.05f;
             }
+            else if (semantic_support
+                && (release_requested
+                    || separation > limits.separation
+                    || velocity.y > limits.upward_speed))
+            {
+                support_contact_latch_[index] = 0u;
+            }
         }
     }
 '''
     text = replace_once(text, old_ground, new_ground,
-        'bounded planted-contact persistence')
+        'warm-started bounded contact manifold')
 
     old_comment = '''            // Separation and toe rotation are the final operations capable of
             // shifting a semantic contact. End every solver iteration with the
@@ -196,12 +246,12 @@ def patch_simulation() -> None:
 '''
     new_comment = '''            // Separation and toe rotation are the final operations capable of
             // shifting a semantic contact. Only the ground solver may establish
-            // support; bounded persistence absorbs numerical lift without
-            // preventing a real swing, toe-off, or powered launch.
+            // support; its warm-started manifold absorbs iterative numerical
+            // lift while moving stages still release feet promptly.
             solve_ground(dt);
 '''
     text = replace_once(text, old_comment, new_comment,
-        'physical crouch support comment')
+        'physical contact manifold comment')
     write('src/simulation.cpp', text)
 
 
@@ -251,68 +301,80 @@ def patch_tests() -> None:
                 && support.grounded == grounded_before;
         }
 
-        static bool planted_contact_persistence_is_bounded(
+        static bool planted_contact_manifold_is_bounded(
             Environment& environment) noexcept
         {
-            environment.set_course(CourseStage::balance, 0.25f);
             if (!environment.valid_node(environment.blueprint_.left_contact_node))
                 return false;
             constexpr float dt = 1.0f / 60.0f;
-            Particle& support = environment.particles_[
-                environment.blueprint_.left_contact_node];
-            const float minimum_y = environment.ground_height_at(support.position.x)
-                + ground_contact_offset(true, support.radius);
+            const std::size_t node = environment.blueprint_.left_contact_node;
+            Particle& support = environment.particles_[node];
 
-            support.position.y = minimum_y + 0.018f;
-            support.previous = support.position - Vec2{ 0.0f, 0.08f * dt };
+            environment.set_course(CourseStage::duck_press, 0.25f);
+            float minimum_y = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = minimum_y;
+            support.previous = support.position;
             support.grounded = true;
             environment.solve_ground(dt);
-            const bool held = support.grounded
+            support.position.y = minimum_y + 0.11f;
+            support.previous = support.position - Vec2{ 0.0f, 0.80f * dt };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            const bool static_held = support.grounded
                 && std::abs(support.position.y - minimum_y) < 1.0e-6f;
 
-            support.position.y = minimum_y + 0.018f;
-            support.previous = support.position - Vec2{ 0.0f, 0.42f * dt };
+            environment.set_course(CourseStage::uneven, 0.25f);
+            minimum_y = environment.ground_height_at(support.position.x)
+                + ground_contact_offset(true, support.radius);
+            support.position.y = minimum_y;
+            support.previous = support.position;
             support.grounded = true;
             environment.solve_ground(dt);
-            const bool released = !support.grounded
-                && std::abs(support.position.y - (minimum_y + 0.018f)) < 1.0e-6f;
-            return held && released;
+            support.position.y = minimum_y + 0.040f;
+            support.previous = support.position - Vec2{ 0.0f, 0.42f * dt };
+            support.grounded = false;
+            environment.solve_ground(dt);
+            const bool moving_released = !support.grounded
+                && std::abs(support.position.y - (minimum_y + 0.040f)) < 1.0e-6f;
+            return static_held && moving_released;
         }
 
 '''
     text = replace_once(text, anchor, addition,
-        'crouch and contact persistence test access')
+        'crouch guide and contact manifold test access')
 
     test_anchor = '''    sim::Environment guided_squat(humanoid_rig, 140);
     require(sim::EnvironmentTestAccess::guided_squat_is_valid(guided_squat),
         "authored crouch guide cannot produce a pelvis-down bilateral squat");
 
 '''
-    test_addition = test_anchor + '''    require(sim::planted_contact_persists(
-            true, true, 0.018f, 0.08f, false),
-        "previously planted semantic support did not survive bounded solver lift");
+    test_addition = test_anchor + '''    const sim::PlantedContactLimits static_limits =
+        sim::planted_contact_limits(true, 0.08f);
+    const sim::PlantedContactLimits moving_limits =
+        sim::planted_contact_limits(false, 0.08f);
+    require(sim::planted_contact_persists(
+            true, true, 0.11f, 0.80f, false, static_limits),
+        "warm-started static support did not survive iterative solver lift");
     require(!sim::planted_contact_persists(
-            true, true, 0.018f, 0.42f, false),
-        "fast upward foot motion remained magnetically planted");
+            true, true, 0.040f, 0.42f, false, moving_limits),
+        "moving foot remained magnetically planted");
     require(!sim::planted_contact_persists(
-            true, true, 0.050f, 0.08f, false),
-        "support persistence exceeded its bounded contact slop");
-    require(!sim::planted_contact_persists(
-            true, true, 0.018f, 0.08f, true),
+            true, true, 0.018f, 0.08f, true, static_limits),
         "explicit powered release was ignored");
 
     sim::Environment unpinned_squat(humanoid_rig, 1401);
     require(sim::EnvironmentTestAccess::crouch_guide_preserves_support_dynamics(
             unpinned_squat),
         "crouch curriculum directly pins semantic foot coordinates or support state");
-    sim::Environment contact_slop(humanoid_rig, 1402);
-    require(sim::EnvironmentTestAccess::planted_contact_persistence_is_bounded(
-            contact_slop),
-        "ground solver did not distinguish numerical contact lift from deliberate foot lift");
+    sim::Environment contact_manifold(humanoid_rig, 1402);
+    require(sim::EnvironmentTestAccess::planted_contact_manifold_is_bounded(
+            contact_manifold),
+        "contact manifold failed static warm-start or moving-foot release");
 
 '''
     text = replace_once(text, test_anchor, test_addition,
-        'bounded physical crouch acceptance')
+        'warm-started physical crouch acceptance')
     write('tests/core_tests.cpp', text)
 
 
@@ -320,32 +382,33 @@ def patch_documents() -> None:
     text = read('missioncache.md')
     text = replace_regex_once(text,
         r'(### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow\n)\*\*Status:\*\*[^\n]*',
-        r'\1**Status:** IMPLEMENTED — BOUNDED PHYSICAL CONTACT PERSISTENCE; FULL VALIDATION REQUIRED',
+        r'\1**Status:** IMPLEMENTED — WARM-STARTED PHYSICAL CONTACT MANIFOLD; FULL VALIDATION REQUIRED',
         'crouch mission refined status')
     text = replace_regex_once(text,
         r'(### WALK-FEET-142 — Proper forward articulated feet and physical traction\n)\*\*Status:\*\*[^\n]*',
-        r'\1**Status:** IMPLEMENTED — BOUNDED PLANTED CONTACT WITH PROMPT RELEASE; FULL VALIDATION REQUIRED',
+        r'\1**Status:** IMPLEMENTED — STATE-AWARE BOUNDED CONTACT RELEASE; FULL VALIDATION REQUIRED',
         'feet mission refined status')
     audit_anchor = '''Before release, re-evaluate at minimum:
 '''
-    audit_addition = '''**Contact-persistence implementation:** `solve_ground` now remembers the immediately previous physical support result and tolerates only 0.032 m of semantic-foot numerical separation at no more than 0.24 m/s upward speed. Larger separation, faster lift, or an explicit powered launch releases the contact. The crouch guide no longer writes support coordinates, velocity history, or grounded state. Positive, negative, and adversarial tests cover bounded persistence, deliberate release, and curriculum noninterference.
+    audit_addition = '''**Contact-manifold implementation:** semantic foot contacts now retain a dedicated warm-start latch independent of the transient `Particle::grounded` flag. Static support permits bounded constraint correction based on foot radius; moving stages use tight separation and upward-speed limits, and powered launch clears contact immediately. The crouch guide remains unable to write support coordinates, velocity history, grounded state, or the contact latch. Tests cover static warm start, moving release, powered release, and curriculum noninterference.
 
 ''' + audit_anchor
     text = replace_once(text, audit_anchor, audit_addition,
-        'record bounded planted-contact implementation')
+        'record warm-started contact manifold')
     write('missioncache.md', text)
 
     text = read('CHANGELOG.md')
     anchor = '## Runner v0.7.15 — active joint growth and state transfer\n'
-    addition = '''## Runner v0.7.15 — physical planted-contact persistence
+    addition = '''## Runner v0.7.15 — warm-started physical foot contacts
 
-- Removed the static-crouch curriculum's direct writes to heel/ball/toe position, velocity history, and grounded state.
-- Added a bounded ground-solver persistence rule for previously planted semantic foot contacts so iterative constraints cannot create false unsupported frames.
-- Contacts release on excessive separation, deliberate upward motion, or powered launch; adversarial tests reject magnetic feet and curriculum pinning.
+- Removed all static-crouch writes to semantic foot coordinates and support state.
+- Added a dedicated ground-solver contact manifold so repeated constraint passes do not erase a physically planted foot.
+- Static support uses radius-bounded correction; moving feet and powered launches release through tighter distance and velocity gates.
+- Added adversarial tests for curriculum noninterference, static contact retention, and non-magnetic moving-foot release.
 
 ''' + anchor
     text = replace_once(text, anchor, addition,
-        'physical planted-contact changelog')
+        'warm-started foot contact changelog')
     write('CHANGELOG.md', text)
 
 
