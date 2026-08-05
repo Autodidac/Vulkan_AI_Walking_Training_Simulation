@@ -1,1 +1,0 @@
-Trigger a fresh PR synchronization event against the hardened topology materializer.

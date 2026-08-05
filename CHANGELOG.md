@@ -1,5 +1,12 @@
 # Changelog
 
+## Runner v0.7.15 — structural evolution completion
+
+- Added a selectable minimal scaffold rig with two articulated leg joints per side and proper semantic feet.
+- Added deterministic topology mutations for bone splitting, branch growth/removal, and support duplication alongside parameter evolution.
+- Added a bounded 16-environment topology nursery that transfers the champion policy, adapts candidates before evaluation, accepts only stage-valid improvement, and restores the exact champion on failed application.
+- Isolated the expanded evolution semantics from earlier v0.7.15 checkpoints.
+
 ## v0.7.15 - Viewport, terrain, and failed-policy recovery
 
 - Pulled the live course camera back and reframed the terrain so the rig appears as a small training subject with meaningful course visibility.

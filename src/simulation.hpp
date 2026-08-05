@@ -787,6 +787,7 @@ namespace runner::sim
                 && std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
         }
 
+        [[nodiscard]] static CreatureBlueprint scaffold();
         [[nodiscard]] static CreatureBlueprint chicken();
         [[nodiscard]] static CreatureBlueprint biped();
         [[nodiscard]] static CreatureBlueprint humanoid();

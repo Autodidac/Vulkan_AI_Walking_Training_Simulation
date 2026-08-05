@@ -372,6 +372,26 @@ int main()
 {
     using namespace runner;
 
+    const sim::CreatureBlueprint scaffold = sim::CreatureBlueprint::scaffold();
+    require(scaffold.valid() && scaffold.active_motor_count == 4u
+            && scaffold.paired_leg_chains(),
+        "minimal scaffold is not a valid two-joint-per-side training rig");
+    bool topology_mutation_seen = false;
+    bool parametric_mutation_seen = false;
+    for (std::uint64_t generation = 0; generation < 22u; ++generation)
+    {
+        const rl::RigMutationCandidate mutation = rl::evolve_rig_candidate(
+            scaffold, generation);
+        if (!mutation.changed)
+            continue;
+        require(mutation.blueprint.valid(),
+            "rig evolution published a structurally invalid candidate");
+        topology_mutation_seen = topology_mutation_seen || mutation.topology_changed;
+        parametric_mutation_seen = parametric_mutation_seen || !mutation.topology_changed;
+    }
+    require(topology_mutation_seen && parametric_mutation_seen,
+        "rig evolution does not produce both topology and parameter candidates");
+
     const sim::DuckPressProfile press_clear = sim::duck_press_profile(1.0f, 0.5f, 5.0f);
     const sim::DuckPressProfile press_descend = sim::duck_press_profile(3.5f, 0.5f, 5.0f);
     const sim::DuckPressProfile press_hold = sim::duck_press_profile(5.5f, 0.5f, 5.0f);

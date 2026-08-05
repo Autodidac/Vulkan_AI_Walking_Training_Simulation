@@ -144,6 +144,36 @@ namespace runner::sim
         }
     }
 
+    CreatureBlueprint CreatureBlueprint::scaffold()
+    {
+        CreatureBlueprint result{};
+        result.nodes = {
+            { 0.00f, 2.62f }, { 0.00f, 3.68f }, { 0.02f, 4.38f },
+            { -0.30f, 1.46f }, { -0.38f, 0.26f },
+            { 0.30f, 1.46f }, { 0.38f, 0.26f }
+        };
+        result.radii = { 0.24f, 0.27f, 0.23f, 0.17f, 0.15f, 0.17f, 0.15f };
+        result.bones = {
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
+            { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
+            { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f }
+        };
+        result.motors = {
+            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
+            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
+        };
+        result.active_motor_count = 4;
+        result.root_node = 0;
+        result.torso_node = 1;
+        result.head_node = 2;
+        result.left_contact_node = 4;
+        result.right_contact_node = 6;
+        add_passive_feet(result, 0.16f, 0.28f);
+        result.rebuild_rest_lengths();
+        calibrate_grounded_defaults(result, 34.0f, 56.0f, 0.042f, 0.048f);
+        return result;
+    }
+
     CreatureBlueprint CreatureBlueprint::chicken()
     {
         CreatureBlueprint result{};

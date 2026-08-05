@@ -96,7 +96,7 @@ Traction must be physical and state-aware rather than an unconditional position 
 **Acceptance:** heel/ball/toe phase tests, planted-foot static-slip bound, dynamic breakaway test, toe angular-rate test, loose/firm terrain traction comparison, no wheel-skating qualification, all-preset finite and Stand acceptance.
 
 ### WALK-EVOLUTION-143 — Structural rig evolution with nursery adaptation
-**Status:** ACTIVE — PARAMETRIC EVOLUTION EXISTS; TOPOLOGY EVOLUTION NOT YET VERIFIED
+**Status:** IMPLEMENTED — DETERMINISTIC AND PACKAGE VALIDATION REQUIRED
 
 Evolution must begin from a minimal valid scaffold option and support real topology changes, not only strength and coordinate micro-tuning.
 

@@ -77,6 +77,32 @@ namespace runner::rl
         std::string message{ "LEARNING TO BALANCE" };
     };
 
+    enum class RigMutationKind : std::uint8_t
+    {
+        motor_strength,
+        joint_range,
+        support_width,
+        torso_height,
+        pivot_height,
+        split_bone,
+        append_leaf,
+        duplicate_support,
+        remove_leaf,
+        node_radius,
+        bone_stiffness
+    };
+
+    struct RigMutationCandidate
+    {
+        sim::CreatureBlueprint blueprint{};
+        RigMutationKind kind{ RigMutationKind::motor_strength };
+        bool changed{};
+        bool topology_changed{};
+    };
+
+    [[nodiscard]] RigMutationCandidate evolve_rig_candidate(
+        const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept;
+
     class AutonomousTrainer
     {
     public:
@@ -225,8 +251,9 @@ namespace runner::rl
 
         void manage_curriculum_locked();
         void attempt_rig_evolution_locked();
-        [[nodiscard]] float evaluate_rig_locked(const sim::CreatureBlueprint& candidate) const;
-        [[nodiscard]] sim::CreatureBlueprint mutate_rig_locked() noexcept;
+        [[nodiscard]] float evaluate_rig_locked(const sim::CreatureBlueprint& candidate,
+            const PolicyNetwork& policy) const;
+        [[nodiscard]] RigMutationCandidate mutate_rig_locked() noexcept;
         void publish_locked();
         void queue_autosave();
         void queue_checkpoint_save(std::filesystem::path path, PpoTrainer::CheckpointData data);

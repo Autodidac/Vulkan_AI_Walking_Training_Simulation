@@ -236,7 +236,7 @@ namespace runner
     {
         enum class Mode : std::uint8_t { live, rig_lab };
         enum class RigPreset : std::uint8_t {
-            humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
+            scaffold, humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
         };
         enum class RigPanelPage : std::uint8_t { body, motor };
         enum class LivePanelPage : std::uint8_t { results, totals };
@@ -310,6 +310,7 @@ namespace runner
         {
             switch (rig_preset)
             {
+            case RigPreset::scaffold: return "SCAFFOLD";
             case RigPreset::humanoid: return "HUMANOID";
             case RigPreset::biped: return "BASIC BIPED";
             case RigPreset::chicken: return "CHICKEN BIPED";
@@ -381,6 +382,7 @@ namespace runner
             case RigPreset::humanoid:
                 return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
                     "LEFT SHOULDER", "LEFT ELBOW", "RIGHT SHOULDER", "RIGHT ELBOW" };
+            case RigPreset::scaffold:
             case RigPreset::biped:
             case RigPreset::chicken:
                 return { "LEFT HIP", "LEFT KNEE", "RIGHT HIP", "RIGHT KNEE",
@@ -458,6 +460,7 @@ namespace runner
             rig_preset = preset;
             switch (preset)
             {
+            case RigPreset::scaffold: blueprint = sim::CreatureBlueprint::scaffold(); break;
             case RigPreset::humanoid: blueprint = sim::CreatureBlueprint::humanoid(); break;
             case RigPreset::biped: blueprint = sim::CreatureBlueprint::biped(); break;
             case RigPreset::chicken: blueprint = sim::CreatureBlueprint::chicken(); break;
@@ -1545,14 +1548,18 @@ namespace runner
                     rig_preset == RigPreset::crawler4))
                     use_preset(RigPreset::crawler4);
                 cursor.y += 43.0f;
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 35.0f } }, "CHICKEN", input, rig_preset == RigPreset::chicken))
+                const float lower_fourth = (rect.size.x - 54.0f) / 4.0f;
+                if (button({ cursor, { lower_fourth, 35.0f } }, "SCAFFOLD", input,
+                    rig_preset == RigPreset::scaffold))
+                    use_preset(RigPreset::scaffold);
+                if (button({ cursor + Vec2{ lower_fourth + 6.0f, 0.0f }, { lower_fourth, 35.0f } },
+                    "CHICKEN", input, rig_preset == RigPreset::chicken))
                     use_preset(RigPreset::chicken);
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 35.0f } }, "6-LEG", input,
-                    rig_preset == RigPreset::hexapod))
+                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 2.0f, 0.0f }, { lower_fourth, 35.0f } },
+                    "6-LEG", input, rig_preset == RigPreset::hexapod))
                     use_preset(RigPreset::hexapod);
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 35.0f } }, "MONOPED", input,
-                    rig_preset == RigPreset::monoped))
+                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 3.0f, 0.0f }, { lower_fourth, 35.0f } },
+                    "MONOPED", input, rig_preset == RigPreset::monoped))
                     use_preset(RigPreset::monoped);
                 cursor.y += 48.0f;
 
