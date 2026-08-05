@@ -8,35 +8,6 @@ def read(path: str) -> str:
 
 
 def write(path: str, text: str) -> None:
-    target = ROOT / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text.replace("\r\n", "\n").rstrip() + "\n", encoding="utf-8")
-
-
-def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"{label}: expected one match, found {count}")
-    return text.replace(old, new, 1)
-
-
-mission = read("missioncache.md")
-audit_anchor = """**Static-friction implementation:** the ground solver records each semantic foot's measured contact x when collision first occurs. Static balance/crouch support is resolved against that physical contact anchor and the terrain height, with velocity removed as a zero-slip constraint. The crouch curriculum cannot write feet or contact memory. Moving stages do not use the static anchor and release through tight separation/upward-speed gates; powered launch releases immediately.\n\n"""
-audit_addition = audit_anchor + """**MSVC portability finding:** exact-source Windows run `31016262550`, job `92341400943`, built `RunnerCore`, `Runner.exe`, and the other native targets but failed `RunnerDeformableTerrainTests` because MSVC 19.51 does not treat `std::abs(float)` as constexpr in the terrain transform `static_assert`. This is a test-only cross-platform defect. The correction must preserve compile-time transform verification without relying on library constexpr coverage, then rerun Linux, Windows, the complete acceptance matrix, and runtime diagnostics.\n\n"""
-mission = replace_once(mission, audit_anchor, audit_addition,
-    "cache MSVC constexpr portability defect")
-write("missioncache.md", mission)
-
-apply_script = r'''from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
-
-
-def write(path: str, text: str) -> None:
     (ROOT / path).write_text(text.replace("\r\n", "\n").rstrip() + "\n", encoding="utf-8")
 
 
@@ -67,5 +38,3 @@ changelog_addition = changelog_anchor + """- Kept terrain coordinate round-trip 
 changelog = replace_once(changelog, changelog_anchor, changelog_addition,
     "record MSVC test portability fix")
 write("CHANGELOG.md", changelog)
-'''
-write("tools/apply_v0715_refinement.py", apply_script)

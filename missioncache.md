@@ -154,6 +154,8 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 
 **Static-friction implementation:** the ground solver records each semantic foot's measured contact x when collision first occurs. Static balance/crouch support is resolved against that physical contact anchor and the terrain height, with velocity removed as a zero-slip constraint. The crouch curriculum cannot write feet or contact memory. Moving stages do not use the static anchor and release through tight separation/upward-speed gates; powered launch releases immediately.
 
+**MSVC portability finding:** exact-source Windows run `31016262550`, job `92341400943`, built `RunnerCore`, `Runner.exe`, and the other native targets but failed `RunnerDeformableTerrainTests` because MSVC 19.51 does not treat `std::abs(float)` as constexpr in the terrain transform `static_assert`. This is a test-only cross-platform defect. The correction must preserve compile-time transform verification without relying on library constexpr coverage, then rerun Linux, Windows, the complete acceptance matrix, and runtime diagnostics.
+
 Before release, re-evaluate at minimum:
 - all eight preset Stand and static-crouch behavior;
 - monoped single-support semantics;
