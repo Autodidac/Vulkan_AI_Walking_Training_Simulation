@@ -188,7 +188,7 @@ Required evidence: clean consolidated source branch; obsolete observer branch re
 
 # Runner v0.7.16 adaptive viewport and usability batch
 
-**Release state:** PR PACKAGE VALIDATED — merge, publication, re-download, and final cleanup remain.
+**Release state:** PUBLISHED — RELEASE ASSETS RE-DOWNLOADED AND VERIFIED; USER EYE TEST REMAINS AUTHORITATIVE.
 
 The v0.7.15 world scale is physically correct, but its fixed 22 px/m live camera makes the rig unnecessarily small. This batch keeps the corrected world scale and terrain synchronization while restoring a readable, user-adjustable view. Equipment, target, policy-extension, and combined carry/fire work remains intact below and moves to v0.7.17 rather than being partially smuggled into this viewport release.
 
@@ -313,7 +313,7 @@ Create root `AGENTS.md` with cache-first scope capture, regression inventory, te
 Close stale v0.7.15 publication text, move the untouched equipment batch to v0.7.17, require AGENTS.md and the camera document in repository/package audits, and forbid temporary applicators from the final branch.
 
 ### WALK-RELEASE-180 — Publish audited Runner v0.7.16
-**Status:** READY FOR MERGE — AUDITED PR PACKAGE GATE PASSED
+**Status:** PUBLISHED — RELEASE ASSETS, RE-DOWNLOAD, AND CLEANUP VERIFIED
 
 Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, every deterministic suite, camera diagnostic, 24-case locomotion acceptance, installed/extracted package diagnostics, run.bat, checksum, manifest, release re-download, branch cleanup, and zero open PRs.
 
@@ -329,7 +329,11 @@ Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, eve
 - Installed package, executable-relative `run.bat`, acceptance, camera diagnostic, and optional-asset fallback: passed.
 - ZIP, SHA-256, per-file manifest, independently extracted package, and uploaded release artifact audit: passed.
 - Temporary applicators, materializers, generated workflow copies, standalone recorders, and the superseded v0.7.15 workflow are absent.
-- Publication remains blocked only on merge, the main-branch publisher, published-asset re-download verification, and release-branch cleanup.
+- Merge commit: `1577706cade4a47cfde9c2834af22279e2cd793f`.
+- Published tag: `v0.7.16`, resolving to the merged Runner 0.7.16 source.
+- The main-branch publisher created the release, re-downloaded and byte-compared every published asset, verified the ZIP SHA-256, and then removed the completed release branch.
+- Repository cleanup after publication: only `main` remains.
+- Contradictory eye-test evidence reopens only the exact affected camera, PIP, layout, locomotion, or package mission.
 
 # Runner v0.7.17 equipment, carry, and target curriculum
 

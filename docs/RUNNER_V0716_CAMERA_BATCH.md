@@ -37,4 +37,4 @@ The clean v0.7.16 source at `794bda73f8d1398d5310311172345343004e5f78` passed Gi
 - optional-asset fallback;
 - ZIP, SHA-256, per-file manifest, independent extraction, and release-artifact upload.
 
-The permanent release workflow repeats these gates for the final source, records mission closure only after both platform jobs pass, and then requires merge, main-branch publication, published-asset re-download verification, and release-branch cleanup. The one-use ledger closure script is removed in the same evidence commit.
+The permanent release workflow repeated these gates for the final source and recorded mission closure only after both platform jobs passed. PR #55 merged as `1577706cade4a47cfde9c2834af22279e2cd793f`; tag `v0.7.16` now resolves to Runner 0.7.16. The publisher re-downloaded and byte-compared every release asset, verified the ZIP SHA-256, removed the completed release branch, and left only `main`. The one-use ledger scripts and workflows are absent. User eye testing remains the final authority for framing and readability.
