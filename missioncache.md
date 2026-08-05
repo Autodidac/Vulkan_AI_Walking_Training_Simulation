@@ -162,6 +162,8 @@ Any change to crouch qualification, gait evidence, foot traction, topology evolu
 
 **Remaining v0.7.15 gate:** run the clean script-free PR workflow, install and audit the package, test `run.bat` from an unrelated directory, verify optional artwork/assets and fallback behavior, create checksums and a per-file manifest, merge, publish `v0.7.15`, re-download and byte-compare the release asset, then remove obsolete PRs/branches. Visual appearance remains subject to released screenshot/manual review and must reopen the exact mission if contradicted.
 
+**Release-audit hygiene finding:** clean PR release run `31020437322`, Linux job `92355450216`, stopped before compilation because the repository still contained `.github/workflows/trigger-v0.1.3.txt`, a one-line historical workflow trigger from release v0.1.3. It is not product source, not referenced by the current workflows, and is explicitly forbidden by the v0.7.15 release audit. Remove that exact stale file, retain all current validation/release workflows, and rerun the full clean package gate.
+
 Before release, re-evaluate at minimum:
 - all eight preset Stand and static-crouch behavior;
 - monoped single-support semantics;
