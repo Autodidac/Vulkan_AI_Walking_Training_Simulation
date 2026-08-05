@@ -1,16 +1,20 @@
 name: Apply Runner v0.7.17 eye-test corrections
 
 on:
-  push:
-    branches:
-      - agent/v0717-eye-test-feet-gait-batch25
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
+concurrency:
+  group: apply-runner-v0717-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   apply:
-    if: ${{ github.actor != 'github-actions[bot]' }}
+    if: ${{ github.head_ref == 'agent/v0717-eye-test-feet-gait-batch25' && github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
