@@ -106,7 +106,8 @@ namespace runner::rl
             if (catastrophic_invalid && !worker_.has_best_policy()
                 && metrics.evaluation_count % 3u == 0u)
             {
-                worker_.set_blueprint(worker_.blueprint(), false);
+                worker_.reset_policy(0x715000u
+                    + metrics.evaluation_count * 0x9E3779B97F4A7C15ULL);
                 worker_.set_course(stage_, difficulty_, false);
                 mastery_streak_ = 0;
                 degradation_streak_ = 0;
