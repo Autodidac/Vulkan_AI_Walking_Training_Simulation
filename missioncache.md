@@ -96,7 +96,7 @@ Traction must be physical and state-aware rather than an unconditional position 
 **Acceptance:** heel/ball/toe phase tests, planted-foot static-slip bound, dynamic breakaway test, toe angular-rate test, loose/firm terrain traction comparison, no wheel-skating qualification, all-preset finite and Stand acceptance.
 
 ### WALK-EVOLUTION-143 — Structural rig evolution with nursery adaptation
-**Status:** IMPLEMENTED — DETERMINISTIC AND PACKAGE VALIDATION REQUIRED
+**Status:** PARTIAL — TOPOLOGY OPERATORS PASS; NEW ACTIVE JOINT SLOT GROWTH REOPENED BEFORE RELEASE
 
 Evolution must begin from a minimal valid scaffold option and support real topology changes, not only strength and coordinate micro-tuning.
 
@@ -108,6 +108,8 @@ Required operators:
 - mutate node position/radius, bone stiffness, motor range/strength, and semantic support assignment;
 - rebuild rest lengths and calibrate motors;
 - preserve existing motor slots where possible and initialize new slots neutrally;
+- when a split creates a usable articulated joint and an action slot is free, activate that joint, zero the transferred actor row/bias for the new slot, and let the bounded nursery discover control without injecting stale unused-output motion;
+- prove explicit transfer-only import accepts dimension-compatible older semantics while normal resume still rejects them and resets optimizer/champion state;
 - reject disconnected, cyclically invalid, unsupported, nonfinite, or semantically ambiguous candidates.
 - protect semantic heel/ball/toe edges and weak visual braces from destructive bone splitting.
 
