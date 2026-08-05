@@ -4,33 +4,33 @@ path = Path('missioncache.md')
 text = path.read_text(encoding='utf-8')
 
 old = '''### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** IMPLEMENTED — FORCED FOOT PIN REMOVED; FULL VALIDATION REQUIRED
+**Status:** PARTIAL — POSTURE EVIDENCE PASSES; FORCED FOOT-PIN REMOVAL REOPENED BEFORE RELEASE
 '''
 new = '''### WALK-CROUCH-140 — Real squat-shaped crouch, not a forward bow
-**Status:** PARTIAL — HARD PIN REMOVED; GENERAL PLANTED-CONTACT PERSISTENCE FAILURE REOPENED
+**Status:** PARTIAL — HARD PIN REMOVAL EXPOSED GENERAL PLANTED-CONTACT PERSISTENCE FAILURE
 '''
 if old not in text:
-    raise SystemExit('WALK-CROUCH-140 refined status not found')
+    raise SystemExit('WALK-CROUCH-140 current status not found')
 text = text.replace(old, new, 1)
 
 old = '''### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** IMPLEMENTED — CROUCH SUPPORT NOW USES ONLY COLLISION/FRICTION; FULL VALIDATION REQUIRED
+**Status:** PARTIAL — GROUND FRICTION PASSES; STATIC CROUCH HARD-PIN REOPENED BEFORE RELEASE
 '''
 new = '''### WALK-FEET-142 — Proper forward articulated feet and physical traction
-**Status:** PARTIAL — HARD PIN REMOVED; PHYSICAL CONTACT PERSISTENCE REQUIRED
+**Status:** PARTIAL — HARD PIN REMOVAL EXPOSED PHYSICAL CONTACT-PERSISTENCE GAP
 '''
 if old not in text:
-    raise SystemExit('WALK-FEET-142 refined status not found')
+    raise SystemExit('WALK-FEET-142 current status not found')
 text = text.replace(old, new, 1)
 
-anchor = '''**Resolution implemented:** the crouch guide now skips every semantic support node. It may shape knees, pelvis, torso, and head, but only `solve_ground` may place heel/ball/toe contacts, alter their retained tangential velocity, or mark them grounded. A dedicated adversarial test perturbs foot position, velocity history, and support state and verifies the guide leaves all three untouched before the real ground solver runs.
+finding = '''**Second-audit finding:** the static crouch stabilizer still wrote authored x positions, floor y positions, previous positions, and `grounded=true` into every semantic foot contact several times per solver iteration. That invalidated the claimed friction-only support model and could manufacture the very crouch being evaluated. The release remains blocked until those assignments are removed and adversarial tests prove support, squat shape, recovery, and bounded slip still pass through the real ground solver.
 '''
-addition = anchor + '''
-**Validation result:** Linux run `31004249303`, job `92300237503`, proved the guide no longer overwrites feet, but the eight-preset live acceptance matrix fell from 24/24 to 16/24. Every static-crouch case failed because tiny constraint lifts cleared the solver's 0.0025 m contact threshold, leaving semantic feet unsupported while the press descended. The fix must be a stage-independent planted-contact persistence rule with bounded vertical slop and velocity limits. It may retain a previously planted support through tiny numerical separation, but must release on deliberate toe-off, meaningful upward velocity, or clearance beyond the slop. Duck-specific position pinning remains forbidden.
+addition = finding + '''
+**Removal validation:** Linux run `31004249303`, job `92300237503`, proved the guide no longer overwrote semantic support nodes, but the live acceptance matrix fell from 24/24 to 16/24. Every static-crouch case failed because tiny constraint lifts cleared the ground solver's 0.0025 m threshold, leaving feet unsupported while the press descended. The next correction must be a general planted-contact persistence/slop rule in `solve_ground`, not a duck-specific pin. It may retain a previously planted support only through bounded numerical separation and bounded upward speed; deliberate toe-off, jump launch, and real swing clearance must release promptly.
 '''
-if anchor not in text:
-    raise SystemExit('second-audit resolution anchor not found')
-text = text.replace(anchor, addition, 1)
+if finding not in text:
+    raise SystemExit('second-audit finding not found')
+text = text.replace(finding, addition, 1)
 
 traction_anchor = '''- moving limbs are not frozen by stance friction;
 '''
