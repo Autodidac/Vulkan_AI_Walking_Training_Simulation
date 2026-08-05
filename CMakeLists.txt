@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.16 LANGUAGES CXX)
+project(Runner VERSION 0.7.17 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -164,6 +164,12 @@ set_target_properties(RunnerViewCameraTests PROPERTIES
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 runner_enable_warnings(RunnerViewCameraTests)
 add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
+
+    add_executable(RunnerV0717EyeTestTests tests/v0717_eye_test_tests.cpp)
+    target_link_libraries(RunnerV0717EyeTestTests PRIVATE Runner::Core)
+    target_compile_features(RunnerV0717EyeTestTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0717EyeTestTests)
+    add_test(NAME runner_v0717_eye_test COMMAND RunnerV0717EyeTestTests)
 set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)

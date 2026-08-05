@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1600u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1700u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -357,12 +357,21 @@ namespace runner::rl
         const sim::CreatureBlueprint& rig = environment.blueprint();
         if (!rig.paired_leg_chains())
             return action;
-        const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.12f;
+        const float phase = environment.elapsed_seconds() * 2.0f * pi * 0.96f;
         const float swing = std::sin(phase);
-        action[0] = clamp(action[0] + 0.42f * swing, -0.82f, 0.82f);
-        action[1] = clamp(action[1] + 0.34f * std::max(0.0f, swing), -0.88f, 0.88f);
-        action[2] = clamp(action[2] - 0.42f * swing, -0.82f, 0.82f);
-        action[3] = clamp(action[3] - 0.34f * std::max(0.0f, -swing), -0.88f, 0.88f);
+        const float left_lift = std::max(0.0f, swing);
+        const float right_lift = std::max(0.0f, -swing);
+        const float span_brake = clamp(
+            (environment.primary_support_span_ratio() - 1.08f) * 0.52f,
+            0.0f, 0.34f);
+        // Sagittal side-view gate: hips drive fore/aft in opposite phase;
+        // knees lift only the swing chain, then extend before landing.
+        action[0] = clamp(action[0] + 0.58f * swing - span_brake, -0.90f, 0.90f);
+        action[1] = clamp(action[1] + 0.54f * left_lift
+            - 0.18f * right_lift, -0.92f, 0.92f);
+        action[2] = clamp(action[2] - 0.58f * swing + span_brake, -0.90f, 0.90f);
+        action[3] = clamp(action[3] - 0.54f * right_lift
+            + 0.18f * left_lift, -0.92f, 0.92f);
         return bilateral_joint_synergy_action(environment, action,
             sim::CourseStage::uneven);
     }
@@ -568,7 +577,8 @@ namespace runner::rl
         body_contact = 1u << 6u,
         non_neutral_posture = 1u << 7u,
         excessive_rotation = 1u << 8u,
-        invalid_crouch_posture = 1u << 9u
+        invalid_crouch_posture = 1u << 9u,
+        lateral_crab_gait = 1u << 10u
     };
 
     struct StageMotionQualification
@@ -596,6 +606,8 @@ namespace runner::rl
             return "UNCONTROLLED STANDING SPIN";
         if ((mask & evidence_bit(MotionEvidenceFailure::invalid_crouch_posture)) != 0u)
             return "HIP HINGE - NOT A CROUCH";
+        if ((mask & evidence_bit(MotionEvidenceFailure::lateral_crab_gait)) != 0u)
+            return "CRAB WALK - NO SAGITTAL CROSSING";
         if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
             return "NO SUSTAINED STANCE";
         if ((mask & evidence_bit(MotionEvidenceFailure::missing_recovery)) != 0u)
@@ -672,11 +684,21 @@ namespace runner::rl
         case sim::CourseStage::uneven:
             if (environment.longest_stable_stance_seconds() < 1.25f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
-            if (environment.gait_cycles() < 4u
-                || (environment.blueprint().paired_leg_chains()
-                    && environment.limb_crossings() < 4u))
+            if (environment.blueprint().paired_leg_chains()
+                && sim::crab_walking_motion(environment.alternating_steps(),
+                    environment.limb_crossings(), environment.distance_travelled(),
+                    environment.elapsed_seconds(),
+                    environment.primary_support_span_ratio()))
+                rejection |= evidence_bit(MotionEvidenceFailure::lateral_crab_gait);
+            if (environment.blueprint().paired_leg_chains()
+                ? !sim::sagittal_gait_evidence(environment.alternating_steps(),
+                    environment.limb_crossings(), environment.distance_travelled(),
+                    environment.elapsed_seconds(),
+                    environment.primary_support_span_ratio())
+                : environment.gait_cycles() < 10u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
-            if (environment.distance_travelled() < 1.0f)
+            if (environment.distance_travelled() < 6.0f
+                || environment.elapsed_seconds() < 8.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
             break;
         case sim::CourseStage::crouch_walk:

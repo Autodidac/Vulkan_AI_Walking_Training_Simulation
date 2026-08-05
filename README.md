@@ -102,3 +102,13 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive live and PIP camera contract.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+
+## v0.7.17 eye-test corrections
+
+- One physical support stub per biped leg; visible forward boots are sprites.
+- Sustained sagittal side-view walking is required; crab walking is rejected.
+- Quadrupeds must survive, hold, retract, and stably recover from the press.
+- Stage advancement requires fresh updates, episodes, and evaluations.
+- Optional user armor/foot art is packaged and has a procedural fallback.
+- Rig Lab exposes optional-art and debug-skeleton toggles.

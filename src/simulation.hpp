@@ -109,9 +109,9 @@ namespace runner::sim
         case CourseStage::duck_press:
             return duck_seconds >= 0.75f && obstacles_passed >= 1u;
         case CourseStage::uneven:
-            return alternating_steps >= 4u;
+            return alternating_steps >= 10u;
         case CourseStage::crouch_walk:
-            return alternating_steps >= 4u && duck_seconds >= 2.0f
+            return alternating_steps >= 8u && duck_seconds >= 2.0f
                 && obstacles_passed >= 3u;
         case CourseStage::ramps:
             return landed_jumps >= 1u;
@@ -239,6 +239,28 @@ namespace runner::sim
             0.30f, 1.0f);
         const float swing_bonus = single_support && swing_clearance > 0.10f ? 0.12f : 0.0f;
         return clamp(established + swing_bonus, 0.0f, 1.0f);
+    }
+
+    [[nodiscard]] inline bool sagittal_gait_evidence(
+        std::uint32_t alternating_steps, std::uint32_t limb_crossings,
+        float distance, float elapsed_seconds, float support_span_ratio) noexcept
+    {
+        return alternating_steps >= 10u
+            && limb_crossings >= 8u
+            && distance >= 6.0f
+            && elapsed_seconds >= 8.0f
+            && support_span_ratio >= 0.42f
+            && support_span_ratio <= 1.45f;
+    }
+
+    [[nodiscard]] inline bool crab_walking_motion(
+        std::uint32_t alternating_steps, std::uint32_t limb_crossings,
+        float distance, float elapsed_seconds, float support_span_ratio) noexcept
+    {
+        return elapsed_seconds >= 4.0f
+            && distance >= 0.75f
+            && (support_span_ratio > 1.55f
+                || (alternating_steps >= 4u && limb_crossings < 2u));
     }
 
     [[nodiscard]] inline bool friction_driven_shuffle(float root_speed,
@@ -379,37 +401,45 @@ namespace runner::sim
     };
 
     [[nodiscard]] inline DuckPressProfile duck_press_profile(float elapsed_seconds,
-        float difficulty, float standing_head_top) noexcept
+        float difficulty, float standing_head_top,
+        bool horizontal_body_plan = false) noexcept
     {
-        constexpr float settle_end = 2.50f;
-        constexpr float descend_end = 5.00f;
-        constexpr float hold_end = 7.00f;
-        constexpr float retract_end = 9.50f;
-        constexpr float cycle = 11.0f;
+        constexpr float settle_end = 2.75f;
+        constexpr float descend_end = 6.25f;
+        constexpr float hold_end = 8.25f;
+        constexpr float retract_end = 10.75f;
+        constexpr float cycle = 12.25f;
         float local = std::fmod(std::max(0.0f, elapsed_seconds), cycle);
         if (local < 0.0f)
             local += cycle;
-        const float start = standing_head_top + 1.10f;
-        const float crouch_drop = clamp(standing_head_top * 0.16f, 0.78f, 0.86f)
-            + clamp(difficulty, 0.0f, 1.0f) * 0.08f;
+        const float start = standing_head_top + (horizontal_body_plan ? 0.72f : 1.10f);
+        const float crouch_drop = horizontal_body_plan
+            ? clamp(standing_head_top * 0.085f, 0.28f, 0.46f)
+                + clamp(difficulty, 0.0f, 1.0f) * 0.035f
+            : clamp(standing_head_top * 0.15f, 0.72f, 0.84f)
+                + clamp(difficulty, 0.0f, 1.0f) * 0.06f;
         const float target = standing_head_top - crouch_drop;
         if (local < settle_end)
             return { start, 0.0f, false, false, false };
         if (local < descend_end)
         {
-            const float t = (local - settle_end) / (descend_end - settle_end);
+            const float duration = descend_end - settle_end;
+            const float t = (local - settle_end) / duration;
             const float smooth = t * t * (3.0f - 2.0f * t);
-            const float derivative = 6.0f * t * (1.0f - t) / (descend_end - settle_end);
-            return { lerp(start, target, smooth), (target - start) * derivative, true, false, false };
+            const float derivative = 6.0f * t * (1.0f - t) / duration;
+            return { lerp(start, target, smooth),
+                (target - start) * derivative, true, false, false };
         }
         if (local < hold_end)
             return { target, 0.0f, false, true, false };
         if (local < retract_end)
         {
-            const float t = (local - hold_end) / (retract_end - hold_end);
+            const float duration = retract_end - hold_end;
+            const float t = (local - hold_end) / duration;
             const float smooth = t * t * (3.0f - 2.0f * t);
-            const float derivative = 6.0f * t * (1.0f - t) / (retract_end - hold_end);
-            return { lerp(target, start, smooth), (start - target) * derivative, false, false, true };
+            const float derivative = 6.0f * t * (1.0f - t) / duration;
+            return { lerp(target, start, smooth),
+                (start - target) * derivative, false, false, true };
         }
         return { start, 0.0f, false, false, false };
     }
