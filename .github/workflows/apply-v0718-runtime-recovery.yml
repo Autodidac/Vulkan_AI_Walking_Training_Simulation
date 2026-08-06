@@ -48,3 +48,5 @@ jobs:
           git diff --cached --check
           git commit -m 'Implement Runner v0.7.18 runtime recovery'
           git push origin HEAD:agent/v0718-runtime-recovery
+
+# synchronize trigger
