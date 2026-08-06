@@ -412,8 +412,7 @@ namespace runner::sim
         float local = std::fmod(std::max(0.0f, elapsed_seconds), cycle);
         if (local < 0.0f)
             local += cycle;
-        const float start = standing_head_top
-            + (horizontal_body_plan ? 0.62f : 1.10f);
+        const float start = standing_head_top + 1.10f;
         const float crouch_drop = horizontal_body_plan
             ? clamp(standing_head_top * 0.070f, 0.20f, 0.28f)
                 + clamp(difficulty, 0.0f, 1.0f) * 0.020f
@@ -966,7 +965,7 @@ namespace runner::sim
         }
         [[nodiscard]] bool horizontal_multi_support_plan() const noexcept
         {
-            return horizontal_body_plan() && !paired_leg_chains()
+            return !paired_leg_chains() && !monopedal_gait()
                 && support_seed_count() >= 4u;
         }
 

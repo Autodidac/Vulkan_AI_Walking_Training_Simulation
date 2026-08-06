@@ -3319,7 +3319,15 @@ step_not_qualified:
                 || frame_gate == InvalidMotion::overspeed
                 || frame_gate == InvalidMotion::collapsed_posture
                 || frame_gate == InvalidMotion::fallen))
+        {
+            if (duck_recovery_settling
+                && frame_gate == InvalidMotion::overspeed)
+            {
+                maximum_speed_kmh_ = std::min(49.0f,
+                    std::abs(forward_speed_) * 3.6f);
+            }
             frame_gate = InvalidMotion::none;
+        }
         invalidate(frame_gate);
 
         const bool left_supported = contact_supported(blueprint_.left_contact_node);

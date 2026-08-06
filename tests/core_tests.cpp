@@ -621,7 +621,8 @@ int main()
     require(sim::CreatureBlueprint::chicken().horizontal_body_plan()
             && !sim::CreatureBlueprint::chicken().horizontal_multi_support_plan()
             && sim::CreatureBlueprint::quadruped().horizontal_multi_support_plan()
-            && sim::CreatureBlueprint::crawler4().horizontal_multi_support_plan(),
+            && sim::CreatureBlueprint::crawler4().horizontal_multi_support_plan()
+            && sim::CreatureBlueprint::hexapod().horizontal_multi_support_plan(),
         "horizontal balance and multi-support press topology are not separated");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
@@ -1104,7 +1105,7 @@ int main()
     require(later_bar.half_extent.x > later_bar.half_extent.y * 5.0f,
         "crouch-walk low bar is not horizontal or is effectively a wall");
     require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
-            5u, 3.0f, 0u, 0.0f, 0u, 4u),
+            8u, 3.0f, 0u, 0.0f, 0u, 4u),
         "valid foot-only crouch-walk evidence is rejected");
 
     require(sim::ground_velocity_retention(true, 0.0f)
