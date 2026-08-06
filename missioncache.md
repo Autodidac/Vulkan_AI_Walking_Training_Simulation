@@ -518,6 +518,17 @@ The correction must separate horizontal balance posture from horizontal multi-su
 
 Clean run `31073332261` passed repository, mission, optional-art, semantics, and CMake audits, then GCC 14 stopped compilation because `update_gait_metrics` redeclared `horizontal_press` inside the press-evidence block after the same topology decision had already been computed earlier in the function. The correction is source-neutral: remove the redundant inner declaration and reuse the existing value. The complete runtime and package gates still apply.
 
+## v0.7.17 fourth Linux validation finding — recovery latch and bounded settling
+
+Clean run `31073516350` passed the full repository/art audit, GCC 14 compilation, all Stand seeds, all vertical paired crouch gates, ordered stage evidence, optional-art parsing, and the warmed concurrency benchmark. The remaining failures share three exact causes:
+
+- `generic_duck` remained true during the static press stage after the platen disappeared, so horizontal rigs could crouch for more than five seconds but could never satisfy the explicit `!duck_active` recovery frame;
+- `horizontal_body_plan` still excluded six-motor horizontal anatomy, leaving the hexapod on the wrong press/recovery contract;
+- monoped completed and recorded a recovery, but a one-frame post-completion overspeed spike invalidated it before the required 0.75-second stance hold could settle;
+- the direct guided-squat unit helper manipulated only the authoring guide and ground solver, not the same complete solver/teacher path already proven by the live humanoid crouch gate.
+
+The correction must disable generic crouch latching during the press lesson, classify horizontal anatomy by geometry rather than motor count, retain a strictly bounded 1.25-second post-completion settling grace for overspeed/fall/collapse only, and make the direct squat fixture execute the real teacher and environment step path. Any rig still unstable after the grace remains invalid. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain required.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
