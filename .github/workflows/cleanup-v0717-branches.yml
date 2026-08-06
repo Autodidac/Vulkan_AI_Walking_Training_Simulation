@@ -1,0 +1,78 @@
+name: Clean Runner v0.7.17 branches after release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: ${{ github.head_ref == 'agent/v0717-cleanup' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v0.7.17
+      PACKAGE_NAME: Runner-v0.7.17-windows-x64
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Wait for verified published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 80); do
+            if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              rm -rf release-download
+              mkdir release-download
+              if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir release-download >/dev/null 2>&1 \
+                  && test -f "release-download/$PACKAGE_NAME.zip" \
+                  && test -f "release-download/$PACKAGE_NAME.zip.sha256" \
+                  && test -f "release-download/$PACKAGE_NAME.manifest.sha256" \
+                  && (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256"); then
+                echo "Published v0.7.17 assets and checksum verified."
+                exit 0
+              fi
+            fi
+            sleep 30
+          done
+          echo "v0.7.17 was not fully published within the cleanup window."
+          exit 1
+
+      - name: Close cleanup pull request
+        shell: bash
+        run: gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --comment "v0.7.17 publication and asset checksum verified; removing completed and obsolete branches."
+
+      - name: Remove completed, obsolete, and accidental v0.7.17 branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            "agent/v0717-eye-test-batch"
+            "agent/v0717-eye-test-feet-gait-batch25"
+            "agent/v0717-finalize-release"
+            "agent/v0717-eye-test-feet-gait-batch25-copy"
+            "agent/v0717-eye-test-feet-gait-batch25-copy2"
+            "agent/v0717-eye-test-feet-gait-batch25-copy3"
+            "agent/v0717-eye-test-feet-gait-batch25-copy4"
+            "agent/v0717-eye-test-feet-gait-batch25-copy5"
+            "agent/v0717-eye-test-feet-gait-batch25-copy6"
+            "agent/v0717-eye-test-feet-gait-batch25-copy7"
+            "agent/v0717-eye-test-feet-gait-batch25-copy8"
+            "agent/v0717-eye-test-feet-gait-batch25-copy9"
+            "agent/v0717-eye-test-feet-gait-batch25-copy10"
+            "agent/v0717-eye-test-feet-gait-batch25-copy11"
+            "agent/v0717-cleanup"
+          )
+          for branch in "${branches[@]}"; do
+            encoded=${branch//\//%2F}
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" >/dev/null 2>&1 || true
+          done
