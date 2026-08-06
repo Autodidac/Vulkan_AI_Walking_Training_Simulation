@@ -492,6 +492,17 @@ Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, eve
 - Repository cleanup after publication: only `main` remains.
 - Contradictory eye-test evidence reopens only the exact affected camera, PIP, layout, locomotion, or package mission.
 
+## v0.7.17 Linux validation finding — exact-source correction required
+
+Validation run `31072185903` reached the complete GCC 14 build and exposed four release-blocking interactions rather than being waived:
+
+- the first stub-foot implementation added a child support point but left the former ankle large enough to contact terrain as a non-foot, breaking Stand for scaffold, biped, and humanoid;
+- the rig-aware press timing was applied globally and invalidated the previously verified vertical-body crouch/hold/retract contract;
+- horizontal multi-support rigs could enter the press challenge before their bounded guide produced topology-appropriate compression, causing `DUCK HIP HINGE` termination instead of safe recovery;
+- the concurrency benchmark included cold worker startup inside a four-second measurement, allowing a valid speed mode to complete no full update before its sample ended.
+
+The correction must use the existing terminal ankle as the single physical support stub, preserve the verified vertical press schedule, identify horizontal multi-support bodies explicitly, provide bounded compression/recovery grace without accepting a flat or body-supported pose, update obsolete heel/ball/toe tests to the new stub contract, and measure speed modes only after warm-up. The same full Linux, Windows, package, optional-art fallback, archive, and publication gates remain required.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
