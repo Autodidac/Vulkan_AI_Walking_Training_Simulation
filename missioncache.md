@@ -570,6 +570,12 @@ Clean run `31075475969` passed repository and optional-art audits, GCC 14 compil
 
 The fixture must supply ten cycles so it tests a genuinely qualified stepped result. No production behavior or threshold changes. The obsolete `agent/v0717-eye-test-batch` branch contains only a superseded cache script/workflow and no unique product source; it must be deleted after the authoritative branch is merged and the release assets are re-downloaded. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
 
+## v0.7.17 eleventh Linux validation finding — obsolete articulated-foot fixture and branch cleanup
+
+Clean run `31095364734` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failing assertion still expected the superseded 17-node heel/ball/toe humanoid even though v0.7.17 intentionally uses the existing terminal ankle as one compact physical support stub and renders the forward boot as optional side-view art.
+
+The fixture must verify the 13-node/15-bone articulated humanoid, eight arm/leg motors, terminal semantic support stubs, empty extra-contact lists, bounded support radii, and retained uploaded pelvis calibration. It must not require deleted heel/ball/toe collision nodes. The publisher must also remove the superseded `agent/v0717-eye-test-batch` branch and every accidental `agent/v0717-*copy*`/finalizer branch after the release assets are re-downloaded and verified. No production threshold or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
