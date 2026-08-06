@@ -112,3 +112,6 @@ A release is incomplete until Linux and Windows tests, build-tree and installed 
 - Stage advancement requires fresh updates, episodes, and evaluations.
 - Optional user armor/foot art is packaged and has a procedural fallback.
 - Rig Lab exposes optional-art and debug-skeleton toggles.
+
+
+The optional package includes compact P3 reference sheets derived from all four supplied concepts under `assets/optional/runner_armor_concepts/source/`, plus validated P3 foot, helmet, torso, and weapon-preview sprites under `runtime/`. Removing the entire optional directory preserves procedural rendering and all training behavior.

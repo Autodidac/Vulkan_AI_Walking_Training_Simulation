@@ -118,6 +118,9 @@ if(RUNNER_BUILD_APP)
             "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
             "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0716_CAMERA_BATCH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
             "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
@@ -130,6 +133,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
         DESTINATION docs RENAME SandHybrid-missioncache.md)
@@ -169,7 +173,9 @@ add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
     target_link_libraries(RunnerV0717EyeTestTests PRIVATE Runner::Core)
     target_compile_features(RunnerV0717EyeTestTests PRIVATE cxx_std_23)
     runner_enable_warnings(RunnerV0717EyeTestTests)
-    add_test(NAME runner_v0717_eye_test COMMAND RunnerV0717EyeTestTests)
+    add_test(NAME Runner.V0717EyeTest
+        COMMAND RunnerV0717EyeTestTests "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    set_tests_properties(Runner.V0717EyeTest PROPERTIES TIMEOUT 180)
 set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)

@@ -24,8 +24,8 @@ stably after retraction before the stage can complete.
 
 ## Optional user art
 
-The four supplied concept sheets are packaged under
-`assets/optional/runner_armor_concepts/source/`. Derived P3 runtime sprites live
+All four supplied concept sheets are represented by compact derived P3 references under
+`assets/optional/runner_armor_concepts/source/`, with original and packaged SHA-256 values recorded in `PROVENANCE.md`. Derived P3 runtime sprites live
 under `runtime/` for feet, helmet, torso, and a Rig Lab-only fictional weapon
 preview. Optional art is visual only and can be disabled independently from the
 debug skeleton. Missing or malformed optional assets fall back to procedural

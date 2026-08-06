@@ -124,6 +124,52 @@ namespace
             error = "Packaged Runner artwork decoded incompletely";
             return false;
         }
+
+        const std::filesystem::path optional_root = asset_directory / "optional"
+            / "runner_armor_concepts";
+        filesystem_error.clear();
+        if (std::filesystem::is_directory(optional_root, filesystem_error))
+        {
+            const std::array optional_metadata{
+                std::filesystem::path{ "PROVENANCE.md" },
+                std::filesystem::path{ "source" } / "concept_modular_pair.ppm",
+                std::filesystem::path{ "source" } / "concept_humanoid_parts.ppm",
+                std::filesystem::path{ "source" } / "concept_helmeted_parts.ppm",
+                std::filesystem::path{ "source" } / "concept_pixel_parts.ppm"
+            };
+            for (const std::filesystem::path& relative : optional_metadata)
+            {
+                const std::filesystem::path absolute = optional_root / relative;
+                filesystem_error.clear();
+                if (!std::filesystem::is_regular_file(absolute, filesystem_error))
+                {
+                    error = "Incomplete optional Runner art package: "
+                        + absolute.string();
+                    return false;
+                }
+            }
+
+            const std::array optional_runtime{
+                std::filesystem::path{ "runtime" } / "foot_side.ppm",
+                std::filesystem::path{ "runtime" } / "helmet_side.ppm",
+                std::filesystem::path{ "runtime" } / "torso_side.ppm",
+                std::filesystem::path{ "runtime" } / "weapon_side.ppm"
+            };
+            for (const std::filesystem::path& relative : optional_runtime)
+            {
+                runner::art::PixelArt optional_art{};
+                if (!runner::art::load_p3_pixel_art(
+                        optional_root / relative, optional_art, error)
+                    || !optional_art.loaded())
+                {
+                    if (error.empty())
+                        error = "Optional Runner art decoded incompletely: "
+                            + (optional_root / relative).string();
+                    return false;
+                }
+            }
+        }
+        filesystem_error.clear();
         error.clear();
         return true;
     }
