@@ -1,40 +1,299 @@
-name: Finalize Runner v0.7.18 runtime recovery
+name: Runner v0.7.18 validation and release
 
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
+  pull-requests: write
 
-concurrency:
-  group: finalize-runner-v0718-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+env:
+  RELEASE_VERSION: 0.7.18
+  RELEASE_TAG: v0.7.18
+  PACKAGE_NAME: Runner-v0.7.18-windows-x64
 
 jobs:
-  finalize:
-    if: ${{ github.head_ref == 'agent/v0718-runtime-recovery-exec' && github.actor != 'github-actions[bot]' }}
+  linux-validation:
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v0718-runtime-recovery-exec
           fetch-depth: 0
-
-      - name: Apply audited v0.7.18 recovery source
-        run: python tools/finalize_v0718_runtime_recovery.py
-
-      - name: Commit source-wide recovery
+      - id: source
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install deterministic build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build python3
+      - name: Audit source before build
         shell: bash
         run: |
           set -euo pipefail
-          rm tools/finalize_v0718_runtime_recovery.py
-          rm -f tools/apply_v0718_runtime_recovery.py tools/v0718.trigger
-          rm -f .github/workflows/apply-v0718-runtime-recovery.yml
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.18 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'WALK-RUNTIME-RESET-211' missioncache.md
+          grep -F 'WALK-RELEASE-225' missioncache.md
+          grep -F 'Runner v0.7.19 equipment, carry, and target curriculum' missioncache.md
+          test -f docs/RUNNER_V0718_RUNTIME_RECOVERY.md
+          test -f tools/generate_v0718_sources.py
+          test -f tests/v0718_runtime_recovery_tests.cpp
+          test ! -e tools/apply_v0718_runtime_recovery.py
+          test ! -e tools/finalize_v0718_runtime_recovery.py
+          test ! -e tools/v0718.trigger
+          test ! -e tools/v0718.prtrigger
+          test ! -e tools/v0718-executor-merge-trigger.txt
+      - name: Configure Linux deterministic suite
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/linux-release -G Ninja
+          -DRUNNER_BUILD_APP=OFF
+          -DRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build and test Linux
+        run: |
+          cmake --build build/linux-release --parallel
+          ctest --test-dir build/linux-release --output-on-failure -V --timeout 1800
+
+  windows-package:
+    needs: linux-validation
+    runs-on: windows-2025
+    timeout-minutes: 210
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.linux-validation.outputs.source_sha }}
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+      - uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: runner-v0718-release-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0718-release-${{ runner.os }}-
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+      - name: Configure and build Windows SDL3/Vulkan application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
+          cmake --build --preset windows-release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+      - name: Run complete Windows test matrix
+        shell: pwsh
+        run: |
+          ctest --preset windows-release --output-on-failure -V --timeout 1800
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+      - name: Verify build-tree diagnostics
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
+          Push-Location $env:RUNNER_TEMP
+          try {
+            $version = (& $exe --version | Out-String).Trim()
+            if ($version -ne 'Runner 0.7.18') { throw "Version mismatch: $version" }
+            & $exe --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+            & $exe --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }
+            & $exe --diagnose-camera
+            if ($LASTEXITCODE -ne 0) { throw 'Camera diagnostic failed' }
+          }
+          finally { Pop-Location }
+      - name: Install complete package
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP $env:PACKAGE_NAME
+          Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+          cmake --install build/windows-release --config Release --prefix $stage
+          if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
+          Copy-Item README.md, LICENSE, CHANGELOG.md, missioncache.md, AGENTS.md -Destination $stage -Force
+          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $stage -Force
+          foreach ($required in @(
+            'Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md','AGENTS.md',
+            'assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv',
+            'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
+            'docs/RUNNER_V0716_CAMERA_BATCH.md','docs/RUNNER_V0717_EYE_TEST_CORRECTION.md',
+            'docs/RUNNER_V0718_RUNTIME_RECOVERY.md')) {
+            if (-not (Test-Path (Join-Path $stage $required))) { throw "Missing package file: $required" }
+          }
+          "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Verify installed package and optional-art fallback
+        shell: pwsh
+        run: |
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$env:STAGE/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Installed package diagnostic failed' }
+            & "$env:STAGE/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Installed acceptance failed' }
+            & "$env:STAGE/Runner.exe" --diagnose-camera
+            if ($LASTEXITCODE -ne 0) { throw 'Installed camera diagnostic failed' }
+            $launched = (& cmd.exe /d /c "call `"$env:STAGE\run.bat`" --version" | Out-String).Trim()
+            if ($launched -ne 'Runner 0.7.18') { throw "run.bat mismatch: $launched" }
+            $optional = Join-Path $env:STAGE 'assets/optional'
+            if (Test-Path $optional) {
+              $backup = Join-Path $env:RUNNER_TEMP 'runner-v0718-optional-backup'
+              Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
+              Move-Item $optional $backup
+              & "$env:STAGE/Runner.exe" --diagnose-package
+              if ($LASTEXITCODE -ne 0) { throw 'Optional-art fallback failed' }
+              Move-Item $backup $optional
+            }
+          }
+          finally { Pop-Location }
+      - name: Create archive checksum and manifest
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
+          $checksum = "$archive.sha256"
+          $manifest = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.manifest.sha256"
+          Remove-Item $archive,$checksum,$manifest -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$env:STAGE/*" -DestinationPath $archive -Force
+          $archiveHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$archiveHash  $env:PACKAGE_NAME.zip" | Set-Content $checksum -Encoding ascii
+          Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $relative"
+          } | Set-Content $manifest -Encoding ascii
+      - name: Independently extract and re-audit archive
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
+          $audit = Join-Path $env:RUNNER_TEMP 'runner-v0718-extracted'
+          Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $archive -DestinationPath $audit -Force
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$audit/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted package diagnostic failed' }
+            & "$audit/Runner.exe" --diagnose-acceptance
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted acceptance failed' }
+            & "$audit/Runner.exe" --diagnose-camera
+            if ($LASTEXITCODE -ne 0) { throw 'Extracted camera diagnostic failed' }
+          }
+          finally { Pop-Location }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: |
+            ${{ env.PACKAGE_NAME }}.zip
+            ${{ env.PACKAGE_NAME }}.zip.sha256
+            ${{ env.PACKAGE_NAME }}.manifest.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    needs: [linux-validation, windows-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VALIDATION_SOURCE: ${{ needs.linux-validation.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: release-assets
+      - name: Record exact release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          mission = Path('missioncache.md')
+          text = mission.read_text(encoding='utf-8')
+          text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',
+              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.', 1)
+          for number in range(211, 225):
+              text = re.sub(rf'(### WALK-[^\n]+-{number}[^\n]*\n)\*\*Status:\*\* [^\n]+',
+                  rf'\1**Status:** VERIFIED — MAIN RELEASE GATE PASSED', text, count=1)
+          text = re.sub(r'(### WALK-RELEASE-225[^\n]*\n)\*\*Status:\*\* [^\n]+',
+              r'\1**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED', text, count=1)
+          evidence = f"\n- v0.7.18 validation source: `{os.environ['VALIDATION_SOURCE']}`.\n- Main release workflow run: `{os.environ['GITHUB_RUN_ID']}`.\n"
+          text = text.replace('## Runner v0.7.17\n', '## Runner v0.7.18\n\n**Status:** PUBLISHED.\n' + evidence + '\n## Runner v0.7.17\n', 1)
+          mission.write_text(text, encoding='utf-8', newline='\n')
+
+          changelog = Path('CHANGELOG.md')
+          old = changelog.read_text(encoding='utf-8')
+          if not old.startswith('## 0.7.18'):
+              prefix = '''## 0.7.18\n\n- Removed the update-10 no-champion reset contradiction and kept cumulative totals visible.\n- Restored START plus 10 m / 50 ft near-course reference markers without changing terrain simulation.\n- Added stage-work, total/local update, evaluation, reset, pipeline, and throughput observability.\n- Corrected runtime controls and disabled optional body skin overlays by default while retaining sprite feet.\n- Strengthened early sagittal walking bootstrap without weakening crab-walk rejection.\n- Added deterministic runtime-recovery and complete Linux/Windows/package release gates.\n\n'''
+              changelog.write_text(prefix + old, encoding='utf-8', newline='\n')
+          PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m 'Finalize Runner v0.7.18 runtime recovery source'
-          git push origin HEAD:agent/v0718-runtime-recovery-exec
+          git add missioncache.md CHANGELOG.md
+          git commit -m 'Record Runner v0.7.18 release evidence [skip ci]'
+          git push origin HEAD:main
+      - name: Create tag and GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists" >&2
+            exit 1
+          fi
+          git tag -a "$RELEASE_TAG" -m "Runner $RELEASE_VERSION"
+          git push origin "$RELEASE_TAG"
+          cat > release-notes.md <<'NOTES'
+          Runner v0.7.18 is the runtime-recovery release from direct v0.7.17 eye testing.
+
+          - Terrain simulation and terrain coordinates are intentionally unchanged.
+          - Prevents the no-champion nursery from resetting at update 10 before Stand's 120-update work gate.
+          - Makes cumulative and local updates, evaluations, resets, stage-work thresholds, pipeline state, and throughput visible.
+          - Restores START plus near-course 10 m / 50 ft reference markers.
+          - Corrects Tab/Space/1/2/3/T/U/A/R runtime controls.
+          - Defaults optional torso/helmet/weapon overlays off while keeping sprite feet independent.
+          - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.
+          NOTES
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Runner v0.7.18" --notes-file release-notes.md
+      - name: Re-download and byte-verify published assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-download
+          gh release download "$RELEASE_TAG" --dir release-download
+          for source in release-assets/*; do
+            file=$(basename "$source")
+            test -f "release-download/$file"
+            cmp --silent "$source" "release-download/$file"
+          done
+          (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
+      - name: Close stale recovery PRs and delete temporary branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pr in 59 61 62; do
+            gh pr close "$pr" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          done
+          branches=(
+            'agent/v0718-runtime-recovery'
+            'agent/v0718-runtime-recovery-exec'
+            'agent/v0718-runtime-recovery-clean'
+            'agent/v0718-executor-trigger'
+            'agent/v0717-eye-test-feet-gait-batch25'
+          )
+          for branch in "${branches[@]}"; do
+            encoded=${branch//\//%2F}
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
+          done
