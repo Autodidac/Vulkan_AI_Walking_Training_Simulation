@@ -540,6 +540,12 @@ Clean run `31074108059` passed repository/art audits, compilation, all Stand cas
 
 The correction must fully retract every press above the recovered body, define multi-support press topology from semantic supports and chain pairing, update the fixture to eight cycles, and discard only an overspeed sample explicitly ignored during the bounded recovery-settling window. Later overspeed remains terminal. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
 
+## v0.7.17 sixth Linux validation finding — stale topology unit assertion
+
+Clean run `31074432529` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failure was a direct core assertion that bundled chicken geometric orientation with quadruped multi-support press topology.
+
+Production behavior no longer uses that bundled assumption: chicken uses paired-leg balance/recovery semantics, while the user-reported quadruped case uses explicit four-support multi-support press semantics. The test must assert those two contracts independently instead of requiring one shared orientation predicate across chicken, quadruped, crawler, and hexapod. No product behavior, acceptance threshold, or release gate is weakened. The complete Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
