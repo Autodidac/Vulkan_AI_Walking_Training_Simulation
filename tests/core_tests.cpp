@@ -1225,8 +1225,8 @@ int main()
         "invalid policy does not restore the champion");
     require(!rl::policy_regression_guard(10.0f, 9.4f, true),
         "small exploration change triggers an unnecessary champion rollback");
-    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 4, 1.2f, 4.0f),
-        "valid stepped best result cannot seed self-imitation");
+    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 10, 1.2f, 4.0f),
+        "valid sustained stepped best result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f, 0.8f),
         "ducking without clearing a low bar can still seed self-imitation");
     require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 8, 1.2f, 12.0f,
