@@ -546,6 +546,12 @@ Clean run `31074432529` passed repository and optional-art audits, GCC 14 compil
 
 Production behavior no longer uses that bundled assumption: chicken uses paired-leg balance/recovery semantics, while the user-reported quadruped case uses explicit four-support multi-support press semantics. The test must assert those two contracts independently instead of requiring one shared orientation predicate across chicken, quadruped, crawler, and hexapod. No product behavior, acceptance threshold, or release gate is weakened. The complete Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
 
+## v0.7.17 seventh Linux validation finding — semantic support topology
+
+Clean run `31074718547` again passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failing assertion showed that `horizontal_multi_support_plan()` still depended on the old `paired_leg_chains()` heuristic. The authored quadruped has four semantic support contacts but that heuristic also reports paired chains, so the helper rejected the exact user-reported multi-support body.
+
+Press topology must be determined from semantic support count, not motor-pair grouping: any non-monoped rig with at least four semantic supports uses the multi-support press/recovery contract. Chicken and ordinary bipeds retain two-support paired behavior. The test and production helper must express the same semantic rule. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
