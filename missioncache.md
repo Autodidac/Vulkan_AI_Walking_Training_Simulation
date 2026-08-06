@@ -564,6 +564,12 @@ Clean run `31075191957` passed all production-facing Linux contracts and failed 
 
 Both duplicated fixtures must use the current eight-cycle sustained crouch-walk threshold. No production code, acceptance threshold, or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
 
+## v0.7.17 tenth Linux validation finding — stale uneven elite fixture
+
+Clean run `31075475969` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only remaining failure was a historical self-imitation unit fixture that still supplied four uneven-stage gait cycles after production qualification was raised to ten sustained cycles.
+
+The fixture must supply ten cycles so it tests a genuinely qualified stepped result. No production behavior or threshold changes. The obsolete `agent/v0717-eye-test-batch` branch contains only a superseded cache script/workflow and no unique product source; it must be deleted after the authoritative branch is merged and the release assets are re-downloaded. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
