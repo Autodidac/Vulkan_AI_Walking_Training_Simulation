@@ -32,6 +32,9 @@ int main(int argc, char** argv)
     require(biped.is_support_seed(biped.left_contact_node)
             && biped.is_support_seed(biped.right_contact_node),
         "stub supports are not semantic contacts");
+    require(biped.radii[biped.left_contact_node] >= 0.104f
+            && biped.radii[biped.right_contact_node] >= 0.104f,
+        "stub supports are too small to carry the authored stance");
 
     const sim::DuckPressProfile upright =
         sim::duck_press_profile(6.5f, 0.5f, 4.8f, false);

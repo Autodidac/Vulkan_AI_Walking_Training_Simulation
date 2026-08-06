@@ -468,9 +468,9 @@ namespace runner::acceptance
             && !sim::stage_skill_evidence(sim::CourseStage::uneven,
                 0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && sim::stage_skill_evidence(sim::CourseStage::uneven,
-                4u, 0.0f, 0u, 0.0f, 0u, 0u)
+                10u, 0.0f, 0u, 0.0f, 0u, 0u)
             && sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
-                5u, 3.0f, 0u, 0.0f, 0u, 4u);
+                8u, 3.0f, 0u, 0.0f, 0u, 4u);
         add_case(report, "ordered-stage-evidence-matrix", curriculum_order,
             curriculum_order
                 ? "stand, crouch, gait, crouch-walk, jump, hurdle, flip, mixed order is enforced"

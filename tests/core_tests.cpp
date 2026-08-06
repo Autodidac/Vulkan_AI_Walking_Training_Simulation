@@ -610,14 +610,17 @@ int main()
                 && rig.additional_right_contact_nodes.empty()
                 && rig.left_contact_node < rig.radii.size()
                 && rig.right_contact_node < rig.radii.size()
+                && rig.radii[rig.left_contact_node] >= 0.104f
+                && rig.radii[rig.right_contact_node] >= 0.104f
                 && rig.radii[rig.left_contact_node] <= 0.1121f
                 && rig.radii[rig.right_contact_node] <= 0.1121f,
-            "paired rig does not use one compact physical support stub per leg");
+            "paired rig does not use one compact loaded support stub per leg");
     }
-    require(!sim::CreatureBlueprint::chicken().horizontal_body_plan()
-            && sim::CreatureBlueprint::quadruped().horizontal_body_plan()
-            && sim::CreatureBlueprint::crawler4().horizontal_body_plan(),
-        "horizontal press classification confuses bipeds with multi-support bodies");
+    require(sim::CreatureBlueprint::chicken().horizontal_body_plan()
+            && !sim::CreatureBlueprint::chicken().horizontal_multi_support_plan()
+            && sim::CreatureBlueprint::quadruped().horizontal_multi_support_plan()
+            && sim::CreatureBlueprint::crawler4().horizontal_multi_support_plan(),
+        "horizontal balance and multi-support press topology are not separated");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;
