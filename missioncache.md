@@ -514,6 +514,10 @@ Clean-source run `31072665828` proved the repository, supplied-art hashes, GCC 1
 
 The correction must separate horizontal balance posture from horizontal multi-support press topology, retain a compact but sufficiently loaded chicken support radius, use actual multi-support body/head compression as crouch evidence, avoid terminating a finite supported horizontal rig merely for failing a biped-shaped crouch test, require a continuous un-crouched post-retraction recovery hold, restore bounded vertical recovery authority, and update the deterministic stage fixture to the current gait thresholds. Full Linux, Windows, package, optional-art fallback, archive, and publication validation remains mandatory.
 
+## v0.7.17 third Linux validation finding — warnings-as-errors shadow
+
+Clean run `31073332261` passed repository, mission, optional-art, semantics, and CMake audits, then GCC 14 stopped compilation because `update_gait_metrics` redeclared `horizontal_press` inside the press-evidence block after the same topology decision had already been computed earlier in the function. The correction is source-neutral: remove the redundant inner declaration and reuse the existing value. The complete runtime and package gates still apply.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
