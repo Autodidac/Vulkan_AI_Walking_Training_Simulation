@@ -1,0 +1,74 @@
+name: Watch Runner v0.7.18 publisher
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for main release run
+        shell: bash
+        run: |
+          set -euo pipefail
+          run=''
+          for attempt in $(seq 1 90); do
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow runner-v0717-release.yml --branch main --event push --limit 1 --json databaseId,status,conclusion,headSha --jq '.[0] // empty')
+            if [ -n "$run" ]; then
+              id=$(jq -r '.databaseId' <<<"$run")
+              status=$(jq -r '.status' <<<"$run")
+              conclusion=$(jq -r '.conclusion // ""' <<<"$run")
+              echo "release_run=$id status=$status conclusion=$conclusion"
+              if [ "$status" = completed ]; then
+                if [ "$conclusion" != success ]; then
+                  gh run view "$id" --repo "$GITHUB_REPOSITORY" --log-failed || true
+                  exit 1
+                fi
+                echo "RELEASE_RUN_ID=$id" >> "$GITHUB_ENV"
+                exit 0
+              fi
+            fi
+            sleep 20
+          done
+          echo 'Timed out waiting for v0.7.18 release run' >&2
+          exit 1
+      - name: Verify published v0.7.18 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v0.7.18 --repo "$GITHUB_REPOSITORY"
+          mkdir release-check
+          gh release download v0.7.18 --repo "$GITHUB_REPOSITORY" --dir release-check
+          cd release-check
+          sha256sum -c Runner-v0.7.18-windows-x64.zip.sha256
+      - name: Close stale PRs and remove temporary branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pr in 59 61 62; do gh pr close "$pr" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true; done
+          branches=(
+            agent/v0718-runtime-recovery
+            agent/v0718-runtime-recovery-exec
+            agent/v0718-runtime-recovery-clean
+            agent/v0718-release
+            agent/v0718-executor-trigger
+            agent/v0717-eye-test-feet-gait-batch25
+          )
+          for branch in "${branches[@]}"; do
+            encoded=${branch//\//%2F}
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
+          done
+      - name: Close watchdog PR and remove watchdog branch
+        shell: bash
+        run: |
+          gh pr close "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
