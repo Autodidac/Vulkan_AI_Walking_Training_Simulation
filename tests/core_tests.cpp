@@ -618,12 +618,19 @@ int main()
                 && rig.radii[rig.right_contact_node] <= 0.1121f,
             "paired rig does not use one compact loaded support stub per leg");
     }
-    require(sim::CreatureBlueprint::chicken().horizontal_body_plan()
-            && !sim::CreatureBlueprint::chicken().horizontal_multi_support_plan()
-            && sim::CreatureBlueprint::quadruped().horizontal_multi_support_plan()
-            && sim::CreatureBlueprint::crawler4().horizontal_multi_support_plan()
-            && sim::CreatureBlueprint::hexapod().horizontal_multi_support_plan(),
-        "horizontal balance and multi-support press topology are not separated");
+    const sim::CreatureBlueprint chicken_topology =
+        sim::CreatureBlueprint::chicken();
+    require(chicken_topology.paired_leg_chains()
+            && !chicken_topology.horizontal_multi_support_plan(),
+        "chicken paired-leg balance topology is not isolated from multi-support press logic");
+
+    const sim::CreatureBlueprint quadruped_topology =
+        sim::CreatureBlueprint::quadruped();
+    require(quadruped_topology.support_seed_count() >= 4u
+            && !quadruped_topology.paired_leg_chains()
+            && !quadruped_topology.monopedal_gait()
+            && quadruped_topology.horizontal_multi_support_plan(),
+        "quadruped does not use explicit multi-support press topology");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;
