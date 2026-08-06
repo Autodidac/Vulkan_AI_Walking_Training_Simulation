@@ -1,20 +1,19 @@
 name: Apply Runner v0.7.18 runtime recovery
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+  push:
+    branches: [agent/v0718-runtime-recovery]
 
 permissions:
   contents: write
 
 concurrency:
-  group: apply-runner-v0718-runtime-recovery-${{ github.event.pull_request.number }}
+  group: apply-runner-v0718-runtime-recovery
   cancel-in-progress: true
 
 jobs:
   apply:
-    if: ${{ github.head_ref == 'agent/v0718-runtime-recovery' && github.actor != 'github-actions[bot]' }}
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -48,5 +47,3 @@ jobs:
           git diff --cached --check
           git commit -m 'Implement Runner v0.7.18 runtime recovery'
           git push origin HEAD:agent/v0718-runtime-recovery
-
-# synchronize trigger
