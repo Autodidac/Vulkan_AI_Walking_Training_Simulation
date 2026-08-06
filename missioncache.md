@@ -529,6 +529,17 @@ Clean run `31073516350` passed the full repository/art audit, GCC 14 compilation
 
 The correction must disable generic crouch latching during the press lesson, classify horizontal anatomy by geometry rather than motor count, retain a strictly bounded 1.25-second post-completion settling grace for overspeed/fall/collapse only, and make the direct squat fixture execute the real teacher and environment step path. Any rig still unstable after the grace remains invalid. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain required.
 
+## v0.7.17 fifth Linux validation finding — full retraction and topology evidence
+
+Clean run `31074108059` passed repository/art audits, compilation, all Stand cases, all paired vertical crouch cases, the guided-squat helper, the ordered stage matrix, optional-art parsing, and the warmed concurrency benchmark. The remaining exact defects were:
+
+- horizontal press retraction stopped only 0.62 m above authored head height, keeping obstacle weight above the `<0.15` recovery gate even after the body restored;
+- hexapod multi-support press behavior was still inferred through head geometry instead of explicit non-paired support topology;
+- the direct crouch-walk evidence unit still supplied five gait cycles after the production requirement was raised to eight;
+- monoped's deliberately ignored one-frame post-completion speed spike remained stored in `maximum_speed_kmh_`, reappearing as an overspeed invalidation immediately after the bounded recovery grace.
+
+The correction must fully retract every press above the recovered body, define multi-support press topology from semantic supports and chain pairing, update the fixture to eight cycles, and discard only an overspeed sample explicitly ignored during the bounded recovery-settling window. Later overspeed remains terminal. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
