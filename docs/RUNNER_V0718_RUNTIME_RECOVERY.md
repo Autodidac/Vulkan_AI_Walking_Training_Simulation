@@ -30,3 +30,7 @@ Optional torso, helmet, and weapon overlays default off. The forward foot sprite
 ## Walking recovery
 
 Early Walk training receives stronger sustained sagittal bootstrap guidance. Existing crab-walk rejection, physical support requirements, sustained-distance requirements, and stage mastery gates remain strict.
+
+## Release gate
+
+The `v0.7.18` tag is created only after the merged `main` source passes Linux warnings-as-errors, the full Windows SDL3/Vulkan test matrix, installed and extracted package diagnostics, checksum/manifest generation, release upload, and release-asset re-download verification.
