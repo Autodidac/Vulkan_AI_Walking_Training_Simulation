@@ -1,5 +1,86 @@
 # Runner cache-first engineering policy and active release plan
 
+# Runner v0.7.18 runtime recovery, controls, and observability release
+
+**Release state:** CACHED BEFORE IMPLEMENTATION — released v0.7.17 eye-test regressions reopened. Terrain is explicitly preserved. The deferred equipment/carry/target curriculum moves intact to v0.7.19.
+
+Direct packaged-runtime observations on v0.7.17 are authoritative: the terrain itself appears correct; reference/mile markers are absent from the initial live view; the visible update counter reaches approximately 10 and then appears to reset; all-time updates are hidden behind a secondary totals page; the trainer remains effectively stuck at the beginning and never reaches useful walking; the live controls and status information are difficult to discover or interpret; and the optional torso/helmet skin is visually unacceptable. Source audit confirms the update-loop cause: policy evaluation occurs at updates 1, 5, and 10, while `manage_curriculum_locked()` resets a no-champion policy on every third invalid evaluation. That reset therefore occurs at update 10 even though Stand requires 120 fresh updates before its dwell gate can complete. `reset_training_state()` preserves `total_updates`, so the cumulative work exists but the primary UI displays the resettable stage/update counter instead.
+
+### WALK-RUNTIME-RESET-211 — Remove the update-10 nursery-reset contradiction
+**Status:** OPEN — RELEASE BLOCKING
+
+A no-champion controller may not be automatically discarded before the current stage has received a meaningful training budget. Stand must be able to accumulate at least its full 120-update dwell requirement without policy reset. Any later nursery reset requires an explicit large fresh-update/evaluation budget and must preserve cumulative totals.
+
+### WALK-TOTAL-UPDATES-212 — Make cumulative updates impossible to miss
+**Status:** OPEN — RELEASE BLOCKING
+
+Live world and Training Results must show `total_updates` continuously, alongside the resettable stage/policy update count, evaluation count, reset count, and updates/second. The user must be able to distinguish training progress from a policy reset without opening another page.
+
+### WALK-STAGE-PROGRESS-213 — Expose actual stage-work progress
+**Status:** OPEN — RELEASE BLOCKING
+
+Publish fresh updates, episodes, and evaluations since stage entry plus their required thresholds. The live panel must explain whether the trainer is waiting on work, strict evidence, or mastery confirmations instead of presenting an opaque starting state.
+
+### WALK-MARKERS-214 — Restore visible reference markers near the start
+**Status:** OPEN — RELEASE BLOCKING
+
+Keep the current terrain/collision coordinate system unchanged. Restore a START marker and useful recurring distance markers inside the initial live viewport. Marker world positions must remain treadmill/course-progress correct.
+
+### WALK-MARKER-LABELS-215 — Use readable meter/foot marker labels
+**Status:** OPEN — RELEASE BLOCKING
+
+Metric reference markers use practical meter labels near the start; imperial markers use practical foot labels before mile-scale distances. Do not display tiny `0.00 KM`/`0.00 MI` labels for nearby markers.
+
+### WALK-CONTROLS-216 — Restore documented keyboard controls
+**Status:** OPEN — RELEASE BLOCKING
+
+`Tab` switches Live/Rig Lab; `Space` runs/pauses background training; `1/2/3` select Normal/Faster/Max CPU; `T` toggles results/totals; `U` toggles metric/imperial; `A` toggles optional armor; `R` resets only the live camera/preview. Runtime mappings must match README and visible help.
+
+### WALK-CONTROL-UI-217 — Put control help in the application
+**Status:** OPEN — RELEASE BLOCKING
+
+The top bar and live panel must advertise the controls rather than requiring source/README knowledge. Training state, speed mode, pause state, and pipeline stage must remain visible.
+
+### WALK-SKIN-218 — Disable the unacceptable body skin by default
+**Status:** OPEN — RELEASE BLOCKING
+
+Keep forward sprite feet available, but optional torso/helmet/weapon overlays default OFF and remain explicitly toggleable. Optional visuals never affect physics, training, observations, package startup, or the terrain.
+
+### WALK-WALK-BOOTSTRAP-219 — Restore useful early walking guidance
+**Status:** OPEN — RELEASE BLOCKING
+
+Once the trainer reaches Walk, early paired-leg policies receive strong enough sagittal teacher guidance to produce visible fore/aft alternating leg motion and forward progress while still allowing PPO authority to grow. Do not loosen crab-walk rejection or stage mastery evidence.
+
+### WALK-STATE-220 — Isolate corrected runtime state
+**Status:** OPEN — RELEASE BLOCKING
+
+Bump training/autonomy semantics and use `runner-v0718-*` autosave paths so the broken v0.7.17 reset loop or stale controller state cannot silently resume. Manual checkpoint transfer remains explicit.
+
+### WALK-SOURCE-AUDIT-221 — Remove stale version/control assumptions
+**Status:** OPEN — RELEASE BLOCKING
+
+Audit application, autonomy, PPO, UI layout, persistence, tests, docs, CMake, package audit, and release automation for stale v0.7.6/v0.7.16/v0.7.17 runtime strings and contradictory control/update assumptions.
+
+### WALK-REGRESSION-222 — Deterministically test the reset, marker, and gait recovery
+**Status:** OPEN — RELEASE BLOCKING
+
+Tests prove: update 10 cannot trigger nursery reset; the full Stand dwell can accumulate; a later bounded reset remains possible; initial reference-marker spacing is visible; v0.7.18 semantics are isolated; and the paired-leg walking teacher provides strong opposite-phase sagittal drive without changing terrain coordinates.
+
+### WALK-DOC-223 — Document runtime recovery and controls
+**Status:** OPEN — RELEASE BLOCKING
+
+Update README, CHANGELOG, focused v0.7.18 documentation, missioncache, CMake install contents, and repository audit. Keep a single changelog and a single mission ledger.
+
+### WALK-PACKAGE-224 — Audit the complete v0.7.18 package
+**Status:** OPEN — RELEASE BLOCKING
+
+Linux warnings-as-errors, full Windows SDL3/Vulkan build, all tests, acceptance/camera/package diagnostics, installed/extracted runs, optional-art fallback, ZIP/checksum/manifest, and unrelated-directory `run.bat` must all pass.
+
+### WALK-RELEASE-225 — Publish and verify Runner v0.7.18
+**Status:** OPEN — RELEASE BLOCKING
+
+Merge only validated source, tag `v0.7.18`, publish audited assets, re-download and byte-verify them, record exact evidence, remove the release branch, and leave only `main`. User eye testing may reopen any matching mission.
+
 `missioncache.md` is the single authoritative active mission ledger. Closed historical mission definitions and their exact release evidence remain preserved in immutable Git history and tags; duplicate imported copies were consolidated out here so active work is not hidden beneath stale ledgers. No open mission was discarded.
 
 ## Mandatory refinement loop
