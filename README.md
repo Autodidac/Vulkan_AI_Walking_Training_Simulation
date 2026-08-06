@@ -1,12 +1,13 @@
 # Runner
 
-Runner 0.7.16 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.18 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
 - CMake 3.28 or newer
 - C++23 compiler
 - Ninja or Visual Studio
+- Python 3 for deterministic v0.7.18 source generation
 - vcpkg for SDL3, Vulkan, and shaderc on Windows
 
 The project pins and statically links the platform-neutral SandHybrid simulation library. Runner owns the SDL3/Vulkan application, rendering, training, editor, and package lifecycle.
@@ -19,13 +20,7 @@ cmake --build --preset windows-release --parallel
 ctest --preset windows-release --output-on-failure
 ```
 
-Launch the Release application with:
-
-```bat
-run.bat
-```
-
-`run.bat` resolves the executable relative to itself and works from an unrelated current directory.
+Launch the Release application with `run.bat`. The launcher resolves the executable relative to itself and works from an unrelated current directory.
 
 ## Linux deterministic build
 
@@ -40,17 +35,25 @@ ctest --test-dir build/linux --output-on-failure
 
 ## Live controls
 
-- Mouse wheel over Live Autopilot: zoom the world view without changing physical scale
-- Live panel `ZOOM OUT` / `AUTO VIEW` / `ZOOM IN`: direct camera controls
-- `R`: Reset the live preview and restore automatic camera fitting
-- `Space`: Pause or resume the live preview
-- `Tab`: Switch between Live Autopilot and Rig Lab
+- Mouse wheel: zoom the Live Autopilot world view without changing physical scale
+- `R`: reset the live preview and restore automatic camera fitting
+- `Space`: pause or resume background training
+- `Tab`: switch between Live Autopilot and Rig Lab
 - `1`, `2`, `3`: Normal, Faster, and Max CPU modes
-- `S`: Save the current rig
-- `L`: Load a rig
-- `Escape`: Quit
+- `T`: toggle Training Results / Lifetime Totals
+- `U`: toggle Metric / Imperial reference labels
+- `A`: toggle optional torso/helmet/weapon overlays; foot sprites remain independent
+- `S`: save the current rig
+- `L`: load a rig
+- `Escape`: quit
+
+The application advertises the primary controls in the top bar. The live trainer distinguishes cumulative total updates from the resettable local policy/stage counter and exposes current stage work, evaluations, resets, pipeline state, and update throughput.
 
 The live view automatically fits the current rig, maintains useful course lookahead, and uses elapsed-time camera smoothing with a screen-space dead zone. Camera magnification never changes simulation scale, terrain coordinates, observations, rewards, or learned state.
+
+## Reference markers
+
+Runner v0.7.18 leaves the terrain/collision treadmill unchanged and restores visible reference signs near launch: START plus recurring 10 m metric or 50 ft imperial markers. Near markers use metres/feet rather than misleading `0.00 KM`/`0.00 MI` labels.
 
 ## Rig Lab
 
@@ -68,26 +71,35 @@ Runner.exe --diagnose-acceptance
 Runner.exe --diagnose-camera
 ```
 
-`--diagnose-acceptance` runs the same deterministic rig and curriculum matrix used by CTest and release-package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale without opening a window.
+`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale without opening a window.
 
 ## Repository records
 
 - [`AGENTS.md`](AGENTS.md) defines cache-first implementation, validation, documentation, and release rules.
 - [`CHANGELOG.md`](CHANGELOG.md) is the single release-history document.
-- [`missioncache.md`](missioncache.md) is Runner's single authoritative mission ledger with status, acceptance criteria, and immutable release evidence.
-- [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library and preserves ownership of both canonical ledgers.
-- [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive live and PIP camera contract.
-- [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the released eye-test corrections for crouch recovery, sustained sagittal gait, terrain-conforming support stubs, and supplied optional sprites.
+- [`missioncache.md`](missioncache.md) is Runner's single authoritative active mission ledger; closed historical ledgers remain in Git history and release tags.
+- [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library.
+- [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive camera contract.
+- [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the crouch/gait/stub-foot correction.
+- [`docs/RUNNER_V0718_RUNTIME_RECOVERY.md`](docs/RUNNER_V0718_RUNTIME_RECOVERY.md) documents the update-loop, marker, control, telemetry, skin, and walking recovery.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 
-## v0.7.17 eye-test corrections
+## v0.7.18 runtime recovery
+
+- Removes the update-10 no-champion nursery-reset contradiction; automatic restart is delayed beyond the full stage work budget while cumulative totals survive.
+- Makes total updates, local updates, evaluations, resets, stage thresholds, pipeline state, and throughput understandable in the live UI.
+- Restores START and useful near-course reference markers without altering the terrain simulation.
+- Corrects keyboard mappings so runtime controls match this README.
+- Defaults the optional fake body armor overlays off while retaining visual-only sprite feet.
+- Strengthens early sagittal walking bootstrap so ordinary fore/aft alternating gait is demonstrated long enough to learn without weakening crab-walk rejection.
+- Uses isolated v0.7.18 autosave paths and a bumped autonomy-state format.
+
+## v0.7.17 retained corrections
 
 - One physical support stub per biped leg; visible forward boots are sprites.
-- Sustained sagittal side-view walking is required; crab walking is rejected.
+- Sustained sagittal side-view walking remains required; crab walking remains rejected.
 - Quadrupeds must survive, hold, retract, and stably recover from the press.
 - Stage advancement requires fresh updates, episodes, and evaluations.
-- OPTIONAL ART from all four supplied concepts is packaged with a procedural fallback.
-- Rig Lab exposes optional-art and debug-skeleton toggles.
 
-The optional package includes compact P3 reference sheets derived from all four supplied concepts under `assets/optional/runner_armor_concepts/source/`, plus validated P3 foot, helmet, torso, and weapon-preview sprites under `runtime/`. Removing the entire optional directory preserves procedural rendering and all training behavior.
+The optional package contains derived visual references and runtime sprites under `assets/optional/runner_armor_concepts/`. Removing the optional directory preserves procedural rendering and all training behavior.

@@ -26,6 +26,10 @@ namespace runner
         bool key_1_pressed{};
         bool key_2_pressed{};
         bool key_3_pressed{};
+        bool tab_pressed{};
+        bool totals_pressed{};
+        bool units_pressed{};
+        bool art_pressed{};
         bool save_pressed{};
         bool load_pressed{};
         bool reset_pressed{};
