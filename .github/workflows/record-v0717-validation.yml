@@ -1,0 +1,38 @@
+name: Record Runner v0.7.17 validation evidence
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-runner-v0717-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    if: ${{ github.head_ref == 'agent/v0717-eye-test-feet-gait-batch25' && github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0717-eye-test-feet-gait-batch25
+          fetch-depth: 0
+
+      - name: Close validated mission statuses
+        run: python tools/record_v0717_validation.py
+
+      - name: Commit exact PR validation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/record_v0717_validation.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md tools/record_v0717_validation.py
+          git diff --cached --check
+          git commit -m 'Record Runner v0.7.17 audited PR validation'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
