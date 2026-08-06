@@ -40,10 +40,12 @@ int main()
 
     sim::Environment walking{ sim::CreatureBlueprint::biped(), 0x718u };
     walking.set_course(sim::CourseStage::uneven, 0.30f);
+    const std::array<float, sim::action_count> neutral{};
+    for (int frame = 0; frame < 12; ++frame)
+        (void)walking.step(neutral);
     const auto teacher = rl::walking_teacher_action(walking);
     require(teacher[0] * teacher[2] <= 0.0f,
         "paired hips are not driven in opposite sagittal phases");
-    const std::array<float, sim::action_count> neutral{};
     const auto assisted = rl::effective_policy_action(
         walking, neutral, sim::CourseStage::uneven);
     require(std::abs(assisted[0] - assisted[2]) > 0.08f,
