@@ -1149,8 +1149,8 @@ int main()
         "stand, static crouch, walk/run, and crouch-walk prerequisites are misordered");
     require(!sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
         "duck lesson completes without moving crouch evidence");
-    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 5u, 3.0f, 0u, 0.0f, 0u, 4u),
-        "foot-only crouch walk and obstacle evidence cannot complete the duck lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 8u, 3.0f, 0u, 0.0f, 0u, 4u),
+        "foot-only sustained crouch walk and obstacle evidence cannot complete the duck lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
         "landed jump cannot complete the jump lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
@@ -1229,9 +1229,9 @@ int main()
         "valid stepped best result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f, 0.8f),
         "ducking without clearing a low bar can still seed self-imitation");
-    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 5, 1.2f, 12.0f,
+    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 8, 1.2f, 12.0f,
             3.0f, 0u, 0.0f, 0u, 4u),
-        "valid foot-only crouch-walk result cannot seed self-imitation");
+        "valid sustained foot-only crouch-walk result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
