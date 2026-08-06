@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-project(Runner VERSION 0.7.17 LANGUAGES CXX)
+project(Runner VERSION 0.7.18 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -121,6 +121,9 @@ if(RUNNER_BUILD_APP)
             "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
             "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
+            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
             "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
@@ -134,6 +137,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
         DESTINATION docs RENAME SandHybrid-missioncache.md)
@@ -159,15 +163,14 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.PixelArt COMMAND RunnerPixelArtTests)
     set_tests_properties(Runner.PixelArt PROPERTIES TIMEOUT 30)
 
-
-add_executable(RunnerViewCameraTests tests/view_camera_tests.cpp)
-target_include_directories(RunnerViewCameraTests PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_features(RunnerViewCameraTests PRIVATE cxx_std_23)
-set_target_properties(RunnerViewCameraTests PROPERTIES
-    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
-runner_enable_warnings(RunnerViewCameraTests)
-add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
+    add_executable(RunnerViewCameraTests tests/view_camera_tests.cpp)
+    target_include_directories(RunnerViewCameraTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerViewCameraTests PRIVATE cxx_std_23)
+    set_target_properties(RunnerViewCameraTests PROPERTIES
+        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    runner_enable_warnings(RunnerViewCameraTests)
+    add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
+    set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerV0717EyeTestTests tests/v0717_eye_test_tests.cpp)
     target_link_libraries(RunnerV0717EyeTestTests PRIVATE Runner::Core)
@@ -176,7 +179,13 @@ add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
     add_test(NAME Runner.V0717EyeTest
         COMMAND RunnerV0717EyeTestTests "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     set_tests_properties(Runner.V0717EyeTest PROPERTIES TIMEOUT 180)
-set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
+
+    add_executable(RunnerV0718RuntimeRecoveryTests tests/v0718_runtime_recovery_tests.cpp)
+    target_link_libraries(RunnerV0718RuntimeRecoveryTests PRIVATE Runner::Core)
+    target_compile_features(RunnerV0718RuntimeRecoveryTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0718RuntimeRecoveryTests)
+    add_test(NAME Runner.V0718RuntimeRecovery COMMAND RunnerV0718RuntimeRecoveryTests)
+    set_tests_properties(Runner.V0718RuntimeRecovery PROPERTIES TIMEOUT 90)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
@@ -194,8 +203,7 @@ set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
     add_test(NAME Runner.DeformableTerrain COMMAND RunnerDeformableTerrainTests)
     set_tests_properties(Runner.DeformableTerrain PROPERTIES TIMEOUT 45)
 
-    add_executable(RunnerSandHybridIntegrationTests
-        tests/sandhybrid_integration_tests.cpp)
+    add_executable(RunnerSandHybridIntegrationTests tests/sandhybrid_integration_tests.cpp)
     target_link_libraries(RunnerSandHybridIntegrationTests PRIVATE Runner::Core)
     target_compile_features(RunnerSandHybridIntegrationTests PRIVATE cxx_std_23)
     set_target_properties(RunnerSandHybridIntegrationTests PROPERTIES

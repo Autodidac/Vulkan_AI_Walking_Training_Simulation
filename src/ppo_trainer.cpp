@@ -62,15 +62,15 @@ namespace runner::rl
                 return update < 1200u ? 0.36f : 0.10f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
-            if (update < 400u)
-                return 0.24f;
-            if (update < 2200u)
-                return lerp(0.24f, 0.10f,
-                    static_cast<float>(update - 400u) / 1800.0f);
-            if (update < 7000u)
-                return lerp(0.10f, 0.02f,
-                    static_cast<float>(update - 2200u) / 4800.0f);
-            return 0.0f;
+            if (update < 800u)
+                return 0.50f;
+            if (update < 3000u)
+                return lerp(0.50f, 0.18f,
+                    static_cast<float>(update - 800u) / 2200.0f);
+            if (update < 8000u)
+                return lerp(0.18f, 0.04f,
+                    static_cast<float>(update - 3000u) / 5000.0f);
+            return 0.02f;
         }
 
         [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
@@ -141,7 +141,6 @@ namespace runner::rl
             initialize_parallel_workers();
         }
 
-
     PpoTrainer::~PpoTrainer()
         {
             shutdown_parallel_workers();
@@ -150,7 +149,6 @@ namespace runner::rl
             rollout_start_cv_.notify_all();
             rollout_workers_.clear();
         }
-
 
     PpoTrainer::RolloutTotals PpoTrainer::collect_rollout_partition(std::size_t worker_index,
         std::size_t worker_count, std::uint64_t update_seed)
@@ -230,37 +228,36 @@ namespace runner::rl
     }
 
     void PpoTrainer::rollout_worker_main(std::size_t worker_index, std::stop_token stop_token)
+    {
+        std::uint64_t observed_generation = 0;
+        while (!stop_token.stop_requested())
         {
-            std::uint64_t observed_generation = 0;
-            while (!stop_token.stop_requested())
+            std::uint64_t update_seed = 0;
+            std::size_t active_workers = 1;
             {
-                std::uint64_t update_seed = 0;
-                std::size_t active_workers = 1;
+                std::unique_lock lock(rollout_mutex_);
+                rollout_start_cv_.wait(lock, stop_token, [this, observed_generation]
                 {
-                    std::unique_lock lock(rollout_mutex_);
-                    rollout_start_cv_.wait(lock, stop_token, [this, observed_generation]
-                    {
-                        return rollout_generation_ != observed_generation;
-                    });
-                    if (stop_token.stop_requested())
-                        return;
-                    observed_generation = rollout_generation_;
-                    update_seed = rollout_update_seed_;
-                    active_workers = rollout_active_worker_count_;
-                }
-
-                RolloutTotals totals{};
-                if (worker_index < active_workers)
-                    totals = collect_rollout_partition(worker_index, active_workers, update_seed);
-                {
-                    std::scoped_lock lock(rollout_mutex_);
-                    rollout_worker_totals_[worker_index] = totals;
-                    ++rollout_completed_;
-                }
-                rollout_done_cv_.notify_one();
+                    return rollout_generation_ != observed_generation;
+                });
+                if (stop_token.stop_requested())
+                    return;
+                observed_generation = rollout_generation_;
+                update_seed = rollout_update_seed_;
+                active_workers = rollout_active_worker_count_;
             }
-        }
 
+            RolloutTotals totals{};
+            if (worker_index < active_workers)
+                totals = collect_rollout_partition(worker_index, active_workers, update_seed);
+            {
+                std::scoped_lock lock(rollout_mutex_);
+                rollout_worker_totals_[worker_index] = totals;
+                ++rollout_completed_;
+            }
+            rollout_done_cv_.notify_one();
+        }
+    }
 
     void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
@@ -601,10 +598,9 @@ namespace runner::rl
     }
 
     void PpoTrainer::evaluate_policy()
-        {
-            parallel_evaluate_policy();
-        }
-
+    {
+        parallel_evaluate_policy();
+    }
 
     bool PpoTrainer::restore_best_policy() noexcept
     {
@@ -622,77 +618,76 @@ namespace runner::rl
     }
 
     void PpoTrainer::update_policy()
+    {
+        constexpr std::size_t optimization_passes = 2;
+        constexpr std::size_t minibatch_size = 256;
+        constexpr float clip_range = 0.12f;
+        constexpr float value_coefficient = 0.42f;
+        const float entropy_coefficient = 0.0012f
+            * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 3500.0f);
+        constexpr float max_gradient_norm = 0.38f;
+
+        std::vector<std::size_t> indices(rollout_.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        float total_policy_loss = 0.0f;
+        float total_value_loss = 0.0f;
+        float total_entropy = 0.0f;
+        std::size_t sample_count = 0;
+
+        for (std::size_t optimization_pass = 0;
+            optimization_pass < optimization_passes; ++optimization_pass)
         {
-            constexpr std::size_t optimization_passes = 2;
-            constexpr std::size_t minibatch_size = 256;
-            constexpr float clip_range = 0.12f;
-            constexpr float value_coefficient = 0.42f;
-            const float entropy_coefficient = 0.0012f
-                * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 3500.0f);
-            constexpr float max_gradient_norm = 0.38f;
-
-            std::vector<std::size_t> indices(rollout_.size());
-            std::iota(indices.begin(), indices.end(), 0);
-            float total_policy_loss = 0.0f;
-            float total_value_loss = 0.0f;
-            float total_entropy = 0.0f;
-            std::size_t sample_count = 0;
-
-            for (std::size_t optimization_pass = 0;
-                optimization_pass < optimization_passes; ++optimization_pass)
+            for (std::size_t index = indices.size(); index > 1; --index)
             {
-                for (std::size_t index = indices.size(); index > 1; --index)
-                {
-                    const std::size_t other = static_cast<std::size_t>(
-                        random_uniform() * static_cast<float>(index));
-                    std::swap(indices[index - 1], indices[std::min(other, index - 1)]);
-                }
-                for (std::size_t begin = 0; begin < indices.size(); begin += minibatch_size)
-                {
-                    const std::size_t end = std::min(indices.size(), begin + minibatch_size);
-                    float batch_policy_loss = 0.0f;
-                    float batch_value_loss = 0.0f;
-                    float batch_entropy = 0.0f;
-                    parallel_accumulate_batch(
-                        indices, begin, end, clip_range, value_coefficient, entropy_coefficient,
-                        batch_policy_loss, batch_value_loss, batch_entropy);
-                    apply_self_imitation_prior();
-
-                    const float inverse_batch = 1.0f / static_cast<float>(end - begin);
-                    float norm_squared = 0.0f;
-                    for (const float gradient : policy_.gradients())
-                    {
-                        const float scaled = gradient * inverse_batch;
-                        norm_squared += scaled * scaled;
-                    }
-                    const float norm = std::sqrt(norm_squared);
-                    const float clip_scale = norm > max_gradient_norm
-                        ? max_gradient_norm / norm
-                        : 1.0f;
-                    const float learning_rate = metrics_.learning_rate
-                        * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 5000.0f);
-                    apply_adam(learning_rate, inverse_batch * clip_scale);
-                    total_policy_loss += batch_policy_loss;
-                    total_value_loss += batch_value_loss;
-                    total_entropy += batch_entropy;
-                    sample_count += end - begin;
-                }
+                const std::size_t other = static_cast<std::size_t>(
+                    random_uniform() * static_cast<float>(index));
+                std::swap(indices[index - 1], indices[std::min(other, index - 1)]);
             }
-            const float inverse_samples = sample_count > 0
-                ? 1.0f / static_cast<float>(sample_count)
-                : 0.0f;
-            if (best_parameters_.size() == policy_.parameter_count())
+            for (std::size_t begin = 0; begin < indices.size(); begin += minibatch_size)
             {
-                const float anchor = metrics_.update < 1500u ? 0.004f : 0.010f;
-                std::vector<float>& current = policy_.parameters();
-                for (std::size_t index = 0; index < current.size(); ++index)
-                    current[index] = lerp(current[index], best_parameters_[index], anchor);
+                const std::size_t end = std::min(indices.size(), begin + minibatch_size);
+                float batch_policy_loss = 0.0f;
+                float batch_value_loss = 0.0f;
+                float batch_entropy = 0.0f;
+                parallel_accumulate_batch(
+                    indices, begin, end, clip_range, value_coefficient, entropy_coefficient,
+                    batch_policy_loss, batch_value_loss, batch_entropy);
+                apply_self_imitation_prior();
+
+                const float inverse_batch = 1.0f / static_cast<float>(end - begin);
+                float norm_squared = 0.0f;
+                for (const float gradient : policy_.gradients())
+                {
+                    const float scaled = gradient * inverse_batch;
+                    norm_squared += scaled * scaled;
+                }
+                const float norm = std::sqrt(norm_squared);
+                const float clip_scale = norm > max_gradient_norm
+                    ? max_gradient_norm / norm
+                    : 1.0f;
+                const float learning_rate = metrics_.learning_rate
+                    * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 5000.0f);
+                apply_adam(learning_rate, inverse_batch * clip_scale);
+                total_policy_loss += batch_policy_loss;
+                total_value_loss += batch_value_loss;
+                total_entropy += batch_entropy;
+                sample_count += end - begin;
             }
-            metrics_.policy_loss = total_policy_loss * inverse_samples;
-            metrics_.value_loss = total_value_loss * inverse_samples;
-            metrics_.entropy = total_entropy * inverse_samples;
         }
-
+        const float inverse_samples = sample_count > 0
+            ? 1.0f / static_cast<float>(sample_count)
+            : 0.0f;
+        if (best_parameters_.size() == policy_.parameter_count())
+        {
+            const float anchor = metrics_.update < 1500u ? 0.004f : 0.010f;
+            std::vector<float>& current = policy_.parameters();
+            for (std::size_t index = 0; index < current.size(); ++index)
+                current[index] = lerp(current[index], best_parameters_[index], anchor);
+        }
+        metrics_.policy_loss = total_policy_loss * inverse_samples;
+        metrics_.value_loss = total_value_loss * inverse_samples;
+        metrics_.entropy = total_entropy * inverse_samples;
+    }
 
     void PpoTrainer::apply_adam(float learning_rate, float gradient_scale)
     {
