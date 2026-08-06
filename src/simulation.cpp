@@ -2836,8 +2836,6 @@ step_not_qualified:
 
         if (course_stage_ == CourseStage::duck_press)
         {
-            const bool horizontal_press =
-                blueprint_.horizontal_multi_support_plan();
             const bool press_challenge_reached = duck_press_contact_this_step_
                 || duck_press_contact_seen_
                 || (duck_obstacle_weight_ >= (horizontal_press ? 0.62f : 0.78f)
