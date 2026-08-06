@@ -1,0 +1,50 @@
+name: Fix Runner v0.7.17 elite fixture
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-runner-v0717-elite-fixture-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    if: ${{ github.head_ref == 'agent/v0717-eye-test-feet-gait-batch25' && github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0717-eye-test-feet-gait-batch25
+          fetch-depth: 0
+
+      - name: Cache final Linux finding
+        run: python tools/fix_v0717_elite_fixture.py cache
+
+      - name: Commit finding before fixture correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git diff --cached --check
+          git commit -m 'Cache Runner v0.7.17 elite fixture finding'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
+
+      - name: Correct stale uneven elite fixture
+        run: python tools/fix_v0717_elite_fixture.py implement
+
+      - name: Commit fixture correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/fix_v0717_elite_fixture.py
+          git add -A
+          git diff --cached --check
+          git commit -m 'Correct Runner v0.7.17 uneven elite fixture'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
