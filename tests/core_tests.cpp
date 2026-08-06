@@ -1306,32 +1306,27 @@ int main()
             && std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
             { return (bone.a == 2u && bone.b == 10u) || (bone.a == 10u && bone.b == 2u); }),
         "raised humanoid shoulder girdle can still invert through the upper spine");
-    require(humanoid.nodes.size() >= 17,
-        "human-calibrated rig should include passive heel/toe feet and articulated arms");
+    require(humanoid.nodes.size() == 13u,
+        "human-calibrated rig does not retain the compact articulated body and arms");
     require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
         "uploaded humanoid pelvis calibration not applied");
-    require(humanoid.bones.size() >= 19,
-        "humanoid feet or arms are not structurally connected");
+    require(humanoid.bones.size() == 15u,
+        "humanoid legs or articulated arms are not structurally connected");
     require(humanoid.active_motor_count == sim::action_count,
         "humanoid does not expose independent shoulder and elbow motors");
-    require(humanoid.left_contact_node != humanoid.motors[1].c
-            && humanoid.right_contact_node != humanoid.motors[3].c,
-        "semantic feet are still the lower-leg motor endpoints");
-    require(humanoid.additional_left_contact_nodes.size() == 2u
-            && humanoid.additional_right_contact_nodes.size() == 2u,
-        "articulated foot does not include heel, ball, and toe contacts");
-    require(humanoid.nodes[humanoid.motors[1].c].y
-            - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
-            && humanoid.nodes[humanoid.motors[3].c].y
-                - humanoid.nodes[humanoid.right_contact_node].y >= 0.18f,
-        "passive foot adapter leaves an ankle on the contact plane");
-    require(std::ranges::none_of(humanoid.motors,
-            [&humanoid](const sim::MotorConstraint& motor)
-            {
-                return motor.c == humanoid.left_contact_node
-                    || motor.c == humanoid.right_contact_node;
-            }),
-        "a policy motor still terminates directly on a semantic foot contact");
+    require(humanoid.left_contact_node == humanoid.motors[1].c
+            && humanoid.right_contact_node == humanoid.motors[3].c,
+        "terminal lower-leg joints are not the physical support stubs");
+    require(humanoid.additional_left_contact_nodes.empty()
+            && humanoid.additional_right_contact_nodes.empty(),
+        "terrain-hostile heel/ball/toe collision contacts remain on the humanoid");
+    require(humanoid.left_contact_node < humanoid.radii.size()
+            && humanoid.right_contact_node < humanoid.radii.size()
+            && humanoid.radii[humanoid.left_contact_node] >= 0.104f
+            && humanoid.radii[humanoid.right_contact_node] >= 0.104f
+            && humanoid.radii[humanoid.left_contact_node] <= 0.1121f
+            && humanoid.radii[humanoid.right_contact_node] <= 0.1121f,
+        "humanoid terminal support stubs are not compact and terrain-conforming");
     for (std::size_t motor_index = 0; motor_index < humanoid.active_motor_count; ++motor_index)
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
@@ -1743,7 +1738,7 @@ int main()
                 break;
         }
         require(support_observed,
-            "passive biped heel/toe nodes never became valid support contacts");
+            "terminal biped support stubs never became valid support contacts");
         require(biped_support.invalid_reason() != sim::InvalidMotion::sustained_flight,
             "grounded passive biped feet were still classified as flying");
     }
