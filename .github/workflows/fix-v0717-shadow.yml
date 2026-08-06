@@ -1,0 +1,50 @@
+name: Fix Runner v0.7.17 shadow warning
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-runner-v0717-shadow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    if: ${{ github.head_ref == 'agent/v0717-eye-test-feet-gait-batch25' && github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0717-eye-test-feet-gait-batch25
+          fetch-depth: 0
+
+      - name: Cache warnings-as-errors finding
+        run: python tools/fix_v0717_shadow.py cache
+
+      - name: Commit finding before source correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git diff --cached --check
+          git commit -m 'Cache Runner v0.7.17 shadow warning'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
+
+      - name: Remove redundant topology declaration
+        run: python tools/fix_v0717_shadow.py implement
+
+      - name: Commit source correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/fix_v0717_shadow.py
+          git add -A
+          git diff --cached --check
+          git commit -m 'Remove Runner v0.7.17 horizontal press shadow'
+          git push origin HEAD:agent/v0717-eye-test-feet-gait-batch25
