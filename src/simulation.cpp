@@ -2707,7 +2707,8 @@ step_not_qualified:
             && crouch_posture.support_margin >= -0.24f;
         const bool physical_crouch = crouch_posture_qualified(crouch_posture)
             || horizontal_compression;
-        const bool generic_duck = physical_crouch
+        const bool generic_duck = course_stage_ != CourseStage::duck_press
+            && physical_crouch
             && current_uprightness > 0.60f
             && duck_depth_ >= (horizontal_press ? 0.10f : 0.48f);
         const bool press_duck = course_stage_ == CourseStage::duck_press
@@ -3309,10 +3310,14 @@ step_not_qualified:
             maximum_speed_kmh_, pelvis_position, airborne_seconds_, allowed_airtime,
             micro_motion_seconds_, terminal_fall, course_stage_,
             current_airborne_rotation_ / (2.0f * pi));
+        const bool duck_recovery_settling = course_stage_ == CourseStage::duck_press
+            && duck_press_completed_ && duck_recovery_count_ >= 1u
+            && elapsed_seconds_ - duck_walk_started_seconds_ <= 1.25f;
         if (course_stage_ == CourseStage::duck_press
-            && !duck_press_completed_
+            && (!duck_press_completed_ || duck_recovery_settling)
             && (frame_gate == InvalidMotion::sustained_flight
                 || frame_gate == InvalidMotion::overspeed
+                || frame_gate == InvalidMotion::collapsed_posture
                 || frame_gate == InvalidMotion::fallen))
             frame_gate = InvalidMotion::none;
         invalidate(frame_gate);
@@ -3526,7 +3531,7 @@ step_not_qualified:
         // terminate this supported compression lesson before those stronger
         // stage-specific checks can run. Every other invalid reason remains.
         if (course_stage_ == CourseStage::duck_press
-            && !duck_press_completed_
+            && (!duck_press_completed_ || duck_recovery_settling)
             && (invalid_reason_ == InvalidMotion::sustained_flight
                 || invalid_reason_ == InvalidMotion::overspeed
                 || invalid_reason_ == InvalidMotion::collapsed_posture

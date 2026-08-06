@@ -962,8 +962,7 @@ namespace runner::sim
             if (root_node >= nodes.size() || head_node >= nodes.size())
                 return false;
             const Vec2 head_offset = nodes[head_node] - nodes[root_node];
-            return active_motor_count <= 4u
-                && std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
+            return std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
         }
         [[nodiscard]] bool horizontal_multi_support_plan() const noexcept
         {

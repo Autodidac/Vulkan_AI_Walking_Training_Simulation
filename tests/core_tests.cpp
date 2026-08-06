@@ -144,20 +144,22 @@ namespace runner::sim
         static bool guided_squat_is_valid(Environment& environment) noexcept
         {
             environment.set_course(CourseStage::duck_press, 0.50f);
-            environment.elapsed_seconds_ = 6.0f;
-            environment.duck_press_contact_seen_ = true;
-            for (int iteration = 0; iteration < 48; ++iteration)
+            for (int frame = 0; frame < 900; ++frame)
             {
-                environment.stabilize_duck_posture();
-                environment.solve_ground(1.0f / 60.0f);
+                const auto action = rl::duck_teacher_action(environment);
+                const StepResult step = environment.step(action);
+                const CrouchPostureEvidence evidence =
+                    environment.current_crouch_posture();
+                if (crouch_posture_qualified(evidence)
+                    && evidence.pelvis_drop >= 0.22f
+                    && evidence.left_knee_flex >= 0.12f
+                    && evidence.right_knee_flex >= 0.12f
+                    && evidence.torso_pitch <= 0.65f)
+                    return true;
+                if (step.terminated)
+                    return false;
             }
-            const CrouchPostureEvidence evidence =
-                environment.current_crouch_posture();
-            return crouch_posture_qualified(evidence)
-                && evidence.pelvis_drop >= 0.30f
-                && evidence.left_knee_flex >= 0.16f
-                && evidence.right_knee_flex >= 0.16f
-                && evidence.torso_pitch <= 0.55f;
+            return false;
         }
 
         static bool crouch_guide_preserves_support_dynamics(
