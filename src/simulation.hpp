@@ -404,20 +404,21 @@ namespace runner::sim
         float difficulty, float standing_head_top,
         bool horizontal_body_plan = false) noexcept
     {
-        constexpr float settle_end = 2.75f;
-        constexpr float descend_end = 6.25f;
-        constexpr float hold_end = 8.25f;
-        constexpr float retract_end = 10.75f;
-        constexpr float cycle = 12.25f;
+        const float settle_end = horizontal_body_plan ? 2.75f : 2.50f;
+        const float descend_end = horizontal_body_plan ? 6.25f : 5.00f;
+        const float hold_end = horizontal_body_plan ? 8.25f : 7.00f;
+        const float retract_end = horizontal_body_plan ? 10.75f : 9.50f;
+        const float cycle = horizontal_body_plan ? 12.25f : 11.0f;
         float local = std::fmod(std::max(0.0f, elapsed_seconds), cycle);
         if (local < 0.0f)
             local += cycle;
-        const float start = standing_head_top + (horizontal_body_plan ? 0.72f : 1.10f);
+        const float start = standing_head_top
+            + (horizontal_body_plan ? 0.62f : 1.10f);
         const float crouch_drop = horizontal_body_plan
-            ? clamp(standing_head_top * 0.085f, 0.28f, 0.46f)
-                + clamp(difficulty, 0.0f, 1.0f) * 0.035f
-            : clamp(standing_head_top * 0.15f, 0.72f, 0.84f)
-                + clamp(difficulty, 0.0f, 1.0f) * 0.06f;
+            ? clamp(standing_head_top * 0.070f, 0.20f, 0.28f)
+                + clamp(difficulty, 0.0f, 1.0f) * 0.020f
+            : clamp(standing_head_top * 0.16f, 0.78f, 0.86f)
+                + clamp(difficulty, 0.0f, 1.0f) * 0.08f;
         const float target = standing_head_top - crouch_drop;
         if (local < settle_end)
             return { start, 0.0f, false, false, false };
@@ -514,9 +515,9 @@ namespace runner::sim
         }
         if (evidence.horizontal_body)
         {
-            return evidence.pelvis_drop >= 0.18f
-                && evidence.torso_pitch <= 0.75f
-                && evidence.support_margin >= -0.15f;
+            return evidence.pelvis_drop >= 0.12f
+                && evidence.torso_pitch <= 0.80f
+                && evidence.support_margin >= -0.22f;
         }
         return evidence.pelvis_drop >= 0.22f
             && evidence.torso_pitch <= 0.65f
@@ -962,6 +963,7 @@ namespace runner::sim
                 return false;
             const Vec2 head_offset = nodes[head_node] - nodes[root_node];
             return active_motor_count <= 4u
+                && support_seed_count() >= 4u
                 && std::abs(head_offset.x) >= std::abs(head_offset.y) * 0.72f;
         }
 

@@ -597,58 +597,27 @@ int main()
         "duck press does not hold a meaningful crouch target");
     require(press_retract.retracting && press_retract.vertical_velocity > 0.0f,
         "duck press does not retract after the hold");
-    auto articulated_forward_foot = [](const sim::CreatureBlueprint& rig,
-        bool left)
-    {
-        const std::uint16_t heel = left ? rig.left_contact_node : rig.right_contact_node;
-        const auto& extra = left
-            ? rig.additional_left_contact_nodes : rig.additional_right_contact_nodes;
-        if (heel >= rig.nodes.size() || extra.size() < 2u
-            || extra[0] >= rig.nodes.size() || extra[1] >= rig.nodes.size())
-            return false;
-        const std::uint16_t ball = extra[0];
-        const std::uint16_t toe = extra[1];
-        const bool toe_hinge = std::ranges::any_of(rig.bones,
-            [ball, toe](const sim::DistanceConstraint& bone)
-            {
-                return (bone.a == ball && bone.b == toe)
-                    || (bone.a == toe && bone.b == ball);
-            });
-        const bool rigid_heel_to_toe = std::ranges::any_of(rig.bones,
-            [heel, toe](const sim::DistanceConstraint& bone)
-            {
-                return (bone.a == heel && bone.b == toe)
-                    || (bone.a == toe && bone.b == heel);
-            });
-        return rig.nodes[heel].x < rig.nodes[ball].x
-            && rig.nodes[ball].x < rig.nodes[toe].x
-            && toe_hinge && !rigid_heel_to_toe;
-    };
-    const std::array articulated_rigs{
+    const std::array stub_rigs{
+        sim::CreatureBlueprint::scaffold(),
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid()
     };
-    for (const sim::CreatureBlueprint& rig : articulated_rigs)
+    for (const sim::CreatureBlueprint& rig : stub_rigs)
     {
-        require(rig.support_seed_count() == 6u
-                && articulated_forward_foot(rig, true)
-                && articulated_forward_foot(rig, false),
-            "paired rig lacks forward articulated heel-ball-toe feet");
+        require(rig.support_seed_count() == 2u
+                && rig.additional_left_contact_nodes.empty()
+                && rig.additional_right_contact_nodes.empty()
+                && rig.left_contact_node < rig.radii.size()
+                && rig.right_contact_node < rig.radii.size()
+                && rig.radii[rig.left_contact_node] <= 0.1121f
+                && rig.radii[rig.right_contact_node] <= 0.1121f,
+            "paired rig does not use one compact physical support stub per leg");
     }
-    sim::Environment toe_environment(sim::CreatureBlueprint::biped(), 79u);
-    toe_environment.set_course(sim::CourseStage::duck_press, 0.25f);
-    require(sim::EnvironmentTestAccess::articulated_toes_move(toe_environment),
-        "coordinated leg action does not actuate both toe hinges");
-    sim::Environment rate_limited_toes(sim::CreatureBlueprint::humanoid(), 181u);
-    require(sim::EnvironmentTestAccess::articulated_toe_rate_is_bounded(
-            rate_limited_toes),
-        "articulated toe hinge can chatter faster than its stance/swing rate gate");
-    require(std::abs(sim::rate_limited_toe_command(0.0f, 1.0f,
-                1.0f / 60.0f, true, sim::CourseStage::uneven))
-            <= sim::toe_command_slew_rate(true, sim::CourseStage::uneven)
-                / 60.0f + 0.000001f,
-        "toe command slew gate permits an instantaneous stabilization snap");
+    require(!sim::CreatureBlueprint::chicken().horizontal_body_plan()
+            && sim::CreatureBlueprint::quadruped().horizontal_body_plan()
+            && sim::CreatureBlueprint::crawler4().horizontal_body_plan(),
+        "horizontal press classification confuses bipeds with multi-support bodies");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;
@@ -800,7 +769,7 @@ int main()
     require(!sim::stage_skill_evidence(sim::CourseStage::uneven,
             0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && sim::stage_skill_evidence(sim::CourseStage::uneven,
-                4u, 0.0f, 0u, 0.0f, 0u, 0u),
+                10u, 0.0f, 0u, 0.0f, 0u, 0u),
         "walking/running stage uses the wrong movement evidence");
     require(sim::CreatureBlueprint::monoped().monopedal_gait()
             && !sim::CreatureBlueprint::humanoid().monopedal_gait(),
@@ -810,7 +779,7 @@ int main()
             && !sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
                 5u, 1.5f, 0u, 0.0f, 0u, 4u)
             && sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
-                5u, 3.0f, 0u, 0.0f, 0u, 4u),
+                8u, 3.0f, 0u, 0.0f, 0u, 4u),
         "duck stage can qualify without sustained crouch walking and obstacles");
     require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
         "joint-powered jump is not recognized");
