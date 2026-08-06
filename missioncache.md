@@ -558,6 +558,12 @@ Clean run `31074945350` again passed all runtime-facing Linux gates and failed o
 
 Monoped identity must require exactly two semantic support contacts in addition to the existing motor relationship. Quadruped, crawler, and hexapod then remain multi-support bodies; the true monoped retains its dedicated gait path. No accepted runtime threshold or behavior is weakened. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
 
+## v0.7.17 ninth Linux validation finding — duplicated legacy crouch-walk thresholds
+
+Clean run `31075191957` passed all production-facing Linux contracts and failed one later core assertion. `core_tests.cpp` already contained the corrected eight-cycle crouch-walk evidence test, but a duplicated historical section farther down still expected five cycles to complete crouch-walk and to enter elite self-imitation. Production `stage_skill_evidence` correctly rejects both five-cycle fixtures.
+
+Both duplicated fixtures must use the current eight-cycle sustained crouch-walk threshold. No production code, acceptance threshold, or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
