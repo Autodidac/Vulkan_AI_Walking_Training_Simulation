@@ -942,7 +942,8 @@ namespace runner::sim
         }
         [[nodiscard]] bool monopedal_gait() const noexcept
         {
-            return active_motor_count >= 4u
+            return support_seed_count() == 2u
+                && active_motor_count >= 4u
                 && motors[2].enabled && motors[3].enabled
                 && motors[2].a == motors[3].a
                 && motors[2].pivot == motors[3].pivot;
