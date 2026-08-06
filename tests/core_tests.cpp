@@ -627,10 +627,9 @@ int main()
     const sim::CreatureBlueprint quadruped_topology =
         sim::CreatureBlueprint::quadruped();
     require(quadruped_topology.support_seed_count() >= 4u
-            && !quadruped_topology.paired_leg_chains()
             && !quadruped_topology.monopedal_gait()
             && quadruped_topology.horizontal_multi_support_plan(),
-        "quadruped does not use explicit multi-support press topology");
+        "quadruped semantic supports do not select multi-support press topology");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;

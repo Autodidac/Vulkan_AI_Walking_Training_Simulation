@@ -965,8 +965,7 @@ namespace runner::sim
         }
         [[nodiscard]] bool horizontal_multi_support_plan() const noexcept
         {
-            return !paired_leg_chains() && !monopedal_gait()
-                && support_seed_count() >= 4u;
+            return !monopedal_gait() && support_seed_count() >= 4u;
         }
 
         [[nodiscard]] static CreatureBlueprint scaffold();
