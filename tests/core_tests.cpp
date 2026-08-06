@@ -144,20 +144,22 @@ namespace runner::sim
         static bool guided_squat_is_valid(Environment& environment) noexcept
         {
             environment.set_course(CourseStage::duck_press, 0.50f);
-            environment.elapsed_seconds_ = 6.0f;
-            environment.duck_press_contact_seen_ = true;
-            for (int iteration = 0; iteration < 48; ++iteration)
+            for (int frame = 0; frame < 900; ++frame)
             {
-                environment.stabilize_duck_posture();
-                environment.solve_ground(1.0f / 60.0f);
+                const auto action = rl::duck_teacher_action(environment);
+                const StepResult step = environment.step(action);
+                const CrouchPostureEvidence evidence =
+                    environment.current_crouch_posture();
+                if (crouch_posture_qualified(evidence)
+                    && evidence.pelvis_drop >= 0.22f
+                    && evidence.left_knee_flex >= 0.12f
+                    && evidence.right_knee_flex >= 0.12f
+                    && evidence.torso_pitch <= 0.65f)
+                    return true;
+                if (step.terminated)
+                    return false;
             }
-            const CrouchPostureEvidence evidence =
-                environment.current_crouch_posture();
-            return crouch_posture_qualified(evidence)
-                && evidence.pelvis_drop >= 0.30f
-                && evidence.left_knee_flex >= 0.16f
-                && evidence.right_knee_flex >= 0.16f
-                && evidence.torso_pitch <= 0.55f;
+            return false;
         }
 
         static bool crouch_guide_preserves_support_dynamics(
@@ -597,58 +599,37 @@ int main()
         "duck press does not hold a meaningful crouch target");
     require(press_retract.retracting && press_retract.vertical_velocity > 0.0f,
         "duck press does not retract after the hold");
-    auto articulated_forward_foot = [](const sim::CreatureBlueprint& rig,
-        bool left)
-    {
-        const std::uint16_t heel = left ? rig.left_contact_node : rig.right_contact_node;
-        const auto& extra = left
-            ? rig.additional_left_contact_nodes : rig.additional_right_contact_nodes;
-        if (heel >= rig.nodes.size() || extra.size() < 2u
-            || extra[0] >= rig.nodes.size() || extra[1] >= rig.nodes.size())
-            return false;
-        const std::uint16_t ball = extra[0];
-        const std::uint16_t toe = extra[1];
-        const bool toe_hinge = std::ranges::any_of(rig.bones,
-            [ball, toe](const sim::DistanceConstraint& bone)
-            {
-                return (bone.a == ball && bone.b == toe)
-                    || (bone.a == toe && bone.b == ball);
-            });
-        const bool rigid_heel_to_toe = std::ranges::any_of(rig.bones,
-            [heel, toe](const sim::DistanceConstraint& bone)
-            {
-                return (bone.a == heel && bone.b == toe)
-                    || (bone.a == toe && bone.b == heel);
-            });
-        return rig.nodes[heel].x < rig.nodes[ball].x
-            && rig.nodes[ball].x < rig.nodes[toe].x
-            && toe_hinge && !rigid_heel_to_toe;
-    };
-    const std::array articulated_rigs{
+    const std::array stub_rigs{
+        sim::CreatureBlueprint::scaffold(),
         sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid()
     };
-    for (const sim::CreatureBlueprint& rig : articulated_rigs)
+    for (const sim::CreatureBlueprint& rig : stub_rigs)
     {
-        require(rig.support_seed_count() == 6u
-                && articulated_forward_foot(rig, true)
-                && articulated_forward_foot(rig, false),
-            "paired rig lacks forward articulated heel-ball-toe feet");
+        require(rig.support_seed_count() == 2u
+                && rig.additional_left_contact_nodes.empty()
+                && rig.additional_right_contact_nodes.empty()
+                && rig.left_contact_node < rig.radii.size()
+                && rig.right_contact_node < rig.radii.size()
+                && rig.radii[rig.left_contact_node] >= 0.104f
+                && rig.radii[rig.right_contact_node] >= 0.104f
+                && rig.radii[rig.left_contact_node] <= 0.1121f
+                && rig.radii[rig.right_contact_node] <= 0.1121f,
+            "paired rig does not use one compact loaded support stub per leg");
     }
-    sim::Environment toe_environment(sim::CreatureBlueprint::biped(), 79u);
-    toe_environment.set_course(sim::CourseStage::duck_press, 0.25f);
-    require(sim::EnvironmentTestAccess::articulated_toes_move(toe_environment),
-        "coordinated leg action does not actuate both toe hinges");
-    sim::Environment rate_limited_toes(sim::CreatureBlueprint::humanoid(), 181u);
-    require(sim::EnvironmentTestAccess::articulated_toe_rate_is_bounded(
-            rate_limited_toes),
-        "articulated toe hinge can chatter faster than its stance/swing rate gate");
-    require(std::abs(sim::rate_limited_toe_command(0.0f, 1.0f,
-                1.0f / 60.0f, true, sim::CourseStage::uneven))
-            <= sim::toe_command_slew_rate(true, sim::CourseStage::uneven)
-                / 60.0f + 0.000001f,
-        "toe command slew gate permits an instantaneous stabilization snap");
+    const sim::CreatureBlueprint chicken_topology =
+        sim::CreatureBlueprint::chicken();
+    require(chicken_topology.paired_leg_chains()
+            && !chicken_topology.horizontal_multi_support_plan(),
+        "chicken paired-leg balance topology is not isolated from multi-support press logic");
+
+    const sim::CreatureBlueprint quadruped_topology =
+        sim::CreatureBlueprint::quadruped();
+    require(quadruped_topology.support_seed_count() >= 4u
+            && !quadruped_topology.monopedal_gait()
+            && quadruped_topology.horizontal_multi_support_plan(),
+        "quadruped semantic supports do not select multi-support press topology");
     const sim::Environment discovery_environment(sim::CreatureBlueprint::biped(), 83u);
     const std::size_t crouch_lane = 2u
         * discovery_environment.blueprint().active_motor_count + 6u;
@@ -800,7 +781,7 @@ int main()
     require(!sim::stage_skill_evidence(sim::CourseStage::uneven,
             0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && sim::stage_skill_evidence(sim::CourseStage::uneven,
-                4u, 0.0f, 0u, 0.0f, 0u, 0u),
+                10u, 0.0f, 0u, 0.0f, 0u, 0u),
         "walking/running stage uses the wrong movement evidence");
     require(sim::CreatureBlueprint::monoped().monopedal_gait()
             && !sim::CreatureBlueprint::humanoid().monopedal_gait(),
@@ -810,7 +791,7 @@ int main()
             && !sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
                 5u, 1.5f, 0u, 0.0f, 0u, 4u)
             && sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
-                5u, 3.0f, 0u, 0.0f, 0u, 4u),
+                8u, 3.0f, 0u, 0.0f, 0u, 4u),
         "duck stage can qualify without sustained crouch walking and obstacles");
     require(sim::powered_joint_launch(sim::CourseStage::ramps, 1.0f, 0.08f),
         "joint-powered jump is not recognized");
@@ -1130,7 +1111,7 @@ int main()
     require(later_bar.half_extent.x > later_bar.half_extent.y * 5.0f,
         "crouch-walk low bar is not horizontal or is effectively a wall");
     require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk,
-            5u, 3.0f, 0u, 0.0f, 0u, 4u),
+            8u, 3.0f, 0u, 0.0f, 0u, 4u),
         "valid foot-only crouch-walk evidence is rejected");
 
     require(sim::ground_velocity_retention(true, 0.0f)
@@ -1168,8 +1149,8 @@ int main()
         "stand, static crouch, walk/run, and crouch-walk prerequisites are misordered");
     require(!sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
         "duck lesson completes without moving crouch evidence");
-    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 5u, 3.0f, 0u, 0.0f, 0u, 4u),
-        "foot-only crouch walk and obstacle evidence cannot complete the duck lesson");
+    require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 8u, 3.0f, 0u, 0.0f, 0u, 4u),
+        "foot-only sustained crouch walk and obstacle evidence cannot complete the duck lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::ramps, 0u, 0.0f, 1u, 0.0f, 0u, 0u),
         "landed jump cannot complete the jump lesson");
     require(sim::stage_skill_evidence(sim::CourseStage::duck_bars, 0u, 0.0f, 1u, 1.0f, 1u, 0u),
@@ -1244,13 +1225,13 @@ int main()
         "invalid policy does not restore the champion");
     require(!rl::policy_regression_guard(10.0f, 9.4f, true),
         "small exploration change triggers an unnecessary champion rollback");
-    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 4, 1.2f, 4.0f),
-        "valid stepped best result cannot seed self-imitation");
+    require(rl::elite_motion_eligible(sim::CourseStage::uneven, true, 10, 1.2f, 4.0f),
+        "valid sustained stepped best result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 0, 0.0f, 4.0f, 0.8f),
         "ducking without clearing a low bar can still seed self-imitation");
-    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 5, 1.2f, 12.0f,
+    require(rl::elite_motion_eligible(sim::CourseStage::duck_press, true, 8, 1.2f, 12.0f,
             3.0f, 0u, 0.0f, 0u, 4u),
-        "valid foot-only crouch-walk result cannot seed self-imitation");
+        "valid sustained foot-only crouch-walk result cannot seed self-imitation");
     require(!rl::elite_motion_eligible(sim::CourseStage::uneven, false, 8, 12.0f, 20.0f),
         "invalid rolling result can seed self-imitation");
     require(sim::hazard_approach_weight(0.40f) == 1.0f,
@@ -1325,32 +1306,27 @@ int main()
             && std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
             { return (bone.a == 2u && bone.b == 10u) || (bone.a == 10u && bone.b == 2u); }),
         "raised humanoid shoulder girdle can still invert through the upper spine");
-    require(humanoid.nodes.size() >= 17,
-        "human-calibrated rig should include passive heel/toe feet and articulated arms");
+    require(humanoid.nodes.size() == 13u,
+        "human-calibrated rig does not retain the compact articulated body and arms");
     require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
         "uploaded humanoid pelvis calibration not applied");
-    require(humanoid.bones.size() >= 19,
-        "humanoid feet or arms are not structurally connected");
+    require(humanoid.bones.size() == 15u,
+        "humanoid legs or articulated arms are not structurally connected");
     require(humanoid.active_motor_count == sim::action_count,
         "humanoid does not expose independent shoulder and elbow motors");
-    require(humanoid.left_contact_node != humanoid.motors[1].c
-            && humanoid.right_contact_node != humanoid.motors[3].c,
-        "semantic feet are still the lower-leg motor endpoints");
-    require(humanoid.additional_left_contact_nodes.size() == 2u
-            && humanoid.additional_right_contact_nodes.size() == 2u,
-        "articulated foot does not include heel, ball, and toe contacts");
-    require(humanoid.nodes[humanoid.motors[1].c].y
-            - humanoid.nodes[humanoid.left_contact_node].y >= 0.18f
-            && humanoid.nodes[humanoid.motors[3].c].y
-                - humanoid.nodes[humanoid.right_contact_node].y >= 0.18f,
-        "passive foot adapter leaves an ankle on the contact plane");
-    require(std::ranges::none_of(humanoid.motors,
-            [&humanoid](const sim::MotorConstraint& motor)
-            {
-                return motor.c == humanoid.left_contact_node
-                    || motor.c == humanoid.right_contact_node;
-            }),
-        "a policy motor still terminates directly on a semantic foot contact");
+    require(humanoid.left_contact_node == humanoid.motors[1].c
+            && humanoid.right_contact_node == humanoid.motors[3].c,
+        "terminal lower-leg joints are not the physical support stubs");
+    require(humanoid.additional_left_contact_nodes.empty()
+            && humanoid.additional_right_contact_nodes.empty(),
+        "terrain-hostile heel/ball/toe collision contacts remain on the humanoid");
+    require(humanoid.left_contact_node < humanoid.radii.size()
+            && humanoid.right_contact_node < humanoid.radii.size()
+            && humanoid.radii[humanoid.left_contact_node] >= 0.104f
+            && humanoid.radii[humanoid.right_contact_node] >= 0.104f
+            && humanoid.radii[humanoid.left_contact_node] <= 0.1121f
+            && humanoid.radii[humanoid.right_contact_node] <= 0.1121f,
+        "humanoid terminal support stubs are not compact and terrain-conforming");
     for (std::size_t motor_index = 0; motor_index < humanoid.active_motor_count; ++motor_index)
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
@@ -1762,7 +1738,7 @@ int main()
                 break;
         }
         require(support_observed,
-            "passive biped heel/toe nodes never became valid support contacts");
+            "terminal biped support stubs never became valid support contacts");
         require(biped_support.invalid_reason() != sim::InvalidMotion::sustained_flight,
             "grounded passive biped feet were still classified as flying");
     }

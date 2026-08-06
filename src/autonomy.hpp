@@ -33,6 +33,41 @@ namespace runner::rl
             ? balance_mastery_lock_confirmations : mastery_lock_confirmations;
     }
 
+    [[nodiscard]] inline std::uint64_t stage_minimum_fresh_updates(
+        sim::CourseStage stage) noexcept
+    {
+        switch (stage)
+        {
+        case sim::CourseStage::balance: return 120u;
+        case sim::CourseStage::duck_press: return 180u;
+        case sim::CourseStage::uneven: return 420u;
+        case sim::CourseStage::crouch_walk: return 360u;
+        default: return 240u;
+        }
+    }
+
+    [[nodiscard]] inline std::uint64_t stage_minimum_fresh_episodes(
+        sim::CourseStage stage) noexcept
+    {
+        switch (stage)
+        {
+        case sim::CourseStage::balance: return 3u;
+        case sim::CourseStage::duck_press: return 4u;
+        case sim::CourseStage::uneven: return 8u;
+        default: return 5u;
+        }
+    }
+
+    [[nodiscard]] inline bool stage_fresh_work_complete(
+        sim::CourseStage stage, std::uint64_t fresh_updates,
+        std::uint64_t fresh_episodes, std::uint64_t fresh_evaluations) noexcept
+    {
+        return fresh_updates >= stage_minimum_fresh_updates(stage)
+            && fresh_episodes >= stage_minimum_fresh_episodes(stage)
+            && fresh_evaluations >= static_cast<std::uint64_t>(
+                required_mastery_confirmations(stage));
+    }
+
     [[nodiscard]] inline bool strict_balance_mastery(
         const TrainingMetrics& metrics) noexcept
     {
@@ -328,6 +363,10 @@ namespace runner::rl
         std::uint64_t rejected_rig_changes_{};
         std::uint64_t last_evaluation_count_{};
         std::uint64_t last_saved_best_update_{};
+        std::uint64_t stage_entry_total_updates_{};
+        std::uint64_t stage_entry_total_episodes_{};
+        std::uint64_t stage_entry_evaluation_count_{};
+        bool stage_entry_baseline_initialized_{};
         int mastery_streak_{};
         int degradation_streak_{};
         int rollback_count_{};

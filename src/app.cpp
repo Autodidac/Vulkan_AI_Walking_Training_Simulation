@@ -144,6 +144,33 @@ namespace runner
             }
         }
 
+        void draw_pixel_art(render::Canvas& canvas, const art::PixelArt& art,
+            Rect target, float alpha = 1.0f)
+        {
+            if (!art.loaded() || target.size.x <= 0.0f || target.size.y <= 0.0f)
+                return;
+            const float pixel_width = target.size.x / static_cast<float>(art.width);
+            const float pixel_height = target.size.y / static_cast<float>(art.height);
+            for (int y = 0; y < art.height; ++y)
+            {
+                for (int x = 0; x < art.width; ++x)
+                {
+                    Color color = art.pixels[static_cast<std::size_t>(
+                        y * art.width + x)];
+                    if (std::max({ color.r, color.g, color.b }) < 0.035f)
+                        continue;
+                    color.a *= alpha;
+                    const Vec2 minimum = target.position + Vec2{
+                        static_cast<float>(x) * pixel_width,
+                        static_cast<float>(y) * pixel_height
+                    };
+                    canvas.quad(minimum,
+                        minimum + Vec2{ pixel_width + 0.35f,
+                            pixel_height + 0.35f }, color);
+                }
+            }
+        }
+
         [[nodiscard]] float fit_text_scale(std::string_view text, float requested_scale,
             float maximum_width, float minimum_scale = 1.05f) noexcept
         {
@@ -307,14 +334,20 @@ namespace runner
         float live_zoom_factor{ 1.0f };
         bool live_zoom_auto{ true };
         art::PixelArt original_runner_art{};
+        art::PixelArt optional_foot_art{};
+        art::PixelArt optional_helmet_art{};
+        art::PixelArt optional_torso_art{};
+        art::PixelArt optional_weapon_art{};
+        bool optional_art_enabled{ true };
+        bool debug_skeleton_overlay{};
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0716-gait-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0716-gait-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0716-gait-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0717-gait-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0717-gait-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0717-gait-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -794,56 +827,146 @@ namespace runner
             };
             auto leg_side = [&](std::size_t index) noexcept
             {
-                if (!rig.paired_leg_chains())
-                    return 0;
-                if (rig.is_left_support_seed(index)
-                    || index == rig.motors[0].c || index == rig.motors[1].c)
+                if (rig.is_left_support_seed(index))
                     return -1;
-                if (rig.is_right_support_seed(index)
-                    || index == rig.motors[2].c || index == rig.motors[3].c)
+                if (rig.is_right_support_seed(index))
                     return 1;
+                if (rig.paired_leg_chains())
+                {
+                    if (index == rig.motors[0].pivot || index == rig.motors[0].c
+                        || index == rig.motors[1].pivot || index == rig.motors[1].c)
+                        return -1;
+                    if (index == rig.motors[2].pivot || index == rig.motors[2].c
+                        || index == rig.motors[3].pivot || index == rig.motors[3].c)
+                        return 1;
+                }
                 return 0;
             };
-            for (const sim::DistanceConstraint& bone : rig.bones)
+            auto draw_bones = [&](int pass)
             {
-                if (bone.a >= particles.size() || bone.b >= particles.size())
-                    continue;
-                const float radius_a = bone.a < rig.radii.size() ? rig.radii[bone.a] : 0.15f;
-                const float radius_b = bone.b < rig.radii.size() ? rig.radii[bone.b] : 0.15f;
-                const float radius = std::max(0.055f, std::min(radius_a, radius_b) * 0.55f) * scale;
-                const int side = leg_side(bone.a) != 0 ? leg_side(bone.a) : leg_side(bone.b);
-                const bool near = side != 0
-                    && ((side > 0) == right_leg_near);
-                const Color color = side == 0 ? body
-                    : near ? leg : rgb(0x765033);
-                canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
+                for (const sim::DistanceConstraint& bone : rig.bones)
+                {
+                    if (bone.a >= particles.size() || bone.b >= particles.size())
+                        continue;
+                    const int side_a = leg_side(bone.a);
+                    const int side_b = leg_side(bone.b);
+                    const int side = side_a != 0 ? side_a : side_b;
+                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const int layer = side == 0 ? 1 : near ? 2 : 0;
+                    if (layer != pass)
+                        continue;
+                    const float radius_a = bone.a < rig.radii.size()
+                        ? rig.radii[bone.a] : 0.15f;
+                    const float radius_b = bone.b < rig.radii.size()
+                        ? rig.radii[bone.b] : 0.15f;
+                    const float radius = std::max(0.050f,
+                        std::min(radius_a, radius_b) * 0.52f) * scale;
+                    const Color color = side == 0 ? body
+                        : near ? leg : rgb(0x5f493b);
+                    canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
+                }
+            };
+            auto draw_nodes = [&](int pass)
+            {
+                for (std::size_t index = 0; index < particles.size(); ++index)
+                {
+                    const int side = leg_side(index);
+                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const int layer = side == 0 ? 1 : near ? 2 : 0;
+                    if (layer != pass)
+                        continue;
+                    const float radius = (index < rig.radii.size()
+                        ? rig.radii[index] : 0.15f) * scale;
+                    Color color = index == rig.head_node ? body_light : body;
+                    if (side != 0)
+                        color = near ? leg : rgb(0x5f493b);
+                    if (rig.is_support_seed(index))
+                    {
+                        const Vec2 center = point(index);
+                        if (optional_art_enabled && optional_foot_art.loaded())
+                        {
+                            const float width = std::max(34.0f, scale * 0.78f);
+                            const float height = width
+                                * static_cast<float>(optional_foot_art.height)
+                                / static_cast<float>(optional_foot_art.width);
+                            draw_pixel_art(canvas, optional_foot_art,
+                                { center + Vec2{ -width * 0.24f, -height * 0.74f },
+                                  { width, height } },
+                                near || side == 0 ? 1.0f : 0.58f);
+                        }
+                        else
+                        {
+                            const float height = std::max(7.0f, radius * 0.55f);
+                            canvas.capsule(center - Vec2{ radius * 0.18f, 0.0f },
+                                center + Vec2{ radius * 1.45f, 0.0f },
+                                height, color, 14);
+                        }
+                    }
+                    else
+                    {
+                        canvas.circle(point(index), radius, color, 22);
+                    }
+                    if (show_nodes || debug_skeleton_overlay)
+                    {
+                        canvas.circle(point(index), 7.0f,
+                            index == static_cast<std::size_t>(selected_node)
+                                ? accent : white, 18);
+                        add_text(canvas, point(index) + Vec2{ 10.0f, -8.0f },
+                            std::to_string(index), 1.05f, white);
+                    }
+                }
+            };
+
+            draw_bones(0);
+            draw_nodes(0);
+            draw_bones(1);
+            draw_nodes(1);
+
+            if (optional_art_enabled && optional_torso_art.loaded()
+                && rig.root_node < particles.size()
+                && rig.torso_node < particles.size())
+            {
+                const Vec2 root = point(rig.root_node);
+                const Vec2 torso = point(rig.torso_node);
+                const Vec2 center = (root + torso) * 0.5f;
+                const float height = std::max(42.0f, length(torso - root) * 1.18f);
+                const float width = height
+                    * static_cast<float>(optional_torso_art.width)
+                    / static_cast<float>(optional_torso_art.height);
+                draw_pixel_art(canvas, optional_torso_art,
+                    { center - Vec2{ width * 0.5f, height * 0.55f },
+                      { width, height } }, 0.86f);
             }
-            for (std::size_t index = 0; index < particles.size(); ++index)
+            if (optional_art_enabled && optional_helmet_art.loaded()
+                && rig.head_node < particles.size())
             {
-                const float radius = (index < rig.radii.size() ? rig.radii[index] : 0.15f) * scale;
-                Color color = index == rig.head_node ? body_light : body;
-                const int side = leg_side(index);
-                if (side != 0)
-                    color = ((side > 0) == right_leg_near)
-                        ? leg : rgb(0x765033);
-                const bool primary_foot = rig.is_support_seed(index);
-                if (primary_foot)
+                const Vec2 center = point(rig.head_node);
+                const float height = std::max(38.0f,
+                    particles[rig.head_node].radius * scale * 2.55f);
+                const float width = height
+                    * static_cast<float>(optional_helmet_art.width)
+                    / static_cast<float>(optional_helmet_art.height);
+                draw_pixel_art(canvas, optional_helmet_art,
+                    { center - Vec2{ width * 0.50f, height * 0.54f },
+                      { width, height } }, 0.92f);
+            }
+            draw_bones(2);
+            draw_nodes(2);
+
+            if (show_nodes && optional_art_enabled && optional_weapon_art.loaded()
+                && rig.active_motor_count >= 8u)
+            {
+                std::size_t hand = rig.motors[7].c;
+                if (hand < particles.size())
                 {
-                    color = side != 0 && ((side > 0) == right_leg_near)
-                        ? leg : rgb(0x765033);
-                    const Vec2 center = point(index);
-                    canvas.capsule(center - Vec2{ radius * 0.82f, 0.0f },
-                        center + Vec2{ radius * 0.82f, 0.0f }, radius * 0.44f, color, 16);
-                }
-                else
-                {
-                    canvas.circle(point(index), radius, color, 22);
-                }
-                if (show_nodes)
-                {
-                    canvas.circle(point(index), 7.0f,
-                        index == static_cast<std::size_t>(selected_node) ? accent : white, 18);
-                    add_text(canvas, point(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
+                    const Vec2 anchor = point(hand);
+                    const float width = 92.0f;
+                    const float height = width
+                        * static_cast<float>(optional_weapon_art.height)
+                        / static_cast<float>(optional_weapon_art.width);
+                    draw_pixel_art(canvas, optional_weapon_art,
+                        { anchor + Vec2{ -12.0f, -height * 0.58f },
+                          { width, height } }, 0.90f);
                 }
             }
         }
@@ -1817,6 +1940,17 @@ namespace runner
                     right_leg_near ? "NEAR LEG: RIGHT" : "NEAR LEG: LEFT",
                     input, right_leg_near))
                     right_leg_near = !right_leg_near;
+                cursor.y += 43.0f;
+                if (button({ cursor, { control_third, 35.0f } },
+                    optional_art_enabled ? "OPTIONAL ART: ON" : "OPTIONAL ART: OFF",
+                    input, optional_art_enabled))
+                    optional_art_enabled = !optional_art_enabled;
+                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
+                    { control_third, 35.0f } },
+                    debug_skeleton_overlay ? "SKELETON: ON" : "SKELETON: OFF",
+                    input, debug_skeleton_overlay))
+                    debug_skeleton_overlay = !debug_skeleton_overlay;
+                cursor.y -= 43.0f;
                 if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
                     { control_third, 35.0f } }, "RESTORE CHAMPION", input,
                     trainer.has_best_policy(), trainer.has_best_policy()))
@@ -2194,6 +2328,19 @@ namespace runner
             impl_->status = "ARTWORK WARNING - " + artwork_error;
             impl_->status_time = 9.0f;
         }
+
+        auto load_optional = [&](std::string_view name, art::PixelArt& destination)
+        {
+            std::string optional_error{};
+            const std::filesystem::path path = asset_directory / "optional"
+                / "runner_armor_concepts" / "runtime" / std::string(name);
+            if (!art::load_p3_pixel_art(path, destination, optional_error))
+                destination = {};
+        };
+        load_optional("foot_side.ppm", impl_->optional_foot_art);
+        load_optional("helmet_side.ppm", impl_->optional_helmet_art);
+        load_optional("torso_side.ppm", impl_->optional_torso_art);
+        load_optional("weapon_side.ppm", impl_->optional_weapon_art);
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);

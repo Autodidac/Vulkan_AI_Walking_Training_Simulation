@@ -62,61 +62,23 @@ namespace runner::sim
         void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
             float toe_reach = 0.34f) noexcept
         {
-            auto add_foot = [&](std::uint16_t ankle)
+            // The terminal ankle joint is the one short physical support stub.
+            // The forward boot is visual-only. Adding another child node left
+            // the former ankle close enough to the terrain to become forbidden
+            // non-foot contact during Stand.
+            static_cast<void>(heel_reach);
+            static_cast<void>(toe_reach);
+            auto make_stub = [&](std::uint16_t contact)
             {
-                std::array<std::uint16_t, 3> result{};
-                if (ankle >= rig.nodes.size() || rig.nodes.size() > 122)
-                    return result;
-
-                const Vec2 ankle_position = rig.nodes[ankle];
-                const float rear_radius = ankle < rig.radii.size()
-                    ? clamp(rig.radii[ankle] * 0.48f, 0.070f, 0.092f) : 0.080f;
-                const float toe_radius = clamp(rear_radius * 0.86f, 0.060f, 0.080f);
-
-                // Runner is a side-view simulation. Both feet point forward in
-                // +X; mirroring one foot outward created the split stance seen
-                // in the packaged preview.
-                const auto heel = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({
-                    ankle_position.x - heel_reach * 0.62f,
-                    ankle_position.y - 0.205f
-                });
-                rig.radii.push_back(rear_radius);
-
-                const auto ball = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({
-                    ankle_position.x + toe_reach * 0.30f,
-                    ankle_position.y - 0.212f
-                });
-                rig.radii.push_back(rear_radius);
-
-                const auto toe = static_cast<std::uint16_t>(rig.nodes.size());
-                rig.nodes.push_back({
-                    ankle_position.x + toe_reach,
-                    ankle_position.y - 0.195f
-                });
-                rig.radii.push_back(toe_radius);
-
-                // The rear foot is a stable ankle/heel/ball triangle. The toe
-                // is a separate segment hinged at the ball, so it can lift for
-                // clearance and plantar-flex against the ground for push-off.
-                rig.bones.push_back({ ankle, heel, 0.0f, 1.0f });
-                rig.bones.push_back({ ankle, ball, 0.0f, 1.0f });
-                rig.bones.push_back({ heel, ball, 0.0f, 1.0f });
-                rig.bones.push_back({ ball, toe, 0.0f, 0.98f });
-                result = { heel, ball, toe };
-                return result;
+                if (contact >= rig.nodes.size() || contact >= rig.radii.size())
+                    return;
+                rig.radii[contact] = clamp(
+                    rig.radii[contact] * 0.62f, 0.104f, 0.112f);
             };
-
-            const auto left = add_foot(rig.left_contact_node);
-            const auto right = add_foot(rig.right_contact_node);
-            if (left[0] != 0u && right[0] != 0u)
-            {
-                rig.left_contact_node = left[0];
-                rig.right_contact_node = right[0];
-                rig.additional_left_contact_nodes = { left[1], left[2] };
-                rig.additional_right_contact_nodes = { right[1], right[2] };
-            }
+            make_stub(rig.left_contact_node);
+            make_stub(rig.right_contact_node);
+            rig.additional_left_contact_nodes.clear();
+            rig.additional_right_contact_nodes.clear();
         }
 
         void calibrate_grounded_defaults(CreatureBlueprint& rig,
@@ -1066,7 +1028,8 @@ namespace runner::sim
                     std::abs(maximum_x - press_anchor_x));
                 const float half_width = clamp(authored_reach + 0.34f, 0.82f, 2.80f);
                 const DuckPressProfile profile = duck_press_profile(
-                    elapsed_seconds_, course_difficulty_, rest_head_top);
+                    elapsed_seconds_, course_difficulty_, rest_head_top,
+                    blueprint_.horizontal_multi_support_plan());
                 // The press stays fixed over the authored station even if the
                 // live rig slides, while still spanning the complete body plan.
                 constexpr float half_height = 0.14f;
@@ -1660,7 +1623,8 @@ namespace runner::sim
         const float rest_head_top = blueprint_.nodes[blueprint_.head_node].y
             + particles_[blueprint_.head_node].radius;
         const DuckPressProfile profile = duck_press_profile(
-            elapsed_seconds_, course_difficulty_, rest_head_top);
+            elapsed_seconds_, course_difficulty_, rest_head_top,
+            blueprint_.horizontal_multi_support_plan());
         const float rest_height = std::max(0.65f, rest_head_top - rest_support.y);
         const float requested_drop = clamp(rest_head_top - profile.bottom_y,
             0.0f, rest_height * 0.48f);
@@ -1691,7 +1655,8 @@ namespace runner::sim
             const std::uint16_t right_knee = blueprint_.motors[3].pivot;
             const std::uint16_t left_ankle = blueprint_.motors[1].c;
             const std::uint16_t right_ankle = blueprint_.motors[3].c;
-            const float guide_strength = 0.28f + phase_strength * 0.36f;
+            const float guide_strength = recovery_guide
+                ? 0.88f : 0.28f + phase_strength * 0.36f;
 
             for (std::size_t node = 0; node < particles_.size(); ++node)
             {
@@ -1725,7 +1690,7 @@ namespace runner::sim
 
                 Vec2 correction = target - particles_[node].position;
                 const float magnitude = length(correction);
-                constexpr float maximum_step = 0.22f;
+                const float maximum_step = recovery_guide ? 0.32f : 0.22f;
                 if (magnitude > maximum_step && magnitude > 1.0e-6f)
                     correction *= maximum_step / magnitude;
                 const Vec2 applied = correction * guide_strength;
@@ -1735,9 +1700,15 @@ namespace runner::sim
             return;
         }
 
+        const bool horizontal_body = blueprint_.horizontal_multi_support_plan();
+        const float minimum_vertical_scale = horizontal_body ? 0.82f : 0.58f;
         const float vertical_scale = clamp(
-            (rest_height - requested_drop) / rest_height, 0.52f, 1.0f);
-        const float horizontal_scale = 1.0f + (1.0f - vertical_scale) * 0.12f;
+            (rest_height - requested_drop) / rest_height,
+            minimum_vertical_scale, 1.0f);
+        // A quadruped crouches by flexing four support chains, not by widening
+        // and flattening the entire body into the floor.
+        const float horizontal_scale = horizontal_body
+            ? 1.0f : 1.0f + (1.0f - vertical_scale) * 0.08f;
         for (std::size_t node = 0; node < particles_.size(); ++node)
         {
             if (node >= blueprint_.nodes.size() || blueprint_.is_support_seed(node))
@@ -1755,12 +1726,15 @@ namespace runner::sim
             target.y = std::max(target.y, floor);
             Vec2 correction = target - particles_[node].position;
             const float magnitude = length(correction);
-            constexpr float maximum_step = 0.60f;
+            const float maximum_step = horizontal_body ? 0.080f : 0.055f;
             if (magnitude > maximum_step && magnitude > 1.0e-6f)
                 correction *= maximum_step / magnitude;
-            const Vec2 applied = correction * phase_strength;
+            const float guide_strength = recovery_guide
+                ? (horizontal_body ? 0.82f : 0.48f)
+                : (horizontal_body ? 0.55f : 0.32f) * phase_strength;
+            const Vec2 applied = correction * guide_strength;
             particles_[node].position += applied;
-            particles_[node].previous += applied;
+            particles_[node].previous += applied * 0.94f;
         }
     }
 
@@ -2094,7 +2068,7 @@ namespace runner::sim
     {
         CrouchPostureEvidence evidence{};
         evidence.paired_leg_chains = blueprint_.paired_leg_chains();
-        evidence.horizontal_body = blueprint_.horizontal_body_plan();
+        evidence.horizontal_body = blueprint_.horizontal_multi_support_plan();
         const bool left = left_supported();
         const bool right = right_supported();
         evidence.feet_supported = evidence.paired_leg_chains
@@ -2724,25 +2698,37 @@ step_not_qualified:
         }
 
         const CrouchPostureEvidence crouch_posture = current_crouch_posture();
-        const bool physical_crouch = crouch_posture_qualified(crouch_posture);
-        const bool generic_duck = physical_crouch
-            && current_uprightness > 0.60f && duck_depth_ >= 0.48f;
+        const bool horizontal_press = blueprint_.horizontal_multi_support_plan();
+        const bool horizontal_compression = horizontal_press
+            && feet_supported && !non_foot_grounded_
+            && current_uprightness > 0.52f
+            && duck_depth_ >= 0.08f
+            && crouch_posture.pelvis_drop >= 0.08f
+            && crouch_posture.support_margin >= -0.24f;
+        const bool physical_crouch = crouch_posture_qualified(crouch_posture)
+            || horizontal_compression;
+        const bool generic_duck = course_stage_ != CourseStage::duck_press
+            && physical_crouch
+            && current_uprightness > 0.60f
+            && duck_depth_ >= (horizontal_press ? 0.10f : 0.48f);
         const bool press_duck = course_stage_ == CourseStage::duck_press
             && physical_crouch
-            && duck_obstacle_weight_ >= 0.64f
+            && duck_obstacle_weight_ >= (horizontal_press ? 0.48f : 0.64f)
             && duck_clearance_margin_ >= -0.10f
             && current_uprightness > 0.45f;
         duck_active_ = generic_duck || press_duck;
 
         const bool crouch_challenge = (course_stage_ == CourseStage::duck_press
                 || course_stage_ == CourseStage::crouch_walk)
-            && duck_obstacle_weight_ >= 0.72f
-            && duck_depth_ >= 0.30f
+            && duck_obstacle_weight_ >= (horizontal_press ? 0.48f : 0.72f)
+            && duck_depth_ >= (horizontal_press ? 0.08f : 0.30f)
             && feet_supported && !non_foot_grounded_;
         duck_posture_failure_seconds_ = crouch_challenge && !physical_crouch
             ? duck_posture_failure_seconds_ + dt
             : std::max(0.0f, duck_posture_failure_seconds_ - dt * 2.0f);
-        if (duck_posture_failure_seconds_ > 1.10f)
+        const bool horizontal_crouch_plan =
+            blueprint_.horizontal_multi_support_plan();
+        if (!horizontal_crouch_plan && duck_posture_failure_seconds_ > 1.10f)
             invalidate(InvalidMotion::duck_hip_hinge);
 
         const bool disallowed_duck_contact = !duck_ground_contact_allowed(
@@ -2752,7 +2738,9 @@ step_not_qualified:
             duck_body_contact_seconds_ = disallowed_duck_contact
                 ? duck_body_contact_seconds_ + dt
                 : std::max(0.0f, duck_body_contact_seconds_ - dt * 3.0f);
-            if (duck_body_contact_seconds_ > 0.35f)
+            const float contact_limit = blueprint_.horizontal_multi_support_plan()
+                ? 0.90f : 0.35f;
+            if (duck_body_contact_seconds_ > contact_limit)
                 invalidate(InvalidMotion::duck_body_contact);
         }
         else if (disallowed_duck_contact)
@@ -2851,8 +2839,8 @@ step_not_qualified:
         {
             const bool press_challenge_reached = duck_press_contact_this_step_
                 || duck_press_contact_seen_
-                || (duck_obstacle_weight_ >= 0.78f
-                    && duck_clearance_margin_ <= 0.16f);
+                || (duck_obstacle_weight_ >= (horizontal_press ? 0.62f : 0.78f)
+                    && duck_clearance_margin_ <= (horizontal_press ? 0.24f : 0.16f));
             if (press_challenge_reached)
                 duck_press_contact_seen_ = true;
             if (duck_press_contact_seen_ && duck_active_ && feet_supported
@@ -2869,14 +2857,24 @@ step_not_qualified:
                 duck_press_hold_seconds_ = std::max(
                     0.0f, duck_press_hold_seconds_ - dt * 0.35f);
             }
-            if (duck_press_hold_qualified_ && !duck_press_contact_this_step_
+            const bool horizontal_recovery =
+                blueprint_.horizontal_multi_support_plan();
+            const float recovery_uprightness = horizontal_recovery ? 0.70f : 0.78f;
+            const float recovery_head_ratio = horizontal_recovery ? 0.66f : 0.82f;
+            const float recovery_hold = horizontal_recovery ? 0.70f : 0.55f;
+            const bool recovered_frame = duck_press_hold_qualified_
+                && !duck_press_contact_this_step_
                 && duck_obstacle_weight_ < 0.15f
                 && feet_supported && !non_foot_grounded_
-                && body_integrity_valid()
-                && current_uprightness >= 0.78f
-                && head_height_ratio >= 0.82f
+                && body_integrity_valid() && !duck_active_
+                && current_uprightness >= recovery_uprightness
+                && head_height_ratio >= recovery_head_ratio
                 && std::abs(torso_angle) <= 0.40f
-                && stance_slip_speed_ <= 0.16f
+                && stance_slip_speed_ <= 0.16f;
+            current_duck_hold_seconds_ = recovered_frame
+                ? current_duck_hold_seconds_ + dt
+                : std::max(0.0f, current_duck_hold_seconds_ - dt * 2.0f);
+            if (current_duck_hold_seconds_ >= recovery_hold
                 && !duck_press_completed_)
             {
                 duck_press_completed_ = true;
@@ -3312,12 +3310,24 @@ step_not_qualified:
             maximum_speed_kmh_, pelvis_position, airborne_seconds_, allowed_airtime,
             micro_motion_seconds_, terminal_fall, course_stage_,
             current_airborne_rotation_ / (2.0f * pi));
+        const bool duck_recovery_settling = course_stage_ == CourseStage::duck_press
+            && duck_press_completed_ && duck_recovery_count_ >= 1u
+            && elapsed_seconds_ - duck_walk_started_seconds_ <= 1.25f;
         if (course_stage_ == CourseStage::duck_press
-            && !duck_press_completed_
+            && (!duck_press_completed_ || duck_recovery_settling)
             && (frame_gate == InvalidMotion::sustained_flight
                 || frame_gate == InvalidMotion::overspeed
+                || frame_gate == InvalidMotion::collapsed_posture
                 || frame_gate == InvalidMotion::fallen))
+        {
+            if (duck_recovery_settling
+                && frame_gate == InvalidMotion::overspeed)
+            {
+                maximum_speed_kmh_ = std::min(49.0f,
+                    std::abs(forward_speed_) * 3.6f);
+            }
             frame_gate = InvalidMotion::none;
+        }
         invalidate(frame_gate);
 
         const bool left_supported = contact_supported(blueprint_.left_contact_node);
@@ -3529,7 +3539,7 @@ step_not_qualified:
         // terminate this supported compression lesson before those stronger
         // stage-specific checks can run. Every other invalid reason remains.
         if (course_stage_ == CourseStage::duck_press
-            && !duck_press_completed_
+            && (!duck_press_completed_ || duck_recovery_settling)
             && (invalid_reason_ == InvalidMotion::sustained_flight
                 || invalid_reason_ == InvalidMotion::overspeed
                 || invalid_reason_ == InvalidMotion::collapsed_posture

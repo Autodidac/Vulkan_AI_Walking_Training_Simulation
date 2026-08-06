@@ -21,9 +21,10 @@ namespace runner::rl
         case sim::CourseStage::duck_press:
             return strict_duck_press_mastery(metrics);
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 7.0f
-                && metrics.evaluation_stride_events >= 8.0f
-                && metrics.evaluation_speed >= 0.70f
+            return metrics.evaluation_distance >= 18.0f
+                && metrics.evaluation_stride_events >= 16.0f
+                && metrics.evaluation_speed >= 0.55f
+                && metrics.evaluation_survival >= 18.0f
                 && metrics.evaluation_collisions <= 1.0f;
         case sim::CourseStage::crouch_walk:
             return metrics.evaluation_duck_recoveries >= 1.0f
@@ -62,6 +63,13 @@ namespace runner::rl
     void AutonomousTrainer::manage_curriculum_locked()
     {
         const TrainingMetrics& metrics = worker_.metrics();
+        if (!stage_entry_baseline_initialized_)
+        {
+            stage_entry_total_updates_ = metrics.total_updates;
+            stage_entry_total_episodes_ = metrics.total_episodes;
+            stage_entry_evaluation_count_ = metrics.evaluation_count;
+            stage_entry_baseline_initialized_ = true;
+        }
         if (metrics.evaluation_count == 0 || metrics.evaluation_count == last_evaluation_count_)
             return;
         last_evaluation_count_ = metrics.evaluation_count;
@@ -72,7 +80,19 @@ namespace runner::rl
             queue_autosave();
         }
 
-        mastery_streak_ = stage_mastered_locked() ? mastery_streak_ + 1 : 0;
+        const std::uint64_t fresh_updates = metrics.total_updates
+            >= stage_entry_total_updates_
+            ? metrics.total_updates - stage_entry_total_updates_ : 0u;
+        const std::uint64_t fresh_episodes = metrics.total_episodes
+            >= stage_entry_total_episodes_
+            ? metrics.total_episodes - stage_entry_total_episodes_ : 0u;
+        const std::uint64_t fresh_evaluations = metrics.evaluation_count
+            >= stage_entry_evaluation_count_
+            ? metrics.evaluation_count - stage_entry_evaluation_count_ : 0u;
+        const bool dwell_complete = stage_fresh_work_complete(stage_,
+            fresh_updates, fresh_episodes, fresh_evaluations);
+        mastery_streak_ = dwell_complete && stage_mastered_locked()
+            ? mastery_streak_ + 1 : 0;
         const int required_confirmations = required_mastery_confirmations(stage_);
         if (worker_.has_best_policy() && metrics.evaluation_valid)
         {
@@ -169,6 +189,11 @@ namespace runner::rl
             worker_message_ = std::format("FULL COURSE MASTERED - DIFFICULTY {:.0f}%", difficulty_ * 100.0f);
         }
         worker_.set_course(stage_, difficulty_, false);
+        const TrainingMetrics& entered = worker_.metrics();
+        stage_entry_total_updates_ = entered.total_updates;
+        stage_entry_total_episodes_ = entered.total_episodes;
+        stage_entry_evaluation_count_ = entered.evaluation_count;
+        stage_entry_baseline_initialized_ = true;
         queue_autosave();
     }
 

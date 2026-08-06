@@ -1,4 +1,4 @@
-name: Runner v0.7.16 validation and release
+name: Runner v0.7.17 validation and release
 
 on:
   pull_request:
@@ -12,18 +12,18 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: runner-v0716-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: runner-v0717-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
-  RELEASE_VERSION: 0.7.16
-  RELEASE_TAG: v0.7.16
-  PACKAGE_NAME: Runner-v0.7.16-windows-x64
+  RELEASE_VERSION: 0.7.17
+  RELEASE_TAG: v0.7.17
+  PACKAGE_NAME: Runner-v0.7.17-windows-x64
 
 jobs:
   linux-validation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 120
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
     steps:
@@ -42,29 +42,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build
 
-      - name: Audit release source and documentation
+      - name: Audit release source, missions, and optional art
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          grep -F 'project(Runner VERSION 0.7.16 LANGUAGES CXX)' CMakeLists.txt
-          grep -F "training_semantics_version = 0x0007'1600u" src/ppo.hpp
-          grep -F 'WALK-VIEW-156' missioncache.md
-          grep -F 'WALK-RELEASE-180' missioncache.md
-          grep -F '# Runner v0.7.17 equipment, carry, and target curriculum' missioncache.md
-          grep -F -- '--diagnose-camera' README.md
+          grep -F 'project(Runner VERSION 0.7.17 LANGUAGES CXX)' CMakeLists.txt
+          grep -F "training_semantics_version = 0x0007'1700u" src/ppo.hpp
+          grep -F 'WALK-QUAD-CROUCH-181' missioncache.md
+          grep -F 'WALK-RELEASE-210' missioncache.md
+          grep -F '# Runner v0.7.18 equipment, carry, and target curriculum' missioncache.md
+          grep -F 'RUNNER_V0717_EYE_TEST_CORRECTION.md' README.md
           test -f AGENTS.md
-          test -f docs/RUNNER_V0716_CAMERA_BATCH.md
-          test ! -e tools/apply_v0716_batch25.py
-          test ! -e tools/repair_v0716_retry.py
-          test ! -e tools/finalize_v0716_ledger.py
-          test ! -e tools/runner-v0716-release.generated.yml
-          test ! -e .github/workflows/apply-v0716-batch25.yml
-          test ! -e .github/workflows/retry-v0716-batch25.yml
-          test ! -e .github/workflows/execute-v0716-batch25.yml
-          test ! -e .github/workflows/pr-execute-v0716-batch25.yml
-          test ! -e .github/workflows/record-v0716-validation.yml
-          test ! -e .github/workflows/runner-v0715-release.yml
+          test -f docs/RUNNER_V0717_EYE_TEST_CORRECTION.md
+          test -f assets/optional/runner_armor_concepts/PROVENANCE.md
+          test -f assets/optional/runner_armor_concepts/source/concept_modular_pair.ppm
+          test -f assets/optional/runner_armor_concepts/source/concept_humanoid_parts.ppm
+          test -f assets/optional/runner_armor_concepts/source/concept_helmeted_parts.ppm
+          test -f assets/optional/runner_armor_concepts/source/concept_pixel_parts.ppm
+          test -f assets/optional/runner_armor_concepts/runtime/foot_side.ppm
+          test -f assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
+          test -f assets/optional/runner_armor_concepts/runtime/torso_side.ppm
+          test -f assets/optional/runner_armor_concepts/runtime/weapon_side.ppm
+          test ! -e tools/finalize_v0717_eye_test.py
+          test ! -e tools/materialize_v0717_optional_art.py
+          test ! -e tools/runner-v0717-release.generated.yml
+          test ! -e .github/workflows/finalize-v0717-eye-test.yml
+          test ! -e .github/workflows/apply-v0717-eye-test.yml
+          test ! -e .github/workflows/runner-v0716-release.yml
 
       - name: Configure Linux deterministic suite
         env:
@@ -84,7 +89,7 @@ jobs:
   windows-package:
     needs: linux-validation
     runs-on: windows-2025
-    timeout-minutes: 180
+    timeout-minutes: 210
     env:
       VCPKG_ROOT: ${{ github.workspace }}\vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
@@ -105,8 +110,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0716-release-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: runner-v0716-release-${{ runner.os }}-
+          key: runner-v0717-release-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0717-release-${{ runner.os }}-
 
       - name: Bootstrap vcpkg
         shell: cmd
@@ -127,14 +132,14 @@ jobs:
           ctest --preset windows-release --output-on-failure -V --timeout 1800
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
 
-      - name: Verify build-tree runtime diagnostics
+      - name: Verify build-tree diagnostics
         shell: pwsh
         run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
           Push-Location $env:RUNNER_TEMP
           try {
             $version = (& $exe --version | Out-String).Trim()
-            if ($version -ne 'Runner 0.7.16') { throw "Version mismatch: $version" }
+            if ($version -ne 'Runner 0.7.17') { throw "Version mismatch: $version" }
             & $exe --diagnose-package
             if ($LASTEXITCODE -ne 0) { throw 'Build-tree package diagnostic failed' }
             & $exe --diagnose-acceptance
@@ -158,14 +163,24 @@ jobs:
             'Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md','AGENTS.md',
             'assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv',
             'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
-            'docs/RUNNER_V0715_VIEWPORT_RECOVERY.md','docs/RUNNER_V0716_CAMERA_BATCH.md')) {
+            'docs/RUNNER_V0715_VIEWPORT_RECOVERY.md','docs/RUNNER_V0716_CAMERA_BATCH.md',
+            'docs/RUNNER_V0717_EYE_TEST_CORRECTION.md',
+            'assets/optional/runner_armor_concepts/PROVENANCE.md',
+            'assets/optional/runner_armor_concepts/source/concept_modular_pair.ppm',
+            'assets/optional/runner_armor_concepts/source/concept_humanoid_parts.ppm',
+            'assets/optional/runner_armor_concepts/source/concept_helmeted_parts.ppm',
+            'assets/optional/runner_armor_concepts/source/concept_pixel_parts.ppm',
+            'assets/optional/runner_armor_concepts/runtime/foot_side.ppm',
+            'assets/optional/runner_armor_concepts/runtime/helmet_side.ppm',
+            'assets/optional/runner_armor_concepts/runtime/torso_side.ppm',
+            'assets/optional/runner_armor_concepts/runtime/weapon_side.ppm')) {
             if (-not (Test-Path (Join-Path $stage $required))) {
               throw "Missing package file: $required"
             }
           }
           "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Verify installed package and optional-asset fallback
+      - name: Verify installed package and optional-art fallback
         shell: pwsh
         run: |
           Push-Location $env:RUNNER_TEMP
@@ -177,21 +192,18 @@ jobs:
             & "$env:STAGE/Runner.exe" --diagnose-camera
             if ($LASTEXITCODE -ne 0) { throw 'Installed camera diagnostic failed' }
             $launched = (& cmd.exe /d /c "call `"$env:STAGE\run.bat`" --version" | Out-String).Trim()
-            if ($launched -ne 'Runner 0.7.16') { throw "run.bat mismatch: $launched" }
-
+            if ($launched -ne 'Runner 0.7.17') { throw "run.bat mismatch: $launched" }
             $optional = Join-Path $env:STAGE 'assets/optional'
             $backup = Join-Path $env:RUNNER_TEMP 'runner-optional-assets-backup'
             Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
-            if (Test-Path $optional) {
-              Move-Item $optional $backup
-              & "$env:STAGE/Runner.exe" --diagnose-package
-              if ($LASTEXITCODE -ne 0) { throw 'Missing-optional-asset fallback failed' }
-              Move-Item $backup $optional
-            }
+            Move-Item $optional $backup
+            & "$env:STAGE/Runner.exe" --diagnose-package
+            if ($LASTEXITCODE -ne 0) { throw 'Missing-optional-art fallback failed' }
+            Move-Item $backup $optional
           }
           finally { Pop-Location }
 
-      - name: Create archive, checksum, and per-file manifest
+      - name: Create archive, checksum, and manifest
         shell: pwsh
         run: |
           $archive = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
@@ -210,7 +222,7 @@ jobs:
         shell: pwsh
         run: |
           $archive = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
-          $audit = Join-Path $env:RUNNER_TEMP 'runner-v0716-extracted-audit'
+          $audit = Join-Path $env:RUNNER_TEMP 'runner-v0717-extracted-audit'
           Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $archive -DestinationPath $audit -Force
           Push-Location $env:RUNNER_TEMP
@@ -222,7 +234,7 @@ jobs:
             & "$audit/Runner.exe" --diagnose-camera
             if ($LASTEXITCODE -ne 0) { throw 'Extracted camera diagnostic failed' }
             $launched = (& cmd.exe /d /c "call `"$audit\run.bat`" --version" | Out-String).Trim()
-            if ($launched -ne 'Runner 0.7.16') { throw "Extracted run.bat mismatch: $launched" }
+            if ($launched -ne 'Runner 0.7.17') { throw "Extracted run.bat mismatch: $launched" }
           }
           finally { Pop-Location }
 
@@ -237,34 +249,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  record-validation:
-    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/v0716-camera-batch25' }}
-    needs: [linux-validation, windows-package]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: agent/v0716-camera-batch25
-          fetch-depth: 0
-
-      - name: Close audited mission ledger
-        env:
-          VALIDATED_SOURCE_SHA: ${{ needs.linux-validation.outputs.source_sha }}
-          VALIDATION_RUN_ID: ${{ github.run_id }}
-        run: python tools/record_v0716_validation.py
-
-      - name: Commit exact validation evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm tools/record_v0716_validation.py
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m 'Record Runner v0.7.16 audited package validation'
-          git push origin HEAD:agent/v0716-camera-batch25
-
   publish-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: windows-package
@@ -276,12 +260,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: actions/download-artifact@v4
         with:
           name: ${{ env.PACKAGE_NAME }}
           path: release-assets
-
       - name: Create annotated source tag
         shell: bash
         run: |
@@ -294,27 +276,22 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "$RELEASE_TAG" -m "Runner $RELEASE_VERSION"
           git push origin "$RELEASE_TAG"
-
       - name: Publish GitHub release
         shell: bash
         run: |
           set -euo pipefail
           cat > release-notes.md <<'NOTES'
-          Runner v0.7.16 completes a cache-first 25-mission adaptive viewport and usability pass.
+          Runner v0.7.17 corrects the released crouch, gait, terrain-foot, and optional-art failures and completes the associated 30-mission cache batch.
 
-          - Keeps the corrected physical world scale while replacing the distant fixed 22 px/m live camera.
-          - Adds bounded rig-height auto fitting, viewport-only wheel zoom, direct panel controls, reset-to-auto, useful lookahead, elapsed-time smoothing, and a camera dead zone.
-          - Enlarges and tightens the training PIP without shrinking the rig for distant hazards.
-          - Adds camera telemetry, deterministic camera/layout tests, and packaged `--diagnose-camera` coverage.
-          - Adds `AGENTS.md` and reconciles mission cache, changelog, README, focused documentation, packaging, and release automation.
+          - Replaces terrain-hostile heel/ball/toe collision feet with one support stub per leg and forward side-view sprite boots.
+          - Requires sustained sagittal gait, rejects crab walking, and prevents short inherited samples from skipping Stand, Crouch, or Walk.
+          - Makes the quadruped press rig-aware and requires a stable four-chain recovery after retraction.
+          - Packages compact P3 references derived from all four supplied concept sheets plus foot, helmet, torso, and Rig Lab weapon sprites with procedural fallback.
+          - Adds deterministic dwell, gait, stub-foot, quadruped press/recovery, optional-art, package, and state-isolation gates.
 
-          Equipment, target, policy-extension, and combined carry/fire curriculum remain explicitly cached for Runner v0.7.17.
+          Equipment, target, policy-extension, and carry/fire work remains explicitly cached for Runner v0.7.18.
           NOTES
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --verify-tag \
-            --title "Runner v0.7.16" \
-            --notes-file release-notes.md
-
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Runner v0.7.17" --notes-file release-notes.md
       - name: Re-download and verify published assets
         shell: bash
         run: |
@@ -327,11 +304,10 @@ jobs:
             cmp --silent "$source" "release-download/$file"
           done
           (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
-
       - name: Remove completed release branch
         shell: bash
         run: |
           encoded=${RELEASE_BRANCH//\//%2F}
           gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" || true
         env:
-          RELEASE_BRANCH: agent/v0716-camera-batch25
+          RELEASE_BRANCH: agent/v0717-eye-test-feet-gait-batch25

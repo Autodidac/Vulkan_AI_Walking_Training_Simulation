@@ -1,3 +1,13 @@
+## 0.7.17
+
+- Reopened released runtime failures from the v0.7.16 eye test.
+- Replaced multi-node heel/ball/toe collision feet with terrain-conforming support stubs and non-physical side-view boot sprites.
+- Added sustained sagittal gait evidence and explicit crab-walk rejection.
+- Added fresh stage dwell so Stand, Crouch, and Walk cannot be skipped after a short inherited sample.
+- Added a shallower rig-aware quadruped press, bounded four-chain crouch guidance, and stable post-retraction recovery.
+- Added all four supplied optional concept sheets, provenance/hashes, derived P3 foot/helmet/torso/weapon sprites, safe fallback, layered side-view rendering, and Rig Lab controls.
+- Isolated v0.7.17 learned state and added deterministic eye-test regression coverage.
+
 # Changelog
 
 

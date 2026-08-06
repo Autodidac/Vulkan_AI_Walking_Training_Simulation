@@ -38,7 +38,20 @@ namespace
         trainer.set_updates_per_cycle(mode);
         trainer.set_background_enabled(true);
 
-        constexpr auto measurement_time = 4s;
+        // Worker creation and the first compiled policy update are warm-up,
+        // not speed-mode throughput. Wait for one completed update before the
+        // fixed measurement window so hosted-runner scheduling cannot report a
+        // valid mode as zero-throughput.
+        const auto warmup_deadline = std::chrono::steady_clock::now() + 12s;
+        while (trainer.metrics().update == 0u
+            && std::chrono::steady_clock::now() < warmup_deadline)
+        {
+            std::this_thread::sleep_for(10ms);
+            trainer.synchronize();
+        }
+        trainer.synchronize();
+        const rl::TrainingMetrics baseline = trainer.metrics();
+        constexpr auto measurement_time = 6s;
         const auto started = std::chrono::steady_clock::now();
         const auto deadline = started + measurement_time;
         while (std::chrono::steady_clock::now() < deadline)
@@ -52,15 +65,18 @@ namespace
 
         const rl::TrainingMetrics metrics = trainer.metrics();
         const rl::AutonomyStatus status = trainer.autonomy_status();
+        const std::uint64_t updates = metrics.update - baseline.update;
+        const std::uint64_t environment_steps =
+            metrics.environment_steps - baseline.environment_steps;
         const double seconds = std::chrono::duration<double>(finished - started).count();
         return {
             mode,
-            metrics.update,
-            metrics.environment_steps,
+            updates,
+            environment_steps,
             status.rollout_threads,
             seconds,
-            static_cast<double>(metrics.update) / seconds,
-            static_cast<double>(metrics.environment_steps) / seconds
+            static_cast<double>(updates) / seconds,
+            static_cast<double>(environment_steps) / seconds
         };
     }
 }

@@ -1,5 +1,173 @@
 # Runner cache-first engineering policy and active release plan
 
+
+# Runner v0.7.17 released-eye-test correction and 25-mission expansion
+
+**Release state:** VALIDATED — PR LINUX/WINDOWS/PACKAGE GATE PASSED; MERGE AND PUBLICATION PENDING. The equipment/carry/target curriculum remains intact for v0.7.18.
+
+The released v0.7.16 package visibly contradicts prior automated closure in five areas: the quadruped remains trapped under the crouch press and is crushed; other rigs advance into Walk almost immediately and produce only a couple of steps; the articulated heel/ball/toe physics geometry performs poorly on granular terrain; the supplied optional armor/character artwork is not present as usable packaged/runtime art; and the supposed side-view gait remains lateral crab-walking rather than a sagittal one-foot-past-the-other gait. These exact missions are reopened and visual evidence outranks earlier deterministic claims.
+
+### WALK-QUAD-CROUCH-181 — Quadruped must complete crouch, hold, retract, and recover
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+The quadruped must compress through all four support chains, remain below the press without body clipping, survive the hold, then restore its authored standing body height after retraction. Remaining permanently compressed, being driven into terrain, or timing out under the platen fails.
+
+### WALK-PRESS-SAFETY-182 — Rig-aware non-crushing press envelope
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+The press target, descent speed, contact impulse, hold duration, and emergency retraction must derive from current rig bounds and support topology. The press may test crouching but may not continue descending through a finite supported rig or manufacture a terminal crush state.
+
+### WALK-QUAD-RECOVERY-183 — Four-chain extension teacher and recovery evidence
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Quadruped recovery must command all four hip/knee chains toward the authored neutral stance after the platen retracts. Acceptance requires recovered root/torso height, bounded joint speed, four semantic supports, no non-foot contact, and a stable hold rather than only a momentary clearance frame.
+
+### WALK-CURRICULUM-DWELL-184 — Do not instantly skip mastered-looking stages
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+No rig may advance from Stand or Static Crouch after one short or inherited-looking sample. Each stage requires a minimum number of fresh updates, multiple complete episodes, repeated strict evaluations, and visible retained evidence produced under the current rig and current training semantics.
+
+### WALK-WALK-DISTANCE-185 — Require sustained walking rather than two steps
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Walk mastery requires sustained forward distance, repeated alternating cycles, minimum elapsed gait time, useful swing clearance, and continued upright support. Two steps, one lucky crossing, course motion without body translation, or immediate stage transition cannot qualify.
+
+### WALK-SAGITTAL-GAIT-186 — True side-view sagittal walking
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+The near and far legs must swing primarily in screen/world X, pass one another, land ahead of the stance foot, and drive forward root progress. The controller and renderer must present a normal side-view gait rather than lateral abduction/adduction.
+
+### WALK-CRAB-REJECT-187 — Reject lateral crab-walking
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Persistent support-span widening, hip abduction, sideways stepping, symmetric outward foot motion, or forward translation produced without sagittal crossing receives no gait credit and cannot seed champion, imitation, evolution, or PIP state.
+
+### WALK-STEP-LENGTH-188 — Measured stride length and foot-passing evidence
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Record signed swing-foot displacement relative to the stance foot, minimum stride length, crossing count, heel-ahead landing, and cadence. Gait qualification requires both left-over-right and right-over-left passes for multi-leg bipeds and topology-appropriate fore/hind cycling for quadrupeds.
+
+### WALK-STUB-FEET-189 — Replace terrain-hostile multi-node feet with joint stubs
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Bipedal and humanoid physics feet become short single-contact ankle stubs with one semantic support point per leg. Remove the rigid heel/ball/toe triangle from collision and constraints while preserving honest support, friction, swing release, and terrain pressure.
+
+### WALK-SPRITE-FEET-190 — Render visible sprite feet on non-colliding stubs
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+A forward-facing side-view foot sprite is anchored to each stub, follows lower-leg orientation with bounded visual rotation, mirrors near/far shading without reversing forward direction, and never contributes collision geometry or training observations.
+
+### WALK-TERRAIN-FOOT-191 — Stub contacts conform to granular terrain
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Single support stubs sample the same SandHybrid surface used by pressure and collision, tolerate bounded cell-scale height variation, release cleanly for swing, and do not bridge, snag, or lever against multiple distant terrain cells.
+
+### WALK-FOOT-ORIENTATION-192 — Feet always point along travel
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Every side-view sprite foot points toward +X by default and follows deliberate backward travel only when that behavior is explicitly selected. Left/right identity changes depth and shading, not forward direction.
+
+### WALK-SUPPORT-SIMPLIFY-193 — One semantic contact per support chain
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Contact bookkeeping, static friction, gait strikes, pressure, support intervals, editor labels, persistence, and tests must use one stub contact per leg. Compatibility import must reject or remap obsolete heel/ball/toe semantic arrays explicitly.
+
+### WALK-OPTIONAL-ART-194 — Add all four supplied concept sheets
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Package compact derived P3 references from all four supplied armor/character/weapon concept sheets under `assets/optional/runner_armor_concepts/source/` with stable filenames, provenance, dimensions, SHA-256 values, and an explicit visual-only boundary.
+
+### WALK-ART-RUNTIME-195 — Load optional foot/armor art safely
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Create a compact runtime P3 atlas derived from the supplied art for side-view feet and simple armor overlays. The application loads it when valid, reports its presence in package diagnostics, and falls back to deterministic procedural sprites without affecting physics or startup.
+
+### WALK-ARMOR-MAP-196 — Map optional armor pieces to rig segments
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Define non-physical sprite anchors for head, torso, upper/lower arms, upper/lower legs, and feet. Missing pieces or unsupported anatomy fall back independently; armor cannot hide support telemetry in Rig Lab debug mode.
+
+### WALK-SIDE-LAYERS-197 — Stable near/far side-view layer order
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Far limbs render first with dimmer shading, torso next, near limbs afterward, and feet at the correct chain depth. Layering must make leg crossing legible without changing collision or semantic identity.
+
+### WALK-WEAPON-SPRITE-198 — Optional weapon sprite anchor and safe carry preview
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Use the supplied fictional weapon art as a non-functional visual preview anchored to valid hand nodes in Rig Lab. This does not activate the deferred firing curriculum and cannot alter policy dimensions, mass, recoil, or runtime behavior.
+
+### WALK-ART-TOGGLE-199 — Explicit optional-art and debug-skeleton controls
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Expose a clear Rig Lab control to toggle optional armor/foot sprites and a separate debug-skeleton overlay. Live training defaults to sprites when available while deterministic diagnostics can force the procedural fallback.
+
+### WALK-QUAD-TEST-200 — Repeated quadruped press/recovery acceptance
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Run repeated seeded quadruped crouch cycles through settle, descent, hold, retraction, full extension, and stable recovery. Reject body clipping, crush termination, unrecovered body height, lost support chains, and infinite crouch residence.
+
+### WALK-DWELL-TEST-201 — Fresh-stage minimum-work regression tests
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Tests prove inherited counters, one evaluation, two steps, or a short lucky episode cannot advance Stand, Crouch, or Walk. Fresh current-stage episodes and minimum dwell requirements must be satisfied after every stage or rig change.
+
+### WALK-GAIT-TEST-202 — Side-view gait and crab adversarial fixtures
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Positive fixtures prove alternating sagittal crossing and sustained distance. Negative fixtures reject split stance, lateral abduction, symmetric outward stepping, friction shuffle, course-only motion, and two-step early exit.
+
+### WALK-STUB-TEST-203 — Stub-foot terrain and release fixtures
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Test single-contact support on flat, stepped, loose, sloped, and deforming terrain; bounded planted slip; prompt swing/toe-off release; no multi-cell bridge; and finite pressure/observation values for every affected preset.
+
+### WALK-ART-TEST-204 — Optional-art parser, atlas, fallback, and package tests
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Validate the derived P3 atlas with the production loader, verify every supplied source sheet and hash in the package, run with optional assets removed, and prove fallback sprites produce the same physics and acceptance results.
+
+### WALK-PIP-PARITY-205 — PIP uses the same side-view sprites and gait truth
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Training PIP and live view share layer order, stub-foot sprites, optional-art fallback, gait direction, and rejection telemetry. PIP may not make crab walking look like forward gait or hide a crushed quadruped.
+
+### WALK-EDITOR-206 — Rig Lab controls for stubs, layers, and gait diagnostics
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Rig Lab displays one support stub per chain, side-view layer assignment, signed stride/crossing telemetry, lateral/crab rejection, current stage dwell, press safety/recovery state, optional-art status, and sprite/debug toggles.
+
+### WALK-STATE-207 — Isolate corrected foot, gait, and curriculum semantics
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Bump training, checkpoint, evolved-rig, and autonomy-state semantics and use `runner-v0717-*` paths. v0.7.16 policies with multi-node feet, short stage dwell, or crab gait cannot silently resume; explicit transfer is weights-only when dimensions and support remapping are valid.
+
+### WALK-DOC-208 — Consolidate v0.7.17 documentation
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Update README, CHANGELOG, AGENTS.md-referenced workflow expectations, focused side-view/stub-foot documentation, optional-art provenance, controls, diagnostics, state migration, and user eye-test reopening rules without creating a second changelog or mission ledger.
+
+### WALK-PACKAGE-209 — Audit source and optional assets in every package form
+**Status:** VERIFIED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; LINUX, WINDOWS, PACKAGE, FALLBACK, ARCHIVE, EXTRACTION, AND ARTIFACT GATES PASSED
+
+Build-tree, installed, extracted, and re-downloaded packages must contain AGENTS.md, missioncache, changelog, focused v0.7.17 documentation, all four supplied optional sheets, provenance/hashes, and the runtime atlas; diagnostics must pass both with and without optional assets.
+
+### WALK-RELEASE-210 — Publish audited Runner v0.7.17
+**Status:** VALIDATED — RUN 31097579829; SOURCE a99e97bd852d0bbf06fbd8d59730db41e70e208d; MERGE, TAG, PUBLICATION, RE-DOWNLOAD, AND BRANCH CLEANUP PENDING
+
+Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, every deterministic suite, repeated quadruped press/recovery, fresh-stage dwell, sustained sagittal gait, crab rejection, stub-foot terrain, optional-art/fallback, 24+ locomotion acceptance, build/installed/extracted diagnostics, executable-relative `run.bat`, ZIP/checksum/manifest, release re-download and byte comparison, exact ledger evidence, zero open cleanup PRs, and only `main`. Released eye-test evidence remains authoritative and reopens the exact mission.
+
+## v0.7.17 authoritative PR validation evidence
+
+- **Workflow:** `Runner v0.7.17 validation and release`
+- **Run:** `31097579829`
+- **Validated source:** `a99e97bd852d0bbf06fbd8d59730db41e70e208d`
+- **Linux:** GCC 14 warnings-as-errors, repository/art audit, and all deterministic suites passed.
+- **Windows:** full SDL3/Vulkan configure/build and complete CTest matrix passed.
+- **Runtime acceptance:** all eight six-seed Stand cases, all eight four-seed crouch/hold/recover cases, and the 24/24 live acceptance matrix passed.
+- **Package:** build-tree diagnostics, installed diagnostics, optional-art removal fallback, `run.bat`, ZIP, SHA-256, per-file manifest, independent extraction, extracted diagnostics, and workflow artifact upload passed.
+- **Remaining release work:** merge PR #56, publish annotated `v0.7.17`, re-download and byte-compare assets, then remove obsolete and completed v0.7.17 branches.
+
 **Authoritative rule:** `missioncache.md` is updated before implementation. Every request, dependency, interaction, likely regression, acceptance test, packaging obligation, and unresolved uncertainty remains explicit. No source change may silently narrow the scope. No mission becomes VERIFIED from source presence or a passing compile alone. Contradictory deterministic, packaged, or screenshot evidence reopens the exact mission.
 
 ## Mandatory refinement loop for every Runner change
@@ -335,9 +503,99 @@ Require Linux GCC 14 warnings-as-errors, the full Windows SDL3/Vulkan build, eve
 - Repository cleanup after publication: only `main` remains.
 - Contradictory eye-test evidence reopens only the exact affected camera, PIP, layout, locomotion, or package mission.
 
-# Runner v0.7.17 equipment, carry, and target curriculum
+## v0.7.17 Linux validation finding — exact-source correction required
 
-**Release state:** CACHED AND OPEN — carried intact after the v0.7.16 viewport release.
+Validation run `31072185903` reached the complete GCC 14 build and exposed four release-blocking interactions rather than being waived:
+
+- the first stub-foot implementation added a child support point but left the former ankle large enough to contact terrain as a non-foot, breaking Stand for scaffold, biped, and humanoid;
+- the rig-aware press timing was applied globally and invalidated the previously verified vertical-body crouch/hold/retract contract;
+- horizontal multi-support rigs could enter the press challenge before their bounded guide produced topology-appropriate compression, causing `DUCK HIP HINGE` termination instead of safe recovery;
+- the concurrency benchmark included cold worker startup inside a four-second measurement, allowing a valid speed mode to complete no full update before its sample ended.
+
+The correction must use the existing terminal ankle as the single physical support stub, preserve the verified vertical press schedule, identify horizontal multi-support bodies explicitly, provide bounded compression/recovery grace without accepting a flat or body-supported pose, update obsolete heel/ball/toe tests to the new stub contract, and measure speed modes only after warm-up. The same full Linux, Windows, package, optional-art fallback, archive, and publication gates remain required.
+
+## v0.7.17 second Linux validation finding — recovery and topology separation
+
+Clean-source run `31072665828` proved the repository, supplied-art hashes, GCC 14 build, camera tests, terrain tests, runtime pipeline, and warmed speed-mode benchmark, but exposed four remaining release blockers:
+
+- excluding the chicken from horizontal-body handling restored press classification but regressed its verified six-seed Stand behavior;
+- vertical paired rigs physically crouched for the complete press cycle but did not establish a clean un-crouched recovery before the next cycle, so scaffold, biped, humanoid, and monoped remained incomplete;
+- quadruped and crawler compression still entered the biped hip-hinge invalidation path before their multi-support body drop reached the required evidence;
+- the live ordered-stage fixture still used the old four-step and five-step thresholds after sustained gait requirements were raised.
+
+The correction must separate horizontal balance posture from horizontal multi-support press topology, retain a compact but sufficiently loaded chicken support radius, use actual multi-support body/head compression as crouch evidence, avoid terminating a finite supported horizontal rig merely for failing a biped-shaped crouch test, require a continuous un-crouched post-retraction recovery hold, restore bounded vertical recovery authority, and update the deterministic stage fixture to the current gait thresholds. Full Linux, Windows, package, optional-art fallback, archive, and publication validation remains mandatory.
+
+## v0.7.17 third Linux validation finding — warnings-as-errors shadow
+
+Clean run `31073332261` passed repository, mission, optional-art, semantics, and CMake audits, then GCC 14 stopped compilation because `update_gait_metrics` redeclared `horizontal_press` inside the press-evidence block after the same topology decision had already been computed earlier in the function. The correction is source-neutral: remove the redundant inner declaration and reuse the existing value. The complete runtime and package gates still apply.
+
+## v0.7.17 fourth Linux validation finding — recovery latch and bounded settling
+
+Clean run `31073516350` passed the full repository/art audit, GCC 14 compilation, all Stand seeds, all vertical paired crouch gates, ordered stage evidence, optional-art parsing, and the warmed concurrency benchmark. The remaining failures share three exact causes:
+
+- `generic_duck` remained true during the static press stage after the platen disappeared, so horizontal rigs could crouch for more than five seconds but could never satisfy the explicit `!duck_active` recovery frame;
+- `horizontal_body_plan` still excluded six-motor horizontal anatomy, leaving the hexapod on the wrong press/recovery contract;
+- monoped completed and recorded a recovery, but a one-frame post-completion overspeed spike invalidated it before the required 0.75-second stance hold could settle;
+- the direct guided-squat unit helper manipulated only the authoring guide and ground solver, not the same complete solver/teacher path already proven by the live humanoid crouch gate.
+
+The correction must disable generic crouch latching during the press lesson, classify horizontal anatomy by geometry rather than motor count, retain a strictly bounded 1.25-second post-completion settling grace for overspeed/fall/collapse only, and make the direct squat fixture execute the real teacher and environment step path. Any rig still unstable after the grace remains invalid. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain required.
+
+## v0.7.17 fifth Linux validation finding — full retraction and topology evidence
+
+Clean run `31074108059` passed repository/art audits, compilation, all Stand cases, all paired vertical crouch cases, the guided-squat helper, the ordered stage matrix, optional-art parsing, and the warmed concurrency benchmark. The remaining exact defects were:
+
+- horizontal press retraction stopped only 0.62 m above authored head height, keeping obstacle weight above the `<0.15` recovery gate even after the body restored;
+- hexapod multi-support press behavior was still inferred through head geometry instead of explicit non-paired support topology;
+- the direct crouch-walk evidence unit still supplied five gait cycles after the production requirement was raised to eight;
+- monoped's deliberately ignored one-frame post-completion speed spike remained stored in `maximum_speed_kmh_`, reappearing as an overspeed invalidation immediately after the bounded recovery grace.
+
+The correction must fully retract every press above the recovered body, define multi-support press topology from semantic supports and chain pairing, update the fixture to eight cycles, and discard only an overspeed sample explicitly ignored during the bounded recovery-settling window. Later overspeed remains terminal. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
+## v0.7.17 sixth Linux validation finding — stale topology unit assertion
+
+Clean run `31074432529` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failure was a direct core assertion that bundled chicken geometric orientation with quadruped multi-support press topology.
+
+Production behavior no longer uses that bundled assumption: chicken uses paired-leg balance/recovery semantics, while the user-reported quadruped case uses explicit four-support multi-support press semantics. The test must assert those two contracts independently instead of requiring one shared orientation predicate across chicken, quadruped, crawler, and hexapod. No product behavior, acceptance threshold, or release gate is weakened. The complete Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
+## v0.7.17 seventh Linux validation finding — semantic support topology
+
+Clean run `31074718547` again passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failing assertion showed that `horizontal_multi_support_plan()` still depended on the old `paired_leg_chains()` heuristic. The authored quadruped has four semantic support contacts but that heuristic also reports paired chains, so the helper rejected the exact user-reported multi-support body.
+
+Press topology must be determined from semantic support count, not motor-pair grouping: any non-monoped rig with at least four semantic supports uses the multi-support press/recovery contract. Chicken and ordinary bipeds retain two-support paired behavior. The test and production helper must express the same semantic rule. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
+## v0.7.17 eighth Linux validation finding — monoped predicate omitted support count
+
+Clean run `31074945350` again passed all runtime-facing Linux gates and failed only the quadruped topology unit. Source inspection found the exact cause: `monopedal_gait()` recognized a shared motor-parent/pivot pattern without requiring monoped support topology. The authored quadruped happens to share that motor pattern, so it was falsely classified as a monoped and excluded from `horizontal_multi_support_plan()` despite owning six semantic support contacts.
+
+Monoped identity must require exactly two semantic support contacts in addition to the existing motor relationship. Quadruped, crawler, and hexapod then remain multi-support bodies; the true monoped retains its dedicated gait path. No accepted runtime threshold or behavior is weakened. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
+## v0.7.17 ninth Linux validation finding — duplicated legacy crouch-walk thresholds
+
+Clean run `31075191957` passed all production-facing Linux contracts and failed one later core assertion. `core_tests.cpp` already contained the corrected eight-cycle crouch-walk evidence test, but a duplicated historical section farther down still expected five cycles to complete crouch-walk and to enter elite self-imitation. Production `stage_skill_evidence` correctly rejects both five-cycle fixtures.
+
+Both duplicated fixtures must use the current eight-cycle sustained crouch-walk threshold. No production code, acceptance threshold, or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
+## v0.7.17 tenth Linux validation finding — stale uneven elite fixture
+
+Clean run `31075475969` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only remaining failure was a historical self-imitation unit fixture that still supplied four uneven-stage gait cycles after production qualification was raised to ten sustained cycles.
+
+The fixture must supply ten cycles so it tests a genuinely qualified stepped result. No production behavior or threshold changes. The obsolete `agent/v0717-eye-test-batch` branch contains only a superseded cache script/workflow and no unique product source; it must be deleted after the authoritative branch is merged and the release assets are re-downloaded. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
+
+## v0.7.17 eleventh Linux validation finding — obsolete articulated-foot fixture and branch cleanup
+
+Clean run `31095364734` passed repository and optional-art audits, GCC 14 compilation, the focused v0.7.17 eye-test suite, all eight six-seed Stand cases, all eight four-seed static crouch/hold/recover cases, the complete 24/24 live acceptance matrix, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The only failing assertion still expected the superseded 17-node heel/ball/toe humanoid even though v0.7.17 intentionally uses the existing terminal ankle as one compact physical support stub and renders the forward boot as optional side-view art.
+
+The fixture must verify the 13-node/15-bone articulated humanoid, eight arm/leg motors, terminal semantic support stubs, empty extra-contact lists, bounded support radii, and retained uploaded pelvis calibration. It must not require deleted heel/ball/toe collision nodes. The publisher must also remove the superseded `agent/v0717-eye-test-batch` branch and every accidental `agent/v0717-*copy*`/finalizer branch after the release assets are re-downloaded and verified. No production threshold or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
+
+## v0.7.17 twelfth validation finding — Windows optional-art byte preservation
+
+PR gate run `31096112530` built the complete Windows SDL3/Vulkan application successfully and passed Runner.Core, Runner.V0717EyeTest, all eight six-seed Stand cases, all eight four-seed crouch/hold/recover cases, the 24/24 live acceptance matrix, package diagnostics, camera diagnostics, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The sole Windows failure was repository hygiene: Git checkout converted the text-form P3 PPM assets from LF to CRLF, so their raw SHA-256 bytes differed from the provenance contract even though parsing and runtime art tests passed.
+
+The optional PPM source and runtime sprites must be marked `-text` in `.gitattributes` so Git preserves their committed bytes identically on Linux and Windows. The existing hashes remain authoritative; no art, physics, training, or acceptance behavior changes. Full Windows package installation, fallback, archive, extraction, upload, publication, re-download, and branch cleanup gates remain mandatory.
+
+# Runner v0.7.18 equipment, carry, and target curriculum
+
+**Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
 
 ### WALK-EQUIPMENT-148 — Unarmed, unequipped, safe, ready, and disarmed states
 **Status:** OPEN
@@ -392,7 +650,7 @@ The eight motor slots remain anatomy controls. Equipment state, aim, and trigger
 
 Test every supported humanoid/biped equipment state plus honest rejection for rigs without usable hands. Re-run unarmed locomotion, crouch, gait, terrain, evolution, persistence, editor, renderer, and package acceptance with equipment disabled to prove the new subsystem is optional and nonregressing.
 
-### WALK-RELEASE-155 — Publish audited Runner v0.7.17
+### WALK-RELEASE-155 — Publish audited Runner v0.7.18
 **Status:** OPEN
 
 Requires all equipment missions above or an explicitly documented reduced release whose unfinished items remain OPEN; Linux/Windows/package/re-download evidence; clean repository and branch state; exact mission-cache closure evidence.
