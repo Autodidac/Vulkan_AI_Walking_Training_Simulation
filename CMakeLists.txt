@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-
 project(Runner VERSION 0.7.18 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
@@ -9,6 +8,19 @@ option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
 option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 
 find_package(Threads REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(RUNNER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-v0718")
+file(MAKE_DIRECTORY "${RUNNER_GENERATED_DIR}")
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_v0718_sources.py"
+        "${RUNNER_GENERATED_DIR}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    RESULT_VARIABLE RUNNER_GENERATE_RESULT)
+if(NOT RUNNER_GENERATE_RESULT EQUAL 0)
+    message(FATAL_ERROR "Runner v0.7.18 deterministic source generation failed")
+endif()
 
 include(FetchContent)
 set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
@@ -36,10 +48,9 @@ add_library(RunnerCore STATIC
     src/self_imitation.cpp
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
-    src/autonomy_commands.cpp
-    src/autonomy_curriculum.cpp
-    src/autonomy_persistence.cpp
-)
+    "${RUNNER_GENERATED_DIR}/autonomy_commands.cpp"
+    "${RUNNER_GENERATED_DIR}/autonomy_curriculum.cpp"
+    "${RUNNER_GENERATED_DIR}/autonomy_persistence.cpp")
 add_library(Runner::Core ALIAS RunnerCore)
 target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 target_link_libraries(RunnerCore PUBLIC Threads::Threads SandHybrid::SandHybrid)
@@ -89,7 +100,9 @@ if(RUNNER_BUILD_APP)
     add_custom_target(RunnerShaders DEPENDS ${RUNNER_SHADER_OUTPUTS})
 
     add_executable(Runner
-        src/main.cpp src/app.cpp src/canvas.cpp src/renderer.cpp
+        "${RUNNER_GENERATED_DIR}/main.cpp"
+        "${RUNNER_GENERATED_DIR}/app.cpp"
+        src/canvas.cpp src/renderer.cpp
         src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
         src/ui_font.hpp src/view_camera.hpp)
     add_dependencies(Runner RunnerShaders)
@@ -108,24 +121,12 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${RUNNER_SHADER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:Runner>/shaders"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/docs"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0716_CAMERA_BATCH.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
-            "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md" "$<TARGET_FILE_DIR:Runner>/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0716_CAMERA_BATCH.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
     install(TARGETS Runner RUNTIME DESTINATION .)
@@ -139,26 +140,21 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         DESTINATION docs)
-    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
-        DESTINATION docs RENAME SandHybrid-missioncache.md)
+    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
 
 if(RUNNER_BUILD_TESTS)
     include(CTest)
     enable_testing()
-    add_test(NAME Runner.RepositoryHygiene
-        COMMAND ${CMAKE_COMMAND}
-            -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
+    add_test(NAME Runner.RepositoryHygiene COMMAND ${CMAKE_COMMAND}
+        -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
     set_tests_properties(Runner.RepositoryHygiene PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerPixelArtTests tests/pixel_art_tests.cpp)
     target_link_libraries(RunnerPixelArtTests PRIVATE Runner::Core)
     target_compile_features(RunnerPixelArtTests PRIVATE cxx_std_23)
-    target_compile_definitions(RunnerPixelArtTests PRIVATE
-        RUNNER_SOURCE_ASSET_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/assets")
-    set_target_properties(RunnerPixelArtTests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    target_compile_definitions(RunnerPixelArtTests PRIVATE RUNNER_SOURCE_ASSET_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/assets")
     runner_enable_warnings(RunnerPixelArtTests)
     add_test(NAME Runner.PixelArt COMMAND RunnerPixelArtTests)
     set_tests_properties(Runner.PixelArt PROPERTIES TIMEOUT 30)
@@ -166,8 +162,6 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerViewCameraTests tests/view_camera_tests.cpp)
     target_include_directories(RunnerViewCameraTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_features(RunnerViewCameraTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerViewCameraTests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerViewCameraTests)
     add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
     set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
@@ -176,8 +170,7 @@ if(RUNNER_BUILD_TESTS)
     target_link_libraries(RunnerV0717EyeTestTests PRIVATE Runner::Core)
     target_compile_features(RunnerV0717EyeTestTests PRIVATE cxx_std_23)
     runner_enable_warnings(RunnerV0717EyeTestTests)
-    add_test(NAME Runner.V0717EyeTest
-        COMMAND RunnerV0717EyeTestTests "${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    add_test(NAME Runner.V0717EyeTest COMMAND RunnerV0717EyeTestTests "${CMAKE_CURRENT_SOURCE_DIR}/assets")
     set_tests_properties(Runner.V0717EyeTest PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerV0718RuntimeRecoveryTests tests/v0718_runtime_recovery_tests.cpp)
@@ -190,15 +183,12 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
     target_compile_features(RunnerCoreTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerCoreTests PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerCoreTests)
     add_test(NAME Runner.Core COMMAND RunnerCoreTests)
 
     add_executable(RunnerDeformableTerrainTests tests/deformable_terrain_tests.cpp)
     target_link_libraries(RunnerDeformableTerrainTests PRIVATE Runner::Core)
     target_compile_features(RunnerDeformableTerrainTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerDeformableTerrainTests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerDeformableTerrainTests)
     add_test(NAME Runner.DeformableTerrain COMMAND RunnerDeformableTerrainTests)
     set_tests_properties(Runner.DeformableTerrain PROPERTIES TIMEOUT 45)
@@ -206,8 +196,6 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerSandHybridIntegrationTests tests/sandhybrid_integration_tests.cpp)
     target_link_libraries(RunnerSandHybridIntegrationTests PRIVATE Runner::Core)
     target_compile_features(RunnerSandHybridIntegrationTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerSandHybridIntegrationTests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerSandHybridIntegrationTests)
     add_test(NAME Runner.SandHybridIntegration COMMAND RunnerSandHybridIntegrationTests)
     set_tests_properties(Runner.SandHybridIntegration PROPERTIES TIMEOUT 60)
@@ -215,8 +203,6 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)
     target_compile_features(RunnerLiveAcceptanceTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerLiveAcceptanceTests PROPERTIES
-        CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerLiveAcceptanceTests)
     add_test(NAME Runner.LiveAcceptance COMMAND RunnerLiveAcceptanceTests)
     set_tests_properties(Runner.LiveAcceptance PROPERTIES TIMEOUT 120)
@@ -224,7 +210,6 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerConcurrencyBenchmark tests/concurrency_benchmark.cpp)
     target_link_libraries(RunnerConcurrencyBenchmark PRIVATE Runner::Core)
     target_compile_features(RunnerConcurrencyBenchmark PRIVATE cxx_std_23)
-    set_target_properties(RunnerConcurrencyBenchmark PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerConcurrencyBenchmark)
     add_test(NAME Runner.ConcurrencyBenchmark COMMAND RunnerConcurrencyBenchmark)
     set_tests_properties(Runner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
@@ -232,7 +217,6 @@ if(RUNNER_BUILD_TESTS)
     add_executable(RunnerRuntimePipelineTests tests/runtime_pipeline_tests.cpp)
     target_link_libraries(RunnerRuntimePipelineTests PRIVATE Runner::Core)
     target_compile_features(RunnerRuntimePipelineTests PRIVATE cxx_std_23)
-    set_target_properties(RunnerRuntimePipelineTests PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
     runner_enable_warnings(RunnerRuntimePipelineTests)
     if(RUNNER_ENABLE_TSAN AND NOT MSVC)
         target_compile_options(RunnerRuntimePipelineTests PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
