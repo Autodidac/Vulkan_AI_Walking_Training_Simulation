@@ -1,4 +1,4 @@
-name: Finalize Runner v0.7.18 runtime recovery
+name: Apply Runner v0.7.18 runtime recovery
 
 on:
   pull_request:
@@ -9,32 +9,43 @@ permissions:
   contents: write
 
 concurrency:
-  group: finalize-runner-v0718-${{ github.event.pull_request.number }}
+  group: apply-runner-v0718-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  finalize:
-    if: ${{ github.head_ref == 'agent/v0718-runtime-recovery-exec' && github.actor != 'github-actions[bot]' }}
+  apply:
+    if: ${{ github.head_ref == 'agent/v0718-runtime-recovery-clean' && github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/v0718-runtime-recovery-exec
+          ref: agent/v0718-runtime-recovery-clean
           fetch-depth: 0
 
-      - name: Apply audited v0.7.18 recovery source
-        run: python tools/finalize_v0718_runtime_recovery.py
+      - name: Cache released runtime regressions first
+        run: python tools/apply_v0718_runtime_recovery.py cache
 
-      - name: Commit source-wide recovery
+      - name: Commit mission cache before product source
         shell: bash
         run: |
           set -euo pipefail
-          rm tools/finalize_v0718_runtime_recovery.py
-          rm -f tools/apply_v0718_runtime_recovery.py tools/v0718.trigger
-          rm -f .github/workflows/apply-v0718-runtime-recovery.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git diff --cached --check
+          git commit -m 'Cache Runner v0.7.18 runtime recovery missions'
+          git push origin HEAD:agent/v0718-runtime-recovery-clean
+
+      - name: Apply source-wide recovery
+        run: python tools/apply_v0718_runtime_recovery.py implement
+
+      - name: Commit source docs and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm tools/apply_v0718_runtime_recovery.py
+          rm -f tools/v0718-executor-merge-trigger.txt
           git add -A
           git diff --cached --check
-          git commit -m 'Finalize Runner v0.7.18 runtime recovery source'
-          git push origin HEAD:agent/v0718-runtime-recovery-exec
+          git commit -m 'Implement Runner v0.7.18 runtime recovery'
+          git push origin HEAD:agent/v0718-runtime-recovery-clean
