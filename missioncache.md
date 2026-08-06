@@ -552,6 +552,12 @@ Clean run `31074718547` again passed repository and optional-art audits, GCC 14 
 
 Press topology must be determined from semantic support count, not motor-pair grouping: any non-monoped rig with at least four semantic supports uses the multi-support press/recovery contract. Chicken and ordinary bipeds retain two-support paired behavior. The test and production helper must express the same semantic rule. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
 
+## v0.7.17 eighth Linux validation finding — monoped predicate omitted support count
+
+Clean run `31074945350` again passed all runtime-facing Linux gates and failed only the quadruped topology unit. Source inspection found the exact cause: `monopedal_gait()` recognized a shared motor-parent/pivot pattern without requiring monoped support topology. The authored quadruped happens to share that motor pattern, so it was falsely classified as a monoped and excluded from `horizontal_multi_support_plan()` despite owning six semantic support contacts.
+
+Monoped identity must require exactly two semantic support contacts in addition to the existing motor relationship. Quadruped, crawler, and hexapod then remain multi-support bodies; the true monoped retains its dedicated gait path. No accepted runtime threshold or behavior is weakened. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
