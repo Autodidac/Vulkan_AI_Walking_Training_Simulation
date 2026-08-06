@@ -1,21 +1,18 @@
-name: Apply Runner v0.7.18 runtime recovery through recognized gate
+name: Apply Runner v0.7.18 runtime recovery
 
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
-  group: apply-runner-v0718-recognized-${{ github.event.pull_request.number }}
+  group: apply-runner-v0718-runtime-recovery
   cancel-in-progress: true
 
 jobs:
   apply:
-    if: ${{ github.head_ref == 'agent/v0718-runtime-recovery' && github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +43,8 @@ jobs:
           set -euo pipefail
           rm tools/apply_v0718_runtime_recovery.py
           rm -f tools/v0718.trigger
-          git add CMakeLists.txt README.md CHANGELOG.md missioncache.md docs tests src tools/apply_v0718_runtime_recovery.py tools/v0718.trigger
+          rm -f .github/workflows/apply-v0718-runtime-recovery.yml
+          git add -A
           git diff --cached --check
           git commit -m 'Implement Runner v0.7.18 runtime recovery'
           git push origin HEAD:agent/v0718-runtime-recovery
