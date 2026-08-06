@@ -503,6 +503,17 @@ Validation run `31072185903` reached the complete GCC 14 build and exposed four 
 
 The correction must use the existing terminal ankle as the single physical support stub, preserve the verified vertical press schedule, identify horizontal multi-support bodies explicitly, provide bounded compression/recovery grace without accepting a flat or body-supported pose, update obsolete heel/ball/toe tests to the new stub contract, and measure speed modes only after warm-up. The same full Linux, Windows, package, optional-art fallback, archive, and publication gates remain required.
 
+## v0.7.17 second Linux validation finding — recovery and topology separation
+
+Clean-source run `31072665828` proved the repository, supplied-art hashes, GCC 14 build, camera tests, terrain tests, runtime pipeline, and warmed speed-mode benchmark, but exposed four remaining release blockers:
+
+- excluding the chicken from horizontal-body handling restored press classification but regressed its verified six-seed Stand behavior;
+- vertical paired rigs physically crouched for the complete press cycle but did not establish a clean un-crouched recovery before the next cycle, so scaffold, biped, humanoid, and monoped remained incomplete;
+- quadruped and crawler compression still entered the biped hip-hinge invalidation path before their multi-support body drop reached the required evidence;
+- the live ordered-stage fixture still used the old four-step and five-step thresholds after sustained gait requirements were raised.
+
+The correction must separate horizontal balance posture from horizontal multi-support press topology, retain a compact but sufficiently loaded chicken support radius, use actual multi-support body/head compression as crouch evidence, avoid terminating a finite supported horizontal rig merely for failing a biped-shaped crouch test, require a continuous un-crouched post-retraction recovery hold, restore bounded vertical recovery authority, and update the deterministic stage fixture to the current gait thresholds. Full Linux, Windows, package, optional-art fallback, archive, and publication validation remains mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
