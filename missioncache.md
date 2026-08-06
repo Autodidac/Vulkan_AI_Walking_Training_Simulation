@@ -576,6 +576,12 @@ Clean run `31095364734` passed repository and optional-art audits, GCC 14 compil
 
 The fixture must verify the 13-node/15-bone articulated humanoid, eight arm/leg motors, terminal semantic support stubs, empty extra-contact lists, bounded support radii, and retained uploaded pelvis calibration. It must not require deleted heel/ball/toe collision nodes. The publisher must also remove the superseded `agent/v0717-eye-test-batch` branch and every accidental `agent/v0717-*copy*`/finalizer branch after the release assets are re-downloaded and verified. No production threshold or runtime behavior changes. Full Linux, Windows, package, optional-art fallback, archive, publication, re-download, and branch cleanup gates remain mandatory.
 
+## v0.7.17 twelfth validation finding — Windows optional-art byte preservation
+
+PR gate run `31096112530` built the complete Windows SDL3/Vulkan application successfully and passed Runner.Core, Runner.V0717EyeTest, all eight six-seed Stand cases, all eight four-seed crouch/hold/recover cases, the 24/24 live acceptance matrix, package diagnostics, camera diagnostics, deformable terrain, SandHybrid integration, runtime pipeline, and the warmed concurrency benchmark. The sole Windows failure was repository hygiene: Git checkout converted the text-form P3 PPM assets from LF to CRLF, so their raw SHA-256 bytes differed from the provenance contract even though parsing and runtime art tests passed.
+
+The optional PPM source and runtime sprites must be marked `-text` in `.gitattributes` so Git preserves their committed bytes identically on Linux and Windows. The existing hashes remain authoritative; no art, physics, training, or acceptance behavior changes. Full Windows package installation, fallback, archive, extraction, upload, publication, re-download, and branch cleanup gates remain mandatory.
+
 # Runner v0.7.18 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — carried intact after the v0.7.17 eye-test correction release.
