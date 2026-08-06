@@ -32,7 +32,7 @@ namespace runner::ui_layout
     [[nodiscard]] constexpr float course_reference_marker_spacing_m(
         DistanceUnits units) noexcept
     {
-        return units == DistanceUnits::metric ? 250.0f : 1609.344f * 0.25f;
+        return units == DistanceUnits::metric ? 10.0f : 15.24f;
     }
 
     [[nodiscard]] constexpr std::uint64_t lifetime_delta(

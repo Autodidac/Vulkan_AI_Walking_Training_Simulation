@@ -68,6 +68,16 @@ namespace runner::rl
                 required_mastery_confirmations(stage));
     }
 
+    [[nodiscard]] inline bool nursery_policy_reset_allowed(
+        sim::CourseStage stage, std::uint64_t fresh_updates,
+        std::uint64_t fresh_evaluations) noexcept
+    {
+        const std::uint64_t minimum_budget = stage_minimum_fresh_updates(stage) + 120u;
+        return fresh_updates >= minimum_budget
+            && fresh_evaluations >= 12u
+            && (fresh_evaluations % 12u) == 0u;
+    }
+
     [[nodiscard]] inline bool strict_balance_mastery(
         const TrainingMetrics& metrics) noexcept
     {
@@ -104,6 +114,12 @@ namespace runner::rl
         std::size_t rollout_threads{ 1 };
         std::size_t environment_count{};
         std::size_t pending_commands{};
+        std::uint64_t stage_fresh_updates{};
+        std::uint64_t stage_required_updates{};
+        std::uint64_t stage_fresh_episodes{};
+        std::uint64_t stage_required_episodes{};
+        std::uint64_t stage_fresh_evaluations{};
+        std::uint64_t stage_required_evaluations{};
         double updates_per_second{};
         int speed_mode{ 1 };
         bool worker_busy{};
