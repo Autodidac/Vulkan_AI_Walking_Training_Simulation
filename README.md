@@ -1,72 +1,33 @@
 # Runner
 
-Runner 0.7.16 is a combined C++23 SDL3/Vulkan locomotion, morphology-evolution, and SandHybrid live-map laboratory with deterministic physics, a compact PPO trainer, persistent background workers, authored multi-leg rigs, deformable terrain, material hazards, and an executable acceptance matrix.
+Runner 0.7.16 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
-## Current curriculum
+## Build requirements
 
-Training uses eight evidence-gated stages:
+- CMake 3.28 or newer
+- C++23 compiler
+- Ninja or Visual Studio
+- vcpkg for SDL3, Vulkan, and shaderc on Windows
 
-1. stand and balance;
-2. static crouch, hold, and recover;
-3. walk and run with real gait cycles;
-4. crouch-walk over deformable uneven terrain and avoid low obstacles;
-5. powered jump and controlled landing;
-6. moving low-bar or hurdle traversal;
-7. controlled flips with no more than three turns and a valid landing;
-8. mixed traversal that preserves earlier skills.
+The project pins and statically links the platform-neutral SandHybrid simulation library. Runner owns the SDL3/Vulkan application, rendering, training, editor, and package lifecycle.
 
-Scalar reward cannot skip prerequisites. Wheel-sliding, body rolling, detached or fused supports, uncontrolled flight, excessive flips, motionless exploits, and invalid body contact cannot seed champion, imitation, evolution, or training-preview state.
+## Windows build
 
-## Authored rigs
-
-The built-in presets are scaffold, chicken, biped, humanoid, quadruped, four-leg crawler, hexapod, and monoped. Every preset has explicit support semantics and a rig-specific control path. The scaffold is the minimal topology-evolution seed; valid bone splitting may activate a previously unused neutral policy slot and train it in a bounded nursery. The monoped uses a single-leg gait cycle rather than fake alternating biped steps.
-
-## Runtime model
-
-- The training worker owns mutable PPO, optimizer, curriculum, rig-evolution, and persistence state.
-- The UI renders immutable publications and does not block on training updates.
-- NORMAL, FASTER, and MAX select persistent CPU worker budgets.
-- Vulkan is used for presentation; the compact policy and optimizer remain on CPU.
-- Checkpoints and autosaves are versioned and written asynchronously through temporary-file and atomic-rename replacement.
-
-## Terrain and hazards
-
-RunnerCore links the complete platform-neutral `SandHybrid::SandHybrid` library pinned at `99dd8acddfa9be1402981052b39cbf6284ed99ae`. The live map uses canonical fine cells, SandHybrid material identity, derived 8×8 macro-tile metadata, and 64×64 dirty-section scheduling. A primary humanoid is approximately 3–5 macro tiles tall. Full uniform 8×8 regions promote immediately; any changed or partial cell demotes immediately. Sand keeps irregular blob/pixel edges while structural stone may form a true vertical face or 90-degree ledge. Collision, observations, evaluation, replay, preview rendering, pressure, deposits, burial, and material impacts consume this same map state.
-
-
-## Optional concept art
-
-The package includes `assets/optional/runner_armor_concepts/runner_armor_concepts.webp`, a compact reference assembled from Adam's modular sci-fi armor sheets. It is not a startup or rendering dependency. Future skin work may crop, repack, or remake it into a deterministic atlas, while the current rig renderer remains the fallback when optional art is absent.
-
-## Controls
-
-- `1`: Live Autopilot
-- `2` or `3`: Rig Lab
-- `Space`: Pause or resume background training
-- Mouse wheel over Live Autopilot: zoom the world view without changing physical scale
-- Live panel `ZOOM OUT` / `AUTO VIEW` / `ZOOM IN`: direct camera controls
-- `R`: Reset the live preview and restore automatic camera fitting
-- `S`: Save the current rig
-- `L`: Load a rig
-- `Delete`: Remove the selected non-required node
-- `Shift + click`: Add a node
-- `Ctrl + click`: Connect the selected node to another node
-- `Alt + click`: Select a bone for stiffness inspection or safe deletion
-- Rig Lab buttons: scaffold/presets, near-leg depth, champion restore, fresh policy, crouch/gait-cycle preview, and firm/loose traction diagnostics
-
-## Build and test
-
-Requirements: CMake 3.28+, a C++23 compiler, Ninja, Vulkan 1.3+, SDL3, shaderc, and vcpkg manifest mode for the complete application.
-
-Windows:
-
-```powershell
+```bat
 cmake --preset windows-release --fresh
 cmake --build --preset windows-release --parallel
 ctest --preset windows-release --output-on-failure
 ```
 
-Linux deterministic core suite:
+Launch the Release application with:
+
+```bat
+run.bat
+```
+
+`run.bat` resolves the executable relative to itself and works from an unrelated current directory.
+
+## Linux deterministic build
 
 ```bash
 cmake -S . -B build/linux -G Ninja \
@@ -77,13 +38,29 @@ cmake --build build/linux --parallel
 ctest --test-dir build/linux --output-on-failure
 ```
 
-## Run and diagnose
+## Live controls
 
-Double-click `run.bat` on Windows. An extracted release launches the adjacent executable; a source checkout uses or builds the configured Release target. Arguments are forwarded.
+- Mouse wheel over Live Autopilot: zoom the world view without changing physical scale
+- Live panel `ZOOM OUT` / `AUTO VIEW` / `ZOOM IN`: direct camera controls
+- `R`: Reset the live preview and restore automatic camera fitting
+- `Space`: Pause or resume the live preview
+- `Tab`: Switch between Live Autopilot and Rig Lab
+- `1`, `2`, `3`: Normal, Faster, and Max CPU modes
+- `S`: Save the current rig
+- `L`: Load a rig
+- `Escape`: Quit
 
-Useful diagnostics:
+The live view automatically fits the current rig, maintains useful course lookahead, and uses elapsed-time camera smoothing with a screen-space dead zone. Camera magnification never changes simulation scale, terrain coordinates, observations, rewards, or learned state.
 
-```text
+## Rig Lab
+
+Rig Lab provides preset selection, node and bone editing, motor ranges and strength, individual and grouped joint testing, gait and crouch test patterns, firm/loose-ground traction tests, near/far side selection, optional-art visibility, debug-skeleton visibility, save/load, champion restore, and fresh-policy controls.
+
+Invalid structural edits are rejected without blocking the background trainer.
+
+## Diagnostics
+
+```bat
 Runner.exe --version
 Runner.exe --diagnose-vulkan
 Runner.exe --diagnose-package
@@ -100,9 +77,9 @@ Runner.exe --diagnose-camera
 - [`missioncache.md`](missioncache.md) is Runner's single authoritative mission ledger with status, acceptance criteria, and immutable release evidence.
 - [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library and preserves ownership of both canonical ledgers.
 - [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive live and PIP camera contract.
+- [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the released eye-test corrections for crouch recovery, sustained sagittal gait, terrain-conforming support stubs, and supplied optional sprites.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
-
 
 ## v0.7.17 eye-test corrections
 
@@ -110,8 +87,7 @@ A release is incomplete until Linux and Windows tests, build-tree and installed 
 - Sustained sagittal side-view walking is required; crab walking is rejected.
 - Quadrupeds must survive, hold, retract, and stably recover from the press.
 - Stage advancement requires fresh updates, episodes, and evaluations.
-- Optional user armor/foot art is packaged and has a procedural fallback.
+- OPTIONAL ART from all four supplied concepts is packaged with a procedural fallback.
 - Rig Lab exposes optional-art and debug-skeleton toggles.
-
 
 The optional package includes compact P3 reference sheets derived from all four supplied concepts under `assets/optional/runner_armor_concepts/source/`, plus validated P3 foot, helmet, torso, and weapon-preview sprites under `runtime/`. Removing the entire optional directory preserves procedural rendering and all training behavior.
