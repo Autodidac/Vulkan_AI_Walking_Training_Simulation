@@ -31,13 +31,12 @@ jobs:
           test -f tests/v0719_general_locomotion_tests.cpp
           test -f docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
           test -f tools/generate_v0719_sources.py
-          test -f .github/workflows/runner-v0719-release.yml
-      - name: Remove temporary executor
+      - name: Remove temporary non-workflow executor files
         run: |
           rm -f tools/apply_v0719_general_locomotion.py
           rm -f tools/run_v0719_executor.py
           rm -f tools/v0719.prtrigger
-          rm -f .github/workflows/apply-v0719-general-locomotion.yml
+          rm -rf tools/__pycache__
       - name: Commit refined source
         run: |
           set -euo pipefail
