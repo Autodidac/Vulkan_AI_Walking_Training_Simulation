@@ -38,11 +38,22 @@ int main()
             ui_layout::DistanceUnits::imperial) - 15.24f) < 0.0001f,
         "imperial marker spacing is not 50 feet");
 
+    require(std::abs(sim::terrain_relative_distance(0.0f, 0.0f, 6.0f) - 6.0f)
+            < 0.0001f,
+        "moving-course distance ignores terrain progress");
+    require(std::abs(sim::terrain_relative_frame_progress(
+            1.0f, 1.0f, 1.25f, 0.02f) - 0.025f) < 0.0001f,
+        "camera-centered treadmill motion has zero logical progress");
+
     sim::Environment walking{ sim::CreatureBlueprint::biped(), 0x718u };
     walking.set_course(sim::CourseStage::uneven, 0.30f);
     const std::array<float, sim::action_count> neutral{};
     for (int frame = 0; frame < 12; ++frame)
         (void)walking.step(neutral);
+    require(walking.distance_travelled() > 0.10f,
+        "moving Walk course still reports zero terrain-relative distance");
+    require(walking.forward_speed() > 0.20f,
+        "moving Walk course still reports zero ground-relative speed");
     const auto teacher = rl::walking_teacher_action(walking);
     require(teacher[0] * teacher[2] <= 0.0f,
         "paired hips are not driven in opposite sagittal phases");

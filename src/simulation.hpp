@@ -51,6 +51,19 @@ namespace runner::sim
         return terrain_x - course_progress;
     }
 
+    [[nodiscard]] constexpr float terrain_relative_distance(float world_x,
+        float initial_world_x, float course_progress) noexcept
+    {
+        return terrain_sample_x(world_x, course_progress) - initial_world_x;
+    }
+
+    [[nodiscard]] constexpr float terrain_relative_frame_progress(
+        float current_world_x, float previous_world_x,
+        float course_speed, float dt) noexcept
+    {
+        return (current_world_x - previous_world_x) + course_speed * dt;
+    }
+
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven

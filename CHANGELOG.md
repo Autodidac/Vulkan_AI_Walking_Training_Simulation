@@ -1,3 +1,11 @@
+## 0.7.18
+
+- Fixed the moving-course coordinate-frame bug that measured treadmill gait in fixed camera X, causing real alternating steps to receive zero distance and fail qualification.
+- Made locomotion distance, logical speed, step displacement, PPO shaping, and evaluation use terrain-relative progress while preserving the world-space anti-idle gate.
+- Split safe incremental Walk candidate qualification from final mastery so two-step sagittal improvements can be checkpointed and refined instead of discarded.
+- Extended early sagittal teacher/bootstrap authority and isolated corrected training semantics from v0.7.17 state.
+- Retained the v0.7.17 terrain model, restored near-course markers/controls/telemetry, and kept optional body art disabled by default.
+
 ## 0.7.17
 
 - Reopened released runtime failures from the v0.7.16 eye test.

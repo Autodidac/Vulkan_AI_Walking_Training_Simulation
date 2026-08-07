@@ -20,7 +20,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1700u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1801u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -682,7 +682,7 @@ namespace runner::rl
             // recovered. Those stronger stage facts are authoritative here.
             break;
         case sim::CourseStage::uneven:
-            if (environment.longest_stable_stance_seconds() < 1.25f)
+            if (environment.longest_stable_stance_seconds() < 0.75f)
                 rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
             if (environment.blueprint().paired_leg_chains()
                 && sim::crab_walking_motion(environment.alternating_steps(),
@@ -690,15 +690,16 @@ namespace runner::rl
                     environment.elapsed_seconds(),
                     environment.primary_support_span_ratio()))
                 rejection |= evidence_bit(MotionEvidenceFailure::lateral_crab_gait);
+            // Qualification is the safe incremental checkpoint gate, not final
+            // Walk mastery. Preserve a real two-step sagittal improvement so PPO
+            // can build on it instead of discarding every policy below mastery.
             if (environment.blueprint().paired_leg_chains()
-                ? !sim::sagittal_gait_evidence(environment.alternating_steps(),
-                    environment.limb_crossings(), environment.distance_travelled(),
-                    environment.elapsed_seconds(),
-                    environment.primary_support_span_ratio())
-                : environment.gait_cycles() < 10u)
+                ? (environment.alternating_steps() < 2u
+                    || environment.limb_crossings() < 1u)
+                : environment.gait_cycles() < 2u)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
-            if (environment.distance_travelled() < 6.0f
-                || environment.elapsed_seconds() < 8.0f)
+            if (environment.distance_travelled() < 1.0f
+                || environment.elapsed_seconds() < 2.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
             break;
         case sim::CourseStage::crouch_walk:

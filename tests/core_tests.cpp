@@ -650,11 +650,11 @@ int main()
     require(ui_layout::top_bar_box(1970.0f).width == 1970.0f,
         "top GUI background does not span the full drawable width");
     require(std::abs(ui_layout::course_reference_marker_spacing_m(
-            ui_layout::DistanceUnits::metric) - 250.0f) < 0.001f,
-        "metric markers are not quarter-kilometre spaced");
+            ui_layout::DistanceUnits::metric) - 10.0f) < 0.001f,
+        "metric near-course markers are not 10 metres apart");
     require(std::abs(ui_layout::course_reference_marker_spacing_m(
-            ui_layout::DistanceUnits::imperial) - 402.336f) < 0.001f,
-        "imperial markers are not quarter-mile spaced");
+            ui_layout::DistanceUnits::imperial) - 15.24f) < 0.001f,
+        "imperial near-course markers are not 50 feet apart");
     require(ui_layout::lifetime_delta(120u, 20u) == 100u
             && ui_layout::lifetime_delta(20u, 120u) == 0u,
         "rig lifetime counters can underflow");

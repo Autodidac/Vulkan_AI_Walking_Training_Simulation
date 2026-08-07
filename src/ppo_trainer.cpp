@@ -62,15 +62,15 @@ namespace runner::rl
                 return update < 1200u ? 0.36f : 0.10f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
-            if (update < 800u)
-                return 0.50f;
-            if (update < 3000u)
-                return lerp(0.50f, 0.18f,
-                    static_cast<float>(update - 800u) / 2200.0f);
-            if (update < 8000u)
-                return lerp(0.18f, 0.04f,
-                    static_cast<float>(update - 3000u) / 5000.0f);
-            return 0.02f;
+            if (update < 1200u)
+                return 0.62f;
+            if (update < 4000u)
+                return lerp(0.62f, 0.24f,
+                    static_cast<float>(update - 1200u) / 2800.0f);
+            if (update < 9000u)
+                return lerp(0.24f, 0.06f,
+                    static_cast<float>(update - 4000u) / 5000.0f);
+            return 0.03f;
         }
 
         [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
