@@ -16,125 +16,125 @@
 
 # Runner v0.7.18 runtime recovery, controls, and observability
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 The v0.7.17 packaged terrain is explicitly retained. Direct runtime observations reopen only these facts: useful course reference markers are missing from the starting view; the visible update count reaches about 10 and appears to reset; cumulative total updates are not continuously visible; the trainer remains effectively at the beginning and ordinary walking has regressed; controls and telemetry are difficult to discover or interpret; and the optional torso/helmet skin is visually unacceptable.
 
 Source audit found the exact update-loop contradiction: policy evaluation occurs at update 1 and every fifth update, while v0.7.17 resets a no-champion policy on every third invalid evaluation. That can reset the local policy counter at update 10 although Stand requires 120 fresh updates before its dwell gate can complete. `reset_training_state()` preserves cumulative totals, so training history survives but the primary UI hides it behind a resettable counter.
 
 ### WALK-RUNTIME-RESET-211 — Remove the update-10 nursery reset contradiction
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 A no-champion controller may not be automatically discarded before the current stage has received a meaningful training budget. Stand must be able to accumulate its full 120-update fresh-work requirement. Any later automatic nursery restart requires a substantially larger fresh-update/evaluation budget and preserves cumulative totals.
 
 ### WALK-TOTAL-UPDATES-212 — Make cumulative training progress continuously visible
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The live world and Training Results show all-time `total_updates` continuously alongside the resettable policy/stage update, evaluation count, reset count, and updates/second. A policy restart must never look like all training progress disappeared.
 
 ### WALK-STAGE-PROGRESS-213 — Explain current stage work
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Publish fresh updates, episodes, and evaluations since stage entry plus each required threshold. The UI states whether the trainer is waiting on work, strict evidence, or mastery confirmations instead of only saying it is starting.
 
 ### WALK-MARKERS-214 — Restore useful markers without touching terrain
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Keep the current terrain, collision, pressure, treadmill transform, and course physics unchanged. Add a visible START reference and recurring near-course distance markers inside the initial viewport. Marker positions remain world/course-progress correct.
 
 ### WALK-MARKER-LABELS-215 — Use practical near-distance labels
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Metric reference markers use metres near the start and kilometres only at kilometre scale. Imperial markers use feet near the start and miles only at mile scale. Do not show nearby signs as `0.00 KM` or `0.00 MI`.
 
 ### WALK-CONTROLS-216 — Make runtime controls match their documentation
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 `Tab` switches Live/Rig Lab; `Space` runs/pauses background training; `1/2/3` select Normal/Faster/Max CPU; `T` toggles Results/Lifetime Totals; `U` toggles Metric/Imperial; `A` toggles optional body armor; `R` resets only live preview/camera state. Runtime mappings and README must agree.
 
 ### WALK-CONTROL-UI-217 — Put control help and trainer state in the application
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The top bar/live panel advertise controls and continuously expose training state, speed mode, pause state, pipeline stage, stage-work progress, and throughput without requiring source knowledge.
 
 ### WALK-SKIN-218 — Disable the unacceptable fake body skin by default
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Optional torso/helmet/weapon overlays default OFF and remain explicitly toggleable. Forward sprite feet remain independently available. Optional art never affects physics, observations, policy state, terrain, package startup, or deterministic acceptance.
 
 ### WALK-WALK-BOOTSTRAP-219 — Restore useful early walking guidance
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Once Walk begins, paired-leg policies receive sufficient sagittal fore/aft teacher/bootstrap authority to demonstrate alternating foot passing and forward progress long enough for PPO to learn it. Existing crab-walk rejection, support integrity, and sustained-distance mastery remain strict.
 
 ### WALK-STATE-220 — Isolate corrected v0.7.18 learned/runtime state
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Bump training and autonomy-state semantics and use `runner-v0718-*` autosave paths so v0.7.17 reset-loop state cannot silently resume. Manual compatible weight transfer remains explicit.
 
 ### WALK-SOURCE-AUDIT-221 — Reconcile stale runtime assumptions across the source tree
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Audit application input/rendering, autonomy, PPO, curriculum, persistence, UI layout, CMake, tests, repository audit, docs, package contents, and release workflow for stale versions, stale controls, contradictory counters, and dead temporary infrastructure.
 
 ### WALK-REGRESSION-222 — Deterministically test reset, marker, state, and gait recovery
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Tests prove update 10 cannot trigger nursery reset; the complete Stand dwell can accumulate; a later bounded nursery restart remains possible; starting marker spacing is visible; v0.7.18 semantics are isolated; and paired-leg walking assistance produces meaningful opposite-phase sagittal drive without changing terrain coordinates.
 
 ### WALK-DOC-223 — Consolidate v0.7.18 documentation
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Update README, CHANGELOG, focused v0.7.18 documentation, this ledger, CMake install contents, and repository/package audits. Do not create another changelog or mission ledger.
 
 ### WALK-PACKAGE-224 — Audit the complete v0.7.18 package
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, every deterministic suite, 24+ live locomotion acceptance, camera/package diagnostics, installed and extracted execution, optional-art fallback, executable-relative `run.bat`, ZIP/checksum/manifest, and workflow artifact upload.
 
 ### WALK-RELEASE-225 — Publish and verify Runner v0.7.18
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 Merge only validated source, tag `v0.7.18`, publish audited assets, re-download and byte-verify them, record exact evidence, delete temporary workflows/branches, close cleanup PRs, and leave only `main`.
 
 # Runner v0.7.18 treadmill-coordinate walking correction
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 The overnight v0.7.17 eye test reaches Walk but reports only zero-to-two credited steps while the course itself moves at walking speed. Source audit found a coordinate-frame contradiction: moving lessons scroll terrain with `course_progress()`, but gait strike displacement, `distance_travelled_`, `forward_speed_`, and forward reward are measured only in fixed screen/world X. A correct treadmill gait can therefore walk in place relative to the camera yet receive zero travelled distance, fail the 5.5 cm step-displacement gate, fail the 6 m qualification gate, and never create a valid Walk champion. The existing qualification gate also conflates a safe incremental candidate with final stage mastery, so a two-step improvement is discarded instead of checkpointed.
 
 ### WALK-COURSE-FRAME-226 — Use terrain-relative locomotion coordinates
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Moving-course locomotion distance and per-frame forward progress use the same transform as the scrolling terrain: world X plus `course_progress()`. Static Stand/Crouch/Jump lessons remain unchanged because their course speed is zero.
 
 ### WALK-STEP-FRAME-227 — Credit real alternating strikes on the treadmill
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Alternating step displacement is measured in terrain-relative locomotion X while foot crossing, swing-air time, swing clearance, and contact transitions remain physical world-space evidence. A walker may stay camera-centered without losing legitimate step credit.
 
 ### WALK-SPEED-FRAME-228 — Report and train terrain-relative forward speed
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Logical forward speed on moving lessons includes course speed plus physical root speed. PPO evaluation, speed mastery, reward shaping, telemetry, and overspeed use the resulting ground-relative speed; static lessons are numerically unchanged.
 
 ### WALK-INCREMENTAL-CHAMPION-229 — Separate safe candidate qualification from mastery
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Walk may checkpoint a physically valid incremental sagittal candidate after two alternating steps, at least one genuine limb crossing, one metre of terrain-relative progress, and two seconds of survival. Final Walk mastery remains strict at the existing 18 m / 16 stride / speed / survival requirements, and crab walking, body contact, invalid motion, and structural failures remain rejected.
 
 ### WALK-IDLE-GATE-230 — Preserve anti-idle and anti-vibration behavior
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The one-second zero-progress anti-idle window stays in camera/world space and still requires useful swing lift or a credited step. Merely standing still while terrain scrolls must not count as active gait.
 
 ### WALK-BOOTSTRAP-231 — Keep useful guidance long enough to establish gait
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Early Walk bootstrap remains strongly sagittal through the first meaningful training window, then decays gradually so PPO takes control after a valid incremental walker exists.
 
 ### WALK-COORDINATE-TEST-232 — Deterministically lock the coordinate contract
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Regression tests prove terrain-relative distance/frame progress, nonzero moving-course distance with a camera-centered rig, opposite-phase teacher drive, and the existing v0.7.18 reset/marker contracts. Full Linux and Windows release gates remain mandatory.
 
@@ -176,6 +176,13 @@ The existing anatomy motor slots remain anatomy controls. Equipment state, aim, 
 **Status:** OPEN
 
 # Recent immutable release evidence
+
+## Runner v0.7.18
+
+**Status:** PUBLISHED.
+
+- v0.7.18 validation source: `157b1754a40193e58b457b49e17c55b2cb7ee6e7`.
+- Main release workflow run: `31169049948`.
 
 ## Runner v0.7.17
 
