@@ -21,7 +21,7 @@ jobs:
       - name: Apply cached rig, gait, preset, and Rig Lab repair
         run: |
           set -euo pipefail
-          python3 tools/apply_v0721_rig_gait_repair.py
+          python3 tools/run_v0721_rig_gait_repair.py
           git diff --check
           grep -F "training_semantics_version = 0x0007'2101u" src/ppo.hpp
           grep -F 'automatic_rig_tuning_candidate' src/autonomy_curriculum.cpp
@@ -32,6 +32,7 @@ jobs:
       - name: Remove one-shot source scripts
         run: |
           rm -f tools/apply_v0721_rig_gait_repair.py
+          rm -f tools/run_v0721_rig_gait_repair.py
           rm -f tools/cache_v0721_rig_repair.py
           rm -rf tools/__pycache__
       - name: Commit exact repaired source
