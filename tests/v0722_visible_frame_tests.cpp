@@ -28,7 +28,9 @@ namespace
             std::cerr << "FAILED: " << name
                 << " remained black or visually empty; samples=" << stats.sample_count
                 << " non_black=" << stats.non_black_samples
-                << " colors=" << stats.distinct_color_buckets << '\n';
+                << " final_colors=" << stats.distinct_color_buckets
+                << " source_vertices=" << stats.source_vertex_count
+                << " source_colors=" << stats.source_color_buckets << '\n';
             std::exit(EXIT_FAILURE);
         }
     }
