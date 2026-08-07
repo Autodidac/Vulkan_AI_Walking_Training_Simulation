@@ -23,19 +23,26 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          grep -F "project(Runner VERSION 0.7.20 LANGUAGES CXX)" CMakeLists.txt
-          grep -F "WALK-DPI-253" missioncache.md
-          grep -F "WALK-RELEASE-262" missioncache.md
+          grep -F "project(Runner VERSION 0.7.21 LANGUAGES CXX)" CMakeLists.txt
+          grep -F "WALK-HUMAN-STATUS-263" missioncache.md
+          grep -F "WALK-RELEASE-275" missioncache.md
           grep -F "training_semantics_version = 0x0007'2001u" src/ppo.hpp
           grep -F "preview_sync::decide" src/autonomy_runtime.cpp
           grep -F "SDL_SetWindowIcon" src/main.cpp
           grep -F "push_clip" src/renderer.hpp
+          grep -F "WHAT THE TRAINER IS TELLING YOU" src/app.cpp
+          grep -F "ADVANCED DIAGNOSTICS" src/app.cpp
+          grep -F "TOTAL UPDATES =" src/training_explainer.hpp
           test -f tools/generate_runner_icon.py
           test -f tests/v0720_ui_tests.cpp
+          test -f tests/v0721_readable_telemetry_tests.cpp
           test -f docs/RUNNER_V0720_UI_PREVIEW_ICON.md
+          test -f docs/RUNNER_V0721_READABLE_TELEMETRY.md
           test ! -e tools/generate_v0719_sources.py
           test ! -e tools/apply_v0720_release.py
+          test ! -e tools/apply_v0721_readable_telemetry.py
           test ! -e .github/workflows/apply-v0720-release.yml
+          test ! -e .github/workflows/apply-v0721-readable-telemetry.yml
       - name: Configure
         env:
           CC: gcc-14
@@ -68,8 +75,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0720-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: runner-v0720-pr-${{ runner.os }}-
+          key: runner-v0721-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0721-pr-${{ runner.os }}-
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
@@ -90,6 +97,8 @@ jobs:
         shell: pwsh
         run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
+          $version = (& $exe --version | Out-String).Trim()
+          if ($version -ne 'Runner 0.7.21') { throw "Version mismatch: $version" }
           & $exe --diagnose-ui
           if ($LASTEXITCODE -ne 0) { throw 'UI diagnostic failed' }
           & $exe --diagnose-camera
