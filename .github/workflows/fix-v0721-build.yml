@@ -1,0 +1,52 @@
+name: Fix Runner v0.7.21 test dependency wiring
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'agent/v0721-readable-telemetry'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0721-readable-telemetry
+          fetch-depth: 0
+      - name: Link telemetry test to the complete core dependency graph
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('CMakeLists.txt')
+          text = path.read_text(encoding='utf-8')
+          old = '''    add_executable(RunnerV0721ReadableTelemetryTests
+              tests/v0721_readable_telemetry_tests.cpp)
+          target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
+              "${CMAKE_CURRENT_SOURCE_DIR}/src")
+          '''
+          new = '''    add_executable(RunnerV0721ReadableTelemetryTests
+              tests/v0721_readable_telemetry_tests.cpp)
+          target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)
+          target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
+              "${CMAKE_CURRENT_SOURCE_DIR}/src")
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('telemetry target marker not found exactly once')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          grep -F 'target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)' CMakeLists.txt
+      - name: Commit dependency repair
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CMakeLists.txt
+          git commit -m 'Fix v0.7.21 telemetry test dependencies'
+          git push origin HEAD:agent/v0721-readable-telemetry
