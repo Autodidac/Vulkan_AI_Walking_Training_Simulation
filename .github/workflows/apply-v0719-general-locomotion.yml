@@ -45,3 +45,5 @@ jobs:
           git add -A
           git commit -m 'Implement Runner v0.7.19 general locomotion'
           git push origin HEAD:agent/v0719-general-locomotion
+
+# trigger: cached missions 233-252
