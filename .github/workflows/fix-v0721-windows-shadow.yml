@@ -23,42 +23,45 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          app = Path('src/app.cpp')
+          text = app.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'const std::size_t\s+leg\s*=\s*motor_index / 2u;\n'
+              r'\s*const bool phase_a = leg == 0u \|\| leg == 3u;')
+          replacement = (
+              'const std::size_t support_leg = motor_index / 2u;\n'
+              '                        const bool phase_a = support_leg == 0u '
+              '|| support_leg == 3u;')
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'app shadow declaration matches: {count}')
+          app.write_text(text, encoding='utf-8', newline='\n')
+
+          expression = '${' + '{ runner.os }}'
+          for path, current, previous in (
+              ('.github/workflows/runner-pr-validation.yml',
+               'runner-v0721-pr-', 'runner-v0720-pr-'),
+              ('.github/workflows/runner-v0721-release.yml',
+               'runner-v0721-release-', 'runner-v0720-release-')):
               file = Path(path)
-              text = file.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected one match, found {count}')
-              file.write_text(text.replace(old, new, 1),
-                  encoding='utf-8', newline='\n')
-
-          replace_once('src/app.cpp',
-              '''                        const std::size_t leg = motor_index / 2u;
-                          const bool phase_a = leg == 0u || leg == 3u;
-              ''',
-              '''                        const std::size_t support_leg = motor_index / 2u;
-                          const bool phase_a = support_leg == 0u || support_leg == 3u;
-              ''')
-          replace_once('.github/workflows/runner-pr-validation.yml',
-              '''          restore-keys: runner-v0721-pr-${{ runner.os }}-
-              ''',
-              '''          restore-keys: |
-                            runner-v0721-pr-${{ runner.os }}-
-                            runner-v0720-pr-${{ runner.os }}-
-              ''')
-          replace_once('.github/workflows/runner-v0721-release.yml',
-              '''          restore-keys: runner-v0721-release-${{ runner.os }}-
-              ''',
-              '''          restore-keys: |
-                            runner-v0721-release-${{ runner.os }}-
-                            runner-v0720-release-${{ runner.os }}-
-              ''')
+              source = file.read_text(encoding='utf-8')
+              old = f'          restore-keys: {current}{expression}-\n'
+              new = (
+                  '          restore-keys: |\n'
+                  f'            {current}{expression}-\n'
+                  f'            {previous}{expression}-\n')
+              if old in source:
+                  source = source.replace(old, new, 1)
+              elif f'{previous}{expression}-' not in source:
+                  raise SystemExit(f'{path}: cache restore marker missing')
+              file.write_text(source, encoding='utf-8', newline='\n')
           PY
           git diff --check
           grep -F 'support_leg' src/app.cpp
-          grep -F 'runner-v0720-pr-${{ runner.os }}-' .github/workflows/runner-pr-validation.yml
-          grep -F 'runner-v0720-release-${{ runner.os }}-' .github/workflows/runner-v0721-release.yml
+          grep -F 'runner-v0720-pr-' .github/workflows/runner-pr-validation.yml
+          grep -F 'runner-v0720-release-' .github/workflows/runner-v0721-release.yml
       - name: Commit corrected Windows contract
         run: |
           set -euo pipefail
