@@ -3,6 +3,7 @@
 #include "pixel_art.hpp"
 #include "simulation.hpp"
 #include "training_explainer.hpp"
+#include "ui_render_contract.hpp"
 #include "ui_layout.hpp"
 #include "ui_font.hpp"
 #include "view_camera.hpp"
@@ -1132,7 +1133,7 @@ namespace runner
                 environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
                 pip_metrics, 0.70f, state_color, rect.size.x - 24.0f, 0.64f);
-            add_rounded_rect(canvas, rect, 10.0f, Color{}, accent_dim, 1.5f);
+            add_rounded_rect(canvas, rect, 10.0f, ui_render::transparent_fill, accent_dim, 1.5f);
         }
 
         void draw_live_panel(Rect rect, const InputState& input)
@@ -1184,7 +1185,7 @@ namespace runner
                 { progress_track.position,
                     { progress_track.size.x * progress.overall, progress_track.size.y } },
                 6.0f, human_color);
-            add_rounded_rect(canvas, progress_track, 6.0f, Color{}, border, 1.0f);
+            add_rounded_rect(canvas, progress_track, 6.0f, ui_render::transparent_fill, border, 1.0f);
             cursor.y += 21.0f;
             add_text_fit(canvas, cursor,
                 std::format("UPDATES {} / {}   ATTEMPTS {} / {}",
@@ -1545,7 +1546,7 @@ namespace runner
                     0.68f, accent, usable_width, 2.0f);
             }
             canvas.pop_clip();
-            add_rounded_rect(canvas, rect, 11.0f, Color{}, border, 1.0f);
+            add_rounded_rect(canvas, rect, 11.0f, ui_render::transparent_fill, border, 1.0f);
         }
 
         void draw_live_world(Rect viewport, float dt, const InputState& input)
@@ -1660,7 +1661,7 @@ namespace runner
                 0.86f, trainer.has_best_policy() ? green : yellow,
                 bottom.size.x - 22.0f, 0.76f);
             canvas.pop_clip();
-            add_rounded_rect(canvas, viewport, 11.0f, Color{}, border, 1.0f);
+            add_rounded_rect(canvas, viewport, 11.0f, ui_render::transparent_fill, border, 1.0f);
         }
 
         void draw_joint_lab(Rect rect, const InputState& input)
@@ -2401,7 +2402,7 @@ namespace runner
                     0.72f, muted, usable, 2.0f);
             }
             canvas.pop_clip();
-            add_rounded_rect(canvas, rect, 11.0f, Color{}, border, 1.0f);
+            add_rounded_rect(canvas, rect, 11.0f, ui_render::transparent_fill, border, 1.0f);
         }
 
         void process_shortcuts(const InputState& input)
@@ -2553,7 +2554,7 @@ namespace runner
                 add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
                     "SIDE VIEW  |  DRAG NODE  |  SHIFT ADD  |  CTRL CONNECT  |  ALT SELECT BONE",
                     0.80f, muted, world.size.x - 36.0f, 0.68f);
-                add_rounded_rect(canvas, world, 11.0f, Color{}, border, 1.0f);
+                add_rounded_rect(canvas, world, 11.0f, ui_render::transparent_fill, border, 1.0f);
             }
 
             if (input.left_released && rig_edit_pending)
