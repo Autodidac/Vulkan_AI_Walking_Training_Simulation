@@ -1,17 +1,16 @@
 name: Cache Runner v0.7.23 gray-frame hotfix
 
 on:
-  push:
-    branches: [agent/v0723-gray-frame-hotfix]
-    paths:
-      - tools/cache_v0723_gray_frame.py
-      - .github/workflows/cache-v0723-gray-frame.yml
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   cache:
+    if: github.head_ref == 'agent/v0723-gray-frame-hotfix'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
