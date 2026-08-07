@@ -11,5 +11,8 @@ def replace_first(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+# The refinement script deliberately patches several repeated reward fragments;
+# execute them deterministically in source order instead of treating duplicates
+# as an error in the temporary migration tool.
 executor.replace_once = replace_first
 raise SystemExit(executor.main())
