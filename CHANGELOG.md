@@ -1,3 +1,14 @@
+## 0.7.20
+
+- Fixed high-DPI coordinate mismatch by separating logical UI dimensions from Vulkan drawable dimensions.
+- Added deterministic Canvas clipping for the world viewport and training PIP.
+- Rebuilt live telemetry, PIP, bottom status, panel spacing, and text sizing around shared layout boxes.
+- Stopped immutable publication from resetting the large preview on every training update.
+- Preserved complete live episodes when a better retained champion is published.
+- Folded generated v0.7.19 patches into canonical C++23 sources and removed the source rewriter.
+- Added transparent PNG, SDL BMP, and multi-resolution embedded Windows application icons.
+- Added deterministic UI, DPI, clipping, preview-reset, and icon-format regression tests.
+
 ## 0.7.19
 
 - Added balance-reserve-aware general locomotion planning for walk, run, recover, crawl, and flee behavior.

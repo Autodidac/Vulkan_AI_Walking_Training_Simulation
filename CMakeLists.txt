@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.19 LANGUAGES CXX)
+project(Runner VERSION 0.7.20 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -10,17 +10,21 @@ option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-set(RUNNER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-v0719")
-file(MAKE_DIRECTORY "${RUNNER_GENERATED_DIR}")
+set(RUNNER_GENERATED_ASSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
+file(MAKE_DIRECTORY "${RUNNER_GENERATED_ASSET_DIR}")
 execute_process(
     COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_v0719_sources.py"
-        "${RUNNER_GENERATED_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_runner_icon.py"
+        "${RUNNER_GENERATED_ASSET_DIR}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE RUNNER_GENERATE_RESULT)
-if(NOT RUNNER_GENERATE_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner v0.7.19 deterministic source generation failed")
+    RESULT_VARIABLE RUNNER_ICON_RESULT)
+if(NOT RUNNER_ICON_RESULT EQUAL 0)
+    message(FATAL_ERROR "Runner v0.7.20 icon generation failed")
 endif()
+set(RUNNER_ICON_PNG "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.png")
+set(RUNNER_ICON_PNG_512 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_512.png")
+set(RUNNER_ICON_BMP "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.bmp")
+set(RUNNER_ICON_ICO "${RUNNER_GENERATED_ASSET_DIR}/runner.ico")
 
 include(FetchContent)
 set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
@@ -48,9 +52,9 @@ add_library(RunnerCore STATIC
     src/self_imitation.cpp
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
-    "${RUNNER_GENERATED_DIR}/autonomy_commands.cpp"
-    "${RUNNER_GENERATED_DIR}/autonomy_curriculum.cpp"
-    "${RUNNER_GENERATED_DIR}/autonomy_persistence.cpp")
+    src/autonomy_commands.cpp
+    src/autonomy_curriculum.cpp
+    src/autonomy_persistence.cpp)
 add_library(Runner::Core ALIAS RunnerCore)
 target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 target_link_libraries(RunnerCore PUBLIC Threads::Threads SandHybrid::SandHybrid)
@@ -100,11 +104,12 @@ if(RUNNER_BUILD_APP)
     add_custom_target(RunnerShaders DEPENDS ${RUNNER_SHADER_OUTPUTS})
 
     add_executable(Runner
-        "${RUNNER_GENERATED_DIR}/main.cpp"
-        "${RUNNER_GENERATED_DIR}/app.cpp"
+        src/main.cpp
+        src/app.cpp
         src/canvas.cpp src/renderer.cpp
         src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
-        src/ui_font.hpp src/view_camera.hpp src/locomotion_strategy.hpp)
+        src/ui_font.hpp src/ui_layout.hpp src/view_camera.hpp
+        src/locomotion_strategy.hpp src/preview_sync.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
@@ -117,8 +122,20 @@ if(RUNNER_BUILD_APP)
         VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:Runner>")
     runner_enable_warnings(Runner)
 
+    if(WIN32)
+        string(REPLACE "\\" "/" RUNNER_ICON_ICO_RC "${RUNNER_ICON_ICO}")
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/runner_icon.rc.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/runner_icon.rc" @ONLY)
+        target_sources(Runner PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/runner_icon.rc")
+    endif()
+
     add_custom_command(TARGET Runner POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/assets/ui"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_PNG}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner_icon.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_PNG_512}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner_icon_512.png"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_BMP}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner_icon.bmp"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_ICO}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner.ico"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${RUNNER_SHADER_OUTPUT_DIR}" "$<TARGET_FILE_DIR:Runner>/shaders"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/docs"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md" "$<TARGET_FILE_DIR:Runner>/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
@@ -127,6 +144,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0720_UI_PREVIEW_ICON.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0720_UI_PREVIEW_ICON.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -134,6 +152,8 @@ if(RUNNER_BUILD_APP)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION .)
     install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
+    install(FILES "${RUNNER_ICON_PNG}" "${RUNNER_ICON_PNG_512}"
+        "${RUNNER_ICON_BMP}" "${RUNNER_ICON_ICO}" DESTINATION assets/ui)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
@@ -141,6 +161,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0720_UI_PREVIEW_ICON.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
@@ -188,6 +209,16 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerV0719GeneralLocomotionTests)
     add_test(NAME Runner.V0719GeneralLocomotion COMMAND RunnerV0719GeneralLocomotionTests)
     set_tests_properties(Runner.V0719GeneralLocomotion PROPERTIES TIMEOUT 30)
+
+    add_executable(RunnerV0720UiTests
+        tests/v0720_ui_tests.cpp src/canvas.cpp)
+    target_include_directories(RunnerV0720UiTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0720UiTests PRIVATE cxx_std_23)
+    target_compile_definitions(RunnerV0720UiTests PRIVATE
+        RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}")
+    runner_enable_warnings(RunnerV0720UiTests)
+    add_test(NAME Runner.V0720Ui COMMAND RunnerV0720UiTests)
+    set_tests_properties(Runner.V0720Ui PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
@@ -239,5 +270,7 @@ if(RUNNER_BUILD_TESTS)
         set_tests_properties(Runner.PackageLayout PROPERTIES TIMEOUT 30)
         add_test(NAME Runner.CameraDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-camera)
         set_tests_properties(Runner.CameraDiagnostic PROPERTIES TIMEOUT 30)
+        add_test(NAME Runner.UiDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-ui)
+        set_tests_properties(Runner.UiDiagnostic PROPERTIES TIMEOUT 30)
     endif()
 endif()

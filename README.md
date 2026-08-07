@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.19 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.20 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -83,8 +83,17 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the crouch/gait/stub-foot correction.
 - [`docs/RUNNER_V0718_RUNTIME_RECOVERY.md`](docs/RUNNER_V0718_RUNTIME_RECOVERY.md) documents the update-loop, marker, control, telemetry, skin, and walking recovery.
 - [`docs/RUNNER_V0719_GENERAL_LOCOMOTION.md`](docs/RUNNER_V0719_GENERAL_LOCOMOTION.md) documents balance reserve, terrain adaptation, running, reversal, flee behavior, and emergency recovery.
+- [`docs/RUNNER_V0720_UI_PREVIEW_ICON.md`](docs/RUNNER_V0720_UI_PREVIEW_ICON.md) documents logical DPI, clipping, preview continuity, and application icon integration.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.20 UI and preview continuity
+
+- Uses logical SDL coordinates end-to-end for readable Windows high-DPI rendering.
+- Clips world and PIP geometry to their cards instead of allowing terrain or markers behind the GUI.
+- Keeps the large live preview running across normal training publications and retained champion updates.
+- Builds canonical C++23 source directly; the configure-time source patcher is gone.
+- Embeds and packages a complete high-contrast Runner icon set.
 
 ## v0.7.19 general locomotion
 

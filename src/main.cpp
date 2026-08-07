@@ -2,6 +2,7 @@
 #include "app.hpp"
 #include "pixel_art.hpp"
 #include "renderer.hpp"
+#include "ui_layout.hpp"
 #include "view_camera.hpp"
 
 #include <SDL3/SDL.h>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -74,6 +76,14 @@ namespace
             && std::string_view(argv[1]) == "--diagnose-camera";
     }
 
+    [[nodiscard]] bool wants_ui_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-ui";
+    }
+
     [[nodiscard]] std::filesystem::path executable_directory()
     {
         const char* const base_path = SDL_GetBasePath();
@@ -89,7 +99,10 @@ namespace
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv",
             std::filesystem::path{ "docs" } / "SANDHYBRID_INTEGRATION_BRIDGE.md",
-            std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md"
+            std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md",
+            std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
+            std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
+            std::filesystem::path{ "assets" } / "ui" / "runner.ico"
         };
         std::error_code filesystem_error{};
         for (const std::filesystem::path& relative : required_files)
@@ -216,6 +229,22 @@ if (wants_camera_diagnostic(argc, argv))
     return valid ? 0 : 1;
 }
 
+    if (wants_ui_diagnostic(argc, argv))
+    {
+        bool valid = true;
+        for (const auto& size : runner::ui_layout::validation_sizes)
+            valid = valid && runner::ui_layout::live_layout_valid(size[0], size[1]);
+        const runner::ui_layout::SurfaceScale dpi =
+            runner::ui_layout::logical_surface_scale(1600.0f, 900.0f,
+                2400.0f, 1350.0f);
+        valid = valid && std::abs(dpi.x - 1.5f) < 1.0e-5f
+            && std::abs(dpi.y - 1.5f) < 1.0e-5f;
+        std::printf("Runner %s UI diagnostic: %s; layouts=%zu dpi=%.2fx%.2f\\n",
+            RUNNER_VERSION, valid ? "passed" : "failed",
+            runner::ui_layout::validation_sizes.size(), dpi.x, dpi.y);
+        return valid ? 0 : 1;
+    }
+
     if (wants_acceptance_diagnostic(argc, argv))
     {
         const runner::acceptance::Report report =
@@ -319,6 +348,13 @@ if (wants_camera_diagnostic(argc, argv))
         return 1;
     }
     SDL_SetWindowMinimumSize(window, 1280, 820);
+    const std::filesystem::path icon_path = base_directory
+        / RUNNER_ASSET_DIRECTORY / "ui" / "runner_icon.bmp";
+    if (SDL_Surface* icon = SDL_LoadBMP(icon_path.string().c_str()); icon != nullptr)
+    {
+        SDL_SetWindowIcon(window, icon);
+        SDL_DestroySurface(icon);
+    }
 
     runner::render::VulkanRenderer renderer{};
     std::string error{};
@@ -378,6 +414,10 @@ if (wants_camera_diagnostic(argc, argv))
                     case SDL_SCANCODE_1: input.key_1_pressed = true; break;
                     case SDL_SCANCODE_2: input.key_2_pressed = true; break;
                     case SDL_SCANCODE_3: input.key_3_pressed = true; break;
+                    case SDL_SCANCODE_TAB: input.tab_pressed = true; break;
+                    case SDL_SCANCODE_T: input.totals_pressed = true; break;
+                    case SDL_SCANCODE_U: input.units_pressed = true; break;
+                    case SDL_SCANCODE_A: input.art_pressed = true; break;
                     case SDL_SCANCODE_S: input.save_pressed = true; break;
                     case SDL_SCANCODE_L: input.load_pressed = true; break;
                     case SDL_SCANCODE_R: input.reset_pressed = true; break;
@@ -399,11 +439,7 @@ if (wants_camera_diagnostic(argc, argv))
         int drawable_height{};
         SDL_GetWindowSize(window, &logical_width, &logical_height);
         SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
-        const float mouse_scale_x = logical_width > 0
-            ? static_cast<float>(drawable_width) / static_cast<float>(logical_width) : 1.0f;
-        const float mouse_scale_y = logical_height > 0
-            ? static_cast<float>(drawable_height) / static_cast<float>(logical_height) : 1.0f;
-        input.mouse = { mouse_x * mouse_scale_x, mouse_y * mouse_scale_y };
+        input.mouse = { mouse_x, mouse_y };
         input.mouse_delta = input.mouse - previous_mouse;
         previous_mouse = input.mouse;
         input.left_down = is_down(mouse_buttons, SDL_BUTTON_LMASK);
@@ -417,9 +453,11 @@ if (wants_camera_diagnostic(argc, argv))
             1.0f / 240.0f, 1.0f / 15.0f);
         previous_ticks = current_ticks;
 
+        SDL_GetWindowSize(window, &logical_width, &logical_height);
         SDL_GetWindowSizeInPixels(window, &drawable_width, &drawable_height);
-        application.frame(input, dt, drawable_width, drawable_height);
-        if (!renderer.render(application.vertices(), drawable_width, drawable_height, error))
+        application.frame(input, dt, logical_width, logical_height);
+        if (!renderer.render(application.vertices(), logical_width, logical_height,
+            drawable_width, drawable_height, error))
         {
             std::fprintf(stderr, "Render failure: %s\n", error.c_str());
             running = false;

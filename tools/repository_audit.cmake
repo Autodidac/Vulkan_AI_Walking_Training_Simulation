@@ -5,23 +5,18 @@ endif()
 foreach(required IN ITEMS
         AGENTS.md CHANGELOG.md missioncache.md README.md
         docs/SANDHYBRID_INTEGRATION_BRIDGE.md
-        docs/RUNNER_V0716_CAMERA_BATCH.md
-        docs/RUNNER_V0717_EYE_TEST_CORRECTION.md
         docs/RUNNER_V0718_RUNTIME_RECOVERY.md
-        tools/generate_v0719_sources.py
+        docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
+        docs/RUNNER_V0720_UI_PREVIEW_ICON.md
+        assets/ui/runner_icon_concept.svg
+        tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
-        docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
+        tests/v0720_ui_tests.cpp
         src/locomotion_strategy.hpp
-        assets/optional/runner_armor_concepts/PROVENANCE.md
-        assets/optional/runner_armor_concepts/source/concept_modular_pair.ppm
-        assets/optional/runner_armor_concepts/source/concept_humanoid_parts.ppm
-        assets/optional/runner_armor_concepts/source/concept_helmeted_parts.ppm
-        assets/optional/runner_armor_concepts/source/concept_pixel_parts.ppm
-        assets/optional/runner_armor_concepts/runtime/foot_side.ppm
-        assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
-        assets/optional/runner_armor_concepts/runtime/torso_side.ppm
-        assets/optional/runner_armor_concepts/runtime/weapon_side.ppm)
+        src/preview_sync.hpp
+        src/runner_icon.rc.in
+        src/ui_layout.hpp)
     if(NOT EXISTS "${RUNNER_SOURCE_DIR}/${required}")
         message(FATAL_ERROR "Missing required repository file: ${required}")
     endif()
@@ -29,63 +24,69 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.19 LANGUAGES CXX)"
-        "generate_v0719_sources.py"
-        "RunnerV0718RuntimeRecoveryTests"
-        "RunnerV0719GeneralLocomotionTests"
-        "RUNNER_V0718_RUNTIME_RECOVERY.md"
-        "RUNNER_V0719_GENERAL_LOCOMOTION.md")
+        "project(Runner VERSION 0.7.20 LANGUAGES CXX)"
+        "generate_runner_icon.py"
+        "src/autonomy_commands.cpp"
+        "src/main.cpp"
+        "RunnerV0720UiTests"
+        "RUNNER_V0720_UI_PREVIEW_ICON.md"
+        "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.19 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake v0.7.20 contract missing: ${reference}")
+    endif()
+endforeach()
+foreach(stale IN ITEMS
+        "RUNNER_GENERATED_DIR"
+        "generate_v0719_sources.py"
+        "generated-v0719")
+    string(FIND "${cmake_text}" "${stale}" pos)
+    if(NOT pos EQUAL -1)
+        message(FATAL_ERROR "Stale generated-source contract remains: ${stale}")
     endif()
 endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/missioncache.md" mission_text)
 foreach(reference IN ITEMS
-        "WALK-RUNTIME-RESET-211"
-        "WALK-TOTAL-UPDATES-212"
-        "WALK-MARKERS-214"
-        "WALK-WALK-BOOTSTRAP-219"
-        "WALK-RELEASE-225"
-        "WALK-BALANCE-RESERVE-233"
-        "WALK-GENERAL-TEST-249"
-        "WALK-RELEASE-252"
-        "Runner v0.7.20 equipment, carry, and target curriculum")
+        "WALK-DPI-253"
+        "WALK-CLIP-254"
+        "WALK-PREVIEW-CONTINUITY-257"
+        "WALK-ICON-260"
+        "WALK-RELEASE-262")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.19 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.20 contract missing: ${reference}")
     endif()
 endforeach()
 
-file(READ "${RUNNER_SOURCE_DIR}/src/autonomy.hpp" autonomy_text)
+file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_runtime.cpp" runtime_text)
 foreach(reference IN ITEMS
-        "nursery_policy_reset_allowed"
-        "stage_fresh_updates"
-        "stage_required_updates")
-    string(FIND "${autonomy_text}" "${reference}" pos)
+        "preview_sync::decide"
+        "if (decision.replace_course)"
+        "if (decision.reset_episode)")
+    string(FIND "${runtime_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Autonomy recovery contract missing: ${reference}")
+        message(FATAL_ERROR "Preview continuity contract missing: ${reference}")
     endif()
 endforeach()
 
-file(READ "${RUNNER_SOURCE_DIR}/src/ui_layout.hpp" layout_text)
-string(FIND "${layout_text}" "10.0f : 15.24f" marker_pos)
-if(marker_pos EQUAL -1)
-    message(FATAL_ERROR "Near-course marker spacing no longer satisfies the retained v0.7.18 contract")
-endif()
-
-file(READ "${RUNNER_SOURCE_DIR}/tools/generate_v0719_sources.py" generator_text)
+file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
 foreach(reference IN ITEMS
-        "EXTENDED NURSERY BUDGET EXHAUSTED"
-        "TOTAL UPDATES"
-        "START"
-        "TAB VIEW"
-        "runner-v0719-general-autosave.eppo"
-        "optional_art_enabled{ false }")
-    string(FIND "${generator_text}" "${reference}" pos)
+        "--diagnose-ui"
+        "SDL_SetWindowIcon"
+        "application.frame(input, dt, logical_width, logical_height)"
+        "logical_width, logical_height")
+    string(FIND "${main_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Generated v0.7.19 runtime contract missing: ${reference}")
+        message(FATAL_ERROR "DPI/icon runtime contract missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/renderer.hpp" renderer_text)
+foreach(reference IN ITEMS "push_clip" "canvas_width" "drawable_width")
+    string(FIND "${renderer_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Renderer clipping/DPI contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -94,31 +95,15 @@ if(release_notes)
     message(FATAL_ERROR "Per-release note files remain; CHANGELOG.md is canonical")
 endif()
 
-file(GLOB_RECURSE markdown_files "${RUNNER_SOURCE_DIR}/*.md")
-foreach(path IN LISTS markdown_files)
-    if(path MATCHES "/build/")
-        continue()
-    endif()
-    get_filename_component(name "${path}" NAME)
-    string(TOLOWER "${name}" lower_name)
-    if(lower_name MATCHES "mission" AND NOT lower_name STREQUAL "missioncache.md")
-        message(FATAL_ERROR "Duplicate mission document remains: ${path}")
-    endif()
-endforeach()
-
 foreach(stale IN ITEMS
-        tools/v0719.trigger
-        tools/v0719.prtrigger
-        tools/v0719-executor-merge-trigger.txt
-        tools/apply_v0719_general_locomotion.py
-        tools/run_v0719_executor.py
-        tools/finalize_v0719_general_locomotion.py
-        tools/fix_v0719_compile.py
-        .github/workflows/apply-v0719-general-locomotion.yml
-        .github/workflows/fix-v0719-compile.yml)
+        tools/generate_v0719_sources.py
+        tools/apply_v0720_release.py
+        tools/fix_v0720_validation.py
+        .github/workflows/apply-v0720-release.yml
+        .github/workflows/fix-v0720-validation.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
-        message(FATAL_ERROR "Temporary v0.7.19 executor file remains: ${stale}")
+        message(FATAL_ERROR "Temporary or stale source generator remains: ${stale}")
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.19 repository hygiene passed")
+message(STATUS "Runner v0.7.20 repository hygiene passed")

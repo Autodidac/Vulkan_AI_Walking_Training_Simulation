@@ -1,4 +1,5 @@
 #include "autonomy.hpp"
+#include "preview_sync.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -95,15 +96,20 @@ namespace runner::rl
         const bool course_changed = snapshot.status.stage != cached_status_.stage
             || std::abs(snapshot.status.difficulty - cached_status_.difficulty) > 1.0e-5f;
 
-        if (rig_changed)
+        const preview_sync::Decision decision = preview_sync::decide(
+            rig_changed, course_changed, best_changed);
+        if (decision.replace_blueprint)
         {
             live_blueprint_ = snapshot.blueprint;
             live_.set_blueprint(live_blueprint_, false);
         }
-        live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
-        live_.policy().parameters() = snapshot.parameters;
-        if (rig_changed || best_changed || course_changed)
-            live_.reset_preview(0xDEADBEEFu + snapshot.metrics.update + snapshot.metrics.best_update);
+        if (decision.replace_course)
+            live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
+        if (decision.adopt_controller)
+            live_.policy().parameters() = snapshot.parameters;
+        if (decision.reset_episode)
+            live_.reset_preview(0xDEADBEEFu
+                + snapshot.metrics.update + snapshot.metrics.best_update);
 
         cached_metrics_ = snapshot.metrics;
         cached_reward_history_ = std::move(snapshot.reward_history);

@@ -22,7 +22,7 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 13\n";
+            output << "RUNAUTONOMY 15\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << '\n';
             output.close();
@@ -55,7 +55,7 @@ namespace runner::rl
             int stage_value{};
             input >> magic >> version >> stage_value >> difficulty >> rig_generation
                 >> accepted >> rejected >> rollback;
-            if (!input || magic != "RUNAUTONOMY" || version != 13
+            if (!input || magic != "RUNAUTONOMY" || version != 15
                 || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
@@ -131,6 +131,17 @@ namespace runner::rl
         snapshot.status.rollout_threads = worker_.rollout_worker_count();
         snapshot.status.environment_count = worker_.environment_count();
         snapshot.status.pending_commands = pending_command_count();
+        const TrainingMetrics& stage_metrics = worker_.metrics();
+        snapshot.status.stage_fresh_updates = stage_metrics.total_updates >= stage_entry_total_updates_
+            ? stage_metrics.total_updates - stage_entry_total_updates_ : 0u;
+        snapshot.status.stage_required_updates = stage_minimum_fresh_updates(stage_);
+        snapshot.status.stage_fresh_episodes = stage_metrics.total_episodes >= stage_entry_total_episodes_
+            ? stage_metrics.total_episodes - stage_entry_total_episodes_ : 0u;
+        snapshot.status.stage_required_episodes = stage_minimum_fresh_episodes(stage_);
+        snapshot.status.stage_fresh_evaluations = stage_metrics.evaluation_count >= stage_entry_evaluation_count_
+            ? stage_metrics.evaluation_count - stage_entry_evaluation_count_ : 0u;
+        snapshot.status.stage_required_evaluations = static_cast<std::uint64_t>(
+            required_mastery_confirmations(stage_));
         snapshot.status.updates_per_second = worker_updates_per_second_;
         snapshot.status.speed_mode = updates_per_cycle_.load(std::memory_order_relaxed);
         snapshot.status.worker_busy = worker_busy_.load(std::memory_order_relaxed);

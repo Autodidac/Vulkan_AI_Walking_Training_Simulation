@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Runner autonomous physics locomotion trainer icon</title>
+  <desc id="desc">A gold articulated runner crosses deformable terrain between cyan speed trails and amber thrown-object warnings.</desc>
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15d7ff"/>
+      <stop offset="0.48" stop-color="#26323c"/>
+      <stop offset="1" stop-color="#ffad19"/>
+    </linearGradient>
+    <linearGradient id="limb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff2a4"/>
+      <stop offset="0.55" stop-color="#e6c684"/>
+      <stop offset="1" stop-color="#ff7a19"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="18" y="18" width="988" height="988" rx="122" fill="#03080d" stroke="#111820" stroke-width="32"/>
+  <rect x="47" y="47" width="930" height="930" rx="96" fill="none" stroke="url(#frame)" stroke-width="12"/>
+  <g opacity="0.22" stroke="#1d657f" stroke-width="2">
+    <path d="M130 130H894M130 230H894M130 330H894M130 430H894M130 530H894M130 630H894"/>
+    <path d="M160 100V700M300 100V700M440 100V700M580 100V700M720 100V700M860 100V700"/>
+    <circle cx="510" cy="390" r="250" fill="none"/><circle cx="510" cy="390" r="170" fill="none"/>
+  </g>
+  <g filter="url(#glow)" stroke="#17d8ff" stroke-linecap="round">
+    <path d="M82 238H353" stroke-width="10"/><path d="M82 292H306" stroke-width="7"/>
+    <path d="M82 360H370" stroke-width="13"/><path d="M82 420H315" stroke-width="8"/>
+    <path d="M82 485H265" stroke-width="6"/>
+  </g>
+  <g filter="url(#glow)" stroke="#ffb31f" stroke-width="7" stroke-linecap="round">
+    <path d="M742 246V430"/><path d="M790 212V405"/><path d="M840 274V455"/><path d="M888 232V394"/>
+    <circle cx="742" cy="246" r="11" fill="#ff4b2f" stroke="none"/>
+    <circle cx="790" cy="212" r="11" fill="#ff4b2f" stroke="none"/>
+    <circle cx="840" cy="274" r="11" fill="#ff4b2f" stroke="none"/>
+    <circle cx="888" cy="232" r="11" fill="#ff4b2f" stroke="none"/>
+  </g>
+  <g fill="#ffbf25" font-family="monospace" font-weight="700">
+    <text x="660" y="145" font-size="42">HAZARD:</text>
+    <text x="660" y="190" font-size="42">THROWN OBJECT</text>
+  </g>
+  <path d="M48 680L190 666L266 712L365 690L446 640L534 662L616 614L712 635L794 674L976 662V792H48Z" fill="#d69a25"/>
+  <path d="M48 718L186 704L276 748L370 726L450 682L542 704L622 660L720 686L808 720L976 708V816H48Z" fill="#704315"/>
+  <path d="M48 774L188 758L280 798L378 780L464 738L550 760L634 724L728 750L820 782L976 772V840H48Z" fill="#34373b"/>
+  <g stroke="url(#limb)" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)">
+    <path d="M548 248L482 330L436 443" stroke-width="50"/>
+    <path d="M488 336L370 328L300 382" stroke-width="34"/>
+    <path d="M492 340L592 358L660 420" stroke-width="34"/>
+    <path d="M436 443L332 556L184 672" stroke-width="38"/>
+    <path d="M436 443L520 566L650 668" stroke-width="42"/>
+    <path d="M152 687H258" stroke="#ff7a19" stroke-width="30"/>
+    <path d="M626 681H735" stroke="#ff7a19" stroke-width="30"/>
+  </g>
+  <g fill="#ffe17a" filter="url(#glow)">
+    <circle cx="565" cy="220" r="56"/><circle cx="488" cy="336" r="25"/>
+    <circle cx="370" cy="328" r="22"/><circle cx="300" cy="382" r="22"/>
+    <circle cx="592" cy="358" r="22"/><circle cx="660" cy="420" r="22"/>
+    <circle cx="436" cy="443" r="38" fill="#a98f70"/>
+    <circle cx="332" cy="556" r="25"/><circle cx="520" cy="566" r="25" fill="#ff8b20"/>
+    <circle cx="184" cy="672" r="17"/><circle cx="650" cy="668" r="17"/>
+  </g>
+  <text x="512" y="924" text-anchor="middle" fill="#f2f5f7" stroke="#12171d" stroke-width="6" paint-order="stroke" font-family="Arial Black, sans-serif" font-style="italic" font-size="132">RUNNER</text>
+  <text x="512" y="965" text-anchor="middle" fill="#1ed4ff" font-family="Arial, sans-serif" font-weight="700" letter-spacing="7" font-size="28">AUTONOMOUS PHYSICS LOCOMOTION TRAINER</text>
+</svg>

@@ -124,14 +124,19 @@ namespace runner::rl
                 return;
             }
             if (catastrophic_invalid && !worker_.has_best_policy()
-                && metrics.evaluation_count % 3u == 0u)
+                && nursery_policy_reset_allowed(stage_, fresh_updates, fresh_evaluations))
             {
-                worker_.reset_policy(0x715000u
-                    + metrics.evaluation_count * 0x9E3779B97F4A7C15ULL);
+                worker_.reset_policy(0x720000u
+                    + metrics.total_updates * 0x9E3779B97F4A7C15ULL);
                 worker_.set_course(stage_, difficulty_, false);
                 mastery_streak_ = 0;
                 degradation_streak_ = 0;
-                worker_message_ = "NO VALID CHAMPION AFTER THREE EVALUATIONS - RESET POLICY NURSERY";
+                const TrainingMetrics& restarted = worker_.metrics();
+                stage_entry_total_updates_ = restarted.total_updates;
+                stage_entry_total_episodes_ = restarted.total_episodes;
+                stage_entry_evaluation_count_ = restarted.evaluation_count;
+                stage_entry_baseline_initialized_ = true;
+                worker_message_ = "EXTENDED NURSERY BUDGET EXHAUSTED - FRESH POLICY STARTED; TOTALS PRESERVED";
                 queue_autosave();
                 return;
             }
