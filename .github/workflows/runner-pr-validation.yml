@@ -21,10 +21,22 @@ jobs:
           sudo apt-get install -y g++-14 ninja-build python3
       - name: Source audit
         run: |
+          set -euo pipefail
           git diff --check
-          grep -F "project(Runner VERSION 0.7.18 LANGUAGES CXX)" CMakeLists.txt
-          grep -F "WALK-COURSE-FRAME-226" missioncache.md
-          grep -F "training_semantics_version = 0x0007'1801u" src/ppo.hpp
+          grep -F "project(Runner VERSION 0.7.19 LANGUAGES CXX)" CMakeLists.txt
+          grep -F "WALK-BALANCE-RESERVE-233" missioncache.md
+          grep -F "WALK-RELEASE-252" missioncache.md
+          grep -F "training_semantics_version = 0x0007'1901u" src/ppo.hpp
+          grep -F "course_stage_ == sim::CourseStage::balance" src/ppo_trainer.cpp
+          grep -F "preview_policy_" src/ppo_trainer.cpp
+          test -f src/locomotion_strategy.hpp
+          test -f tests/v0719_general_locomotion_tests.cpp
+          test -f docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
+          test -f tools/generate_v0719_sources.py
+          test ! -e tools/apply_v0719_general_locomotion.py
+          test ! -e tools/run_v0719_executor.py
+          test ! -e tools/v0719.prtrigger
+          test ! -e tools/__pycache__
       - name: Configure
         env:
           CC: gcc-14
