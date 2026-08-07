@@ -1,0 +1,38 @@
+name: Cache Runner v0.7.24 structural metrics icon work
+
+on:
+  push:
+    branches: [agent/v0724-structural-metrics-icon]
+    paths:
+      - tools/cache_v0724_structural_metrics_icon.py
+
+permissions:
+  contents: write
+
+jobs:
+  cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0724-structural-metrics-icon
+          fetch-depth: 0
+      - name: Cache observed failures
+        run: |
+          set -euo pipefail
+          python3 tools/cache_v0724_structural_metrics_icon.py
+          git diff --check
+          grep -F 'WALK-SCREENSHOT-ICON-296' missioncache.md
+          grep -F 'WALK-BONE-LENGTH-297' missioncache.md
+          grep -F 'WALK-DEBUG-TRUTH-300' missioncache.md
+          grep -F 'WALK-RELEASE-306' missioncache.md
+          grep -F '# Runner v0.7.25 equipment' missioncache.md
+      - name: Commit mission cache
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git commit -m 'Cache Runner v0.7.24 structural and telemetry missions'
+          git push origin HEAD:agent/v0724-structural-metrics-icon
