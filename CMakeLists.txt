@@ -233,6 +233,16 @@ if(RUNNER_BUILD_TESTS)
         COMMAND RunnerV0721ReadableTelemetryTests)
     set_tests_properties(Runner.V0721ReadableTelemetry PROPERTIES TIMEOUT 30)
 
+    add_executable(RunnerV0721RigGaitTests
+        tests/v0721_rig_gait_tests.cpp)
+    target_link_libraries(RunnerV0721RigGaitTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0721RigGaitTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0721RigGaitTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0721RigGaitTests)
+    add_test(NAME Runner.V0721RigGait COMMAND RunnerV0721RigGaitTests)
+    set_tests_properties(Runner.V0721RigGait PROPERTIES TIMEOUT 90)
+
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)
     target_compile_features(RunnerCoreTests PRIVATE cxx_std_23)

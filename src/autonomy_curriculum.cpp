@@ -544,6 +544,72 @@ namespace runner::rl
         return result;
     }
 
+    RigMutationCandidate automatic_rig_tuning_candidate(
+        const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept
+    {
+        RigMutationCandidate result{};
+        result.blueprint = source;
+        sim::CreatureBlueprint& candidate = result.blueprint;
+        const std::uint64_t original_signature = source.signature();
+        const float direction = ((generation / 3u) & 1u) == 0u ? 1.0f : -1.0f;
+        switch (generation % 3u)
+        {
+        case 0u:
+        {
+            result.kind = RigMutationKind::motor_strength;
+            if (candidate.active_motor_count > 0u)
+            {
+                const std::size_t index = static_cast<std::size_t>(
+                    generation % candidate.active_motor_count);
+                candidate.motors[index].strength = clamp(
+                    candidate.motors[index].strength + direction * 0.0020f,
+                    0.020f, 0.11f);
+            }
+            break;
+        }
+        case 1u:
+        {
+            result.kind = RigMutationKind::joint_range;
+            if (candidate.active_motor_count > 0u)
+            {
+                const std::size_t index = static_cast<std::size_t>(
+                    generation % candidate.active_motor_count);
+                sim::MotorConstraint& motor = candidate.motors[index];
+                const float delta = direction * 1.5f * pi / 180.0f;
+                const float negative = clamp(
+                    motor.neutral_angle - motor.minimum_angle + delta,
+                    2.0f * pi / 180.0f, 120.0f * pi / 180.0f);
+                const float positive = clamp(
+                    motor.maximum_angle - motor.neutral_angle + delta,
+                    2.0f * pi / 180.0f, 120.0f * pi / 180.0f);
+                motor.minimum_angle = motor.neutral_angle - negative;
+                motor.maximum_angle = motor.neutral_angle + positive;
+            }
+            break;
+        }
+        default:
+        {
+            result.kind = RigMutationKind::bone_stiffness;
+            if (!candidate.bones.empty())
+            {
+                const std::size_t index = static_cast<std::size_t>(
+                    generation % candidate.bones.size());
+                candidate.bones[index].stiffness = clamp(
+                    candidate.bones[index].stiffness + direction * 0.025f,
+                    0.20f, 1.0f);
+            }
+            break;
+        }
+        }
+        result.changed = candidate.valid()
+            && candidate.signature() != original_signature;
+        result.topology_changed = false;
+        result.activated_motor_mask = 0u;
+        if (!result.changed)
+            result.blueprint = source;
+        return result;
+    }
+
     float AutonomousTrainer::evaluate_rig_locked(
         const sim::CreatureBlueprint& candidate, const PolicyNetwork& policy) const
     {
@@ -616,7 +682,8 @@ namespace runner::rl
 
     RigMutationCandidate AutonomousTrainer::mutate_rig_locked() noexcept
     {
-        return evolve_rig_candidate(worker_.blueprint(), rig_generation_);
+        return automatic_rig_tuning_candidate(
+            worker_.blueprint(), rig_generation_);
     }
 
     void AutonomousTrainer::attempt_rig_evolution_locked()
@@ -630,7 +697,7 @@ namespace runner::rl
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "RIG GENERATION {} REJECTED - INVALID/EMPTY {} MUTATION",
+                "CONTROLLER TUNING {} SKIPPED - INVALID/EMPTY {} CHANGE",
                 rig_generation_, mutation_name(mutation.kind));
             return;
         }
@@ -643,7 +710,7 @@ namespace runner::rl
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "TOPOLOGY NURSERY {} REJECTED - POLICY TRANSFER FAILED",
+                "CONTROLLER TUNING {} REJECTED - POLICY TRANSFER FAILED",
                 rig_generation_);
             return;
         }
@@ -677,7 +744,7 @@ namespace runner::rl
                 ++rejected_rig_changes_;
                 ++rollback_count_;
                 worker_message_ = std::format(
-                    "TOPOLOGY NURSERY {} ROLLED BACK - ADAPTED POLICY APPLY FAILED",
+                    "CONTROLLER TUNING {} ROLLED BACK - ADAPTED POLICY APPLY FAILED",
                     rig_generation_);
                 return;
             }
@@ -685,7 +752,7 @@ namespace runner::rl
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             worker_message_ = std::format(
-                "TOPOLOGY NURSERY {} ACCEPTED {}{}  {:+.3f} VALID SCORE",
+                "CONTROLLER TUNING {} ACCEPTED {}{}  {:+.3f} VALID SCORE",
                 rig_generation_, mutation_name(mutation.kind),
                 mutation.activated_motor_mask != 0u ? " + ACTIVE JOINT" : "",
                 candidate_score - (std::isfinite(baseline) ? baseline : 0.0f));
@@ -695,7 +762,7 @@ namespace runner::rl
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "TOPOLOGY NURSERY {} REJECTED {} - NO VALID IMPROVEMENT",
+                "CONTROLLER TUNING {} REJECTED {} - NO VALID IMPROVEMENT",
                 rig_generation_, mutation_name(mutation.kind));
         }
     }

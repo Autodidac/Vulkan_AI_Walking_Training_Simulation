@@ -154,6 +154,8 @@ namespace runner::rl
 
     [[nodiscard]] RigMutationCandidate evolve_rig_candidate(
         const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept;
+    [[nodiscard]] RigMutationCandidate automatic_rig_tuning_candidate(
+        const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept;
 
     class AutonomousTrainer
     {

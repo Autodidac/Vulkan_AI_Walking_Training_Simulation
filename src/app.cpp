@@ -281,7 +281,7 @@ namespace runner
         enum class RigPreset : std::uint8_t {
             scaffold, humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
         };
-        enum class RigPanelPage : std::uint8_t { body, motor };
+        enum class RigPanelPage : std::uint8_t { presets, structure, motors, test };
         enum class LivePanelPage : std::uint8_t { summary, totals, advanced };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
@@ -291,7 +291,7 @@ namespace runner
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
-        RigPanelPage rig_panel_page{ RigPanelPage::body };
+        RigPanelPage rig_panel_page{ RigPanelPage::presets };
         LivePanelPage live_panel_page{ LivePanelPage::summary };
         int selected_node{ -1 };
         int selected_bone{ -1 };
@@ -358,9 +358,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0720-ui-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0720-ui-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0720-ui-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0721-rig-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0721-rig-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0721-rig-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1715,15 +1715,38 @@ namespace runner
 
         void draw_blueprint(Rect viewport, const InputState& input)
         {
-            constexpr float scale = 86.0f;
-            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport, 0.0f, scale).y;
+            float minimum_x = std::numeric_limits<float>::infinity();
+            float maximum_x = -std::numeric_limits<float>::infinity();
+            float maximum_y = 0.0f;
+            for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
+            {
+                const float radius = index < blueprint.radii.size()
+                    ? blueprint.radii[index] : 0.15f;
+                minimum_x = std::min(minimum_x, blueprint.nodes[index].x - radius);
+                maximum_x = std::max(maximum_x, blueprint.nodes[index].x + radius);
+                maximum_y = std::max(maximum_y, blueprint.nodes[index].y + radius);
+            }
+            if (!std::isfinite(minimum_x) || !std::isfinite(maximum_x))
+            {
+                minimum_x = -1.0f;
+                maximum_x = 1.0f;
+            }
+            const float blueprint_camera = 0.5f * (minimum_x + maximum_x);
+            const float horizontal_scale = (viewport.size.x - 90.0f)
+                / std::max(1.0f, maximum_x - minimum_x + 0.50f);
+            const float vertical_scale = (viewport.size.y * 0.70f - 45.0f)
+                / std::max(1.0f, maximum_y + 0.30f);
+            const float scale = std::clamp(
+                std::min(horizontal_scale, vertical_scale), 42.0f, 106.0f);
+            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport,
+                blueprint_camera, scale).y;
             canvas.quad({ viewport.position.x, ground_y }, viewport.position + viewport.size, rgb(0x111820));
             canvas.line({ viewport.position.x, ground_y }, { viewport.position.x + viewport.size.x, ground_y },
                 3.0f, rgb(0x475762));
 
             auto screen = [&](std::size_t index)
             {
-                return world_to_screen(blueprint.nodes[index], viewport, 0.0f, scale);
+                return world_to_screen(blueprint.nodes[index], viewport, blueprint_camera, scale);
             };
             std::vector<Vec2> preview = blueprint.nodes;
             for (int motor_index = 0; motor_index < static_cast<int>(sim::action_count); ++motor_index)
@@ -1765,7 +1788,7 @@ namespace runner
             }
             auto preview_screen = [&](std::size_t index)
             {
-                return world_to_screen(preview[index], viewport, 0.0f, scale);
+                return world_to_screen(preview[index], viewport, blueprint_camera, scale);
             };
             for (std::size_t index = 0; index < blueprint.bones.size(); ++index)
             {
@@ -1852,7 +1875,7 @@ namespace runner
                     const float t = static_cast<float>(segment) / 32.0f;
                     const float angle = lerp(motor.minimum_angle, motor.maximum_angle, t);
                     arc.push_back(world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                        viewport, 0.0f, scale));
+                        viewport, blueprint_camera, scale));
                 }
                 canvas.polyline(arc, 4.0f, accent);
                 const Vec2 pivot_screen = screen(motor.pivot);
@@ -1860,7 +1883,7 @@ namespace runner
                 {
                     canvas.line(pivot_screen,
                         world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                            viewport, 0.0f, scale), width, color);
+                            viewport, blueprint_camera, scale), width, color);
                 };
                 ray(motor.minimum_angle, danger, 2.5f);
                 ray(motor.maximum_angle, danger, 2.5f);
@@ -1871,9 +1894,7 @@ namespace runner
                 add_text(canvas, screen(motor.c) + Vec2{ 8.0f, -15.0f }, "C / DRIVEN", 1.05f, yellow);
             }
 
-            const Rect joint_rect{ { viewport.position.x + 20.0f, viewport.position.y + viewport.size.y - 220.0f },
-                { std::min(850.0f, viewport.size.x - 40.0f), 200.0f } };
-            const bool over_joint_lab = contains(joint_rect, input.mouse);
+            const bool over_joint_lab = false;
             if (input.left_pressed && input.alt
                 && contains(viewport, input.mouse) && !over_joint_lab)
             {
@@ -1920,7 +1941,7 @@ namespace runner
                 }
                 if (input.shift && hit < 0 && blueprint.nodes.size() < 128)
                 {
-                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, 0.0f, scale));
+                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, blueprint_camera, scale));
                     blueprint.radii.push_back(0.16f);
                     selected_node = static_cast<int>(blueprint.nodes.size() - 1);
                     rig_preset = RigPreset::custom;
@@ -1948,13 +1969,12 @@ namespace runner
             }
             if (dragging_node && input.left_down && !over_joint_lab && selected_node >= 0
                 && static_cast<std::size_t>(selected_node) < blueprint.nodes.size())
-                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, 0.0f, scale);
+                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, blueprint_camera, scale);
             if (dragging_node && input.left_released)
             {
                 dragging_node = false;
                 apply_small_rig_change("NODE MOVED");
             }
-            draw_joint_lab(joint_rect, input);
         }
 
         bool delete_selected_node()
@@ -2031,160 +2051,185 @@ namespace runner
         void draw_rig_panel(Rect rect, const InputState& input)
         {
             add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
+            canvas.push_clip(rect.position + Vec2{ 1.0f, 1.0f },
+                rect.position + rect.size - Vec2{ 1.0f, 1.0f });
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
+            const float usable = rect.size.x - 36.0f;
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
-            add_text(canvas, cursor, "GUIDED RIG LAB", 1.80f, white);
+            add_text_fit(canvas, cursor, "RIG LAB", 1.70f, white, usable, 1.10f);
             cursor.y += 38.0f;
-            const float page_width = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { page_width, 36.0f } }, "BODY / FILES", input,
-                rig_panel_page == RigPanelPage::body))
-                rig_panel_page = RigPanelPage::body;
-            if (button({ cursor + Vec2{ page_width + 6.0f, 0.0f }, { page_width, 36.0f } }, "JOINT / MOTOR", input,
-                rig_panel_page == RigPanelPage::motor))
-                rig_panel_page = RigPanelPage::motor;
-            cursor.y += 49.0f;
-
-            if (rig_panel_page == RigPanelPage::body)
+            const float tab = (usable - 18.0f) * 0.25f;
+            auto page_button = [&](int slot, std::string_view label, RigPanelPage page)
             {
-                add_text(canvas, cursor, "CHOOSE A BODY; AUTOPILOT RESTARTS AT BALANCE", 1.02f, muted);
-                cursor.y += 27.0f;
-                const float fourth = (rect.size.x - 54.0f) / 4.0f;
-                if (button({ cursor, { fourth, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
-                    use_preset(RigPreset::humanoid);
-                if (button({ cursor + Vec2{ fourth + 6.0f, 0.0f }, { fourth, 35.0f } }, "BIPED", input,
-                    rig_preset == RigPreset::biped))
-                    use_preset(RigPreset::biped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 2.0f, 0.0f }, { fourth, 35.0f } }, "QUADRUPED", input,
-                    rig_preset == RigPreset::quadruped))
-                    use_preset(RigPreset::quadruped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 3.0f, 0.0f }, { fourth, 35.0f } }, "4-LEG", input,
-                    rig_preset == RigPreset::crawler4))
-                    use_preset(RigPreset::crawler4);
-                cursor.y += 43.0f;
-                const float lower_fourth = (rect.size.x - 54.0f) / 4.0f;
-                if (button({ cursor, { lower_fourth, 35.0f } }, "SCAFFOLD", input,
-                    rig_preset == RigPreset::scaffold))
-                    use_preset(RigPreset::scaffold);
-                if (button({ cursor + Vec2{ lower_fourth + 6.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "CHICKEN", input, rig_preset == RigPreset::chicken))
-                    use_preset(RigPreset::chicken);
-                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 2.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "6-LEG", input, rig_preset == RigPreset::hexapod))
-                    use_preset(RigPreset::hexapod);
-                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 3.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "MONOPED", input, rig_preset == RigPreset::monoped))
-                    use_preset(RigPreset::monoped);
-                cursor.y += 48.0f;
+                if (button({ cursor + Vec2{ static_cast<float>(slot) * (tab + 6.0f), 0.0f },
+                    { tab, 35.0f } }, label, input, rig_panel_page == page))
+                    rig_panel_page = page;
+            };
+            page_button(0, "PRESETS", RigPanelPage::presets);
+            page_button(1, "STRUCTURE", RigPanelPage::structure);
+            page_button(2, "MOTORS", RigPanelPage::motors);
+            page_button(3, "TEST", RigPanelPage::test);
+            cursor.y += 48.0f;
 
-                const float file_third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { file_third, 35.0f } }, "SAVE RIG", input) || input.save_pressed)
+            if (rig_panel_page == RigPanelPage::presets)
+            {
+                add_text(canvas, cursor, "CANONICAL SIDE-VIEW RIGS", 1.02f, accent);
+                cursor.y += 25.0f;
+                const float half = (usable - 6.0f) * 0.5f;
+                auto preset = [&](int row, int column, std::string_view label,
+                    RigPreset value)
+                {
+                    const Vec2 position = cursor + Vec2{
+                        static_cast<float>(column) * (half + 6.0f),
+                        static_cast<float>(row) * 41.0f };
+                    if (button({ position, { half, 35.0f } }, label, input,
+                        rig_preset == value))
+                        use_preset(value);
+                };
+                preset(0, 0, "HUMANOID", RigPreset::humanoid);
+                preset(0, 1, "BIPED", RigPreset::biped);
+                preset(1, 0, "SCAFFOLD", RigPreset::scaffold);
+                preset(1, 1, "CHICKEN", RigPreset::chicken);
+                preset(2, 0, "QUADRUPED", RigPreset::quadruped);
+                preset(2, 1, "FOUR-LEG CRAWLER", RigPreset::crawler4);
+                preset(3, 0, "HEXAPOD", RigPreset::hexapod);
+                preset(3, 1, "MONOPED", RigPreset::monoped);
+                cursor.y += 176.0f;
+                add_wrapped_text(canvas, cursor,
+                    "Selecting a preset restores its authored anatomy. Automatic training tunes control parameters only; it never changes limb length or adds body parts.",
+                    0.73f, muted, usable, 2.0f);
+                cursor.y += 55.0f;
+
+                const float third = (usable - 12.0f) / 3.0f;
+                if (button({ cursor, { third, 35.0f } }, "SAVE RIG", input)
+                    || input.save_pressed)
                 {
                     std::string error{};
                     set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
                 }
-                if (button({ cursor + Vec2{ file_third + 6.0f, 0.0f }, { file_third, 35.0f } }, "LOAD RIG", input)
-                    || input.load_pressed)
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f },
+                    { third, 35.0f } }, "LOAD RIG", input) || input.load_pressed)
                 {
                     std::string error{};
                     blueprint = sim::CreatureBlueprint::load(rig_path, error);
                     rig_preset = RigPreset::custom;
                     trainer.set_blueprint(blueprint, false);
-                    set_status(error.empty() ? "RIG LOADED - FRESH BALANCE LESSON STARTED" : error);
+                    set_status(error.empty()
+                        ? "CUSTOM RIG LOADED - FRESH BALANCE LESSON STARTED"
+                        : error);
                 }
-                if (button({ cursor + Vec2{ (file_third + 6.0f) * 2.0f, 0.0f }, { file_third, 35.0f } },
-                    "USE EVOLVED", input))
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
+                    { third, 35.0f } }, "COPY TRAINING RIG", input))
                 {
                     blueprint = trainer.blueprint();
                     rig_preset = RigPreset::custom;
-                    set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
+                    set_status("CURRENT TRAINING RIG COPIED INTO STRUCTURE EDITOR");
                 }
-                cursor.y += 50.0f;
-                const float control_third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { control_third, 35.0f } },
+                cursor.y += 48.0f;
+                if (button({ cursor, { half, 35.0f } }, "RESTORE RETAINED CONTROLLER",
+                    input, trainer.has_best_policy(), trainer.has_best_policy()))
+                {
+                    set_status(trainer.restore_best_policy()
+                        ? "RETAINED CONTROLLER RESTORE QUEUED"
+                        : "NO RETAINED CONTROLLER AVAILABLE");
+                }
+                if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } },
+                    "START FRESH CONTROLLER", input))
+                {
+                    trainer.reset_policy(0x721300u
+                        + autonomy.rig_generation * 0x9E3779B97F4A7C15ULL);
+                    set_status("FRESH CONTROLLER QUEUED FOR UNCHANGED ANATOMY");
+                }
+                cursor.y += 48.0f;
+                const float visual_third = (usable - 12.0f) / 3.0f;
+                if (button({ cursor, { visual_third, 35.0f } },
                     right_leg_near ? "NEAR LEG: RIGHT" : "NEAR LEG: LEFT",
                     input, right_leg_near))
                     right_leg_near = !right_leg_near;
-                cursor.y += 43.0f;
-                if (button({ cursor, { control_third, 35.0f } },
-                    optional_art_enabled ? "OPTIONAL ART: ON" : "OPTIONAL ART: OFF",
+                if (button({ cursor + Vec2{ visual_third + 6.0f, 0.0f },
+                    { visual_third, 35.0f } },
+                    optional_art_enabled ? "ART: ON" : "ART: OFF",
                     input, optional_art_enabled))
                     optional_art_enabled = !optional_art_enabled;
-                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
-                    { control_third, 35.0f } },
+                if (button({ cursor + Vec2{ (visual_third + 6.0f) * 2.0f, 0.0f },
+                    { visual_third, 35.0f } },
                     debug_skeleton_overlay ? "SKELETON: ON" : "SKELETON: OFF",
                     input, debug_skeleton_overlay))
                     debug_skeleton_overlay = !debug_skeleton_overlay;
-                cursor.y -= 43.0f;
-                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
-                    { control_third, 35.0f } }, "RESTORE CHAMPION", input,
-                    trainer.has_best_policy(), trainer.has_best_policy()))
-                {
-                    set_status(trainer.restore_best_policy()
-                        ? "VERIFIED CHAMPION RESTORE QUEUED"
-                        : "NO VERIFIED CHAMPION AVAILABLE");
-                }
-                if (button({ cursor + Vec2{ (control_third + 6.0f) * 2.0f, 0.0f },
-                    { control_third, 35.0f } }, "FRESH POLICY", input))
-                {
-                    trainer.reset_policy(0x715300u
-                        + autonomy.rig_generation * 0x9E3779B97F4A7C15ULL);
-                    set_status("FRESH POLICY NURSERY QUEUED FOR CURRENT RIG");
-                }
-                cursor.y += 46.0f;
-
-                add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
-                if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
-                    "DELETE", input, false, selected_node >= 0))
+                cursor.y += 50.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("CONTROL TUNING {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                        autonomy.rig_generation, autonomy.accepted_rig_changes,
+                        autonomy.rejected_rig_changes, autonomy.rollback_count),
+                    0.74f, accent, usable, 0.60f);
+            }
+            else if (rig_panel_page == RigPanelPage::structure)
+            {
+                add_text(canvas, cursor, "MANUAL STRUCTURE EDITING", 1.02f, accent);
+                cursor.y += 25.0f;
+                add_wrapped_text(canvas, cursor,
+                    "Only manual edits change anatomy. Select and drag nodes in the viewport. Shift adds a node, Ctrl connects it, Alt selects a bone.",
+                    0.72f, muted, usable, 2.0f);
+                cursor.y += 58.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("SELECTED NODE: {}", selected_node),
+                    1.02f, white, usable - 120.0f);
+                if (button({ cursor + Vec2{ usable - 110.0f, -5.0f },
+                    { 110.0f, 32.0f } }, "DELETE NODE", input,
+                    false, selected_node >= 0))
                     delete_selected_node();
-                cursor.y += 33.0f;
-                if (selected_node >= 0 && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
+                cursor.y += 36.0f;
+                if (selected_node >= 0
+                    && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
                 {
                     float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
-                    const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                    const float updated = slider({ cursor, { usable, 38.0f } },
                         "NODE SIZE", radius, 0.08f, 0.60f, input);
                     if (updated != radius)
                     {
                         radius = updated;
                         queue_rig_change("NODE SIZE UPDATED");
                     }
-                    cursor.y += 50.0f;
-
-                    add_text(canvas, cursor, "SELECTED NODE ROLE", 1.08f, muted);
-                    cursor.y += 23.0f;
-                    const float role_width = (rect.size.x - 52.0f) * 0.20f;
-                    auto role = [&](int slot, std::string_view label, std::uint16_t& target)
+                    cursor.y += 52.0f;
+                    add_text(canvas, cursor, "SEMANTIC ROLE", 0.92f, muted);
+                    cursor.y += 22.0f;
+                    const float role = (usable - 16.0f) * 0.20f;
+                    auto set_role = [&](int slot, std::string_view label,
+                        std::uint16_t& target)
                     {
-                        if (button({ cursor + Vec2{ role_width * static_cast<float>(slot), 0.0f },
-                            { role_width - 4.0f, 32.0f } }, label, input, target == selected_node))
+                        if (button({ cursor + Vec2{ static_cast<float>(slot) * (role + 4.0f), 0.0f },
+                            { role, 31.0f } }, label, input,
+                            target == selected_node))
                         {
                             target = static_cast<std::uint16_t>(selected_node);
                             apply_small_rig_change("NODE ROLE UPDATED");
                         }
                     };
-                    role(0, "ROOT", blueprint.root_node);
-                    role(1, "TORSO", blueprint.torso_node);
-                    role(2, "HEAD", blueprint.head_node);
-                    role(3, "FOOT L", blueprint.left_contact_node);
-                    role(4, "FOOT R", blueprint.right_contact_node);
-                    cursor.y += 44.0f;
+                    set_role(0, "ROOT", blueprint.root_node);
+                    set_role(1, "TORSO", blueprint.torso_node);
+                    set_role(2, "HEAD", blueprint.head_node);
+                    set_role(3, "PHASE A", blueprint.left_contact_node);
+                    set_role(4, "PHASE B", blueprint.right_contact_node);
+                    cursor.y += 45.0f;
                 }
-                cursor.y += 5.0f;
-                add_text(canvas, cursor, std::format("SELECTED BONE: {}", selected_bone), 1.10f, muted);
-                cursor.y += 27.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("SELECTED BONE: {}", selected_bone),
+                    1.00f, white, usable - 120.0f);
+                cursor.y += 34.0f;
                 if (selected_bone >= 0
                     && static_cast<std::size_t>(selected_bone) < blueprint.bones.size())
                 {
                     sim::DistanceConstraint& selected = blueprint.bones[
                         static_cast<std::size_t>(selected_bone)];
-                    const float stiffness = slider({ cursor, { rect.size.x - 170.0f, 38.0f } },
+                    const float stiffness = slider({ cursor, { usable, 38.0f } },
                         "BONE STIFFNESS", selected.stiffness, 0.20f, 1.0f, input);
                     if (stiffness != selected.stiffness)
                     {
                         selected.stiffness = stiffness;
                         queue_rig_change("BONE STIFFNESS UPDATED");
                     }
-                    if (button({ cursor + Vec2{ rect.size.x - 152.0f, -5.0f },
-                        { 116.0f, 31.0f } }, "DELETE BONE", input))
+                    cursor.y += 52.0f;
+                    if (button({ cursor, { usable, 34.0f } }, "DELETE SELECTED BONE", input))
                     {
                         sim::CreatureBlueprint candidate = blueprint;
                         candidate.bones.erase(candidate.bones.begin() + selected_bone);
@@ -2195,140 +2240,140 @@ namespace runner
                             apply_small_rig_change("BONE DELETED");
                         }
                         else
-                        {
-                            set_status("BONE DELETE REJECTED - RIG OR MOTOR WOULD DISCONNECT");
-                        }
+                            set_status("BONE DELETE REJECTED - RIG WOULD DISCONNECT");
                     }
-                    cursor.y += 47.0f;
                 }
-                add_text(canvas, cursor,
-                    std::format("GEN {}  ACCEPT {}  REJECT {}  ROLLBACK {}",
-                        autonomy.rig_generation, autonomy.accepted_rig_changes,
-                        autonomy.rejected_rig_changes, autonomy.rollback_count),
-                    0.92f, accent);
-                cursor.y += 25.0f;
-                add_text(canvas, cursor, "SELECT/DRAG NODES. SHIFT ADDS, CTRL CONNECTS, ALT SELECTS BONE.", 0.92f, muted);
             }
-            else
+            else if (rig_panel_page == RigPanelPage::motors)
             {
-                add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
-                cursor.y += 29.0f;
-                const float motor_width = (rect.size.x - 48.0f) * 0.25f;
+                add_text(canvas, cursor, "MOTOR CHAINS", 1.02f, accent);
+                cursor.y += 25.0f;
+                const float quarter = (usable - 18.0f) * 0.25f;
                 for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
                 {
                     const int column = index % 4;
                     const int row = index / 4;
-                    const bool motor_available = static_cast<std::size_t>(index) < blueprint.active_motor_count;
-                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(column),
-                        static_cast<float>(row) * 41.0f }, { motor_width - 4.0f, 35.0f } },
-                        std::to_string(index + 1), input, selected_motor == index, motor_available))
+                    const bool available = static_cast<std::size_t>(index)
+                        < blueprint.active_motor_count;
+                    if (button({ cursor + Vec2{
+                            static_cast<float>(column) * (quarter + 6.0f),
+                            static_cast<float>(row) * 40.0f },
+                        { quarter, 34.0f } }, std::format("MOTOR {}", index + 1),
+                        input, selected_motor == index, available))
                     {
                         selected_motor = index;
                         joint_test_group = JointTestGroup::selected;
                     }
                 }
-                cursor.y += 87.0f;
+                cursor.y += 88.0f;
                 const auto names = motor_names();
-                add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
-                cursor.y += 30.0f;
-
-                sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
-                const float endpoint = (rect.size.x - 48.0f) / 3.0f;
-                auto set_endpoint = [&](Vec2 position, std::string_view label, std::uint16_t& value)
+                add_text_fit(canvas, cursor,
+                    names[static_cast<std::size_t>(selected_motor)],
+                    1.28f, white, usable, 0.90f);
+                cursor.y += 31.0f;
+                sim::MotorConstraint& motor = blueprint.motors[
+                    static_cast<std::size_t>(selected_motor)];
+                const float third = (usable - 12.0f) / 3.0f;
+                auto endpoint = [&](int slot, std::string_view label,
+                    std::uint16_t& value)
                 {
-                    if (!button({ position, { endpoint, 34.0f } }, label, input, false, selected_node >= 0))
+                    if (!button({ cursor + Vec2{ static_cast<float>(slot) * (third + 6.0f), 0.0f },
+                        { third, 34.0f } }, label, input, false, selected_node >= 0))
                         return;
                     value = static_cast<std::uint16_t>(selected_node);
-                    const bool distinct = motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
-                    const bool connected = distinct && has_direct_bone(motor.a, motor.pivot)
+                    const bool connected = motor.a != motor.pivot
+                        && motor.pivot != motor.c && motor.a != motor.c
+                        && has_direct_bone(motor.a, motor.pivot)
                         && has_direct_bone(motor.pivot, motor.c);
                     motor.enabled = connected;
                     if (connected)
                     {
-                        const float negative = std::max(2.0f,
-                            (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                        const float positive = std::max(2.0f,
-                            (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                        blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                        blueprint.calibrate_motor(
+                            static_cast<std::size_t>(selected_motor), 30.0f,
+                            30.0f, motor.strength);
                         apply_small_rig_change("MOTOR ENDPOINT UPDATED");
                     }
                     else
-                    {
-                        set_status("MOTOR DISABLED - A-PIVOT AND PIVOT-C MUST EACH BE REAL BONES");
-                    }
+                        set_status("MOTOR NEEDS REAL A-PIVOT AND PIVOT-C BONES");
                 };
-                set_endpoint(cursor, "SET A / PARENT", motor.a);
-                set_endpoint(cursor + Vec2{ endpoint + 6.0f, 0.0f }, "SET PIVOT", motor.pivot);
-                set_endpoint(cursor + Vec2{ (endpoint + 6.0f) * 2.0f, 0.0f }, "SET C / DRIVEN", motor.c);
-                cursor.y += 44.0f;
-
-                const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
-                    && motor.c < blueprint.nodes.size() && motor.a != motor.pivot
-                    && motor.pivot != motor.c && motor.a != motor.c;
-                const bool connected = endpoints_valid && has_direct_bone(motor.a, motor.pivot)
+                endpoint(0, "SET PARENT", motor.a);
+                endpoint(1, "SET PIVOT", motor.pivot);
+                endpoint(2, "SET DRIVEN", motor.c);
+                cursor.y += 45.0f;
+                const bool connected = motor.a < blueprint.nodes.size()
+                    && motor.pivot < blueprint.nodes.size()
+                    && motor.c < blueprint.nodes.size()
+                    && motor.a != motor.pivot && motor.pivot != motor.c
+                    && motor.a != motor.c
+                    && has_direct_bone(motor.a, motor.pivot)
                     && has_direct_bone(motor.pivot, motor.c);
-                add_text(canvas, cursor, std::format("A {}  PIVOT {}  C {}  {}", motor.a, motor.pivot, motor.c,
-                    connected ? (motor.enabled ? "READY" : "DISABLED") : "NOT CONNECTED"), 1.12f,
-                    connected ? accent : danger);
-                cursor.y += 30.0f;
-
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 34.0f } }, "SET REST", input, false, connected))
+                add_text_fit(canvas, cursor,
+                    std::format("PARENT {}   PIVOT {}   DRIVEN {}   {}",
+                        motor.a, motor.pivot, motor.c,
+                        connected ? (motor.enabled ? "READY" : "DISABLED")
+                            : "NOT CONNECTED"),
+                    0.78f, connected ? green : yellow, usable, 0.62f);
+                cursor.y += 29.0f;
+                float negative = (motor.neutral_angle - motor.minimum_angle)
+                    * 180.0f / pi;
+                float positive = (motor.maximum_angle - motor.neutral_angle)
+                    * 180.0f / pi;
+                const float updated_negative = slider({ cursor, { usable, 38.0f } },
+                    "NEGATIVE RANGE", negative, 2.0f, 120.0f, input, " DEG");
+                if (updated_negative != negative)
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, positive, motor.strength);
+                cursor.y += 50.0f;
+                const float updated_positive = slider({ cursor, { usable, 38.0f } },
+                    "POSITIVE RANGE", positive, 2.0f, 120.0f, input, " DEG");
+                if (updated_positive != positive)
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, updated_positive, motor.strength);
+                cursor.y += 50.0f;
+                const float power = slider({ cursor, { usable, 38.0f } },
+                    "MOTOR POWER", motor.strength, 0.0f, 0.20f, input);
+                if (power != motor.strength)
                 {
-                    const float negative = std::max(2.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                    const float positive = std::max(2.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                    motor.strength = power;
+                    queue_rig_change("MOTOR POWER UPDATED");
+                }
+                cursor.y += 53.0f;
+                if (button({ cursor, { third, 34.0f } }, "SET REST", input,
+                    false, connected))
+                {
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, updated_positive, motor.strength);
                     apply_small_rig_change("REST POSE RECALIBRATED");
                 }
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } }, "SAFE RANGE", input,
-                    false, connected))
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } },
+                    "SAFE RANGE", input, false, connected))
                 {
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, 0.050f);
-                    apply_small_rig_change("SAFE JOINT DEFAULT APPLIED");
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        18.0f, 20.0f, 0.050f);
+                    apply_small_rig_change("SAFE MOTOR DEFAULT APPLIED");
                 }
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 34.0f } }, "SWAP A/C", input,
-                    false, connected))
-                {
-                    std::swap(motor.a, motor.c);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, motor.strength);
-                    apply_small_rig_change("MOTOR DIRECTION SWAPPED");
-                }
-                cursor.y += 46.0f;
-
-                if (button({ cursor, { rect.size.x - 36.0f, 34.0f } },
-                    motor.enabled ? "DISABLE THIS MOTOR" : "ENABLE THIS MOTOR", input, motor.enabled, connected))
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
+                    { third, 34.0f } }, motor.enabled ? "DISABLE" : "ENABLE",
+                    input, motor.enabled, connected))
                 {
                     motor.enabled = !motor.enabled;
-                    apply_small_rig_change(motor.enabled ? "MOTOR ENABLED" : "MOTOR DISABLED");
-                }
-                cursor.y += 47.0f;
-
-                float negative = (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi;
-                float positive = (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi;
-                const float updated_negative = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "BACKWARD TRAVEL", negative, 2.0f, 60.0f, input, " DEG");
-                if (updated_negative != negative)
-                {
-                    motor.minimum_angle = motor.neutral_angle - updated_negative * pi / 180.0f;
-                    queue_rig_change("BACKWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_positive = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "FORWARD TRAVEL", positive, 2.0f, 60.0f, input, " DEG");
-                if (updated_positive != positive)
-                {
-                    motor.maximum_angle = motor.neutral_angle + updated_positive * pi / 180.0f;
-                    queue_rig_change("FORWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_power = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "JOINT SPEED / POWER", motor.strength, 0.02f, 0.10f, input);
-                if (updated_power != motor.strength)
-                {
-                    motor.strength = updated_power;
-                    queue_rig_change("JOINT POWER UPDATED");
+                    apply_small_rig_change(motor.enabled
+                        ? "MOTOR ENABLED" : "MOTOR DISABLED");
                 }
             }
+            else
+            {
+                add_text(canvas, cursor, "JOINT AND TRACTION TESTS", 1.02f, accent);
+                cursor.y += 28.0f;
+                const Rect test_card{ cursor, { usable, 205.0f } };
+                draw_joint_lab(test_card, input);
+                cursor.y += 220.0f;
+                add_wrapped_text(canvas, cursor,
+                    "GAIT CYCLE is a side-view fore/aft check. A credited walking step must lift from behind, pass the stance support, and land ahead. Test controls never change the saved training policy.",
+                    0.72f, muted, usable, 2.0f);
+            }
+            canvas.pop_clip();
+            add_rounded_rect(canvas, rect, 11.0f, Color{}, border, 1.0f);
         }
 
         void process_shortcuts(const InputState& input)
@@ -2463,15 +2508,24 @@ namespace runner
             }
             else
             {
-                const float panel_width = std::clamp(content.size.x * 0.42f, 680.0f, 760.0f);
-                const Rect side{ content.position, { panel_width, content.size.y } };
-                const Rect world{ { content.position.x + panel_width + 10.0f, content.position.y },
-                    { content.size.x - panel_width - 10.0f, content.size.y } };
+                const ui_layout::Box layout_side =
+                    ui_layout::rig_lab_panel_box(layout_content);
+                const ui_layout::Box layout_world =
+                    ui_layout::rig_lab_world_box(layout_content);
+                const Rect side{ { layout_side.x, layout_side.y },
+                    { layout_side.width, layout_side.height } };
+                const Rect world{ { layout_world.x, layout_world.y },
+                    { layout_world.width, layout_world.height } };
                 draw_rig_panel(side, input);
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
+                canvas.push_clip(world.position + Vec2{ 1.0f, 1.0f },
+                    world.position + world.size - Vec2{ 1.0f, 1.0f });
                 draw_blueprint(world, input);
-                add_text(canvas, world.position + Vec2{ 20.0f, 18.0f },
-                    "CLICK/DRAG NODE / SHIFT ADD / CTRL CONNECT / ALT SELECT BONE / DELETE NODE", 1.02f, muted);
+                canvas.pop_clip();
+                add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
+                    "SIDE VIEW  |  DRAG NODE  |  SHIFT ADD  |  CTRL CONNECT  |  ALT SELECT BONE",
+                    0.80f, muted, world.size.x - 36.0f, 0.68f);
+                add_rounded_rect(canvas, world, 11.0f, Color{}, border, 1.0f);
             }
 
             if (input.left_released && rig_edit_pending)

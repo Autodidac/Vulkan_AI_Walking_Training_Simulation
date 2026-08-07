@@ -111,9 +111,9 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.00f, 2.62f }, { 0.00f, 3.68f }, { 0.02f, 4.38f },
-            { -0.30f, 1.46f }, { -0.38f, 0.26f },
-            { 0.30f, 1.46f }, { 0.38f, 0.26f }
+            { 0.00f, 2.62f }, { 0.02f, 3.68f }, { 0.10f, 4.38f },
+            { -0.08f, 1.46f }, { -0.14f, 0.25f },
+            { 0.08f, 1.46f }, { 0.14f, 0.25f }
         };
         result.radii = { 0.24f, 0.27f, 0.23f, 0.17f, 0.15f, 0.17f, 0.15f };
         result.bones = {
@@ -125,15 +125,15 @@ namespace runner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
         };
-        result.active_motor_count = 4;
-        result.root_node = 0;
-        result.torso_node = 1;
-        result.head_node = 2;
-        result.left_contact_node = 4;
-        result.right_contact_node = 6;
+        result.active_motor_count = 4u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.right_contact_node = 6u;
         add_passive_feet(result, 0.16f, 0.28f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 34.0f, 56.0f, 0.042f, 0.048f);
+        calibrate_grounded_defaults(result, 38.0f, 58.0f, 0.042f, 0.048f);
         return result;
     }
 
@@ -144,8 +144,8 @@ namespace runner::sim
             { 0.00f, 2.40f }, { 0.72f, 2.48f },
             { 0.98f, 3.04f }, { 1.18f, 3.50f }, { 1.54f, 3.46f },
             { -0.92f, 2.64f }, { -1.36f, 2.84f },
-            { -0.42f, 1.42f }, { -0.58f, 0.28f },
-            { 0.42f, 1.42f }, { 0.58f, 0.28f },
+            { -0.10f, 1.42f }, { -0.15f, 0.28f },
+            { 0.10f, 1.42f }, { 0.15f, 0.28f },
             { 0.02f, 3.12f }
         };
         result.radii = {
@@ -168,15 +168,15 @@ namespace runner::sim
             MotorConstraint{ 11, 0, 7 }, MotorConstraint{ 0, 7, 8 },
             MotorConstraint{ 11, 0, 9 }, MotorConstraint{ 0, 9, 10 }
         };
-        result.active_motor_count = 4;
-        result.root_node = 0;
-        result.torso_node = 11;
-        result.head_node = 3;
-        result.left_contact_node = 8;
-        result.right_contact_node = 10;
+        result.active_motor_count = 4u;
+        result.root_node = 0u;
+        result.torso_node = 11u;
+        result.head_node = 3u;
+        result.left_contact_node = 8u;
+        result.right_contact_node = 10u;
         add_passive_feet(result, 0.17f, 0.29f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 34.0f, 58.0f, 0.038f, 0.044f);
+        calibrate_grounded_defaults(result, 38.0f, 60.0f, 0.038f, 0.044f);
         return result;
     }
 
@@ -184,9 +184,9 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0f, 2.74f }, { 0.0f, 3.84f }, { 0.02f, 4.64f },
-            { -0.36f, 1.52f }, { -0.46f, 0.26f },
-            { 0.36f, 1.52f }, { 0.46f, 0.26f }
+            { 0.00f, 2.74f }, { 0.02f, 3.84f }, { 0.10f, 4.64f },
+            { -0.09f, 1.52f }, { -0.14f, 0.25f },
+            { 0.09f, 1.52f }, { 0.14f, 0.25f }
         };
         result.radii = { 0.25f, 0.29f, 0.25f, 0.18f, 0.17f, 0.18f, 0.17f };
         result.bones = {
@@ -198,9 +198,15 @@ namespace runner::sim
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 }
         };
+        result.active_motor_count = 4u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.right_contact_node = 6u;
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 36.0f, 58.0f, 0.045f, 0.051f);
+        calibrate_grounded_defaults(result, 40.0f, 60.0f, 0.045f, 0.051f);
         return result;
     }
 
@@ -208,11 +214,11 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { -0.0034f, 2.8127f }, { -0.0060f, 4.2000f }, { -0.0060f, 4.9800f },
-            { -0.3443f, 1.5514f }, { -0.4200f, 0.2500f },
-            { 0.3400f, 1.6200f }, { 0.4200f, 0.2500f },
-            { -0.42f, 4.0200f }, { -0.78f, 3.43f }, { -0.60f, 2.76f },
-            { 0.40f, 4.0200f }, { 0.76f, 3.43f }, { 0.58f, 2.76f }
+            { 0.00f, 2.82f }, { 0.02f, 4.20f }, { 0.12f, 4.98f },
+            { -0.09f, 1.56f }, { -0.14f, 0.25f },
+            { 0.09f, 1.56f }, { 0.14f, 0.25f },
+            { -0.04f, 4.04f }, { -0.34f, 3.46f }, { -0.18f, 2.78f },
+            { 0.04f, 4.04f }, { 0.34f, 3.46f }, { 0.18f, 2.78f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -222,10 +228,12 @@ namespace runner::sim
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
             { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
             { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f },
-            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f }, { 8, 9, 0.0f, 0.96f },
-            { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f }, { 11, 12, 0.0f, 0.96f },
-            { 7, 10, 0.0f, 0.72f },
-            { 2, 7, 0.0f, 0.94f }, { 2, 10, 0.0f, 0.94f }
+            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f },
+            { 8, 9, 0.0f, 0.96f },
+            { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f },
+            { 11, 12, 0.0f, 0.96f },
+            { 7, 10, 0.0f, 0.48f },
+            { 2, 7, 0.0f, 0.90f }, { 2, 10, 0.0f, 0.90f }
         };
         result.motors = {
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
@@ -233,57 +241,71 @@ namespace runner::sim
             MotorConstraint{ 1, 7, 8 }, MotorConstraint{ 7, 8, 9 },
             MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 }
         };
-        result.active_motor_count = 8;
+        result.active_motor_count = 8u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.right_contact_node = 6u;
         add_passive_feet(result);
         result.rebuild_rest_lengths();
-        for (std::size_t index = 0; index < 4; ++index)
+        for (std::size_t index = 0; index < 4u; ++index)
         {
             const bool knee = (index & 1u) != 0u;
             const MotorConstraint& motor = result.motors[index];
-            const float driven_length = length(result.nodes[motor.c] - result.nodes[motor.pivot]);
+            const float driven_length = length(
+                result.nodes[motor.c] - result.nodes[motor.pivot]);
             const float linear_gain = knee ? 0.051f : 0.045f;
             const float strength = linear_gain / std::max(0.75f, driven_length);
-            result.calibrate_motor(index, knee ? 58.0f : 36.0f,
-                knee ? 58.0f : 36.0f, strength);
+            result.calibrate_motor(index, knee ? 60.0f : 40.0f,
+                knee ? 60.0f : 40.0f, strength);
         }
-        result.calibrate_motor(4, 95.0f, 95.0f, 0.034f);
-        result.calibrate_motor(5, 108.0f, 108.0f, 0.031f);
-        result.calibrate_motor(6, 95.0f, 95.0f, 0.034f);
-        result.calibrate_motor(7, 108.0f, 108.0f, 0.031f);
+        result.calibrate_motor(4, 88.0f, 88.0f, 0.032f);
+        result.calibrate_motor(5, 100.0f, 100.0f, 0.030f);
+        result.calibrate_motor(6, 88.0f, 88.0f, 0.032f);
+        result.calibrate_motor(7, 100.0f, 100.0f, 0.030f);
         return result;
     }
 
     CreatureBlueprint CreatureBlueprint::quadruped()
     {
         CreatureBlueprint result{};
-        // A real planar quadruped: four separate legs, slightly staggered in x
-        // so the near/far pairs remain visible in a side view. The two support
-        // channels are diagonal pairs, allowing a stable trot with four policy
-        // outputs instead of pretending that two articulated legs are four.
         result.nodes = {
-            { 0.0f, 1.58f }, { 1.48f, 1.62f }, { 2.22f, 1.88f }, { -0.88f, 1.78f },
-            { -0.46f, 0.24f }, { 0.08f, 0.28f },
-            { 1.42f, 0.24f }, { 1.96f, 0.28f }
+            { -0.65f, 2.12f }, { 0.65f, 2.16f }, { 1.38f, 2.46f },
+            { -0.82f, 1.18f }, { -0.94f, 0.24f },
+            { -0.48f, 1.14f }, { -0.40f, 0.24f },
+            { 0.48f, 1.16f }, { 0.38f, 0.24f },
+            { 0.82f, 1.14f }, { 0.92f, 0.24f }
         };
-        result.radii = { 0.30f, 0.31f, 0.25f, 0.15f, 0.16f, 0.15f, 0.16f, 0.15f };
+        result.radii = {
+            0.31f, 0.32f, 0.25f,
+            0.16f, 0.14f, 0.16f, 0.14f,
+            0.16f, 0.14f, 0.16f, 0.14f
+        };
         result.bones = {
-            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.95f }, { 0, 3, 0.0f, 0.84f },
-            { 0, 4, 0.0f, 1.0f }, { 0, 5, 0.0f, 0.98f },
-            { 1, 6, 0.0f, 1.0f }, { 1, 7, 0.0f, 0.98f }
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.96f },
+            { 0, 2, 0.0f, 0.74f },
+            { 0, 3, 0.0f, 1.0f }, { 3, 4, 0.0f, 1.0f },
+            { 0, 5, 0.0f, 1.0f }, { 5, 6, 0.0f, 1.0f },
+            { 1, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
+            { 1, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }
         };
-        result.root_node = 0;
-        result.torso_node = 1;
-        result.head_node = 2;
-        result.left_contact_node = 4;
-        result.right_contact_node = 6;
-        result.additional_left_contact_nodes = { 7 };
-        result.additional_right_contact_nodes = { 5 };
         result.motors = {
-            MotorConstraint{ 1, 0, 4 }, MotorConstraint{ 1, 0, 5 },
-            MotorConstraint{ 0, 1, 6 }, MotorConstraint{ 0, 1, 7 }
+            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
+            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
+            MotorConstraint{ 0, 1, 7 }, MotorConstraint{ 1, 7, 8 },
+            MotorConstraint{ 0, 1, 9 }, MotorConstraint{ 1, 9, 10 }
         };
+        result.active_motor_count = 8u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.additional_left_contact_nodes = { 10u };
+        result.right_contact_node = 6u;
+        result.additional_right_contact_nodes = { 8u };
         result.rebuild_rest_lengths();
-        calibrate_obstacle_legs(result, 52.0f);
+        calibrate_obstacle_legs(result, 48.0f);
         return result;
     }
 
@@ -291,32 +313,41 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0f, 2.05f }, { 1.05f, 2.12f }, { 1.82f, 2.42f },
-            { -0.72f, 0.30f }, { -0.20f, 0.28f },
-            { 1.22f, 0.28f }, { 1.72f, 0.30f },
-            { -0.48f, 2.10f }, { 1.52f, 2.16f }
+            { -0.70f, 1.64f }, { 0.55f, 1.68f }, { 1.26f, 1.86f },
+            { -0.90f, 0.92f }, { -1.00f, 0.23f },
+            { -0.50f, 0.88f }, { -0.42f, 0.23f },
+            { 0.35f, 0.90f }, { 0.25f, 0.23f },
+            { 0.75f, 0.88f }, { 0.85f, 0.23f }
         };
-        result.radii = { 0.29f, 0.29f, 0.24f, 0.15f, 0.15f, 0.15f, 0.15f, 0.18f, 0.18f };
+        result.radii = {
+            0.29f, 0.30f, 0.23f,
+            0.15f, 0.13f, 0.15f, 0.13f,
+            0.15f, 0.13f, 0.15f, 0.13f
+        };
         result.bones = {
-            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.92f },
-            { 7, 0, 0.0f, 0.98f }, { 1, 8, 0.0f, 0.98f },
-            { 7, 3, 0.0f, 0.97f }, { 0, 4, 0.0f, 0.97f },
-            { 1, 5, 0.0f, 0.97f }, { 8, 6, 0.0f, 0.97f },
-            { 3, 4, 0.0f, 0.42f }, { 5, 6, 0.0f, 0.42f }
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.94f },
+            { 0, 2, 0.0f, 0.66f },
+            { 0, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.98f },
+            { 0, 5, 0.0f, 0.98f }, { 5, 6, 0.0f, 0.98f },
+            { 1, 7, 0.0f, 0.98f }, { 7, 8, 0.0f, 0.98f },
+            { 1, 9, 0.0f, 0.98f }, { 9, 10, 0.0f, 0.98f }
         };
-        result.root_node = 0;
-        result.torso_node = 1;
-        result.head_node = 2;
-        result.left_contact_node = 3;
-        result.right_contact_node = 5;
-        result.additional_left_contact_nodes = { 6 };
-        result.additional_right_contact_nodes = { 4 };
         result.motors = {
-            MotorConstraint{ 0, 7, 3 }, MotorConstraint{ 1, 0, 4 },
-            MotorConstraint{ 0, 1, 5 }, MotorConstraint{ 1, 8, 6 }
+            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
+            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
+            MotorConstraint{ 0, 1, 7 }, MotorConstraint{ 1, 7, 8 },
+            MotorConstraint{ 0, 1, 9 }, MotorConstraint{ 1, 9, 10 }
         };
+        result.active_motor_count = 8u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.additional_left_contact_nodes = { 10u };
+        result.right_contact_node = 6u;
+        result.additional_right_contact_nodes = { 8u };
         result.rebuild_rest_lengths();
-        calibrate_obstacle_legs(result, 48.0f);
+        calibrate_obstacle_legs(result, 50.0f);
         return result;
     }
 
@@ -324,42 +355,38 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0f, 2.08f }, { 0.92f, 2.12f }, { 1.82f, 2.36f },
-            { -0.92f, 0.30f }, { -0.42f, 0.27f },
-            { 0.42f, 0.27f }, { 0.92f, 0.27f },
-            { 1.55f, 0.28f }, { 2.02f, 0.31f },
-            { -0.48f, 2.10f }, { 0.45f, 2.15f }, { 1.48f, 2.16f }
+            { -0.82f, 1.66f }, { 0.00f, 1.70f },
+            { 0.82f, 1.68f }, { 1.46f, 1.92f },
+            { -1.02f, 0.24f }, { -0.62f, 0.24f },
+            { -0.20f, 0.24f }, { 0.20f, 0.24f },
+            { 0.62f, 0.24f }, { 1.02f, 0.24f }
         };
         result.radii = {
-            0.28f, 0.29f, 0.23f,
-            0.14f, 0.14f, 0.14f, 0.14f, 0.14f, 0.14f,
-            0.17f, 0.17f, 0.17f
+            0.27f, 0.28f, 0.27f, 0.22f,
+            0.13f, 0.13f, 0.13f, 0.13f, 0.13f, 0.13f
         };
         result.bones = {
-            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.92f },
-            { 9, 0, 0.0f, 0.98f }, { 0, 10, 0.0f, 0.98f }, { 1, 11, 0.0f, 0.98f },
-            { 9, 3, 0.0f, 0.96f }, { 9, 4, 0.0f, 0.96f },
-            { 10, 5, 0.0f, 0.96f }, { 10, 6, 0.0f, 0.96f },
-            { 11, 7, 0.0f, 0.96f }, { 11, 8, 0.0f, 0.96f },
-            { 3, 4, 0.0f, 0.42f }, { 4, 5, 0.0f, 0.06f },
-            { 5, 6, 0.0f, 0.42f }, { 6, 7, 0.0f, 0.06f }, { 7, 8, 0.0f, 0.42f }
+            { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
+            { 2, 3, 0.0f, 0.94f }, { 0, 2, 0.0f, 0.68f },
+            { 0, 4, 0.0f, 0.98f }, { 0, 5, 0.0f, 0.98f },
+            { 1, 6, 0.0f, 0.98f }, { 1, 7, 0.0f, 0.98f },
+            { 2, 8, 0.0f, 0.98f }, { 2, 9, 0.0f, 0.98f }
         };
-        result.root_node = 0;
-        result.torso_node = 1;
-        result.head_node = 2;
-        // Each rigid foot plate belongs to one gait phase. Splitting the
-        // endpoints of a single plate across left/right semantics made the
-        // Stand teacher command the same plate in opposite directions.
-        result.left_contact_node = 3;
-        result.right_contact_node = 5;
-        result.additional_left_contact_nodes = { 4, 7, 8 };
-        result.additional_right_contact_nodes = { 6 };
         result.motors = {
-            MotorConstraint{ 0, 9, 3 }, MotorConstraint{ 0, 10, 5 },
-            MotorConstraint{ 1, 11, 7 }, MotorConstraint{ 0, 1, 2 }
+            MotorConstraint{ 1, 0, 4 }, MotorConstraint{ 1, 0, 5 },
+            MotorConstraint{ 0, 1, 6 }, MotorConstraint{ 0, 1, 7 },
+            MotorConstraint{ 1, 2, 8 }, MotorConstraint{ 1, 2, 9 }
         };
+        result.active_motor_count = 6u;
+        result.root_node = 1u;
+        result.torso_node = 2u;
+        result.head_node = 3u;
+        result.left_contact_node = 4u;
+        result.additional_left_contact_nodes = { 7u, 8u };
+        result.right_contact_node = 5u;
+        result.additional_right_contact_nodes = { 6u, 9u };
         result.rebuild_rest_lengths();
-        calibrate_obstacle_legs(result, 50.0f);
+        calibrate_obstacle_legs(result, 44.0f);
         return result;
     }
 
@@ -367,24 +394,28 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0f, 2.85f }, { 0.0f, 3.86f }, { 0.0f, 4.62f },
-            { 0.0f, 1.62f }, { -0.34f, 0.22f },
-            { 0.0f, 0.68f }, { 0.34f, 0.22f }
+            { 0.00f, 2.85f }, { 0.04f, 3.86f }, { 0.12f, 4.62f },
+            { 0.00f, 1.62f }, { -0.18f, 0.22f },
+            { 0.00f, 0.68f }, { 0.18f, 0.22f }
         };
-        result.radii = { 0.27f, 0.29f, 0.25f, 0.19f, 0.17f, 0.18f, 0.17f };
+        result.radii = { 0.27f, 0.29f, 0.25f, 0.19f, 0.15f, 0.18f, 0.15f };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
             { 0, 3, 0.0f, 1.0f }, { 3, 5, 0.0f, 1.0f },
             { 5, 4, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.92f }
         };
-        result.left_contact_node = 4;
-        result.right_contact_node = 6;
         result.motors = {
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 5 },
             MotorConstraint{ 3, 5, 4 }, MotorConstraint{ 3, 5, 6 }
         };
+        result.active_motor_count = 4u;
+        result.root_node = 0u;
+        result.torso_node = 1u;
+        result.head_node = 2u;
+        result.left_contact_node = 4u;
+        result.right_contact_node = 6u;
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 32.0f, 48.0f, 0.043f, 0.049f);
+        calibrate_grounded_defaults(result, 34.0f, 50.0f, 0.043f, 0.049f);
         return result;
     }
 
@@ -1305,6 +1336,8 @@ namespace runner::sim
         right_swing_seconds_ = 0.0f;
         left_swing_clearance_ = 0.0f;
         right_swing_clearance_ = 0.0f;
+        left_swing_started_behind_ = false;
+        right_swing_started_behind_ = false;
         left_swing_crossed_ = false;
         right_swing_crossed_ = false;
         limb_crossings_ = 0u;
@@ -2498,11 +2531,9 @@ namespace runner::sim
             || blueprint_.left_contact_node >= blueprint_.nodes.size()
             || blueprint_.right_contact_node >= blueprint_.nodes.size())
             return 1.0f;
-        const float rest_span = std::abs(
+        const float rest_span = std::max(0.42f, std::abs(
             blueprint_.nodes[blueprint_.right_contact_node].x
-            - blueprint_.nodes[blueprint_.left_contact_node].x);
-        if (rest_span < 0.08f)
-            return 1.0f;
+            - blueprint_.nodes[blueprint_.left_contact_node].x));
         const float current_span = std::abs(
             particles_[blueprint_.right_contact_node].position.x
             - particles_[blueprint_.left_contact_node].position.x);
@@ -2560,22 +2591,30 @@ namespace runner::sim
         const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
         const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
         if (!left && previous_left_grounded_)
+        {
+            left_swing_started_behind_ = left_center < right_center - 0.035f;
             left_swing_crossed_ = false;
+        }
         if (!right && previous_right_grounded_)
+        {
+            right_swing_started_behind_ = right_center < left_center - 0.035f;
             right_swing_crossed_ = false;
+        }
         if (!left)
         {
             left_swing_seconds_ += dt;
             left_swing_clearance_ = std::max(left_swing_clearance_, left_clearance);
             left_swing_crossed_ = left_swing_crossed_
-                || (left_clearance >= 0.065f && left_center > right_center + 0.035f);
+                || completes_side_view_crossing(left_swing_started_behind_,
+                    left_center, right_center, left_clearance);
         }
         if (!right)
         {
             right_swing_seconds_ += dt;
             right_swing_clearance_ = std::max(right_swing_clearance_, right_clearance);
             right_swing_crossed_ = right_swing_crossed_
-                || (right_clearance >= 0.065f && right_center > left_center + 0.035f);
+                || completes_side_view_crossing(right_swing_started_behind_,
+                    right_center, left_center, right_clearance);
         }
 
         const FootContactPhase next_left_phase = detect_foot_contact_phase(true);
@@ -2609,7 +2648,8 @@ namespace runner::sim
             else
             {
                 const bool swing_crossed = new_left
-                    ? left_swing_crossed_ : right_swing_crossed_;
+                    ? left_swing_started_behind_ && left_swing_crossed_
+                    : right_swing_started_behind_ && right_swing_crossed_;
                 const bool crossing_required = blueprint_.paired_leg_chains();
                 if (!qualifies_crossing_step(last_contact_side_, strike_side,
                     elapsed_seconds_ - last_step_time_, locomotion_x - last_step_x_,
@@ -2634,11 +2674,13 @@ step_not_qualified:
         {
             left_swing_seconds_ = 0.0f;
             left_swing_clearance_ = 0.0f;
+            left_swing_started_behind_ = false;
         }
         if (right)
         {
             right_swing_seconds_ = 0.0f;
             right_swing_clearance_ = 0.0f;
+            right_swing_started_behind_ = false;
         }
 
         const float left_slip = left

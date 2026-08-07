@@ -96,7 +96,11 @@ A release is incomplete until Linux and Windows tests, build-tree and installed 
 - Reports stage-specific useful evidence and the exact current mastery goal.
 - Explains total updates, attempts, valid attempts, resets, rollbacks, and retained champions on-screen.
 - Keeps raw score, quality key, losses, optimizer state, throughput, and pipeline data on an explicit Advanced page.
-- Preserves v0.7.20 learned-state, checkpoint, terrain, curriculum, preview, DPI, clipping, and icon behavior unchanged.
+- Automatic training tunes motor strength, joint range, and stiffness without changing the character's anatomy.
+- Shipped bipeds use compact side-view rest poses and gait credit requires a real behind-to-ahead support crossing.
+- Quadruped and crawler presets use four articulated two-segment legs; the hexapod uses six independent tripod-phase supports.
+- Rig Lab is split into Presets, Structure, Motors, and Test pages and auto-fits every preset in the editor viewport.
+- v0.7.21 uses isolated autosave/training semantics; older checkpoints remain explicit transfer inputs.
 
 ## v0.7.20 UI and preview continuity
 

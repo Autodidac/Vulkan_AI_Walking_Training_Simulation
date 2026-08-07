@@ -1,6 +1,6 @@
 # Runner v0.7.21 readable training dashboard
 
-Runner v0.7.21 changes presentation only. Policy dimensions, checkpoints, curriculum thresholds, terrain physics, learned parameters, and the v0.7.20 autosave paths remain compatible.
+Runner v0.7.21 makes the dashboard understandable and corrects the rig/gait defects visible in v0.7.20. Policy dimensions and terrain physics remain stable, but corrected anatomy and gait semantics use isolated v0.7.21 autosave state; older checkpoints remain explicit transfer inputs.
 
 ## The five questions the default dashboard answers
 
@@ -35,3 +35,16 @@ The `ADVANCED` page preserves raw evaluation score, best score, quality key, rej
 ## Keyboard behavior
 
 `T` cycles `SUMMARY`, `TOTALS`, and `ADVANCED`. The default after launch is `SUMMARY`.
+
+
+## Fixed-anatomy training
+
+Automatic curriculum refinement may adjust motor strength, joint range, and bone stiffness. It cannot move nodes, change limb length, widen feet, add or delete branches, or reassign supports. Anatomy changes are manual Rig Lab operations only.
+
+## Side-view gait truth
+
+A biped step is credited only when the swing support begins behind the stance support, leaves the ground, achieves useful clearance, passes ahead, and lands on the opposite contact phase. Permanent split stance, shuffling, treadmill-only progress, and a foot that remains ahead do not count.
+
+## Preset and Rig Lab contract
+
+Bipedal presets use compact side-view silhouettes. Quadruped and four-leg crawler presets have four independent articulated two-segment legs. The hexapod has six independent supports split into alternating tripod phases and no support-to-support brace. Rig Lab separates Presets, Structure, Motors, and Test controls, clips each page, and automatically centers/fits the complete rig in the viewport.
