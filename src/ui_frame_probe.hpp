@@ -17,6 +17,8 @@ namespace runner::ui_frame_probe
         std::size_t sample_count{};
         std::size_t non_black_samples{};
         std::size_t distinct_color_buckets{};
+        std::size_t source_vertex_count{};
+        std::size_t source_color_buckets{};
     };
 
     [[nodiscard]] inline bool triangle_contains(Vec2 point,
@@ -81,10 +83,27 @@ namespace runner::ui_frame_probe
         if (region.width <= 12.0f || region.height <= 12.0f)
             return result;
 
+        std::array<bool, 4096u> source_buckets{};
+        for (const render::Vertex& vertex : vertices)
+        {
+            const bool inside = vertex.position.x >= region.x
+                && vertex.position.x <= region.x + region.width
+                && vertex.position.y >= region.y
+                && vertex.position.y <= region.y + region.height;
+            if (!inside || vertex.color.a <= 0.001f)
+                continue;
+            ++result.source_vertex_count;
+            const std::uint16_t bucket = color_bucket(vertex.color);
+            if (!source_buckets[bucket])
+            {
+                source_buckets[bucket] = true;
+                ++result.source_color_buckets;
+            }
+        }
+
         constexpr std::size_t columns = 20u;
         constexpr std::size_t rows = 14u;
-        std::array<std::uint16_t, columns * rows> buckets{};
-        std::size_t bucket_count{};
+        std::array<bool, 4096u> final_buckets{};
         for (std::size_t row = 0; row < rows; ++row)
         {
             for (std::size_t column = 0; column < columns; ++column)
@@ -100,13 +119,13 @@ namespace runner::ui_frame_probe
                 if (std::max({ color.r, color.g, color.b }) > 0.105f)
                     ++result.non_black_samples;
                 const std::uint16_t bucket = color_bucket(color);
-                const auto begin = buckets.begin();
-                const auto end = begin + static_cast<std::ptrdiff_t>(bucket_count);
-                if (std::find(begin, end, bucket) == end)
-                    buckets[bucket_count++] = bucket;
+                if (!final_buckets[bucket])
+                {
+                    final_buckets[bucket] = true;
+                    ++result.distinct_color_buckets;
+                }
             }
         }
-        result.distinct_color_buckets = bucket_count;
         return result;
     }
 
@@ -115,6 +134,7 @@ namespace runner::ui_frame_probe
     {
         return stats.sample_count > 0u
             && stats.non_black_samples >= 3u
-            && stats.distinct_color_buckets >= 3u;
+            && stats.source_vertex_count >= 6u
+            && stats.source_color_buckets >= 3u;
     }
 }
