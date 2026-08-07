@@ -1,0 +1,69 @@
+name: Fix Runner v0.7.21 Windows shadow warning
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'agent/v0721-readable-telemetry'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0721-readable-telemetry
+          fetch-depth: 0
+      - name: Repair MSVC warning and reuse validated dependency caches
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              file.write_text(text.replace(old, new, 1),
+                  encoding='utf-8', newline='\n')
+
+          replace_once('src/app.cpp',
+              '''                        const std::size_t leg = motor_index / 2u;
+                          const bool phase_a = leg == 0u || leg == 3u;
+              ''',
+              '''                        const std::size_t support_leg = motor_index / 2u;
+                          const bool phase_a = support_leg == 0u || support_leg == 3u;
+              ''')
+          replace_once('.github/workflows/runner-pr-validation.yml',
+              '''          restore-keys: runner-v0721-pr-${{ runner.os }}-
+              ''',
+              '''          restore-keys: |
+                            runner-v0721-pr-${{ runner.os }}-
+                            runner-v0720-pr-${{ runner.os }}-
+              ''')
+          replace_once('.github/workflows/runner-v0721-release.yml',
+              '''          restore-keys: runner-v0721-release-${{ runner.os }}-
+              ''',
+              '''          restore-keys: |
+                            runner-v0721-release-${{ runner.os }}-
+                            runner-v0720-release-${{ runner.os }}-
+              ''')
+          PY
+          git diff --check
+          grep -F 'support_leg' src/app.cpp
+          grep -F 'runner-v0720-pr-${{ runner.os }}-' .github/workflows/runner-pr-validation.yml
+          grep -F 'runner-v0720-release-${{ runner.os }}-' .github/workflows/runner-v0721-release.yml
+      - name: Commit corrected Windows contract
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/app.cpp .github/workflows/runner-pr-validation.yml .github/workflows/runner-v0721-release.yml
+          git commit -m 'Fix v0.7.21 Windows shadow warning'
+          git push origin HEAD:agent/v0721-readable-telemetry
