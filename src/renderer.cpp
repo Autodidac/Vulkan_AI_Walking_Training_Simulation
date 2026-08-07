@@ -519,14 +519,17 @@ namespace runner::render
         impl_ = nullptr;
     }
 
-    bool VulkanRenderer::render(std::span<const Vertex> vertices, int drawable_width, int drawable_height, std::string& error)
+    bool VulkanRenderer::render(std::span<const Vertex> vertices,
+        int canvas_width, int canvas_height,
+        int drawable_width, int drawable_height, std::string& error)
     {
         if (impl_ == nullptr)
         {
             error = "Vulkan renderer is not initialized.";
             return false;
         }
-        if (drawable_width <= 0 || drawable_height <= 0)
+        if (canvas_width <= 0 || canvas_height <= 0
+            || drawable_width <= 0 || drawable_height <= 0)
             return true;
         if (vertices.size_bytes() > maximum_vertex_bytes)
         {
@@ -598,7 +601,8 @@ namespace runner::render
             vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, impl.pipeline);
             const VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(command_buffer, 0, 1, &impl.vertex_buffers[frame], &offset);
-            struct PushConstants { float width; float height; } push{ static_cast<float>(impl.extent.width), static_cast<float>(impl.extent.height) };
+            struct PushConstants { float width; float height; } push{
+                static_cast<float>(canvas_width), static_cast<float>(canvas_height) };
             vkCmdPushConstants(command_buffer, impl.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
             if (!vertices.empty())
                 vkCmdDraw(command_buffer, static_cast<std::uint32_t>(vertices.size()), 1, 0, 0);

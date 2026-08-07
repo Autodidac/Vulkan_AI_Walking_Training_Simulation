@@ -22,9 +22,17 @@ namespace runner::render
     class Canvas
     {
     public:
-        void clear() noexcept { vertices_.clear(); }
+        void clear() noexcept
+        {
+            vertices_.clear();
+            clip_stack_.clear();
+        }
         void reserve(std::size_t vertex_count) { vertices_.reserve(vertex_count); }
         [[nodiscard]] std::span<const Vertex> vertices() const noexcept { return vertices_; }
+
+        void push_clip(Vec2 minimum, Vec2 maximum);
+        void pop_clip() noexcept;
+        [[nodiscard]] std::size_t clip_depth() const noexcept { return clip_stack_.size(); }
 
         void triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
         void quad(Vec2 minimum, Vec2 maximum, Color color);
@@ -34,7 +42,16 @@ namespace runner::render
         void polyline(std::span<const Vec2> points, float thickness, Color color);
 
     private:
+        struct ClipRect
+        {
+            Vec2 minimum{};
+            Vec2 maximum{};
+        };
+
+        void emit_triangle(Vec2 a, Vec2 b, Vec2 c, Color color);
+
         std::vector<Vertex> vertices_{};
+        std::vector<ClipRect> clip_stack_{};
     };
 
     class VulkanRenderer
@@ -48,9 +65,12 @@ namespace runner::render
         VulkanRenderer(VulkanRenderer&&) = delete;
         VulkanRenderer& operator=(VulkanRenderer&&) = delete;
 
-        [[nodiscard]] bool initialize(SDL_Window* window, const std::filesystem::path& shader_directory, std::string& error);
+        [[nodiscard]] bool initialize(SDL_Window* window,
+            const std::filesystem::path& shader_directory, std::string& error);
         void shutdown() noexcept;
-        [[nodiscard]] bool render(std::span<const Vertex> vertices, int drawable_width, int drawable_height, std::string& error);
+        [[nodiscard]] bool render(std::span<const Vertex> vertices,
+            int canvas_width, int canvas_height,
+            int drawable_width, int drawable_height, std::string& error);
         void wait_idle() noexcept;
 
     private:
