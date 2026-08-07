@@ -140,109 +140,109 @@ Regression tests prove terrain-relative distance/frame progress, nonzero moving-
 
 # Runner v0.7.19 general locomotion, terrain transfer, and survival
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 The current Walk/Run trainer still treats locomotion primarily as forward cadence plus speed. Direct training observation shows a critical game-AI failure on structural plateaus and ledges: a rig can reach a transition with insufficient support reserve, stumble, and lose the episode instead of slowing, shifting its center of mass, loading a stance leg, levering the body upward, taking a deliberate recovery step, or stopping briefly to regain control. The same architecture does not explicitly train acceleration from walk to run, controlled deceleration, reversal, turn-away behavior, or fleeing from an approaching threat. Crawling is a valid survival behavior but must remain an emergency escape mode, never a shortcut around learning upright gait.
 
 The target is terrain-agnostic locomotion behavior that can be transferred to a game runtime through height/support/threat observations rather than SandHybrid-specific rules. SandHybrid remains one training environment, not the behavioral contract.
 
 ### WALK-BALANCE-RESERVE-233 — Track and reward usable balance reserve
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Derive a normalized support reserve from torso uprightness, semantic support state, and root position relative to the active support interval. Moving quickly with almost no reserve is penalized; increasing reserve during a stumble is positive progress even before forward distance resumes. Stable two-foot support and controlled single-support both remain valid.
 
 ### WALK-PLATEAU-LEVER-234 — Learn step-up and plateau levering
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 When near/mid terrain probes show a reachable positive step or plateau edge, reduce cadence, lift the swing chain higher, load and extend the stance chain, move the root over the planted support, then recover normal gait on top. Repeatedly striking the edge at running cadence, hanging below it, or vibrating against it receives no progress credit.
 
 ### WALK-SLOW-RECOVER-235 — Allow deliberate slow movement, stop, and regain
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The policy may slow below nominal walking speed, take short corrective steps, or briefly hold position when balance reserve is low or terrain demand rises. Recovery progress must not be mistaken for zero-motion failure while the rig is measurably regaining uprightness or support reserve.
 
 ### WALK-WALK-FIRST-236 — Make correct walking the primary locomotion skill
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Upright sagittal walking with repeated left/right crossing, bounded slip, support reserve, and terrain adaptation must be established before speed incentives can dominate. Running cannot be used to blast through a weak walking policy.
 
 ### WALK-RUN-237 — Train true run acceleration, cadence, and braking
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 After walking is established, clear terrain and sufficient balance reserve may raise target speed and cadence into a run. The controller must accelerate without collapsing stride quality, then decelerate before ledges, hazards, sharp terrain changes, or depleted reserve. Overspeed without control is not mastery.
 
 ### WALK-DIRECTION-238 — Train reversal and 2D turn-away behavior
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The side-view trainer must support a signed travel intent. A reversal requires controlled braking, support transfer, opposite-direction gait, and continued upright locomotion; simply falling, rolling, or being pushed backward does not count. Game integration may mirror facing visually, while the physical policy learns both +X and -X traversal.
 
 ### WALK-FLEE-239 — Run away from imminent threats
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 In the mixed hazard lesson, incoming direction, time-to-impact, density, and free-space information choose an escape direction. When the threat is urgent and escape space exists, the policy must turn/reverse if needed and accelerate away while preserving support. Evade, brace, or recover are valid context-dependent choices; standing in the impact path is not.
 
 ### WALK-CRAWL-LAST-240 — Crawl only as an emergency survival fallback
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Crawling is enabled only in late mixed/recovery training when the rig is already non-upright, upright recovery is not immediately viable, and obstruction/burial or a blocking ledge leaves an escape path. Crawl motion may preserve life and create space to stand, but it receives no upright gait credit and cannot seed Walk/Run champions.
 
 ### WALK-RECOVER-TO-STAND-241 — Crawl/recovery must return to upright locomotion
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Emergency crawl or prone escape is temporary. Once free space and support permit, reward transition back through kneel/brace to semantic-foot support, stable stance, then walking. Remaining prone after the obstruction clears is a failed recovery.
 
 ### WALK-TERRAIN-TRANSFER-242 — Train across material-independent terrain classes
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The locomotion strategy consumes local height deltas, slope, firmness, looseness, support state, and obstacle/threat data. Training covers flat, rough, soft, firm, ramps, step-ups, plateaus, step-downs, deforming ground, and mixed hazards without keying behavior to a specific material ID or game name.
 
 ### WALK-DOMAIN-RANDOM-243 — Randomize terrain demand without randomizing away learnability
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Seeded episodes vary roughness, plateau/ledge placement and height within reachable limits, firmness/looseness, disturbance timing, and clear-run lengths. Early lessons stay learnable; later lessons combine variations. Exact seeds remain reproducible for regression tests.
 
 ### WALK-STRATEGY-244 — Centralize reusable locomotion planning
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add a platform-neutral locomotion strategy layer that classifies hold/walk/run/recover/crawl/flee intent from existing physical observations. PPO bootstrap, reward shaping, deterministic tests, and future game integration consume the same calculations rather than duplicating terrain heuristics.
 
 ### WALK-TEACHER-245 — Terrain-aware gait bootstrap
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Replace fixed-frequency forward-only bootstrap behavior with a strategy-driven cadence, stride amplitude, swing lift, stance extension, direction, and counterbalance plan. Teacher influence remains a decaying bootstrap; PPO must still own the final policy.
 
 ### WALK-REWARD-246 — Reward control quality before raw speed
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Replace monotonic speed reward with target-speed tracking conditioned on terrain demand, gait establishment, direction intent, and balance reserve. Reward proper stepping, reserve recovery, step-up completion, safe acceleration, safe braking, and threat escape; penalize uncontrolled overspeed, repeated ledge impacts, and speed gained without gait evidence.
 
 ### WALK-RECOVERY-WINDOW-247 — Give constrained recovery enough time without permitting body surfing
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Late mixed training may extend the recovery window only while an explicit emergency-crawl condition remains true and measurable escape/recovery progress occurs. Ordinary body rolling, head dragging, friction surfing, and prone travel on clear terrain remain invalid.
 
 ### WALK-ANTI-EXPLOIT-248 — Preserve strict gait and survival truth
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 No new recovery allowance may grant Walk/Run credit for crawling, rolling, double-support shuffling, course-only motion, obstacle pushing, or being thrown backward. Signed-direction gait still requires real swing, contact transitions, and support evidence.
 
 ### WALK-GENERAL-TEST-249 — Deterministic plateau, reserve, run, reverse, flee, and crawl tests
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add positive and adversarial tests for balance-reserve calculation, plateau slowdown/lever plan, walk-before-run gating, run target speed on clear terrain, reversal intent, flee direction, crawl-last-resort eligibility, crawl denial on clear terrain, and return-to-stand preference. Existing v0.7.18 coordinate and package tests remain mandatory.
 
 ### WALK-STATE-250 — Isolate v0.7.19 training semantics
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Bump training semantics and use `runner-v0719-*` autosave/state paths. Older v0.7.18 policies may be explicit transfer inputs only; they cannot silently resume as mastered general-locomotion policies.
 
 ### WALK-DOC-251 — Document general locomotion/game integration contract
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Document the terrain-independent strategy inputs, balance reserve, signed travel intent, emergency crawl boundary, and expected game-runtime use. Keep one changelog and one mission cache.
 
 ### WALK-RELEASE-252 — Publish audited Runner v0.7.19
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, all deterministic and live acceptance suites, installed/extracted diagnostics, ZIP/checksum/manifest, release re-download verification, clean branch state, and user eye-test reopening rules.
 
@@ -284,6 +284,13 @@ The existing anatomy motor slots remain anatomy controls. Equipment state, aim, 
 **Status:** OPEN
 
 # Recent immutable release evidence
+
+## Runner v0.7.19
+
+**Status:** PUBLISHED.
+
+- v0.7.19 validation source: `a41d4c4de7517d3f981ffa91560c1a43f8025153`.
+- Main release workflow run: `31183722468`.
 
 ## Runner v0.7.18
 
