@@ -1,0 +1,44 @@
+name: Apply Runner v0.7.21 readable telemetry
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/v0721-readable-telemetry'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0721-readable-telemetry
+          fetch-depth: 0
+      - name: Apply readable telemetry source migration
+        run: |
+          set -euo pipefail
+          python3 tools/apply_v0721_readable_telemetry.py
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.21 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'WHAT THE TRAINER IS TELLING YOU' src/app.cpp
+          grep -F 'ADVANCED DIAGNOSTICS' src/app.cpp
+          grep -F 'WALK-HUMAN-STATUS-263' missioncache.md
+          test -f src/training_explainer.hpp
+          test -f tests/v0721_readable_telemetry_tests.cpp
+          test -f docs/RUNNER_V0721_READABLE_TELEMETRY.md
+      - name: Remove temporary migration script
+        run: |
+          rm tools/apply_v0721_readable_telemetry.py
+          rm -rf tools/__pycache__
+      - name: Commit product source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Implement Runner v0.7.21 readable telemetry'
+          git push origin HEAD:agent/v0721-readable-telemetry
