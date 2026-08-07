@@ -1,0 +1,37 @@
+name: Add Runner v0.7.22 packaged frame diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/v0722-black-frame-hotfix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0722-black-frame-hotfix
+          fetch-depth: 0
+      - name: Add CPU final-frame package diagnostic
+        run: |
+          set -euo pipefail
+          python3 tools/add_v0722_frame_diagnostic.py
+          rm -f tools/add_v0722_frame_diagnostic.py
+          rm -rf tools/__pycache__
+          git diff --check
+          grep -F 'visible_application_frames' src/main.cpp
+          grep -F 'frames=%s' src/main.cpp
+      - name: Commit diagnostic source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add v0.7.22 visible-frame package diagnostic'
+          git push origin HEAD:agent/v0722-black-frame-hotfix
