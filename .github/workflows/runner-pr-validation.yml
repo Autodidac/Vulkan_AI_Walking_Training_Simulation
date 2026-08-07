@@ -23,27 +23,27 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          grep -F "project(Runner VERSION 0.7.22 LANGUAGES CXX)" CMakeLists.txt
-          grep -F "WALK-HUMAN-STATUS-263" missioncache.md
-          grep -F "WALK-RELEASE-283" missioncache.md
-          grep -F "WALK-BLACK-FRAME-284" missioncache.md
-          grep -F "WALK-FRAME-DIAGNOSTIC-287" missioncache.md
-          grep -F "WALK-RELEASE-289" missioncache.md
+          grep -F "project(Runner VERSION 0.7.23 LANGUAGES CXX)" CMakeLists.txt
+          grep -F "WALK-TRUE-OUTLINE-290" missioncache.md
+          grep -F "WALK-ROUNDING-291" missioncache.md
+          grep -F "WALK-COMPOSITE-292" missioncache.md
+          grep -F "WALK-ALL-VIEWS-293" missioncache.md
+          grep -F "WALK-HOTFIX-COMPAT-294" missioncache.md
+          grep -F "WALK-RELEASE-295" missioncache.md
           grep -F "training_semantics_version = 0x0007'2101u" src/ppo.hpp
-          grep -F "ui_render::transparent_fill" src/app.cpp
-          ! grep -F "Color{}" src/app.cpp
-          grep -F "RunnerV0722VisibleFrameTests" CMakeLists.txt
-          grep -F "visibly_populated" src/ui_frame_probe.hpp
-          grep -F "transparent_fill" src/ui_render_contract.hpp
-          test -f tests/v0722_visible_frame_tests.cpp
-          test -f docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
-          test ! -e tools/cache_v0722_black_frame.py
-          test ! -e tools/apply_v0722_black_frame_hotfix.py
-          test ! -e tools/v0722.cache-trigger
-          test ! -e tools/v0722.cache-trigger2
-          test ! -e tools/v0722.cache-trigger3
-          test ! -e .github/workflows/cache-v0722-black-frame.yml
-          test ! -e .github/workflows/apply-v0722-black-frame.yml
+          grep -F "ui_render::rounded_rect" src/app.cpp
+          grep -F "stroke_rounded_rect" src/ui_render_contract.hpp
+          grep -F "rounded_corner_stroke" src/ui_render_contract.hpp
+          grep -F "distinct_color_buckets >= 3u" src/ui_frame_probe.hpp
+          grep -F "RunnerV0723GrayFrameTests" CMakeLists.txt
+          test -f tests/v0723_gray_frame_tests.cpp
+          test -f docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
+          test -f .github/workflows/runner-v0723-release.yml
+          test ! -e tests/v0722_visible_frame_tests.cpp
+          test ! -e tools/cache_v0723_gray_frame.py
+          test ! -e tools/apply_v0723_gray_frame_hotfix.py
+          test ! -e .github/workflows/cache-v0723-gray-frame.yml
+          test ! -e .github/workflows/apply-v0723-gray-frame.yml
       - name: Configure
         env:
           CC: gcc-14
@@ -76,11 +76,11 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0722-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: runner-v0723-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            runner-v0723-pr-${{ runner.os }}-
             runner-v0722-pr-${{ runner.os }}-
             runner-v0721-pr-${{ runner.os }}-
-            runner-v0720-pr-${{ runner.os }}-
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
@@ -97,14 +97,16 @@ jobs:
         run: |
           ctest --preset windows-release --output-on-failure -V --timeout 1800
           if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+          & 'build/windows-release/Release/RunnerV0723GrayFrameTests.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Rounded-outline regression test failed' }
       - name: Runtime diagnostics
         shell: pwsh
         run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
           $version = (& $exe --version | Out-String).Trim()
-          if ($version -ne 'Runner 0.7.22') { throw "Version mismatch: $version" }
+          if ($version -ne 'Runner 0.7.23') { throw "Version mismatch: $version" }
           & $exe --diagnose-ui
-          if ($LASTEXITCODE -ne 0) { throw 'UI diagnostic failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'Final-composite UI diagnostic failed' }
           & $exe --diagnose-camera
           if ($LASTEXITCODE -ne 0) { throw 'Camera diagnostic failed' }
           & $exe --diagnose-package

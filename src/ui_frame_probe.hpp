@@ -134,6 +134,7 @@ namespace runner::ui_frame_probe
     {
         return stats.sample_count > 0u
             && stats.non_black_samples >= 3u
+            && stats.distinct_color_buckets >= 3u
             && stats.source_vertex_count >= 6u
             && stats.source_color_buckets >= 3u;
     }
