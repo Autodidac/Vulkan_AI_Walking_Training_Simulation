@@ -2,7 +2,7 @@ name: Temporary PR66 core-test patch helper
 
 on:
   pull_request_target:
-    types: [synchronize]
+    types: [reopened, synchronize]
 
 permissions:
   contents: write
@@ -28,17 +28,17 @@ jobs:
           path = Path('tests/core_tests.cpp')
           text = path.read_text(encoding='utf-8')
           old = '''    require(std::abs(ui_layout::course_reference_marker_spacing_m(
-                  ui_layout::DistanceUnits::metric) - 250.0f) < 0.001f,
-              "metric markers are not quarter-kilometre spaced");
-          require(std::abs(ui_layout::course_reference_marker_spacing_m(
-                  ui_layout::DistanceUnits::imperial) - 402.336f) < 0.001f,
-              "imperial markers are not quarter-mile spaced");'''
+            ui_layout::DistanceUnits::metric) - 250.0f) < 0.001f,
+        "metric markers are not quarter-kilometre spaced");
+    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+            ui_layout::DistanceUnits::imperial) - 402.336f) < 0.001f,
+        "imperial markers are not quarter-mile spaced");'''
           new = '''    require(std::abs(ui_layout::course_reference_marker_spacing_m(
-                  ui_layout::DistanceUnits::metric) - 10.0f) < 0.001f,
-              "metric near-course markers are not 10 metres apart");
-          require(std::abs(ui_layout::course_reference_marker_spacing_m(
-                  ui_layout::DistanceUnits::imperial) - 15.24f) < 0.001f,
-              "imperial near-course markers are not 50 feet apart");'''
+            ui_layout::DistanceUnits::metric) - 10.0f) < 0.001f,
+        "metric near-course markers are not 10 metres apart");
+    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+            ui_layout::DistanceUnits::imperial) - 15.24f) < 0.001f,
+        "imperial near-course markers are not 50 feet apart");'''
           if old not in text:
               raise SystemExit('stale marker assertion block not found exactly')
           path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
