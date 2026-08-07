@@ -1,6 +1,5 @@
 #include "locomotion_strategy.hpp"
 
-#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -115,10 +114,13 @@ int main()
 
     {
         Signals unstable = stable_flat();
-        unstable.uprightness = 0.52f;
+        unstable.uprightness = 0.34f;
         unstable.right_supported = false;
-        unstable.root_x = -0.12f;
+        unstable.root_x = 0.55f;
         unstable.forward_speed = 1.4f;
+        const float reserve = runner::locomotion::balance_reserve(unstable);
+        require(reserve < 0.38f,
+            "regression fixture must actually represent depleted balance reserve");
         const auto plan = runner::locomotion::plan(unstable);
         require(plan.intent == Intent::recover,
             "depleted balance reserve should select recovery before speed");
