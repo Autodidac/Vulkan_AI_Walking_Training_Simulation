@@ -18,7 +18,7 @@ jobs:
         with:
           ref: agent/v0721-readable-telemetry
           fetch-depth: 0
-      - name: Repair MSVC warning and reuse validated dependency caches
+      - name: Repair the MSVC warnings-as-errors collision
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -38,35 +38,14 @@ jobs:
           if count != 1:
               raise SystemExit(f'app shadow declaration matches: {count}')
           app.write_text(text, encoding='utf-8', newline='\n')
-
-          expression = '${' + '{ runner.os }}'
-          for path, current, previous in (
-              ('.github/workflows/runner-pr-validation.yml',
-               'runner-v0721-pr-', 'runner-v0720-pr-'),
-              ('.github/workflows/runner-v0721-release.yml',
-               'runner-v0721-release-', 'runner-v0720-release-')):
-              file = Path(path)
-              source = file.read_text(encoding='utf-8')
-              old = f'          restore-keys: {current}{expression}-\n'
-              new = (
-                  '          restore-keys: |\n'
-                  f'            {current}{expression}-\n'
-                  f'            {previous}{expression}-\n')
-              if old in source:
-                  source = source.replace(old, new, 1)
-              elif f'{previous}{expression}-' not in source:
-                  raise SystemExit(f'{path}: cache restore marker missing')
-              file.write_text(source, encoding='utf-8', newline='\n')
           PY
           git diff --check
           grep -F 'support_leg' src/app.cpp
-          grep -F 'runner-v0720-pr-' .github/workflows/runner-pr-validation.yml
-          grep -F 'runner-v0720-release-' .github/workflows/runner-v0721-release.yml
-      - name: Commit corrected Windows contract
+      - name: Commit corrected C++ source
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/app.cpp .github/workflows/runner-pr-validation.yml .github/workflows/runner-v0721-release.yml
+          git add src/app.cpp
           git commit -m 'Fix v0.7.21 Windows shadow warning'
           git push origin HEAD:agent/v0721-readable-telemetry
