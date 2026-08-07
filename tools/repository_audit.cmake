@@ -8,6 +8,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0718_RUNTIME_RECOVERY.md
         docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
         docs/RUNNER_V0720_UI_PREVIEW_ICON.md
+        assets/ui/runner_icon_concept.svg
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
@@ -97,7 +98,9 @@ endif()
 foreach(stale IN ITEMS
         tools/generate_v0719_sources.py
         tools/apply_v0720_release.py
-        .github/workflows/apply-v0720-release.yml)
+        tools/fix_v0720_validation.py
+        .github/workflows/apply-v0720-release.yml
+        .github/workflows/fix-v0720-validation.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
         message(FATAL_ERROR "Temporary or stale source generator remains: ${stale}")
     endif()
