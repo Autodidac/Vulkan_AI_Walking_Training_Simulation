@@ -47,14 +47,19 @@ int main()
     require(humanoid.nodes.size() >= 13 && humanoid.bones.size() >= 13,
         "humanoid arm nodes or bones are missing");
 
-    for (const sim::CreatureBlueprint& rig : {
-        sim::CreatureBlueprint::biped(), sim::CreatureBlueprint::chicken(),
-        sim::CreatureBlueprint::quadruped(), sim::CreatureBlueprint::crawler4(),
-        sim::CreatureBlueprint::hexapod(), sim::CreatureBlueprint::monoped() })
+    const std::array<std::pair<sim::CreatureBlueprint, std::size_t>, 6> motor_contracts{
+        std::pair{ sim::CreatureBlueprint::biped(), 4u },
+        std::pair{ sim::CreatureBlueprint::chicken(), 4u },
+        std::pair{ sim::CreatureBlueprint::quadruped(), 8u },
+        std::pair{ sim::CreatureBlueprint::crawler4(), 8u },
+        std::pair{ sim::CreatureBlueprint::hexapod(), 6u },
+        std::pair{ sim::CreatureBlueprint::monoped(), 4u }
+    };
+    for (const auto& [rig, expected_motors] : motor_contracts)
     {
-        require(rig.valid(), "four-motor built-in rig became invalid after policy expansion");
-        require(rig.active_motor_count == 4,
-            "non-humanoid rig did not preserve its four active motors");
+        require(rig.valid(), "built-in rig became invalid after policy expansion");
+        require(rig.active_motor_count == expected_motors,
+            "built-in rig does not expose its authored articulated motor count");
     }
 
     {

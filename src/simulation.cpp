@@ -214,11 +214,11 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.00f, 2.82f }, { 0.02f, 4.20f }, { 0.12f, 4.98f },
+            { -0.0034f, 2.8127f }, { -0.0060f, 4.2000f }, { -0.0060f, 4.9800f },
             { -0.09f, 1.56f }, { -0.14f, 0.25f },
             { 0.09f, 1.56f }, { 0.14f, 0.25f },
-            { -0.04f, 4.04f }, { -0.34f, 3.46f }, { -0.18f, 2.78f },
-            { 0.04f, 4.04f }, { 0.34f, 3.46f }, { 0.18f, 2.78f }
+            { -0.42f, 4.0200f }, { -0.78f, 3.43f }, { -0.60f, 2.76f },
+            { 0.40f, 4.0200f }, { 0.76f, 3.43f }, { 0.58f, 2.76f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -232,8 +232,8 @@ namespace runner::sim
             { 8, 9, 0.0f, 0.96f },
             { 1, 10, 0.0f, 0.98f }, { 10, 11, 0.0f, 0.98f },
             { 11, 12, 0.0f, 0.96f },
-            { 7, 10, 0.0f, 0.48f },
-            { 2, 7, 0.0f, 0.90f }, { 2, 10, 0.0f, 0.90f }
+            { 7, 10, 0.0f, 0.72f },
+            { 2, 7, 0.0f, 0.94f }, { 2, 10, 0.0f, 0.94f }
         };
         result.motors = {
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
@@ -257,13 +257,13 @@ namespace runner::sim
                 result.nodes[motor.c] - result.nodes[motor.pivot]);
             const float linear_gain = knee ? 0.051f : 0.045f;
             const float strength = linear_gain / std::max(0.75f, driven_length);
-            result.calibrate_motor(index, knee ? 60.0f : 40.0f,
-                knee ? 60.0f : 40.0f, strength);
+            result.calibrate_motor(index, knee ? 58.0f : 36.0f,
+                knee ? 58.0f : 36.0f, strength);
         }
-        result.calibrate_motor(4, 88.0f, 88.0f, 0.032f);
-        result.calibrate_motor(5, 100.0f, 100.0f, 0.030f);
-        result.calibrate_motor(6, 88.0f, 88.0f, 0.032f);
-        result.calibrate_motor(7, 100.0f, 100.0f, 0.030f);
+        result.calibrate_motor(4, 95.0f, 95.0f, 0.034f);
+        result.calibrate_motor(5, 108.0f, 108.0f, 0.031f);
+        result.calibrate_motor(6, 95.0f, 95.0f, 0.034f);
+        result.calibrate_motor(7, 108.0f, 108.0f, 0.031f);
         return result;
     }
 
@@ -382,9 +382,9 @@ namespace runner::sim
         result.torso_node = 2u;
         result.head_node = 3u;
         result.left_contact_node = 4u;
-        result.additional_left_contact_nodes = { 7u, 8u };
+        result.additional_left_contact_nodes = { 6u, 8u };
         result.right_contact_node = 5u;
-        result.additional_right_contact_nodes = { 6u, 9u };
+        result.additional_right_contact_nodes = { 7u, 9u };
         result.rebuild_rest_lengths();
         calibrate_obstacle_legs(result, 44.0f);
         return result;
@@ -394,11 +394,11 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.00f, 2.85f }, { 0.04f, 3.86f }, { 0.12f, 4.62f },
-            { 0.00f, 1.62f }, { -0.18f, 0.22f },
-            { 0.00f, 0.68f }, { 0.18f, 0.22f }
+            { 0.00f, 2.85f }, { 0.00f, 3.86f }, { 0.00f, 4.62f },
+            { 0.00f, 1.62f }, { -0.34f, 0.22f },
+            { 0.00f, 0.68f }, { 0.34f, 0.22f }
         };
-        result.radii = { 0.27f, 0.29f, 0.25f, 0.19f, 0.15f, 0.18f, 0.15f };
+        result.radii = { 0.27f, 0.29f, 0.25f, 0.19f, 0.17f, 0.18f, 0.17f };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
             { 0, 3, 0.0f, 1.0f }, { 3, 5, 0.0f, 1.0f },
@@ -415,7 +415,7 @@ namespace runner::sim
         result.left_contact_node = 4u;
         result.right_contact_node = 6u;
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 34.0f, 50.0f, 0.043f, 0.049f);
+        calibrate_grounded_defaults(result, 32.0f, 48.0f, 0.043f, 0.049f);
         return result;
     }
 
@@ -1276,7 +1276,7 @@ namespace runner::sim
         }
         elapsed_seconds_ = 0.0f;
         distance_travelled_ = 0.0f;
-        forward_speed_ = 0.0f;
+        forward_speed_ = course_speed();
         last_reward_ = 0.0f;
         fallen_ = false;
         collision_count_ = 0.0f;

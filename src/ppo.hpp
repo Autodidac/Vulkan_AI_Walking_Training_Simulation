@@ -428,7 +428,7 @@ namespace runner::rl
             if (rig.support_seed_count() < 4u)
                 return action;
             const float phase = environment.elapsed_seconds() * 2.0f * pi
-                * movement.cadence_hz;
+                * movement.cadence_hz + pi * 0.5f;
             const float swing = std::sin(phase) * movement.direction;
             const float amplitude = 0.28f + movement.stride_scale * 0.34f;
             for (std::size_t index = 0; index < rig.active_motor_count; ++index)

@@ -436,8 +436,30 @@ namespace runner
 
         [[nodiscard]] float test_input_for_motor(std::size_t motor_index) const noexcept
         {
-            return sim::rig_test_motor_input(rig_test_pattern, motor_index,
-                session_runtime_seconds * 2.0f * pi * 1.05f, joint_test_input);
+            const float phase = session_runtime_seconds * 2.0f * pi * 1.05f;
+            if (rig_test_pattern != sim::RigTestPattern::gait)
+                return sim::rig_test_motor_input(rig_test_pattern,
+                    motor_index, phase, joint_test_input);
+            const float swing = std::sin(phase);
+            if (rig_preset == RigPreset::quadruped
+                || rig_preset == RigPreset::crawler4)
+            {
+                const std::size_t leg = motor_index / 2u;
+                const bool phase_a = leg == 0u || leg == 3u;
+                const float drive = phase_a ? swing : -swing;
+                return (motor_index & 1u) == 0u
+                    ? 0.52f * drive
+                    : 0.48f * std::max(0.0f, drive)
+                        - 0.20f * std::max(0.0f, -drive);
+            }
+            if (rig_preset == RigPreset::hexapod && motor_index < 6u)
+            {
+                const bool phase_a = motor_index == 0u
+                    || motor_index == 2u || motor_index == 4u;
+                return 0.55f * (phase_a ? swing : -swing);
+            }
+            return sim::rig_test_motor_input(rig_test_pattern,
+                motor_index, phase, joint_test_input);
         }
 
         [[nodiscard]] bool has_direct_bone(std::uint16_t a, std::uint16_t b) const noexcept
@@ -459,14 +481,20 @@ namespace runner
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A HIP", "REAR PHASE A KNEE",
+                    "REAR PHASE B HIP", "REAR PHASE B KNEE",
+                    "FRONT PHASE B HIP", "FRONT PHASE B KNEE",
+                    "FRONT PHASE A HIP", "FRONT PHASE A KNEE" };
             case RigPreset::crawler4:
-                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A HIP", "REAR PHASE A KNEE",
+                    "REAR PHASE B HIP", "REAR PHASE B KNEE",
+                    "FRONT PHASE B HIP", "FRONT PHASE B KNEE",
+                    "FRONT PHASE A HIP", "FRONT PHASE A KNEE" };
             case RigPreset::hexapod:
-                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A", "REAR PHASE B",
+                    "MIDDLE PHASE A", "MIDDLE PHASE B",
+                    "FRONT PHASE A", "FRONT PHASE B",
+                    "UNUSED 7", "UNUSED 8" };
             case RigPreset::monoped:
                 return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
                     "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
