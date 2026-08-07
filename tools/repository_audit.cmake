@@ -37,7 +37,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0719_GENERAL_LOCOMOTION.md")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.18 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake v0.7.19 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -54,7 +54,7 @@ foreach(reference IN ITEMS
         "Runner v0.7.20 equipment, carry, and target curriculum")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.18 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.19 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -72,7 +72,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/ui_layout.hpp" layout_text)
 string(FIND "${layout_text}" "10.0f : 15.24f" marker_pos)
 if(marker_pos EQUAL -1)
-    message(FATAL_ERROR "Near-course marker spacing is not the v0.7.18 contract")
+    message(FATAL_ERROR "Near-course marker spacing no longer satisfies the retained v0.7.18 contract")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/tools/generate_v0719_sources.py" generator_text)
@@ -85,7 +85,7 @@ foreach(reference IN ITEMS
         "optional_art_enabled{ false }")
     string(FIND "${generator_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Generated runtime recovery contract missing: ${reference}")
+        message(FATAL_ERROR "Generated v0.7.19 runtime contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -111,10 +111,13 @@ foreach(stale IN ITEMS
         tools/v0719.prtrigger
         tools/v0719-executor-merge-trigger.txt
         tools/apply_v0719_general_locomotion.py
+        tools/run_v0719_executor.py
         tools/finalize_v0719_general_locomotion.py
-        .github/workflows/apply-v0719-general-locomotion.yml)
+        tools/fix_v0719_compile.py
+        .github/workflows/apply-v0719-general-locomotion.yml
+        .github/workflows/fix-v0719-compile.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
-        message(FATAL_ERROR "Temporary v0.7.18 executor file remains: ${stale}")
+        message(FATAL_ERROR "Temporary v0.7.19 executor file remains: ${stale}")
     endif()
 endforeach()
 
