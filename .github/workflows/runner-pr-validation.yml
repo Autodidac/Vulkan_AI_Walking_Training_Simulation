@@ -23,40 +23,27 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          grep -F "project(Runner VERSION 0.7.21 LANGUAGES CXX)" CMakeLists.txt
+          grep -F "project(Runner VERSION 0.7.22 LANGUAGES CXX)" CMakeLists.txt
           grep -F "WALK-HUMAN-STATUS-263" missioncache.md
-          grep -F "WALK-AUTO-TUNING-275" missioncache.md
-          grep -F "WALK-SIDE-GAIT-276" missioncache.md
-          grep -F "WALK-RIG-LAB-279" missioncache.md
           grep -F "WALK-RELEASE-283" missioncache.md
+          grep -F "WALK-BLACK-FRAME-284" missioncache.md
+          grep -F "WALK-FRAME-DIAGNOSTIC-287" missioncache.md
+          grep -F "WALK-RELEASE-289" missioncache.md
           grep -F "training_semantics_version = 0x0007'2101u" src/ppo.hpp
-          grep -F "automatic_rig_tuning_candidate" src/autonomy_curriculum.cpp
-          grep -F "completes_side_view_crossing" src/simulation.cpp
-          grep -F "preview_sync::decide" src/autonomy_runtime.cpp
-          grep -F "SDL_SetWindowIcon" src/main.cpp
-          grep -F "push_clip" src/renderer.hpp
-          grep -F "WHAT THE TRAINER IS TELLING YOU" src/app.cpp
-          grep -F "ADVANCED DIAGNOSTICS" src/app.cpp
-          grep -F "RigPanelPage::presets" src/app.cpp
-          grep -F "rig_lab_layout_valid" src/ui_layout.hpp
-          grep -F "TOTAL UPDATES =" src/training_explainer.hpp
-          test -f tools/generate_runner_icon.py
-          test -f tests/v0720_ui_tests.cpp
-          test -f tests/v0721_readable_telemetry_tests.cpp
-          test -f tests/v0721_rig_gait_tests.cpp
-          test -f docs/RUNNER_V0720_UI_PREVIEW_ICON.md
-          test -f docs/RUNNER_V0721_READABLE_TELEMETRY.md
-          test ! -e tools/generate_v0719_sources.py
-          test ! -e tools/apply_v0720_release.py
-          test ! -e tools/apply_v0721_readable_telemetry.py
-          test ! -e tools/cache_v0721_rig_repair.py
-          test ! -e tools/apply_v0721_rig_gait_repair.py
-          test ! -e tools/run_v0721_rig_gait_repair.py
-          test ! -e .github/workflows/apply-v0720-release.yml
-          test ! -e .github/workflows/apply-v0721-readable-telemetry.yml
-          test ! -e .github/workflows/cache-v0721-rig-repair.yml
-          test ! -e .github/workflows/apply-v0721-rig-gait-repair.yml
-          test ! -e .github/workflows/fix-v0721-windows-shadow.yml
+          grep -F "ui_render::transparent_fill" src/app.cpp
+          ! grep -F "Color{}" src/app.cpp
+          grep -F "RunnerV0722VisibleFrameTests" CMakeLists.txt
+          grep -F "visibly_populated" src/ui_frame_probe.hpp
+          grep -F "transparent_fill" src/ui_render_contract.hpp
+          test -f tests/v0722_visible_frame_tests.cpp
+          test -f docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
+          test ! -e tools/cache_v0722_black_frame.py
+          test ! -e tools/apply_v0722_black_frame_hotfix.py
+          test ! -e tools/v0722.cache-trigger
+          test ! -e tools/v0722.cache-trigger2
+          test ! -e tools/v0722.cache-trigger3
+          test ! -e .github/workflows/cache-v0722-black-frame.yml
+          test ! -e .github/workflows/apply-v0722-black-frame.yml
       - name: Configure
         env:
           CC: gcc-14
@@ -89,8 +76,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0721-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          key: runner-v0722-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
+            runner-v0722-pr-${{ runner.os }}-
             runner-v0721-pr-${{ runner.os }}-
             runner-v0720-pr-${{ runner.os }}-
       - name: Bootstrap vcpkg
@@ -114,7 +102,7 @@ jobs:
         run: |
           $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
           $version = (& $exe --version | Out-String).Trim()
-          if ($version -ne 'Runner 0.7.21') { throw "Version mismatch: $version" }
+          if ($version -ne 'Runner 0.7.22') { throw "Version mismatch: $version" }
           & $exe --diagnose-ui
           if ($LASTEXITCODE -ne 0) { throw 'UI diagnostic failed' }
           & $exe --diagnose-camera
