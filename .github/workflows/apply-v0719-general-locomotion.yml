@@ -6,12 +6,16 @@ on:
     paths:
       - tools/apply_v0719_general_locomotion.py
       - .github/workflows/apply-v0719-general-locomotion.yml
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.head_ref == 'agent/v0719-general-locomotion' || github.ref_name == 'agent/v0719-general-locomotion'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -45,5 +49,3 @@ jobs:
           git add -A
           git commit -m 'Implement Runner v0.7.19 general locomotion'
           git push origin HEAD:agent/v0719-general-locomotion
-
-# trigger: cached missions 233-252
