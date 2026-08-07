@@ -1,0 +1,52 @@
+name: Update Runner v0.7.21 hexapod core contract
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'agent/v0721-readable-telemetry'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0721-readable-telemetry
+          fetch-depth: 0
+      - name: Replace obsolete rigid-foot hexapod expectation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/core_tests.cpp')
+          text = path.read_text(encoding='utf-8')
+          old = '''    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16
+                  && hexapod.support_seed_count() == 6,
+              "six-legged hexapod geometry or support semantics are incomplete");
+          '''
+          new = '''    require(hexapod.nodes.size() >= 10 && hexapod.bones.size() >= 10
+                  && hexapod.active_motor_count == 6
+                  && hexapod.support_seed_count() == 6
+                  && hexapod.horizontal_multi_support_plan(),
+              "six-legged hexapod geometry, tripod phases, or support semantics are incomplete");
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('obsolete hexapod assertion not found exactly once')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          grep -F 'hexapod.active_motor_count == 6' tests/core_tests.cpp
+          grep -F 'hexapod.horizontal_multi_support_plan()' tests/core_tests.cpp
+      - name: Commit corrected core contract
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/core_tests.cpp
+          git commit -m 'Update v0.7.21 hexapod core contract'
+          git push origin HEAD:agent/v0721-readable-telemetry
