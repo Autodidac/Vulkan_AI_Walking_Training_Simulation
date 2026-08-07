@@ -24,7 +24,7 @@ jobs:
       - name: Apply cached v0.7.19 refinement
         run: |
           set -euo pipefail
-          python3 tools/apply_v0719_general_locomotion.py
+          python3 tools/run_v0719_executor.py
           git diff --check
           grep -F "project(Runner VERSION 0.7.19 LANGUAGES CXX)" CMakeLists.txt
           grep -F "training_semantics_version = 0x0007'1901u" src/ppo.hpp
@@ -36,6 +36,8 @@ jobs:
       - name: Remove branch-local executor scaffolding
         run: |
           rm -f tools/apply_v0719_general_locomotion.py
+          rm -f tools/run_v0719_executor.py
+          rm -f tools/v0719.prtrigger
           rm -f .github/workflows/apply-v0719-general-locomotion.yml
       - name: Commit refined source to PR branch
         run: |
