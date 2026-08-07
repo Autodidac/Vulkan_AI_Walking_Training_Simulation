@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'2001u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'2101u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -422,10 +422,30 @@ namespace runner::rl
     {
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
-        if (!rig.paired_leg_chains())
-            return action;
-
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        if (!rig.paired_leg_chains())
+        {
+            if (rig.support_seed_count() < 4u)
+                return action;
+            const float phase = environment.elapsed_seconds() * 2.0f * pi
+                * movement.cadence_hz + pi * 0.5f;
+            const float swing = std::sin(phase) * movement.direction;
+            const float amplitude = 0.28f + movement.stride_scale * 0.34f;
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+            {
+                const std::uint8_t mask = motor_support_mask(rig, rig.motors[index]);
+                if (mask == 0u)
+                    continue;
+                const float phase_drive = mask == 0x1u ? swing
+                    : mask == 0x2u ? -swing
+                    : ((index & 1u) == 0u ? swing : -swing);
+                action[index] = clamp(action[index] + phase_drive * amplitude,
+                    -0.90f, 0.90f);
+            }
+            return bilateral_joint_synergy_action(environment, action,
+                environment.course_stage());
+        }
+
         const float phase = environment.elapsed_seconds() * 2.0f * pi
             * movement.cadence_hz;
         const float swing = std::sin(phase);

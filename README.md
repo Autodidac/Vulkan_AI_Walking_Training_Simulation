@@ -1,13 +1,13 @@
 # Runner
 
-Runner 0.7.20 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.21 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
 - CMake 3.28 or newer
 - C++23 compiler
 - Ninja or Visual Studio
-- Python 3 for deterministic v0.7.19 source generation
+- Python 3 for deterministic icon generation
 - vcpkg for SDL3, Vulkan, and shaderc on Windows
 
 The project pins and statically links the platform-neutral SandHybrid simulation library. Runner owns the SDL3/Vulkan application, rendering, training, editor, and package lifecycle.
@@ -40,14 +40,14 @@ ctest --test-dir build/linux --output-on-failure
 - `Space`: pause or resume background training
 - `Tab`: switch between Live Autopilot and Rig Lab
 - `1`, `2`, `3`: Normal, Faster, and Max CPU modes
-- `T`: toggle Training Results / Lifetime Totals
+- `T`: cycle Summary / Totals / Advanced Diagnostics
 - `U`: toggle Metric / Imperial reference labels
 - `A`: toggle optional torso/helmet/weapon overlays; foot sprites remain independent
 - `S`: save the current rig
 - `L`: load a rig
 - `Escape`: quit
 
-The application advertises the primary controls in the top bar. The live trainer distinguishes cumulative total updates from the resettable local policy/stage counter and exposes current stage work, evaluations, resets, pipeline state, and update throughput.
+The default Summary page explains learning health, lesson progress, the latest test, current useful evidence, the retained best controller, and the exact next goal. Raw scores, losses, quality keys, pipeline state, and throughput remain available on Advanced Diagnostics.
 
 The live view automatically fits the current rig, maintains useful course lookahead, and uses elapsed-time camera smoothing with a screen-space dead zone. Camera magnification never changes simulation scale, terrain coordinates, observations, rewards, or learned state.
 
@@ -84,8 +84,23 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0718_RUNTIME_RECOVERY.md`](docs/RUNNER_V0718_RUNTIME_RECOVERY.md) documents the update-loop, marker, control, telemetry, skin, and walking recovery.
 - [`docs/RUNNER_V0719_GENERAL_LOCOMOTION.md`](docs/RUNNER_V0719_GENERAL_LOCOMOTION.md) documents balance reserve, terrain adaptation, running, reversal, flee behavior, and emergency recovery.
 - [`docs/RUNNER_V0720_UI_PREVIEW_ICON.md`](docs/RUNNER_V0720_UI_PREVIEW_ICON.md) documents logical DPI, clipping, preview continuity, and application icon integration.
+- [`docs/RUNNER_V0721_READABLE_TELEMETRY.md`](docs/RUNNER_V0721_READABLE_TELEMETRY.md) defines every plain-language training status, counter, goal, and color rule.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.21 readable training dashboard
+
+- Replaces the default raw negative-score display with a plain-language learning-health headline.
+- Shows conservative lesson progress from required updates, attempts, and repeat tests.
+- Translates the latest rejected test into one actionable reason without implying that saved training was lost.
+- Reports stage-specific useful evidence and the exact current mastery goal.
+- Explains total updates, attempts, valid attempts, resets, rollbacks, and retained champions on-screen.
+- Keeps raw score, quality key, losses, optimizer state, throughput, and pipeline data on an explicit Advanced page.
+- Automatic training tunes motor strength, joint range, and stiffness without changing the character's anatomy.
+- Shipped bipeds use compact side-view rest poses and gait credit requires a real behind-to-ahead support crossing.
+- Quadruped and crawler presets use four articulated two-segment legs; the hexapod uses six independent tripod-phase supports.
+- Rig Lab is split into Presets, Structure, Motors, and Test pages and auto-fits every preset in the editor viewport.
+- v0.7.21 uses isolated autosave/training semantics; older checkpoints remain explicit transfer inputs.
 
 ## v0.7.20 UI and preview continuity
 

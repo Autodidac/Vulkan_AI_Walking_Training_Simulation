@@ -2,6 +2,7 @@
 #include "autonomy.hpp"
 #include "pixel_art.hpp"
 #include "simulation.hpp"
+#include "training_explainer.hpp"
 #include "ui_layout.hpp"
 #include "ui_font.hpp"
 #include "view_camera.hpp"
@@ -72,6 +73,18 @@ namespace runner
         constexpr Color body{ 0.82f, 0.59f, 0.24f, 1.0f };
         constexpr Color body_light{ 0.96f, 0.82f, 0.40f, 1.0f };
         constexpr Color leg{ 0.89f, 0.42f, 0.15f, 1.0f };
+
+        [[nodiscard]] constexpr Color telemetry_color(telemetry::Tone tone) noexcept
+        {
+            switch (tone)
+            {
+            case telemetry::Tone::information: return accent;
+            case telemetry::Tone::caution: return yellow;
+            case telemetry::Tone::success: return green;
+            case telemetry::Tone::danger: return danger;
+            }
+            return accent;
+        }
 
         void fill_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color color)
         {
@@ -268,8 +281,8 @@ namespace runner
         enum class RigPreset : std::uint8_t {
             scaffold, humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
         };
-        enum class RigPanelPage : std::uint8_t { body, motor };
-        enum class LivePanelPage : std::uint8_t { results, totals };
+        enum class RigPanelPage : std::uint8_t { presets, structure, motors, test };
+        enum class LivePanelPage : std::uint8_t { summary, totals, advanced };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
         render::Canvas canvas{};
@@ -278,8 +291,8 @@ namespace runner
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
-        RigPanelPage rig_panel_page{ RigPanelPage::body };
-        LivePanelPage live_panel_page{ LivePanelPage::results };
+        RigPanelPage rig_panel_page{ RigPanelPage::presets };
+        LivePanelPage live_panel_page{ LivePanelPage::summary };
         int selected_node{ -1 };
         int selected_bone{ -1 };
         int selected_motor{};
@@ -345,9 +358,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0720-ui-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0720-ui-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0720-ui-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0721-rig-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0721-rig-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0721-rig-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -423,8 +436,30 @@ namespace runner
 
         [[nodiscard]] float test_input_for_motor(std::size_t motor_index) const noexcept
         {
-            return sim::rig_test_motor_input(rig_test_pattern, motor_index,
-                session_runtime_seconds * 2.0f * pi * 1.05f, joint_test_input);
+            const float phase = session_runtime_seconds * 2.0f * pi * 1.05f;
+            if (rig_test_pattern != sim::RigTestPattern::gait)
+                return sim::rig_test_motor_input(rig_test_pattern,
+                    motor_index, phase, joint_test_input);
+            const float swing = std::sin(phase);
+            if (rig_preset == RigPreset::quadruped
+                || rig_preset == RigPreset::crawler4)
+            {
+                const std::size_t support_leg = motor_index / 2u;
+                        const bool phase_a = support_leg == 0u || support_leg == 3u;
+                const float drive = phase_a ? swing : -swing;
+                return (motor_index & 1u) == 0u
+                    ? 0.52f * drive
+                    : 0.48f * std::max(0.0f, drive)
+                        - 0.20f * std::max(0.0f, -drive);
+            }
+            if (rig_preset == RigPreset::hexapod && motor_index < 6u)
+            {
+                const bool phase_a = motor_index == 0u
+                    || motor_index == 2u || motor_index == 4u;
+                return 0.55f * (phase_a ? swing : -swing);
+            }
+            return sim::rig_test_motor_input(rig_test_pattern,
+                motor_index, phase, joint_test_input);
         }
 
         [[nodiscard]] bool has_direct_bone(std::uint16_t a, std::uint16_t b) const noexcept
@@ -446,14 +481,20 @@ namespace runner
             switch (rig_preset)
             {
             case RigPreset::quadruped:
-                return { "REAR NEAR LEG", "REAR FAR LEG", "FRONT NEAR LEG", "FRONT FAR LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A HIP", "REAR PHASE A KNEE",
+                    "REAR PHASE B HIP", "REAR PHASE B KNEE",
+                    "FRONT PHASE B HIP", "FRONT PHASE B KNEE",
+                    "FRONT PHASE A HIP", "FRONT PHASE A KNEE" };
             case RigPreset::crawler4:
-                return { "REAR LEG", "MID-REAR LEG", "MID-FRONT LEG", "FRONT LEG",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A HIP", "REAR PHASE A KNEE",
+                    "REAR PHASE B HIP", "REAR PHASE B KNEE",
+                    "FRONT PHASE B HIP", "FRONT PHASE B KNEE",
+                    "FRONT PHASE A HIP", "FRONT PHASE A KNEE" };
             case RigPreset::hexapod:
-                return { "REAR PAIR A", "REAR PAIR B", "MID PAIR", "FRONT PAIR",
-                    "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
+                return { "REAR PHASE A", "REAR PHASE B",
+                    "MIDDLE PHASE A", "MIDDLE PHASE B",
+                    "FRONT PHASE A", "FRONT PHASE B",
+                    "UNUSED 7", "UNUSED 8" };
             case RigPreset::monoped:
                 return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
                     "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
@@ -598,7 +639,7 @@ namespace runner
             if (start_x > 620.0f)
             {
                 add_text_fit(canvas, { 330.0f, 20.0f },
-                    "TAB VIEW  SPACE TRAIN  1/2/3 SPEED  T TOTALS  U UNITS  A ART  R RESET",
+                    "TAB VIEW  SPACE TRAIN  1/2/3 SPEED  T DATA PAGE  U UNITS  A ART  R RESET",
                     0.82f, muted, start_x - 352.0f, 0.78f);
             }
             if (button({ { start_x, 17.0f }, { tab_width - 6.0f, 42.0f } },
@@ -1086,7 +1127,7 @@ namespace runner
             canvas.pop_clip();
 
             const std::string pip_metrics = std::format(
-                "TOTAL {}  STAGE {}  {:.1f}M  STEPS {}",
+                "TOTAL UPDATES {}  LESSON UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
                 trainer.metrics().total_updates, trainer.metrics().update,
                 environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
@@ -1103,6 +1144,12 @@ namespace runner
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
             const rl::TrainingMetrics& metrics = trainer.metrics();
+            const telemetry::LessonProgress progress = telemetry::lesson_progress(autonomy);
+            const telemetry::StatusSummary human_status = telemetry::status_summary(
+                autonomy, metrics, trainer.background_enabled(), trainer.has_best_policy(),
+                trainer.controller_state_name());
+            const Color human_color = telemetry_color(human_status.tone);
+            const int progress_percent = static_cast<int>(std::lround(progress.overall * 100.0f));
 
             add_text_fit(canvas, cursor, "AUTONOMOUS RIG TRAINER", 1.54f,
                 white, usable_width, 1.08f);
@@ -1121,29 +1168,36 @@ namespace runner
             add_text_fit(canvas, cursor, sim::course_stage_name(autonomy.stage), 2.05f,
                 accent, usable_width, 1.30f);
             cursor.y += 38.0f;
-            add_text_fit(canvas, cursor, std::format("DIFFICULTY {:.0f}%   STRICT MASTERY {}/{}",
-                autonomy.difficulty * 100.0f, autonomy.mastery_streak,
-                rl::required_mastery_confirmations(autonomy.stage)),
-                1.02f, white, usable_width);
+            add_text_fit(canvas, cursor,
+                std::format("DIFFICULTY {:.0f}%   MASTERY TESTS {} / {}",
+                    autonomy.difficulty * 100.0f, autonomy.mastery_streak,
+                    rl::required_mastery_confirmations(autonomy.stage)),
+                0.98f, white, usable_width, 0.80f);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor,
-                std::format("STAGE WORK  UPD {}/{}  EPS {}/{}  EVAL {}/{}",
+                std::format("LESSON PROGRESS {}%", progress_percent),
+                1.02f, human_color, usable_width);
+            cursor.y += 23.0f;
+            const Rect progress_track{ cursor, { usable_width, 12.0f } };
+            fill_rounded_rect(canvas, progress_track, 6.0f, rgb(0x101820));
+            fill_rounded_rect(canvas,
+                { progress_track.position,
+                    { progress_track.size.x * progress.overall, progress_track.size.y } },
+                6.0f, human_color);
+            add_rounded_rect(canvas, progress_track, 6.0f, Color{}, border, 1.0f);
+            cursor.y += 21.0f;
+            add_text_fit(canvas, cursor,
+                std::format("UPDATES {} / {}   ATTEMPTS {} / {}",
                     autonomy.stage_fresh_updates, autonomy.stage_required_updates,
-                    autonomy.stage_fresh_episodes, autonomy.stage_required_episodes,
-                    autonomy.stage_fresh_evaluations, autonomy.stage_required_evaluations),
-                0.78f, accent, usable_width, 0.70f);
-            cursor.y += 22.0f;
-            cursor.y += add_wrapped_text(canvas, cursor, autonomy.message, 0.88f,
-                metrics.evaluation_valid || metrics.evaluation_count == 0 ? muted : danger,
-                usable_width, 4.0f);
-            cursor.y += 15.0f;
+                    autonomy.stage_fresh_episodes, autonomy.stage_required_episodes),
+                0.78f, muted, usable_width, 0.68f);
+            cursor.y += 20.0f;
             add_text_fit(canvas, cursor,
-                std::format("RIG GEN {}  ACCEPT {}  REJECT {}  RB {}  {}",
-                    autonomy.rig_generation, autonomy.accepted_rig_changes,
-                    autonomy.rejected_rig_changes, autonomy.rollback_count,
-                    autonomy.pipeline_stage),
-                0.80f, accent, usable_width, 0.66f);
-            cursor.y += 25.0f;
+                std::format("REPEAT TESTS {} / {}   STATUS: {}",
+                    autonomy.stage_fresh_evaluations, autonomy.stage_required_evaluations,
+                    human_status.headline),
+                0.78f, human_color, usable_width, 0.64f);
+            cursor.y += 28.0f;
 
             const float third = (usable_width - 12.0f) / 3.0f;
             if (button({ cursor, { third, 40.0f } }, "NORMAL", input, trainer.updates_per_cycle() == 1))
@@ -1183,167 +1237,312 @@ namespace runner
                 distance_units = ui_layout::DistanceUnits::imperial;
             cursor.y += 53.0f;
 
-            if (button({ cursor, { half, 38.0f } }, "TRAINING RESULTS", input,
-                live_panel_page == LivePanelPage::results))
-                live_panel_page = LivePanelPage::results;
-            if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 38.0f } },
-                "LIFETIME TOTALS", input, live_panel_page == LivePanelPage::totals))
+            const float page_third = (usable_width - 12.0f) / 3.0f;
+            if (button({ cursor, { page_third, 38.0f } }, "SUMMARY", input,
+                live_panel_page == LivePanelPage::summary))
+                live_panel_page = LivePanelPage::summary;
+            if (button({ cursor + Vec2{ page_third + 6.0f, 0.0f },
+                    { page_third, 38.0f } }, "TOTALS", input,
+                live_panel_page == LivePanelPage::totals))
                 live_panel_page = LivePanelPage::totals;
+            if (button({ cursor + Vec2{ (page_third + 6.0f) * 2.0f, 0.0f },
+                    { page_third, 38.0f } }, "ADVANCED", input,
+                live_panel_page == LivePanelPage::advanced))
+                live_panel_page = LivePanelPage::advanced;
             cursor.y += 47.0f;
 
-            if (live_panel_page == LivePanelPage::results)
+            if (live_panel_page == LivePanelPage::summary)
             {
                 add_rounded_rect(canvas,
-                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 247.0f } },
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 365.0f } },
                     8.0f, panel_alt, border, 1.0f);
-                add_text(canvas, cursor, "TRAINING RESULTS", 1.18f, accent);
-                cursor.y += 31.0f;
-                add_text_fit(canvas, cursor, std::format("TOTAL {}  STAGE {}  ENV {}",
-                    metrics.total_updates, metrics.update, metrics.environment_steps), 1.10f, white, usable_width);
+                add_text_fit(canvas, cursor, "WHAT THE TRAINER IS TELLING YOU",
+                    1.12f, accent, usable_width, 0.92f);
                 cursor.y += 29.0f;
-                add_text_fit(canvas, cursor, std::format("EVAL {:+.2f}   DIST {}",
-                    metrics.evaluation_score, format_distance(metrics.evaluation_distance)),
-                    1.10f, metrics.evaluation_valid ? green : danger, usable_width);
-                cursor.y += 29.0f;
-                add_text_fit(canvas, cursor, std::format("BEST {:+.2f} @ UPDATE {}",
-                    metrics.best_evaluation_score, metrics.best_update),
-                    1.10f, accent, usable_width);
-                cursor.y += 29.0f;
-                add_text_fit(canvas, cursor, std::format("SURVIVAL {:.1f} S   STRIDES {:.1f}",
-                    metrics.evaluation_survival, metrics.evaluation_stride_events),
-                    1.08f, white, usable_width);
-                cursor.y += 29.0f;
-                if (autonomy.stage == sim::CourseStage::balance)
+                add_text_fit(canvas, cursor, human_status.headline,
+                    1.32f, human_color, usable_width, 1.0f);
+                cursor.y += 27.0f;
+                cursor.y += add_wrapped_text(canvas, cursor, human_status.explanation,
+                    0.78f, white, usable_width, 3.0f);
+                cursor.y += 8.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("TOTAL UPDATES {}   LESSON {}%",
+                        metrics.total_updates, progress_percent),
+                    1.10f, white, usable_width, 0.86f);
+                cursor.y += 25.0f;
+                cursor.y += add_wrapped_text(canvas, cursor,
+                    telemetry::total_updates_help(), 0.68f, muted,
+                    usable_width, 2.0f);
+                cursor.y += 8.0f;
+                const Color test_color = telemetry_color(
+                    telemetry::latest_test_tone(metrics));
+                add_text_fit(canvas, cursor, telemetry::latest_test_title(metrics),
+                    1.02f, test_color, usable_width, 0.82f);
+                cursor.y += 23.0f;
+                cursor.y += add_wrapped_text(canvas, cursor,
+                    telemetry::latest_test_explanation(metrics, autonomy.stage),
+                    0.76f, metrics.evaluation_valid ? green : yellow,
+                    usable_width, 2.0f);
+                cursor.y += 7.0f;
+
+                std::string evidence{};
+                switch (autonomy.stage)
                 {
-                    add_text_fit(canvas, cursor,
-                        std::format("STANCE CUR {:.1f} LONG {:.1f} TARGET {:.1f} S",
-                            metrics.evaluation_stable_stance,
-                            metrics.evaluation_longest_stance,
-                            rl::standing_mastery_seconds),
-                        1.00f, metrics.evaluation_valid ? green : danger, usable_width);
-                    cursor.y += 29.0f;
+                case sim::CourseStage::balance:
+                {
                     const std::uint32_t valid_seeds = 6u
                         - std::min<std::uint32_t>(metrics.evaluation_invalid_runs, 6u);
-                    add_text_fit(canvas, cursor,
-                        std::format("SPIN {:.2f}/{:.2f}   VALID SEEDS {}/6",
-                            metrics.evaluation_spin_turns,
-                            rl::standing_mastery_spin_limit, valid_seeds),
-                        0.98f, rl::strict_balance_mastery(metrics) ? green : yellow,
-                        usable_width, 0.82f);
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: UPRIGHT {:.1f} / 6.0 S   VALID TEST SEEDS {} / 6",
+                        metrics.evaluation_longest_stance, valid_seeds);
+                    break;
                 }
-                else
-                {
-                    add_text_fit(canvas, cursor,
-                        std::format("STANCE {:.1f}/{:.1f} S   DUCK REC {:.1f}",
-                            metrics.evaluation_stable_stance,
-                            metrics.evaluation_longest_stance,
-                            metrics.evaluation_duck_recoveries),
-                        1.05f, metrics.evaluation_valid ? green : danger, usable_width);
-                    cursor.y += 29.0f;
-                    add_text_fit(canvas, cursor, std::format("QUALITY {:016X}   {}",
-                        metrics.evaluation_quality_key,
-                        rl::primary_motion_rejection_name(metrics.evaluation_rejection_mask)),
-                        0.98f, metrics.evaluation_valid ? accent : danger,
-                        usable_width, 0.82f);
+                case sim::CourseStage::duck_press:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: CROUCH {:.1f} S   RECOVERIES {:.0f}   SURVIVAL {:.1f} S",
+                        metrics.evaluation_duck_seconds,
+                        metrics.evaluation_duck_recoveries,
+                        metrics.evaluation_survival);
+                    break;
+                case sim::CourseStage::uneven:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: DISTANCE {}   STRIDE EVENTS {:.0f}   SURVIVAL {:.1f} S",
+                        format_distance(std::max(0.0f, metrics.evaluation_distance)),
+                        metrics.evaluation_stride_events,
+                        metrics.evaluation_survival);
+                    break;
+                case sim::CourseStage::crouch_walk:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: LOW {:.1f} S   STRIDES {:.0f}   OBSTACLES {:.0f}",
+                        metrics.evaluation_duck_seconds,
+                        metrics.evaluation_stride_events,
+                        metrics.evaluation_obstacles_passed);
+                    break;
+                case sim::CourseStage::ramps:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: POWERED JUMPS {:.0f}   SAFE LANDINGS {:.0f}   DISTANCE {}",
+                        metrics.evaluation_powered_jumps,
+                        metrics.evaluation_jump_landings,
+                        format_distance(std::max(0.0f, metrics.evaluation_distance)));
+                    break;
+                case sim::CourseStage::hurdles:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: OBSTACLES {:.0f}   LANDINGS {:.0f}   DISTANCE {}",
+                        metrics.evaluation_obstacles_passed,
+                        metrics.evaluation_jump_landings,
+                        format_distance(std::max(0.0f, metrics.evaluation_distance)));
+                    break;
+                case sim::CourseStage::duck_bars:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: FLIP LANDINGS {:.0f}   MAX TURNS {:.2f}   JUMPS {:.0f}",
+                        metrics.evaluation_spin_landings,
+                        metrics.evaluation_spin_turns,
+                        metrics.evaluation_powered_jumps);
+                    break;
+                case sim::CourseStage::moving_hazards:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: DISTANCE {}   STRIDES {:.0f}   HAZARDS PASSED {:.0f}",
+                        format_distance(std::max(0.0f, metrics.evaluation_distance)),
+                        metrics.evaluation_stride_events,
+                        metrics.evaluation_obstacles_passed);
+                    break;
                 }
+                add_text_fit(canvas, cursor, evidence, 0.76f,
+                    metrics.evaluation_valid ? green : muted, usable_width, 0.60f);
+                cursor.y += 23.0f;
+                add_text_fit(canvas, cursor,
+                    trainer.has_best_policy()
+                        ? std::format("RETAINED BEST CONTROLLER: SAVED AT UPDATE {}",
+                            metrics.best_update)
+                        : std::string("RETAINED BEST CONTROLLER: NONE YET - STILL SEARCHING"),
+                    0.76f, trainer.has_best_policy() ? green : yellow,
+                    usable_width, 0.62f);
+                cursor.y += 24.0f;
+                add_text(canvas, cursor, "NEXT GOAL", 0.86f, accent);
+                cursor.y += 20.0f;
+                cursor.y += add_wrapped_text(canvas, cursor,
+                    telemetry::stage_goal(autonomy.stage), 0.73f, white,
+                    usable_width, 2.0f);
+                cursor.y += 5.0f;
+                add_wrapped_text(canvas, cursor,
+                    telemetry::sample_budget_message(progress), 0.68f,
+                    progress.sample_budget_complete ? green : muted,
+                    usable_width, 2.0f);
+            }
+            else if (live_panel_page == LivePanelPage::totals)
+            {
+                add_rounded_rect(canvas,
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 365.0f } },
+                    8.0f, panel_alt, border, 1.0f);
+                add_text(canvas, cursor, "THIS RIG", 1.05f, accent);
+                cursor.y += 25.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("RUNNING TIME {}   LEARNING UPDATES {}",
+                        format_duration(rig_lifetime_seconds),
+                        ui_layout::lifetime_delta(metrics.update, rig_start_update)),
+                    0.76f, white, usable_width, 0.64f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("ATTEMPTS {}   VALID {}   FAILED CHECKS {}",
+                        ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
+                        ui_layout::lifetime_delta(metrics.total_valid_episodes,
+                            rig_start_valid_episodes),
+                        ui_layout::lifetime_delta(metrics.total_invalid_episodes,
+                            rig_start_invalid_episodes)),
+                    0.74f, white, usable_width, 0.60f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("DISTANCE {}   STEPS {}   FALLS {}",
+                        format_distance(static_cast<float>(std::max(0.0,
+                            metrics.total_distance - rig_start_distance))),
+                        ui_layout::lifetime_delta(metrics.total_alternating_steps,
+                            rig_start_steps),
+                        ui_layout::lifetime_delta(metrics.total_falls, rig_start_falls)),
+                    0.74f, white, usable_width, 0.60f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("COLLISIONS {}   OBSTACLES PASSED {}   BEST LESSON {}",
+                        ui_layout::lifetime_delta(metrics.total_collisions,
+                            rig_start_collisions),
+                        ui_layout::lifetime_delta(metrics.total_obstacles_passed,
+                            rig_start_obstacles),
+                        static_cast<unsigned>(rig_best_stage) + 1u),
+                    0.72f, white, usable_width, 0.58f);
+                cursor.y += 28.0f;
+
+                add_text(canvas, cursor, "THIS SESSION", 1.05f, accent);
+                cursor.y += 25.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("RUN TIME {}   TRAINING TIME {}",
+                        format_duration(session_runtime_seconds),
+                        format_duration(static_cast<float>(std::max(0.0,
+                            metrics.total_training_seconds - session_start_training_seconds)))),
+                    0.74f, white, usable_width, 0.60f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("ATTEMPTS {}   RESETS {}   ROLLBACKS {}",
+                        ui_layout::lifetime_delta(metrics.total_episodes,
+                            session_start_episodes),
+                        ui_layout::lifetime_delta(metrics.total_resets,
+                            session_start_resets),
+                        ui_layout::lifetime_delta(autonomy.rollback_count,
+                            session_start_rollbacks)),
+                    0.72f, white, usable_width, 0.58f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("DISTANCE {}   COLLISIONS {}   HAZARDS PASSED {}",
+                        format_distance(static_cast<float>(std::max(0.0,
+                            metrics.total_distance - session_start_distance))),
+                        ui_layout::lifetime_delta(metrics.total_collisions,
+                            session_start_collisions),
+                        ui_layout::lifetime_delta(metrics.total_obstacles_passed,
+                            session_start_obstacles)),
+                    0.72f, white, usable_width, 0.58f);
+                cursor.y += 28.0f;
+
+                add_text(canvas, cursor, "ALL TIME", 1.05f, accent);
+                cursor.y += 25.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("TOTAL UPDATES {}   ATTEMPTS {}   VALID {}",
+                        metrics.total_updates, metrics.total_episodes,
+                        metrics.total_valid_episodes),
+                    0.76f, white, usable_width, 0.62f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("DISTANCE {}   RESETS {}   ROLLBACKS {}",
+                        format_distance(static_cast<float>(metrics.total_distance)),
+                        metrics.total_resets, autonomy.rollback_count),
+                    0.72f, white, usable_width, 0.58f);
+                cursor.y += 26.0f;
+                cursor.y += add_wrapped_text(canvas, cursor,
+                    telemetry::attempts_help(), 0.66f, muted,
+                    usable_width, 2.0f);
+                cursor.y += 4.0f;
+                add_wrapped_text(canvas, cursor,
+                    telemetry::reset_help(), 0.66f, muted,
+                    usable_width, 2.0f);
             }
             else
             {
                 add_rounded_rect(canvas,
-                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 318.0f } },
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 365.0f } },
                     8.0f, panel_alt, border, 1.0f);
-                add_text(canvas, cursor, "RIG / SESSION / ALL-TIME TOTALS", 1.08f, accent);
+                add_text(canvas, cursor, "ADVANCED DIAGNOSTICS", 1.08f, accent);
                 cursor.y += 27.0f;
-                add_text_fit(canvas, cursor, std::format("{} WORKERS {} ENV {:.2f} UPDATES/S {}",
-                    autonomy.rollout_threads, autonomy.environment_count,
-                    autonomy.updates_per_second, autonomy.speed_mode),
-                    0.76f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("RIG {} UPD {} ENV {} BEST STAGE {}",
-                    format_duration(rig_lifetime_seconds),
-                    ui_layout::lifetime_delta(metrics.update, rig_start_update),
-                    ui_layout::lifetime_delta(metrics.environment_steps,
-                        rig_start_environment_steps),
-                    static_cast<unsigned>(rig_best_stage) + 1u),
-                    0.78f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("RIG EPS {} VALID {} BAD {} DIST {}",
-                    ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
-                    ui_layout::lifetime_delta(metrics.total_valid_episodes,
-                        rig_start_valid_episodes),
-                    ui_layout::lifetime_delta(metrics.total_invalid_episodes,
-                        rig_start_invalid_episodes),
-                    format_distance(static_cast<float>(std::max(0.0,
-                        metrics.total_distance - rig_start_distance)))),
-                    0.76f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("RIG STEP {} FALL {} COLL {} OBS {}",
-                    ui_layout::lifetime_delta(metrics.total_alternating_steps, rig_start_steps),
-                    ui_layout::lifetime_delta(metrics.total_falls, rig_start_falls),
-                    ui_layout::lifetime_delta(metrics.total_collisions, rig_start_collisions),
-                    ui_layout::lifetime_delta(metrics.total_obstacles_passed,
-                        rig_start_obstacles)), 0.76f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("RIG JUMP {} LAND {} FLIP {} TRAIN {}",
-                    ui_layout::lifetime_delta(metrics.total_powered_jumps, rig_start_jumps),
-                    ui_layout::lifetime_delta(metrics.total_landed_jumps, rig_start_landings),
-                    ui_layout::lifetime_delta(metrics.total_landed_flips, rig_start_flips),
-                    format_duration(static_cast<float>(std::max(0.0,
-                        metrics.total_training_seconds - rig_start_training_seconds)))),
-                    0.74f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("RIG ACCEPT {} REJECT {} ROLLBACK {}",
-                    ui_layout::lifetime_delta(autonomy.accepted_rig_changes,
-                        rig_start_accepted_rigs),
-                    ui_layout::lifetime_delta(autonomy.rejected_rig_changes,
-                        rig_start_rejected_rigs),
-                    ui_layout::lifetime_delta(autonomy.rollback_count, rig_start_rollbacks)),
-                    0.74f, white, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("SESSION {} TRAIN {} ENV {} EPS {} BAD {}",
-                    format_duration(session_runtime_seconds),
-                    format_duration(static_cast<float>(std::max(0.0,
-                        metrics.total_training_seconds - session_start_training_seconds))),
-                    ui_layout::lifetime_delta(metrics.total_environment_steps,
-                        session_start_environment_steps),
-                    ui_layout::lifetime_delta(metrics.total_episodes, session_start_episodes),
-                    ui_layout::lifetime_delta(metrics.total_invalid_episodes,
-                        session_start_invalid_episodes)), 0.70f, muted, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("SESSION DIST {} COLL {} JUMP {} FLIP {} OBS {}",
-                    format_distance(static_cast<float>(std::max(0.0,
-                        metrics.total_distance - session_start_distance))),
-                    ui_layout::lifetime_delta(metrics.total_collisions,
-                        session_start_collisions),
-                    ui_layout::lifetime_delta(metrics.total_powered_jumps, session_start_jumps),
-                    ui_layout::lifetime_delta(metrics.total_landed_flips, session_start_flips),
-                    ui_layout::lifetime_delta(metrics.total_obstacles_passed,
-                        session_start_obstacles)), 0.70f, muted, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("SESSION ACCEPT {} REJECT {} RESET {} RB {}",
-                    ui_layout::lifetime_delta(autonomy.accepted_rig_changes,
-                        session_start_accepted_rigs),
-                    ui_layout::lifetime_delta(autonomy.rejected_rig_changes,
-                        session_start_rejected_rigs),
-                    ui_layout::lifetime_delta(metrics.total_resets, session_start_resets),
-                    ui_layout::lifetime_delta(autonomy.rollback_count,
-                        session_start_rollbacks)), 0.70f, muted, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("ALL TRAIN {} UPD {} ENV {} EPS {} RESET {}",
-                    format_duration(static_cast<float>(metrics.total_training_seconds)),
-                    metrics.total_updates, metrics.total_environment_steps,
-                    metrics.total_episodes, metrics.total_resets),
-                    0.70f, muted, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("ALL DIST {} COLL {} JUMP {} FLIP {} OBS {}",
-                    format_distance(static_cast<float>(metrics.total_distance)),
-                    metrics.total_collisions, metrics.total_powered_jumps,
-                    metrics.total_landed_flips, metrics.total_obstacles_passed),
-                    0.70f, muted, usable_width);
-                cursor.y += 22.0f;
-                add_text_fit(canvas, cursor, std::format("ALL ACCEPT {} REJECT {} ROLLBACK {}",
-                    autonomy.accepted_rig_changes, autonomy.rejected_rig_changes,
-                    autonomy.rollback_count), 0.70f, muted, usable_width);
+                auto raw_number = [](float value)
+                {
+                    return std::isfinite(value)
+                        ? std::format("{:+.4f}", value)
+                        : std::string("NOT AVAILABLE");
+                };
+                const std::string quality = metrics.evaluation_quality_key == 0u
+                    ? std::string("NOT AVAILABLE")
+                    : std::format("{:016X}", metrics.evaluation_quality_key);
+                add_text_fit(canvas, cursor,
+                    std::format("RAW TEST SCORE {}   BEST RAW SCORE {}",
+                        raw_number(metrics.evaluation_score),
+                        raw_number(metrics.best_evaluation_score)),
+                    0.72f, muted, usable_width, 0.58f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("BEST SAVED AT LOCAL UPDATE {}   QUALITY KEY {}",
+                        metrics.best_update, quality),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("REJECTION MASK 0x{:08X}   {}",
+                        metrics.evaluation_rejection_mask,
+                        rl::primary_motion_rejection_name(
+                            metrics.evaluation_rejection_mask)),
+                    0.70f, metrics.evaluation_valid ? green : yellow,
+                    usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("POLICY LOSS {}   VALUE LOSS {}",
+                        raw_number(metrics.policy_loss), raw_number(metrics.value_loss)),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("ENTROPY {}   LEARNING RATE {:.7f}",
+                        raw_number(metrics.entropy), metrics.learning_rate),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("MEAN REWARD {}   MEAN SPEED {}",
+                        raw_number(metrics.mean_reward),
+                        format_speed(metrics.mean_speed)),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("LOCAL UPDATE {}   ENVIRONMENT STEPS {}",
+                        metrics.update, metrics.environment_steps),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("OPTIMIZER STEP {}   EXPLORATION {:.4f}",
+                        trainer.optimizer_step(), trainer.exploration()),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("WORKERS {}   SIMULATIONS {}   {:.2f} UPDATES/SECOND",
+                        autonomy.rollout_threads, autonomy.environment_count,
+                        autonomy.updates_per_second),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("PIPELINE {}   CONTROLLER {}",
+                        autonomy.pipeline_stage, trainer.controller_state_name()),
+                    0.70f, muted, usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("RIG GENERATION {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                        autonomy.rig_generation, autonomy.accepted_rig_changes,
+                        autonomy.rejected_rig_changes, autonomy.rollback_count),
+                    0.68f, muted, usable_width, 0.54f);
+                cursor.y += 25.0f;
+                add_wrapped_text(canvas, cursor,
+                    "These raw values are for debugging. A negative score or loss does not mean the trainer can never learn.",
+                    0.68f, accent, usable_width, 2.0f);
             }
             canvas.pop_clip();
             add_rounded_rect(canvas, rect, 11.0f, Color{}, border, 1.0f);
@@ -1428,21 +1627,20 @@ namespace runner
                 0.92f, environment.valid_motion() ? green : danger, text_width);
             line.y += 24.0f;
             add_text_fit(canvas, line,
-                std::format("STEPS {}  CROSS {}  HEEL {}  TOE {}  SLIP {:.2f}",
+                std::format("REAL STEPS {}   LEG CROSSINGS {}   HEEL STRIKES {}   TOE LIFTS {}",
                     environment.alternating_steps(), environment.limb_crossings(),
-                    environment.heel_strikes(), environment.toe_offs(),
-                    environment.stance_slip_speed()),
+                    environment.heel_strikes(), environment.toe_offs()),
                 0.84f, environment.recovering() ? yellow : muted, text_width);
             line.y += 23.0f;
             add_text_fit(canvas, line,
-                std::format("LEFT {}   RIGHT {}   PASSED {}",
+                std::format("LEFT FOOT {}   RIGHT FOOT {}   OBSTACLES PASSED {}",
                     sim::foot_contact_phase_name(environment.left_foot_phase()),
                     sim::foot_contact_phase_name(environment.right_foot_phase()),
                     environment.obstacles_passed()),
                 0.82f, muted, text_width);
             line.y += 23.0f;
             add_text_fit(canvas, line,
-                std::format("{}   TOTAL UPDATES {}   STAGE {}",
+                std::format("MOTION {}   TOTAL UPDATES {}   LESSON UPDATE {}",
                     sim::invalid_motion_name(environment.invalid_reason()),
                     trainer.metrics().total_updates, trainer.metrics().update),
                 0.80f, environment.valid_motion() ? accent : danger, text_width);
@@ -1545,15 +1743,38 @@ namespace runner
 
         void draw_blueprint(Rect viewport, const InputState& input)
         {
-            constexpr float scale = 86.0f;
-            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport, 0.0f, scale).y;
+            float minimum_x = std::numeric_limits<float>::infinity();
+            float maximum_x = -std::numeric_limits<float>::infinity();
+            float maximum_y = 0.0f;
+            for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
+            {
+                const float radius = index < blueprint.radii.size()
+                    ? blueprint.radii[index] : 0.15f;
+                minimum_x = std::min(minimum_x, blueprint.nodes[index].x - radius);
+                maximum_x = std::max(maximum_x, blueprint.nodes[index].x + radius);
+                maximum_y = std::max(maximum_y, blueprint.nodes[index].y + radius);
+            }
+            if (!std::isfinite(minimum_x) || !std::isfinite(maximum_x))
+            {
+                minimum_x = -1.0f;
+                maximum_x = 1.0f;
+            }
+            const float blueprint_camera = 0.5f * (minimum_x + maximum_x);
+            const float horizontal_scale = (viewport.size.x - 90.0f)
+                / std::max(1.0f, maximum_x - minimum_x + 0.50f);
+            const float vertical_scale = (viewport.size.y * 0.70f - 45.0f)
+                / std::max(1.0f, maximum_y + 0.30f);
+            const float scale = std::clamp(
+                std::min(horizontal_scale, vertical_scale), 42.0f, 106.0f);
+            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport,
+                blueprint_camera, scale).y;
             canvas.quad({ viewport.position.x, ground_y }, viewport.position + viewport.size, rgb(0x111820));
             canvas.line({ viewport.position.x, ground_y }, { viewport.position.x + viewport.size.x, ground_y },
                 3.0f, rgb(0x475762));
 
             auto screen = [&](std::size_t index)
             {
-                return world_to_screen(blueprint.nodes[index], viewport, 0.0f, scale);
+                return world_to_screen(blueprint.nodes[index], viewport, blueprint_camera, scale);
             };
             std::vector<Vec2> preview = blueprint.nodes;
             for (int motor_index = 0; motor_index < static_cast<int>(sim::action_count); ++motor_index)
@@ -1595,7 +1816,7 @@ namespace runner
             }
             auto preview_screen = [&](std::size_t index)
             {
-                return world_to_screen(preview[index], viewport, 0.0f, scale);
+                return world_to_screen(preview[index], viewport, blueprint_camera, scale);
             };
             for (std::size_t index = 0; index < blueprint.bones.size(); ++index)
             {
@@ -1682,7 +1903,7 @@ namespace runner
                     const float t = static_cast<float>(segment) / 32.0f;
                     const float angle = lerp(motor.minimum_angle, motor.maximum_angle, t);
                     arc.push_back(world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                        viewport, 0.0f, scale));
+                        viewport, blueprint_camera, scale));
                 }
                 canvas.polyline(arc, 4.0f, accent);
                 const Vec2 pivot_screen = screen(motor.pivot);
@@ -1690,7 +1911,7 @@ namespace runner
                 {
                     canvas.line(pivot_screen,
                         world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                            viewport, 0.0f, scale), width, color);
+                            viewport, blueprint_camera, scale), width, color);
                 };
                 ray(motor.minimum_angle, danger, 2.5f);
                 ray(motor.maximum_angle, danger, 2.5f);
@@ -1701,9 +1922,7 @@ namespace runner
                 add_text(canvas, screen(motor.c) + Vec2{ 8.0f, -15.0f }, "C / DRIVEN", 1.05f, yellow);
             }
 
-            const Rect joint_rect{ { viewport.position.x + 20.0f, viewport.position.y + viewport.size.y - 220.0f },
-                { std::min(850.0f, viewport.size.x - 40.0f), 200.0f } };
-            const bool over_joint_lab = contains(joint_rect, input.mouse);
+            const bool over_joint_lab = false;
             if (input.left_pressed && input.alt
                 && contains(viewport, input.mouse) && !over_joint_lab)
             {
@@ -1750,7 +1969,7 @@ namespace runner
                 }
                 if (input.shift && hit < 0 && blueprint.nodes.size() < 128)
                 {
-                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, 0.0f, scale));
+                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, blueprint_camera, scale));
                     blueprint.radii.push_back(0.16f);
                     selected_node = static_cast<int>(blueprint.nodes.size() - 1);
                     rig_preset = RigPreset::custom;
@@ -1778,13 +1997,12 @@ namespace runner
             }
             if (dragging_node && input.left_down && !over_joint_lab && selected_node >= 0
                 && static_cast<std::size_t>(selected_node) < blueprint.nodes.size())
-                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, 0.0f, scale);
+                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, blueprint_camera, scale);
             if (dragging_node && input.left_released)
             {
                 dragging_node = false;
                 apply_small_rig_change("NODE MOVED");
             }
-            draw_joint_lab(joint_rect, input);
         }
 
         bool delete_selected_node()
@@ -1861,160 +2079,185 @@ namespace runner
         void draw_rig_panel(Rect rect, const InputState& input)
         {
             add_rounded_rect(canvas, rect, 11.0f, panel, border, 1.0f);
+            canvas.push_clip(rect.position + Vec2{ 1.0f, 1.0f },
+                rect.position + rect.size - Vec2{ 1.0f, 1.0f });
             const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
+            const float usable = rect.size.x - 36.0f;
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
-            add_text(canvas, cursor, "GUIDED RIG LAB", 1.80f, white);
+            add_text_fit(canvas, cursor, "RIG LAB", 1.70f, white, usable, 1.10f);
             cursor.y += 38.0f;
-            const float page_width = (rect.size.x - 42.0f) * 0.5f;
-            if (button({ cursor, { page_width, 36.0f } }, "BODY / FILES", input,
-                rig_panel_page == RigPanelPage::body))
-                rig_panel_page = RigPanelPage::body;
-            if (button({ cursor + Vec2{ page_width + 6.0f, 0.0f }, { page_width, 36.0f } }, "JOINT / MOTOR", input,
-                rig_panel_page == RigPanelPage::motor))
-                rig_panel_page = RigPanelPage::motor;
-            cursor.y += 49.0f;
-
-            if (rig_panel_page == RigPanelPage::body)
+            const float tab = (usable - 18.0f) * 0.25f;
+            auto page_button = [&](int slot, std::string_view label, RigPanelPage page)
             {
-                add_text(canvas, cursor, "CHOOSE A BODY; AUTOPILOT RESTARTS AT BALANCE", 1.02f, muted);
-                cursor.y += 27.0f;
-                const float fourth = (rect.size.x - 54.0f) / 4.0f;
-                if (button({ cursor, { fourth, 35.0f } }, "HUMANOID", input, rig_preset == RigPreset::humanoid))
-                    use_preset(RigPreset::humanoid);
-                if (button({ cursor + Vec2{ fourth + 6.0f, 0.0f }, { fourth, 35.0f } }, "BIPED", input,
-                    rig_preset == RigPreset::biped))
-                    use_preset(RigPreset::biped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 2.0f, 0.0f }, { fourth, 35.0f } }, "QUADRUPED", input,
-                    rig_preset == RigPreset::quadruped))
-                    use_preset(RigPreset::quadruped);
-                if (button({ cursor + Vec2{ (fourth + 6.0f) * 3.0f, 0.0f }, { fourth, 35.0f } }, "4-LEG", input,
-                    rig_preset == RigPreset::crawler4))
-                    use_preset(RigPreset::crawler4);
-                cursor.y += 43.0f;
-                const float lower_fourth = (rect.size.x - 54.0f) / 4.0f;
-                if (button({ cursor, { lower_fourth, 35.0f } }, "SCAFFOLD", input,
-                    rig_preset == RigPreset::scaffold))
-                    use_preset(RigPreset::scaffold);
-                if (button({ cursor + Vec2{ lower_fourth + 6.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "CHICKEN", input, rig_preset == RigPreset::chicken))
-                    use_preset(RigPreset::chicken);
-                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 2.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "6-LEG", input, rig_preset == RigPreset::hexapod))
-                    use_preset(RigPreset::hexapod);
-                if (button({ cursor + Vec2{ (lower_fourth + 6.0f) * 3.0f, 0.0f }, { lower_fourth, 35.0f } },
-                    "MONOPED", input, rig_preset == RigPreset::monoped))
-                    use_preset(RigPreset::monoped);
-                cursor.y += 48.0f;
+                if (button({ cursor + Vec2{ static_cast<float>(slot) * (tab + 6.0f), 0.0f },
+                    { tab, 35.0f } }, label, input, rig_panel_page == page))
+                    rig_panel_page = page;
+            };
+            page_button(0, "PRESETS", RigPanelPage::presets);
+            page_button(1, "STRUCTURE", RigPanelPage::structure);
+            page_button(2, "MOTORS", RigPanelPage::motors);
+            page_button(3, "TEST", RigPanelPage::test);
+            cursor.y += 48.0f;
 
-                const float file_third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { file_third, 35.0f } }, "SAVE RIG", input) || input.save_pressed)
+            if (rig_panel_page == RigPanelPage::presets)
+            {
+                add_text(canvas, cursor, "CANONICAL SIDE-VIEW RIGS", 1.02f, accent);
+                cursor.y += 25.0f;
+                const float half = (usable - 6.0f) * 0.5f;
+                auto preset = [&](int row, int column, std::string_view label,
+                    RigPreset value)
+                {
+                    const Vec2 position = cursor + Vec2{
+                        static_cast<float>(column) * (half + 6.0f),
+                        static_cast<float>(row) * 41.0f };
+                    if (button({ position, { half, 35.0f } }, label, input,
+                        rig_preset == value))
+                        use_preset(value);
+                };
+                preset(0, 0, "HUMANOID", RigPreset::humanoid);
+                preset(0, 1, "BIPED", RigPreset::biped);
+                preset(1, 0, "SCAFFOLD", RigPreset::scaffold);
+                preset(1, 1, "CHICKEN", RigPreset::chicken);
+                preset(2, 0, "QUADRUPED", RigPreset::quadruped);
+                preset(2, 1, "FOUR-LEG CRAWLER", RigPreset::crawler4);
+                preset(3, 0, "HEXAPOD", RigPreset::hexapod);
+                preset(3, 1, "MONOPED", RigPreset::monoped);
+                cursor.y += 176.0f;
+                add_wrapped_text(canvas, cursor,
+                    "Selecting a preset restores its authored anatomy. Automatic training tunes control parameters only; it never changes limb length or adds body parts.",
+                    0.73f, muted, usable, 2.0f);
+                cursor.y += 55.0f;
+
+                const float third = (usable - 12.0f) / 3.0f;
+                if (button({ cursor, { third, 35.0f } }, "SAVE RIG", input)
+                    || input.save_pressed)
                 {
                     std::string error{};
                     set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
                 }
-                if (button({ cursor + Vec2{ file_third + 6.0f, 0.0f }, { file_third, 35.0f } }, "LOAD RIG", input)
-                    || input.load_pressed)
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f },
+                    { third, 35.0f } }, "LOAD RIG", input) || input.load_pressed)
                 {
                     std::string error{};
                     blueprint = sim::CreatureBlueprint::load(rig_path, error);
                     rig_preset = RigPreset::custom;
                     trainer.set_blueprint(blueprint, false);
-                    set_status(error.empty() ? "RIG LOADED - FRESH BALANCE LESSON STARTED" : error);
+                    set_status(error.empty()
+                        ? "CUSTOM RIG LOADED - FRESH BALANCE LESSON STARTED"
+                        : error);
                 }
-                if (button({ cursor + Vec2{ (file_third + 6.0f) * 2.0f, 0.0f }, { file_third, 35.0f } },
-                    "USE EVOLVED", input))
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
+                    { third, 35.0f } }, "COPY TRAINING RIG", input))
                 {
                     blueprint = trainer.blueprint();
                     rig_preset = RigPreset::custom;
-                    set_status("CURRENT AUTOPILOT-EVOLVED RIG COPIED INTO LAB");
+                    set_status("CURRENT TRAINING RIG COPIED INTO STRUCTURE EDITOR");
                 }
-                cursor.y += 50.0f;
-                const float control_third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { control_third, 35.0f } },
+                cursor.y += 48.0f;
+                if (button({ cursor, { half, 35.0f } }, "RESTORE RETAINED CONTROLLER",
+                    input, trainer.has_best_policy(), trainer.has_best_policy()))
+                {
+                    set_status(trainer.restore_best_policy()
+                        ? "RETAINED CONTROLLER RESTORE QUEUED"
+                        : "NO RETAINED CONTROLLER AVAILABLE");
+                }
+                if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } },
+                    "START FRESH CONTROLLER", input))
+                {
+                    trainer.reset_policy(0x721300u
+                        + autonomy.rig_generation * 0x9E3779B97F4A7C15ULL);
+                    set_status("FRESH CONTROLLER QUEUED FOR UNCHANGED ANATOMY");
+                }
+                cursor.y += 48.0f;
+                const float visual_third = (usable - 12.0f) / 3.0f;
+                if (button({ cursor, { visual_third, 35.0f } },
                     right_leg_near ? "NEAR LEG: RIGHT" : "NEAR LEG: LEFT",
                     input, right_leg_near))
                     right_leg_near = !right_leg_near;
-                cursor.y += 43.0f;
-                if (button({ cursor, { control_third, 35.0f } },
-                    optional_art_enabled ? "OPTIONAL ART: ON" : "OPTIONAL ART: OFF",
+                if (button({ cursor + Vec2{ visual_third + 6.0f, 0.0f },
+                    { visual_third, 35.0f } },
+                    optional_art_enabled ? "ART: ON" : "ART: OFF",
                     input, optional_art_enabled))
                     optional_art_enabled = !optional_art_enabled;
-                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
-                    { control_third, 35.0f } },
+                if (button({ cursor + Vec2{ (visual_third + 6.0f) * 2.0f, 0.0f },
+                    { visual_third, 35.0f } },
                     debug_skeleton_overlay ? "SKELETON: ON" : "SKELETON: OFF",
                     input, debug_skeleton_overlay))
                     debug_skeleton_overlay = !debug_skeleton_overlay;
-                cursor.y -= 43.0f;
-                if (button({ cursor + Vec2{ control_third + 6.0f, 0.0f },
-                    { control_third, 35.0f } }, "RESTORE CHAMPION", input,
-                    trainer.has_best_policy(), trainer.has_best_policy()))
-                {
-                    set_status(trainer.restore_best_policy()
-                        ? "VERIFIED CHAMPION RESTORE QUEUED"
-                        : "NO VERIFIED CHAMPION AVAILABLE");
-                }
-                if (button({ cursor + Vec2{ (control_third + 6.0f) * 2.0f, 0.0f },
-                    { control_third, 35.0f } }, "FRESH POLICY", input))
-                {
-                    trainer.reset_policy(0x715300u
-                        + autonomy.rig_generation * 0x9E3779B97F4A7C15ULL);
-                    set_status("FRESH POLICY NURSERY QUEUED FOR CURRENT RIG");
-                }
-                cursor.y += 46.0f;
-
-                add_text(canvas, cursor, std::format("SELECTED NODE: {}", selected_node), 1.20f, muted);
-                if (button({ cursor + Vec2{ rect.size.x - 151.0f, -6.0f }, { 115.0f, 32.0f } },
-                    "DELETE", input, false, selected_node >= 0))
+                cursor.y += 50.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("CONTROL TUNING {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                        autonomy.rig_generation, autonomy.accepted_rig_changes,
+                        autonomy.rejected_rig_changes, autonomy.rollback_count),
+                    0.74f, accent, usable, 0.60f);
+            }
+            else if (rig_panel_page == RigPanelPage::structure)
+            {
+                add_text(canvas, cursor, "MANUAL STRUCTURE EDITING", 1.02f, accent);
+                cursor.y += 25.0f;
+                add_wrapped_text(canvas, cursor,
+                    "Only manual edits change anatomy. Select and drag nodes in the viewport. Shift adds a node, Ctrl connects it, Alt selects a bone.",
+                    0.72f, muted, usable, 2.0f);
+                cursor.y += 58.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("SELECTED NODE: {}", selected_node),
+                    1.02f, white, usable - 120.0f);
+                if (button({ cursor + Vec2{ usable - 110.0f, -5.0f },
+                    { 110.0f, 32.0f } }, "DELETE NODE", input,
+                    false, selected_node >= 0))
                     delete_selected_node();
-                cursor.y += 33.0f;
-                if (selected_node >= 0 && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
+                cursor.y += 36.0f;
+                if (selected_node >= 0
+                    && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
                 {
                     float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
-                    const float updated = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
+                    const float updated = slider({ cursor, { usable, 38.0f } },
                         "NODE SIZE", radius, 0.08f, 0.60f, input);
                     if (updated != radius)
                     {
                         radius = updated;
                         queue_rig_change("NODE SIZE UPDATED");
                     }
-                    cursor.y += 50.0f;
-
-                    add_text(canvas, cursor, "SELECTED NODE ROLE", 1.08f, muted);
-                    cursor.y += 23.0f;
-                    const float role_width = (rect.size.x - 52.0f) * 0.20f;
-                    auto role = [&](int slot, std::string_view label, std::uint16_t& target)
+                    cursor.y += 52.0f;
+                    add_text(canvas, cursor, "SEMANTIC ROLE", 0.92f, muted);
+                    cursor.y += 22.0f;
+                    const float role = (usable - 16.0f) * 0.20f;
+                    auto set_role = [&](int slot, std::string_view label,
+                        std::uint16_t& target)
                     {
-                        if (button({ cursor + Vec2{ role_width * static_cast<float>(slot), 0.0f },
-                            { role_width - 4.0f, 32.0f } }, label, input, target == selected_node))
+                        if (button({ cursor + Vec2{ static_cast<float>(slot) * (role + 4.0f), 0.0f },
+                            { role, 31.0f } }, label, input,
+                            target == selected_node))
                         {
                             target = static_cast<std::uint16_t>(selected_node);
                             apply_small_rig_change("NODE ROLE UPDATED");
                         }
                     };
-                    role(0, "ROOT", blueprint.root_node);
-                    role(1, "TORSO", blueprint.torso_node);
-                    role(2, "HEAD", blueprint.head_node);
-                    role(3, "FOOT L", blueprint.left_contact_node);
-                    role(4, "FOOT R", blueprint.right_contact_node);
-                    cursor.y += 44.0f;
+                    set_role(0, "ROOT", blueprint.root_node);
+                    set_role(1, "TORSO", blueprint.torso_node);
+                    set_role(2, "HEAD", blueprint.head_node);
+                    set_role(3, "PHASE A", blueprint.left_contact_node);
+                    set_role(4, "PHASE B", blueprint.right_contact_node);
+                    cursor.y += 45.0f;
                 }
-                cursor.y += 5.0f;
-                add_text(canvas, cursor, std::format("SELECTED BONE: {}", selected_bone), 1.10f, muted);
-                cursor.y += 27.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("SELECTED BONE: {}", selected_bone),
+                    1.00f, white, usable - 120.0f);
+                cursor.y += 34.0f;
                 if (selected_bone >= 0
                     && static_cast<std::size_t>(selected_bone) < blueprint.bones.size())
                 {
                     sim::DistanceConstraint& selected = blueprint.bones[
                         static_cast<std::size_t>(selected_bone)];
-                    const float stiffness = slider({ cursor, { rect.size.x - 170.0f, 38.0f } },
+                    const float stiffness = slider({ cursor, { usable, 38.0f } },
                         "BONE STIFFNESS", selected.stiffness, 0.20f, 1.0f, input);
                     if (stiffness != selected.stiffness)
                     {
                         selected.stiffness = stiffness;
                         queue_rig_change("BONE STIFFNESS UPDATED");
                     }
-                    if (button({ cursor + Vec2{ rect.size.x - 152.0f, -5.0f },
-                        { 116.0f, 31.0f } }, "DELETE BONE", input))
+                    cursor.y += 52.0f;
+                    if (button({ cursor, { usable, 34.0f } }, "DELETE SELECTED BONE", input))
                     {
                         sim::CreatureBlueprint candidate = blueprint;
                         candidate.bones.erase(candidate.bones.begin() + selected_bone);
@@ -2025,140 +2268,140 @@ namespace runner
                             apply_small_rig_change("BONE DELETED");
                         }
                         else
-                        {
-                            set_status("BONE DELETE REJECTED - RIG OR MOTOR WOULD DISCONNECT");
-                        }
+                            set_status("BONE DELETE REJECTED - RIG WOULD DISCONNECT");
                     }
-                    cursor.y += 47.0f;
                 }
-                add_text(canvas, cursor,
-                    std::format("GEN {}  ACCEPT {}  REJECT {}  ROLLBACK {}",
-                        autonomy.rig_generation, autonomy.accepted_rig_changes,
-                        autonomy.rejected_rig_changes, autonomy.rollback_count),
-                    0.92f, accent);
-                cursor.y += 25.0f;
-                add_text(canvas, cursor, "SELECT/DRAG NODES. SHIFT ADDS, CTRL CONNECTS, ALT SELECTS BONE.", 0.92f, muted);
             }
-            else
+            else if (rig_panel_page == RigPanelPage::motors)
             {
-                add_text(canvas, cursor, "A = PARENT REFERENCE   PIVOT = JOINT   C = DRIVEN CHILD", 1.00f, muted);
-                cursor.y += 29.0f;
-                const float motor_width = (rect.size.x - 48.0f) * 0.25f;
+                add_text(canvas, cursor, "MOTOR CHAINS", 1.02f, accent);
+                cursor.y += 25.0f;
+                const float quarter = (usable - 18.0f) * 0.25f;
                 for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
                 {
                     const int column = index % 4;
                     const int row = index / 4;
-                    const bool motor_available = static_cast<std::size_t>(index) < blueprint.active_motor_count;
-                    if (button({ cursor + Vec2{ motor_width * static_cast<float>(column),
-                        static_cast<float>(row) * 41.0f }, { motor_width - 4.0f, 35.0f } },
-                        std::to_string(index + 1), input, selected_motor == index, motor_available))
+                    const bool available = static_cast<std::size_t>(index)
+                        < blueprint.active_motor_count;
+                    if (button({ cursor + Vec2{
+                            static_cast<float>(column) * (quarter + 6.0f),
+                            static_cast<float>(row) * 40.0f },
+                        { quarter, 34.0f } }, std::format("MOTOR {}", index + 1),
+                        input, selected_motor == index, available))
                     {
                         selected_motor = index;
                         joint_test_group = JointTestGroup::selected;
                     }
                 }
-                cursor.y += 87.0f;
+                cursor.y += 88.0f;
                 const auto names = motor_names();
-                add_text(canvas, cursor, names[static_cast<std::size_t>(selected_motor)], 1.55f, white);
-                cursor.y += 30.0f;
-
-                sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
-                const float endpoint = (rect.size.x - 48.0f) / 3.0f;
-                auto set_endpoint = [&](Vec2 position, std::string_view label, std::uint16_t& value)
+                add_text_fit(canvas, cursor,
+                    names[static_cast<std::size_t>(selected_motor)],
+                    1.28f, white, usable, 0.90f);
+                cursor.y += 31.0f;
+                sim::MotorConstraint& motor = blueprint.motors[
+                    static_cast<std::size_t>(selected_motor)];
+                const float third = (usable - 12.0f) / 3.0f;
+                auto endpoint = [&](int slot, std::string_view label,
+                    std::uint16_t& value)
                 {
-                    if (!button({ position, { endpoint, 34.0f } }, label, input, false, selected_node >= 0))
+                    if (!button({ cursor + Vec2{ static_cast<float>(slot) * (third + 6.0f), 0.0f },
+                        { third, 34.0f } }, label, input, false, selected_node >= 0))
                         return;
                     value = static_cast<std::uint16_t>(selected_node);
-                    const bool distinct = motor.a != motor.pivot && motor.pivot != motor.c && motor.a != motor.c;
-                    const bool connected = distinct && has_direct_bone(motor.a, motor.pivot)
+                    const bool connected = motor.a != motor.pivot
+                        && motor.pivot != motor.c && motor.a != motor.c
+                        && has_direct_bone(motor.a, motor.pivot)
                         && has_direct_bone(motor.pivot, motor.c);
                     motor.enabled = connected;
                     if (connected)
                     {
-                        const float negative = std::max(2.0f,
-                            (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                        const float positive = std::max(2.0f,
-                            (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                        blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                        blueprint.calibrate_motor(
+                            static_cast<std::size_t>(selected_motor), 30.0f,
+                            30.0f, motor.strength);
                         apply_small_rig_change("MOTOR ENDPOINT UPDATED");
                     }
                     else
-                    {
-                        set_status("MOTOR DISABLED - A-PIVOT AND PIVOT-C MUST EACH BE REAL BONES");
-                    }
+                        set_status("MOTOR NEEDS REAL A-PIVOT AND PIVOT-C BONES");
                 };
-                set_endpoint(cursor, "SET A / PARENT", motor.a);
-                set_endpoint(cursor + Vec2{ endpoint + 6.0f, 0.0f }, "SET PIVOT", motor.pivot);
-                set_endpoint(cursor + Vec2{ (endpoint + 6.0f) * 2.0f, 0.0f }, "SET C / DRIVEN", motor.c);
-                cursor.y += 44.0f;
-
-                const bool endpoints_valid = motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
-                    && motor.c < blueprint.nodes.size() && motor.a != motor.pivot
-                    && motor.pivot != motor.c && motor.a != motor.c;
-                const bool connected = endpoints_valid && has_direct_bone(motor.a, motor.pivot)
+                endpoint(0, "SET PARENT", motor.a);
+                endpoint(1, "SET PIVOT", motor.pivot);
+                endpoint(2, "SET DRIVEN", motor.c);
+                cursor.y += 45.0f;
+                const bool connected = motor.a < blueprint.nodes.size()
+                    && motor.pivot < blueprint.nodes.size()
+                    && motor.c < blueprint.nodes.size()
+                    && motor.a != motor.pivot && motor.pivot != motor.c
+                    && motor.a != motor.c
+                    && has_direct_bone(motor.a, motor.pivot)
                     && has_direct_bone(motor.pivot, motor.c);
-                add_text(canvas, cursor, std::format("A {}  PIVOT {}  C {}  {}", motor.a, motor.pivot, motor.c,
-                    connected ? (motor.enabled ? "READY" : "DISABLED") : "NOT CONNECTED"), 1.12f,
-                    connected ? accent : danger);
-                cursor.y += 30.0f;
-
-                const float third = (rect.size.x - 48.0f) / 3.0f;
-                if (button({ cursor, { third, 34.0f } }, "SET REST", input, false, connected))
+                add_text_fit(canvas, cursor,
+                    std::format("PARENT {}   PIVOT {}   DRIVEN {}   {}",
+                        motor.a, motor.pivot, motor.c,
+                        connected ? (motor.enabled ? "READY" : "DISABLED")
+                            : "NOT CONNECTED"),
+                    0.78f, connected ? green : yellow, usable, 0.62f);
+                cursor.y += 29.0f;
+                float negative = (motor.neutral_angle - motor.minimum_angle)
+                    * 180.0f / pi;
+                float positive = (motor.maximum_angle - motor.neutral_angle)
+                    * 180.0f / pi;
+                const float updated_negative = slider({ cursor, { usable, 38.0f } },
+                    "NEGATIVE RANGE", negative, 2.0f, 120.0f, input, " DEG");
+                if (updated_negative != negative)
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, positive, motor.strength);
+                cursor.y += 50.0f;
+                const float updated_positive = slider({ cursor, { usable, 38.0f } },
+                    "POSITIVE RANGE", positive, 2.0f, 120.0f, input, " DEG");
+                if (updated_positive != positive)
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, updated_positive, motor.strength);
+                cursor.y += 50.0f;
+                const float power = slider({ cursor, { usable, 38.0f } },
+                    "MOTOR POWER", motor.strength, 0.0f, 0.20f, input);
+                if (power != motor.strength)
                 {
-                    const float negative = std::max(2.0f, (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi);
-                    const float positive = std::max(2.0f, (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), negative, positive, motor.strength);
+                    motor.strength = power;
+                    queue_rig_change("MOTOR POWER UPDATED");
+                }
+                cursor.y += 53.0f;
+                if (button({ cursor, { third, 34.0f } }, "SET REST", input,
+                    false, connected))
+                {
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        updated_negative, updated_positive, motor.strength);
                     apply_small_rig_change("REST POSE RECALIBRATED");
                 }
-                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } }, "SAFE RANGE", input,
-                    false, connected))
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f }, { third, 34.0f } },
+                    "SAFE RANGE", input, false, connected))
                 {
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, 0.050f);
-                    apply_small_rig_change("SAFE JOINT DEFAULT APPLIED");
+                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
+                        18.0f, 20.0f, 0.050f);
+                    apply_small_rig_change("SAFE MOTOR DEFAULT APPLIED");
                 }
-                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f }, { third, 34.0f } }, "SWAP A/C", input,
-                    false, connected))
-                {
-                    std::swap(motor.a, motor.c);
-                    blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor), 16.0f, 18.0f, motor.strength);
-                    apply_small_rig_change("MOTOR DIRECTION SWAPPED");
-                }
-                cursor.y += 46.0f;
-
-                if (button({ cursor, { rect.size.x - 36.0f, 34.0f } },
-                    motor.enabled ? "DISABLE THIS MOTOR" : "ENABLE THIS MOTOR", input, motor.enabled, connected))
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
+                    { third, 34.0f } }, motor.enabled ? "DISABLE" : "ENABLE",
+                    input, motor.enabled, connected))
                 {
                     motor.enabled = !motor.enabled;
-                    apply_small_rig_change(motor.enabled ? "MOTOR ENABLED" : "MOTOR DISABLED");
-                }
-                cursor.y += 47.0f;
-
-                float negative = (motor.neutral_angle - motor.minimum_angle) * 180.0f / pi;
-                float positive = (motor.maximum_angle - motor.neutral_angle) * 180.0f / pi;
-                const float updated_negative = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "BACKWARD TRAVEL", negative, 2.0f, 60.0f, input, " DEG");
-                if (updated_negative != negative)
-                {
-                    motor.minimum_angle = motor.neutral_angle - updated_negative * pi / 180.0f;
-                    queue_rig_change("BACKWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_positive = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "FORWARD TRAVEL", positive, 2.0f, 60.0f, input, " DEG");
-                if (updated_positive != positive)
-                {
-                    motor.maximum_angle = motor.neutral_angle + updated_positive * pi / 180.0f;
-                    queue_rig_change("FORWARD TRAVEL UPDATED");
-                }
-                cursor.y += 49.0f;
-                const float updated_power = slider({ cursor, { rect.size.x - 36.0f, 38.0f } },
-                    "JOINT SPEED / POWER", motor.strength, 0.02f, 0.10f, input);
-                if (updated_power != motor.strength)
-                {
-                    motor.strength = updated_power;
-                    queue_rig_change("JOINT POWER UPDATED");
+                    apply_small_rig_change(motor.enabled
+                        ? "MOTOR ENABLED" : "MOTOR DISABLED");
                 }
             }
+            else
+            {
+                add_text(canvas, cursor, "JOINT AND TRACTION TESTS", 1.02f, accent);
+                cursor.y += 28.0f;
+                const Rect test_card{ cursor, { usable, 205.0f } };
+                draw_joint_lab(test_card, input);
+                cursor.y += 220.0f;
+                add_wrapped_text(canvas, cursor,
+                    "GAIT CYCLE is a side-view fore/aft check. A credited walking step must lift from behind, pass the stance support, and land ahead. Test controls never change the saved training policy.",
+                    0.72f, muted, usable, 2.0f);
+            }
+            canvas.pop_clip();
+            add_rounded_rect(canvas, rect, 11.0f, Color{}, border, 1.0f);
         }
 
         void process_shortcuts(const InputState& input)
@@ -2169,8 +2412,20 @@ namespace runner
             if (input.key_2_pressed) trainer.set_updates_per_cycle(2);
             if (input.key_3_pressed) trainer.set_updates_per_cycle(4);
             if (input.totals_pressed)
-                live_panel_page = live_panel_page == LivePanelPage::results
-                    ? LivePanelPage::totals : LivePanelPage::results;
+            {
+                switch (live_panel_page)
+                {
+                case LivePanelPage::summary:
+                    live_panel_page = LivePanelPage::totals;
+                    break;
+                case LivePanelPage::totals:
+                    live_panel_page = LivePanelPage::advanced;
+                    break;
+                case LivePanelPage::advanced:
+                    live_panel_page = LivePanelPage::summary;
+                    break;
+                }
+            }
             if (input.units_pressed)
                 distance_units = distance_units == ui_layout::DistanceUnits::metric
                     ? ui_layout::DistanceUnits::imperial : ui_layout::DistanceUnits::metric;
@@ -2281,15 +2536,24 @@ namespace runner
             }
             else
             {
-                const float panel_width = std::clamp(content.size.x * 0.42f, 680.0f, 760.0f);
-                const Rect side{ content.position, { panel_width, content.size.y } };
-                const Rect world{ { content.position.x + panel_width + 10.0f, content.position.y },
-                    { content.size.x - panel_width - 10.0f, content.size.y } };
+                const ui_layout::Box layout_side =
+                    ui_layout::rig_lab_panel_box(layout_content);
+                const ui_layout::Box layout_world =
+                    ui_layout::rig_lab_world_box(layout_content);
+                const Rect side{ { layout_side.x, layout_side.y },
+                    { layout_side.width, layout_side.height } };
+                const Rect world{ { layout_world.x, layout_world.y },
+                    { layout_world.width, layout_world.height } };
                 draw_rig_panel(side, input);
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
+                canvas.push_clip(world.position + Vec2{ 1.0f, 1.0f },
+                    world.position + world.size - Vec2{ 1.0f, 1.0f });
                 draw_blueprint(world, input);
-                add_text(canvas, world.position + Vec2{ 20.0f, 18.0f },
-                    "CLICK/DRAG NODE / SHIFT ADD / CTRL CONNECT / ALT SELECT BONE / DELETE NODE", 1.02f, muted);
+                canvas.pop_clip();
+                add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
+                    "SIDE VIEW  |  DRAG NODE  |  SHIFT ADD  |  CTRL CONNECT  |  ALT SELECT BONE",
+                    0.80f, muted, world.size.x - 36.0f, 0.68f);
+                add_rounded_rect(canvas, world, 11.0f, Color{}, border, 1.0f);
             }
 
             if (input.left_released && rig_edit_pending)

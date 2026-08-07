@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.20 LANGUAGES CXX)
+project(Runner VERSION 0.7.21 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -19,7 +19,7 @@ execute_process(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE RUNNER_ICON_RESULT)
 if(NOT RUNNER_ICON_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner v0.7.20 icon generation failed")
+    message(FATAL_ERROR "Runner v0.7.21 icon generation failed")
 endif()
 set(RUNNER_ICON_PNG "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.png")
 set(RUNNER_ICON_PNG_512 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_512.png")
@@ -109,7 +109,8 @@ if(RUNNER_BUILD_APP)
         src/canvas.cpp src/renderer.cpp
         src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
         src/ui_font.hpp src/ui_layout.hpp src/view_camera.hpp
-        src/locomotion_strategy.hpp src/preview_sync.hpp)
+        src/locomotion_strategy.hpp src/preview_sync.hpp
+        src/training_explainer.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
@@ -145,6 +146,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0720_UI_PREVIEW_ICON.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0720_UI_PREVIEW_ICON.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0721_READABLE_TELEMETRY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0721_READABLE_TELEMETRY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -162,6 +164,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0720_UI_PREVIEW_ICON.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0721_READABLE_TELEMETRY.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
@@ -219,6 +222,27 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerV0720UiTests)
     add_test(NAME Runner.V0720Ui COMMAND RunnerV0720UiTests)
     set_tests_properties(Runner.V0720Ui PROPERTIES TIMEOUT 30)
+
+    add_executable(RunnerV0721ReadableTelemetryTests
+        tests/v0721_readable_telemetry_tests.cpp)
+    target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0721ReadableTelemetryTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0721ReadableTelemetryTests)
+    add_test(NAME Runner.V0721ReadableTelemetry
+        COMMAND RunnerV0721ReadableTelemetryTests)
+    set_tests_properties(Runner.V0721ReadableTelemetry PROPERTIES TIMEOUT 30)
+
+    add_executable(RunnerV0721RigGaitTests
+        tests/v0721_rig_gait_tests.cpp)
+    target_link_libraries(RunnerV0721RigGaitTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0721RigGaitTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0721RigGaitTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0721RigGaitTests)
+    add_test(NAME Runner.V0721RigGait COMMAND RunnerV0721RigGaitTests)
+    set_tests_properties(Runner.V0721RigGait PROPERTIES TIMEOUT 90)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)

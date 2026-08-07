@@ -1,3 +1,16 @@
+## 0.7.21
+
+- Replaced raw default evaluation scores with plain-language training health, test result, progress, evidence, and next-goal summaries.
+- Added conservative lesson progress from updates, completed attempts, and repeat evaluations.
+- Added stage-specific rejection explanations and mastery targets.
+- Added friendly Rig / Session / All-Time totals and inline definitions for attempts, resets, rollbacks, and total updates.
+- Moved score, quality, loss, optimizer, worker, and pipeline data to Advanced Diagnostics; non-finite values show as unavailable.
+- Stopped automatic training from changing limb length, support width, topology, or semantic contacts; automatic refinement now tunes controller parameters only.
+- Rebuilt bipedal presets as compact side-view rigs and rebuilt quadruped, crawler, and hexapod support branches.
+- Tightened gait credit to require a swing support to begin behind, clear, pass, and land ahead of the stance support.
+- Split Rig Lab into Presets, Structure, Motors, and Test pages with automatic viewport fitting.
+- Bumped rig/gait training semantics and isolated v0.7.21 autosave state while preserving explicit checkpoint transfer.
+
 ## 0.7.20
 
 - Fixed high-DPI coordinate mismatch by separating logical UI dimensions from Vulkan drawable dimensions.

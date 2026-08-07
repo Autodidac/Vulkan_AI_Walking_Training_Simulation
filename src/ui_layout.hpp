@@ -159,6 +159,38 @@ namespace runner::ui_layout
             && !overlaps(telemetry, bottom);
     }
 
+    [[nodiscard]] constexpr float rig_lab_panel_width(float content_width) noexcept
+    {
+        return std::clamp(content_width * 0.31f, 420.0f, 560.0f);
+    }
+
+    [[nodiscard]] constexpr Box rig_lab_panel_box(Box content) noexcept
+    {
+        return { content.x, content.y,
+            rig_lab_panel_width(content.width), content.height };
+    }
+
+    [[nodiscard]] constexpr Box rig_lab_world_box(Box content) noexcept
+    {
+        const Box panel = rig_lab_panel_box(content);
+        return { panel.x + panel.width + panel_gap, content.y,
+            std::max(0.0f, content.width - panel.width - panel_gap),
+            content.height };
+    }
+
+    [[nodiscard]] constexpr bool rig_lab_layout_valid(
+        float width, float height) noexcept
+    {
+        if (!supported_window(width, height))
+            return false;
+        const Box content = content_box(width, height);
+        const Box panel = rig_lab_panel_box(content);
+        const Box world = rig_lab_world_box(content);
+        return panel.width >= 420.0f && world.width >= 680.0f
+            && contains(content, panel) && contains(content, world)
+            && !overlaps(panel, world);
+    }
+
     inline constexpr std::array<std::array<float, 2>, 5> validation_sizes{
         std::array<float, 2>{ 1280.0f, 820.0f },
         std::array<float, 2>{ 1600.0f, 900.0f },

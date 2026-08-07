@@ -682,6 +682,15 @@ namespace runner::sim
             && upward_speed <= moving_contact_release_speed_mps;
     }
 
+    [[nodiscard]] inline bool completes_side_view_crossing(
+        bool began_behind, float swing_center_x, float stance_center_x,
+        float swing_clearance) noexcept
+    {
+        return began_behind
+            && swing_clearance >= 0.065f
+            && swing_center_x >= stance_center_x + 0.035f;
+    }
+
     [[nodiscard]] inline bool qualifies_crossing_step(int previous_side,
         int strike_side, float seconds_since_previous, float root_displacement,
         float swing_air_seconds, float swing_clearance, bool swing_crossed,
@@ -963,7 +972,8 @@ namespace runner::sim
         }
         [[nodiscard]] bool paired_leg_chains() const noexcept
         {
-            return !monopedal_gait() && active_motor_count >= 4u
+            return support_seed_count() == 2u
+                && !monopedal_gait() && active_motor_count >= 4u
                 && motors[0].enabled && motors[1].enabled
                 && motors[2].enabled && motors[3].enabled
                 && motors[0].pivot == motors[2].pivot
@@ -1283,6 +1293,8 @@ namespace runner::sim
         float right_swing_seconds_{};
         float left_swing_clearance_{};
         float right_swing_clearance_{};
+        bool left_swing_started_behind_{};
+        bool right_swing_started_behind_{};
         bool left_swing_crossed_{};
         bool right_swing_crossed_{};
         std::uint32_t limb_crossings_{};
