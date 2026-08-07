@@ -1,0 +1,73 @@
+name: Temporary v0.7.18 release-gate correction helper
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  correct:
+    if: github.event.issue.number == 66 && github.event.issue.pull_request && github.event.comment.body == '/correct-v0718-release-gate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Correct v0.7.18 release evidence and notes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/runner-v0717-release.yml')
+          text = path.read_text(encoding='utf-8')
+
+          old = "          grep -F 'WALK-RELEASE-225' missioncache.md\n"
+          new = old + "          grep -F 'WALK-COURSE-FRAME-226' missioncache.md\n          grep -F 'WALK-COORDINATE-TEST-232' missioncache.md\n"
+          if "grep -F 'WALK-COURSE-FRAME-226'" not in text:
+              assert old in text
+              text = text.replace(old, new, 1)
+
+          text = text.replace(
+              "          text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',\n              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.', 1)\n",
+              "          text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',\n              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.')\n",
+              1)
+          text = text.replace('          for number in range(211, 225):\n',
+                              '          for number in range(211, 233):\n', 1)
+
+          text = text.replace(
+              '          - Terrain simulation and terrain coordinates are intentionally unchanged.\n',
+              '          - Terrain material/shape simulation is retained; moving-course locomotion accounting now uses terrain-relative progress.\n',
+              1)
+          bootstrap = '          - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.\n'
+          if 'Fixes the treadmill/world coordinate mismatch' not in text:
+              assert bootstrap in text
+              text = text.replace(bootstrap, bootstrap +
+                  '          - Fixes the treadmill/world coordinate mismatch so real side-view steps accumulate ground-relative distance and speed.\n'
+                  '          - Checkpoints safe incremental two-step sagittal walkers before final mastery instead of discarding them.\n', 1)
+
+          cleanup = "            'agent/v0717-eye-test-feet-gait-batch25'\n"
+          if "'agent/v0719-walk-coordinate-recovery'" not in text:
+              assert cleanup in text
+              text = text.replace(cleanup, cleanup +
+                  "            'agent/v0719-walk-coordinate-recovery'\n", 1)
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          grep -F "WALK-COURSE-FRAME-226" .github/workflows/runner-v0717-release.yml
+          grep -F "range(211, 233)" .github/workflows/runner-v0717-release.yml
+          grep -F "agent/v0719-walk-coordinate-recovery" .github/workflows/runner-v0717-release.yml
+      - name: Commit corrected gate and remove helper
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/temporary-v0718-release-gate-correction.yml
+          git add .github/workflows/runner-v0717-release.yml
+          git commit -m 'Finalize v0.7.18 treadmill-coordinate release evidence gate'
+          git push origin HEAD:main
