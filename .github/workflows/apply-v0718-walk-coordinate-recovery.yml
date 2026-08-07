@@ -1,4 +1,4 @@
-name: Finish Runner v0.7.18 walk-coordinate recovery
+name: Finalize Runner v0.7.18 walk-coordinate recovery
 
 on:
   push:
@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  finalize:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,71 +22,34 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-      - name: Fix candidate qualification semantics
+      - name: Update release gate for corrected walking semantics
         run: |
           python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('fix', 'tools/apply_v0718_walk_coordinate_recovery.py')
-          fix = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(fix)
-          fix.implement_ppo_header()
-          PY
-          git diff --check
-          git add src/ppo.hpp
-          git commit -m 'Separate incremental Walk qualification from mastery'
-          git push origin HEAD:agent/v0719-walk-coordinate-recovery
-      - name: Extend early sagittal bootstrap
-        run: |
-          python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('fix', 'tools/apply_v0718_walk_coordinate_recovery.py')
-          fix = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(fix)
-          fix.implement_ppo_trainer()
-          PY
-          git diff --check
-          git add src/ppo_trainer.cpp
-          git commit -m 'Extend early sagittal Walk bootstrap'
-          git push origin HEAD:agent/v0719-walk-coordinate-recovery
-      - name: Add coordinate regression contracts
-        run: |
-          python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('fix', 'tools/apply_v0718_walk_coordinate_recovery.py')
-          fix = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(fix)
-          fix.implement_tests()
-          PY
-          git diff --check
-          git add tests/v0718_runtime_recovery_tests.cpp
-          git commit -m 'Test terrain-relative walking coordinates'
-          git push origin HEAD:agent/v0719-walk-coordinate-recovery
-      - name: Document corrected runtime semantics
-        run: |
-          python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('fix', 'tools/apply_v0718_walk_coordinate_recovery.py')
-          fix = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(fix)
-          fix.implement_changelog()
-          fix.implement_docs()
-          PY
-          git diff --check
-          git add CHANGELOG.md docs/RUNNER_V0718_RUNTIME_RECOVERY.md
-          git commit -m 'Document v0.7.18 treadmill-coordinate correction'
-          git push origin HEAD:agent/v0719-walk-coordinate-recovery
-      - name: Extend release audit to coordinate missions
-        run: |
-          python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('fix', 'tools/apply_v0718_walk_coordinate_recovery.py')
-          fix = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(fix)
-          fix.implement_release_workflow()
+          from pathlib import Path
+          path = Path('.github/workflows/runner-v0717-release.yml')
+          text = path.read_text(encoding='utf-8')
+          anchor = "          grep -F 'WALK-RELEASE-225' missioncache.md\n"
+          if "WALK-COURSE-FRAME-226" not in text:
+              assert anchor in text
+              text = text.replace(anchor, anchor +
+                  "          grep -F 'WALK-COURSE-FRAME-226' missioncache.md\n"
+                  "          grep -F 'WALK-COORDINATE-TEST-232' missioncache.md\n", 1)
+          text = text.replace('for number in range(211, 225):',
+                              'for number in range(211, 233):')
+          text = text.replace(
+              '          - Terrain simulation and terrain coordinates are intentionally unchanged.\n',
+              '          - Terrain material/shape simulation is retained; moving-course locomotion coordinates now correctly use terrain-relative progress.\n')
+          bootstrap = '          - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.\n'
+          if 'Checkpoints safe incremental two-step sagittal walkers' not in text:
+              assert bootstrap in text
+              text = text.replace(bootstrap, bootstrap +
+                  '          - Fixes the treadmill/world coordinate mismatch so real side-view steps accumulate ground-relative distance and speed.\n'
+                  '          - Checkpoints safe incremental two-step sagittal walkers before final mastery instead of discarding them.\n', 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
           PY
           git diff --check
           git add .github/workflows/runner-v0717-release.yml
-          git commit -m 'Gate v0.7.18 release on walking-coordinate correction'
+          git commit -m 'Gate v0.7.18 release on treadmill-coordinate recovery'
           git push origin HEAD:agent/v0719-walk-coordinate-recovery
       - name: Remove temporary executor infrastructure
         run: |
