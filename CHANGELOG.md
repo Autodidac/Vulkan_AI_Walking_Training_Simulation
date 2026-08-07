@@ -1,3 +1,12 @@
+## 0.7.21
+
+- Replaced raw default evaluation scores with plain-language training health, test result, progress, evidence, and next-goal summaries.
+- Added conservative lesson progress from updates, completed attempts, and repeat evaluations.
+- Added stage-specific rejection explanations and mastery targets.
+- Added friendly Rig / Session / All-Time totals and inline definitions for attempts, resets, rollbacks, and total updates.
+- Moved score, quality, loss, optimizer, worker, and pipeline data to Advanced Diagnostics; non-finite values show as unavailable.
+- Preserved v0.7.20 policy, checkpoint, curriculum, terrain, autosave, preview, DPI, clipping, and icon semantics.
+
 ## 0.7.20
 
 - Fixed high-DPI coordinate mismatch by separating logical UI dimensions from Vulkan drawable dimensions.
