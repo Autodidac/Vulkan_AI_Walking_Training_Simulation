@@ -444,8 +444,8 @@ namespace runner
             if (rig_preset == RigPreset::quadruped
                 || rig_preset == RigPreset::crawler4)
             {
-                const std::size_t leg = motor_index / 2u;
-                const bool phase_a = leg == 0u || leg == 3u;
+                const std::size_t support_leg = motor_index / 2u;
+                        const bool phase_a = support_leg == 0u || support_leg == 3u;
                 const float drive = phase_a ? swing : -swing;
                 return (motor_index & 1u) == 0u
                     ? 0.52f * drive
