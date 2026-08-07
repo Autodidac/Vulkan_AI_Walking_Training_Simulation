@@ -2,6 +2,7 @@
 #include "renderer.hpp"
 #include "ui_layout.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>

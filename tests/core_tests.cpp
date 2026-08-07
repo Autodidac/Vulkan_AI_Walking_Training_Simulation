@@ -675,12 +675,12 @@ int main()
             == cumulative.total_episodes
             && cumulative.total_landed_jumps <= cumulative.total_powered_jumps,
         "cumulative runtime statistics are internally inconsistent");
-    require(ui_layout::live_layout_valid(1100.0f, 902.0f),
+    require(ui_layout::live_layout_valid(1280.0f, 820.0f),
         "supported minimum live layout overlaps its panel, telemetry, or PIP");
-    require(!ui_layout::supported_window(1099.0f, 902.0f)
-            && !ui_layout::supported_window(1100.0f, 901.0f),
+    require(!ui_layout::supported_window(1279.0f, 820.0f)
+            && !ui_layout::supported_window(1280.0f, 819.0f),
         "undersized windows are incorrectly treated as fully supported");
-    const ui_layout::Box minimum_content = ui_layout::content_box(1100.0f, 902.0f);
+    const ui_layout::Box minimum_content = ui_layout::content_box(1280.0f, 820.0f);
     const ui_layout::Box minimum_world = ui_layout::live_world_box(minimum_content);
     const ui_layout::Box minimum_pip = ui_layout::training_pip_box(minimum_world);
     require(ui_layout::contains(minimum_world, minimum_pip),

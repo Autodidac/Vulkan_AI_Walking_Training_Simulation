@@ -20,6 +20,8 @@ namespace runner::ui_layout
         float y{ 1.0f };
     };
 
+    inline constexpr float minimum_window_width = 1280.0f;
+    inline constexpr float minimum_window_height = 820.0f;
     inline constexpr float minimum_content_width = 1150.0f;
     inline constexpr float minimum_content_height = 700.0f;
     inline constexpr float top_bar_height = 78.0f;
@@ -131,7 +133,9 @@ namespace runner::ui_layout
     [[nodiscard]] constexpr bool supported_window(float width, float height) noexcept
     {
         const Box content = content_box(width, height);
-        return content.width >= minimum_content_width
+        return width >= minimum_window_width
+            && height >= minimum_window_height
+            && content.width >= minimum_content_width
             && content.height >= minimum_content_height;
     }
 
