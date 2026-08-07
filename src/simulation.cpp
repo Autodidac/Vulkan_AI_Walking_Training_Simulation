@@ -2546,6 +2546,7 @@ namespace runner::sim
         const bool new_right = right && !previous_right_grounded_;
         const int strike_side = new_left == new_right ? 0 : (new_left ? -1 : 1);
         const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
+        const float locomotion_x = terrain_sample_x(root_x, course_progress());
         const float left_clearance = contact_cluster_clearance(blueprint_.left_contact_node);
         const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
         const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
@@ -2595,7 +2596,7 @@ namespace runner::sim
             {
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
-                last_step_x_ = root_x;
+                last_step_x_ = locomotion_x;
             }
             else
             {
@@ -2603,7 +2604,7 @@ namespace runner::sim
                     ? left_swing_crossed_ : right_swing_crossed_;
                 const bool crossing_required = blueprint_.paired_leg_chains();
                 if (!qualifies_crossing_step(last_contact_side_, strike_side,
-                    elapsed_seconds_ - last_step_time_, root_x - last_step_x_,
+                    elapsed_seconds_ - last_step_time_, locomotion_x - last_step_x_,
                     swing_air_seconds, swing_clearance,
                     swing_crossed, crossing_required))
                     goto step_not_qualified;
@@ -2613,7 +2614,7 @@ namespace runner::sim
                 alternating_step_this_step_ = true;
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
-                last_step_x_ = root_x;
+                last_step_x_ = locomotion_x;
                 if (new_left)
                     left_swing_crossed_ = false;
                 else
@@ -2946,10 +2947,10 @@ step_not_qualified:
             if (blueprint_.monopedal_gait()
                 && (course_stage_ == CourseStage::uneven
                     || course_stage_ == CourseStage::crouch_walk)
-                && std::abs(root_x - last_single_leg_landing_x_) >= 0.040f)
+                && std::abs(locomotion_x - last_single_leg_landing_x_) >= 0.040f)
             {
                 ++single_leg_cycles_;
-                last_single_leg_landing_x_ = root_x;
+                last_single_leg_landing_x_ = locomotion_x;
             }
             if (powered_takeoff_)
             {
@@ -3237,11 +3238,15 @@ step_not_qualified:
 
         elapsed_seconds_ += dt;
         const Vec2 pelvis_position = particles_[blueprint_.root_node].position;
-        const float raw_speed = (pelvis_position.x - previous_pelvis_.x) / dt;
+        const float raw_world_speed = (pelvis_position.x - previous_pelvis_.x) / dt;
+        const float moving_course_speed = course_speed();
+        const float raw_speed = raw_world_speed + moving_course_speed;
         forward_speed_ = lerp(forward_speed_, raw_speed, 0.18f);
-        const float frame_progress = pelvis_position.x - previous_pelvis_.x;
+        const float frame_progress = terrain_relative_frame_progress(
+            pelvis_position.x, previous_pelvis_.x, moving_course_speed, dt);
         previous_pelvis_ = pelvis_position;
-        distance_travelled_ = pelvis_position.x - blueprint_.nodes[blueprint_.root_node].x;
+        distance_travelled_ = terrain_relative_distance(pelvis_position.x,
+            blueprint_.nodes[blueprint_.root_node].x, course_progress());
         maximum_speed_kmh_ = std::max(maximum_speed_kmh_, std::max(std::abs(raw_speed), std::abs(forward_speed_)) * 3.6f);
 
         float action_energy = 0.0f;
