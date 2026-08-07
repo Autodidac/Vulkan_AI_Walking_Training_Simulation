@@ -2515,8 +2515,6 @@ namespace runner
 
             const ui_layout::Box layout_content = ui_layout::content_box(
                 static_cast<float>(width), static_cast<float>(height));
-            const Rect content{ { layout_content.x, layout_content.y },
-                { layout_content.width, layout_content.height } };
             if (!ui_layout::supported_window(static_cast<float>(width), static_cast<float>(height)))
             {
                 add_text(canvas, { 24.0f, 100.0f },

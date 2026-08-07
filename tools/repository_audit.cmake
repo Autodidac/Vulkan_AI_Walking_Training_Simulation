@@ -145,6 +145,7 @@ foreach(stale IN ITEMS
         tools/cache_v0722_black_frame.py
         tools/apply_v0722_black_frame_hotfix.py
         tools/add_v0722_frame_diagnostic.py
+        tools/fix_v0722_validation.py
         tools/v0722.cache-trigger
         tools/v0722.cache-trigger2
         tools/v0722.cache-trigger3
