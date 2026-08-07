@@ -225,6 +225,7 @@ if(RUNNER_BUILD_TESTS)
 
     add_executable(RunnerV0721ReadableTelemetryTests
         tests/v0721_readable_telemetry_tests.cpp)
+    target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)
     target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_features(RunnerV0721ReadableTelemetryTests PRIVATE cxx_std_23)
