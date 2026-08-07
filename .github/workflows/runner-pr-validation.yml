@@ -25,24 +25,37 @@ jobs:
           git diff --check
           grep -F "project(Runner VERSION 0.7.21 LANGUAGES CXX)" CMakeLists.txt
           grep -F "WALK-HUMAN-STATUS-263" missioncache.md
-          grep -F "WALK-RELEASE-275" missioncache.md
-          grep -F "training_semantics_version = 0x0007'2001u" src/ppo.hpp
+          grep -F "WALK-AUTO-TUNING-275" missioncache.md
+          grep -F "WALK-SIDE-GAIT-276" missioncache.md
+          grep -F "WALK-RIG-LAB-279" missioncache.md
+          grep -F "WALK-RELEASE-283" missioncache.md
+          grep -F "training_semantics_version = 0x0007'2101u" src/ppo.hpp
+          grep -F "automatic_rig_tuning_candidate" src/autonomy_curriculum.cpp
+          grep -F "completes_side_view_crossing" src/simulation.cpp
           grep -F "preview_sync::decide" src/autonomy_runtime.cpp
           grep -F "SDL_SetWindowIcon" src/main.cpp
           grep -F "push_clip" src/renderer.hpp
           grep -F "WHAT THE TRAINER IS TELLING YOU" src/app.cpp
           grep -F "ADVANCED DIAGNOSTICS" src/app.cpp
+          grep -F "RigPanelPage::presets" src/app.cpp
+          grep -F "rig_lab_layout_valid" src/ui_layout.hpp
           grep -F "TOTAL UPDATES =" src/training_explainer.hpp
           test -f tools/generate_runner_icon.py
           test -f tests/v0720_ui_tests.cpp
           test -f tests/v0721_readable_telemetry_tests.cpp
+          test -f tests/v0721_rig_gait_tests.cpp
           test -f docs/RUNNER_V0720_UI_PREVIEW_ICON.md
           test -f docs/RUNNER_V0721_READABLE_TELEMETRY.md
           test ! -e tools/generate_v0719_sources.py
           test ! -e tools/apply_v0720_release.py
           test ! -e tools/apply_v0721_readable_telemetry.py
+          test ! -e tools/cache_v0721_rig_repair.py
+          test ! -e tools/apply_v0721_rig_gait_repair.py
+          test ! -e tools/run_v0721_rig_gait_repair.py
           test ! -e .github/workflows/apply-v0720-release.yml
           test ! -e .github/workflows/apply-v0721-readable-telemetry.yml
+          test ! -e .github/workflows/cache-v0721-rig-repair.yml
+          test ! -e .github/workflows/apply-v0721-rig-gait-repair.yml
       - name: Configure
         env:
           CC: gcc-14
@@ -105,3 +118,5 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Camera diagnostic failed' }
           & $exe --diagnose-package
           if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+          & $exe --diagnose-acceptance
+          if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }
