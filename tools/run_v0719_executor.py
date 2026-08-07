@@ -11,8 +11,10 @@ def replace_first(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-# The refinement script deliberately patches several repeated reward fragments;
-# execute them deterministically in source order instead of treating duplicates
-# as an error in the temporary migration tool.
+# The migration contains intentional repeated reward fragments. Apply the first
+# source-ordered match. Workflow YAML is updated separately through the GitHub
+# repository API because Actions tokens may not rewrite workflow files.
 executor.replace_once = replace_first
+executor.patch_pr_validation = lambda: None
+executor.patch_release_workflow = lambda: None
 raise SystemExit(executor.main())
