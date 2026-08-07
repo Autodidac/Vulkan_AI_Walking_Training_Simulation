@@ -362,7 +362,7 @@ namespace runner::rl
             || rig.right_contact_node >= particles.size())
             return signals;
 
-        const sim::Vec2 root = particles[rig.root_node].position;
+        const Vec2 root = particles[rig.root_node].position;
         const float ground = environment.ground_height_at(root.x);
         signals.uprightness = environment.uprightness();
         signals.root_x = root.x;

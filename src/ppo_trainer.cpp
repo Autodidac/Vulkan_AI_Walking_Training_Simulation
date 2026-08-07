@@ -88,8 +88,6 @@ namespace runner::rl
         }
     }
 
-    PpoTrainer::PpoTrainer    }
-
     PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count,
             bool enable_rollout_workers)
             : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu),
