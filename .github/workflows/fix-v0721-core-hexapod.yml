@@ -23,21 +23,23 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('tests/core_tests.cpp')
           text = path.read_text(encoding='utf-8')
-          old = '''    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16
-                  && hexapod.support_seed_count() == 6,
-              "six-legged hexapod geometry or support semantics are incomplete");
-          '''
-          new = '''    require(hexapod.nodes.size() >= 10 && hexapod.bones.size() >= 10
+          pattern = re.compile(
+              r'    require\(hexapod\.nodes\.size\(\) >= 12 && hexapod\.bones\.size\(\) >= 16\n'
+              r'\s*&& hexapod\.support_seed_count\(\) == 6,\n'
+              r'\s*"six-legged hexapod geometry or support semantics are incomplete"\);')
+          replacement = '''    require(hexapod.nodes.size() >= 10 && hexapod.bones.size() >= 10
                   && hexapod.active_motor_count == 6
                   && hexapod.support_seed_count() == 6
                   && hexapod.horizontal_multi_support_plan(),
-              "six-legged hexapod geometry, tripod phases, or support semantics are incomplete");
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('obsolete hexapod assertion not found exactly once')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+              "six-legged hexapod geometry, tripod phases, or support semantics are incomplete");'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'obsolete hexapod assertion matches: {count}')
+          path.write_text(text, encoding='utf-8', newline='\n')
           PY
           git diff --check
           grep -F 'hexapod.active_motor_count == 6' tests/core_tests.cpp
