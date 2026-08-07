@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.18 LANGUAGES CXX)
+project(Runner VERSION 0.7.19 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -10,16 +10,16 @@ option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-set(RUNNER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-v0718")
+set(RUNNER_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-v0719")
 file(MAKE_DIRECTORY "${RUNNER_GENERATED_DIR}")
 execute_process(
     COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_v0718_sources.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_v0719_sources.py"
         "${RUNNER_GENERATED_DIR}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE RUNNER_GENERATE_RESULT)
 if(NOT RUNNER_GENERATE_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner v0.7.18 deterministic source generation failed")
+    message(FATAL_ERROR "Runner v0.7.19 deterministic source generation failed")
 endif()
 
 include(FetchContent)
@@ -104,7 +104,7 @@ if(RUNNER_BUILD_APP)
         "${RUNNER_GENERATED_DIR}/app.cpp"
         src/canvas.cpp src/renderer.cpp
         src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
-        src/ui_font.hpp src/view_camera.hpp)
+        src/ui_font.hpp src/view_camera.hpp src/locomotion_strategy.hpp)
     add_dependencies(Runner RunnerShaders)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
@@ -126,6 +126,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0716_CAMERA_BATCH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -139,6 +140,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0716_CAMERA_BATCH.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0717_EYE_TEST_CORRECTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0718_RUNTIME_RECOVERY.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0719_GENERAL_LOCOMOTION.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
@@ -179,6 +181,13 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerV0718RuntimeRecoveryTests)
     add_test(NAME Runner.V0718RuntimeRecovery COMMAND RunnerV0718RuntimeRecoveryTests)
     set_tests_properties(Runner.V0718RuntimeRecovery PROPERTIES TIMEOUT 90)
+
+    add_executable(RunnerV0719GeneralLocomotionTests tests/v0719_general_locomotion_tests.cpp)
+    target_include_directories(RunnerV0719GeneralLocomotionTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0719GeneralLocomotionTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0719GeneralLocomotionTests)
+    add_test(NAME Runner.V0719GeneralLocomotion COMMAND RunnerV0719GeneralLocomotionTests)
+    set_tests_properties(Runner.V0719GeneralLocomotion PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerCoreTests tests/core_tests.cpp)
     target_link_libraries(RunnerCoreTests PRIVATE Runner::Core)

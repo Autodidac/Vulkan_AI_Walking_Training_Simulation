@@ -1,3 +1,14 @@
+## 0.7.19
+
+- Added balance-reserve-aware general locomotion planning for walk, run, recover, crawl, and flee behavior.
+- Added terrain-aware slowdown, swing lift, stance extension, and braking for reachable plateaus and step-ups.
+- Restricted anatomy motor-discovery probes to Balance so Walk training is no longer overwritten by discovery pulses.
+- Added signed-direction threat escape and emergency crawl-with-return-to-stand constraints.
+- Added falling/depositing sand to deformable Walk/Hurdle lessons while keeping the locomotion strategy material-independent.
+- Reduced and deterministically randomized authored structural plateau heights into reachable training ranges.
+- Changed the Live preview to display the retained champion when available and vary restart seeds after failures.
+- Bumped training/autonomy semantics and isolated v0.7.19 runtime state.
+
 ## 0.7.18
 
 - Fixed the moving-course coordinate-frame bug that measured treadmill gait in fixed camera X, causing real alternating steps to receive zero distance and fail qualification.

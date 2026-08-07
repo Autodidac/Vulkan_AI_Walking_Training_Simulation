@@ -467,14 +467,23 @@ namespace runner::sim
 
             const std::size_t macro_x = static_cast<std::size_t>(
                 std::floor(local / macro_tile_size));
-            bool ledge = false;
-            if ((macro_x >= 10u && macro_x <= 12u)
-                || (macro_x >= 47u && macro_x <= 49u))
+            const std::size_t first_ledge = 10u
+                + static_cast<std::size_t>(seed_ % 3u);
+            const std::size_t second_ledge = 46u
+                + static_cast<std::size_t>((seed_ >> 8u) % 3u);
+            const bool first_plateau = macro_x >= first_ledge
+                && macro_x <= first_ledge + 2u;
+            const bool second_plateau = macro_x >= second_ledge
+                && macro_x <= second_ledge + 2u;
+            bool ledge = first_plateau || second_plateau;
+            if (ledge)
             {
-                const float ledge_height = macro_x < 20u
-                    ? macro_tile_size : macro_tile_size * 2.0f;
+                const float variation = unit_hash(seed_
+                    ^ (static_cast<std::uint64_t>(macro_x) * 0x9e3779b97f4a7c15ULL));
+                const float ledge_height = first_plateau
+                    ? 0.42f + difficulty_ * 0.38f + variation * 0.14f
+                    : 0.68f + difficulty_ * 0.45f + variation * 0.20f;
                 height += ledge_height;
-                ledge = true;
             }
             return { std::clamp(height, -1.25f, 3.50f), ledge };
         }

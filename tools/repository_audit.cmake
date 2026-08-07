@@ -8,8 +8,11 @@ foreach(required IN ITEMS
         docs/RUNNER_V0716_CAMERA_BATCH.md
         docs/RUNNER_V0717_EYE_TEST_CORRECTION.md
         docs/RUNNER_V0718_RUNTIME_RECOVERY.md
-        tools/generate_v0718_sources.py
+        tools/generate_v0719_sources.py
         tests/v0718_runtime_recovery_tests.cpp
+        tests/v0719_general_locomotion_tests.cpp
+        docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
+        src/locomotion_strategy.hpp
         assets/optional/runner_armor_concepts/PROVENANCE.md
         assets/optional/runner_armor_concepts/source/concept_modular_pair.ppm
         assets/optional/runner_armor_concepts/source/concept_humanoid_parts.ppm
@@ -26,10 +29,12 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.18 LANGUAGES CXX)"
-        "generate_v0718_sources.py"
+        "project(Runner VERSION 0.7.19 LANGUAGES CXX)"
+        "generate_v0719_sources.py"
         "RunnerV0718RuntimeRecoveryTests"
-        "RUNNER_V0718_RUNTIME_RECOVERY.md")
+        "RunnerV0719GeneralLocomotionTests"
+        "RUNNER_V0718_RUNTIME_RECOVERY.md"
+        "RUNNER_V0719_GENERAL_LOCOMOTION.md")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "CMake v0.7.18 contract missing: ${reference}")
@@ -43,7 +48,10 @@ foreach(reference IN ITEMS
         "WALK-MARKERS-214"
         "WALK-WALK-BOOTSTRAP-219"
         "WALK-RELEASE-225"
-        "Runner v0.7.19 equipment, carry, and target curriculum")
+        "WALK-BALANCE-RESERVE-233"
+        "WALK-GENERAL-TEST-249"
+        "WALK-RELEASE-252"
+        "Runner v0.7.20 equipment, carry, and target curriculum")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache v0.7.18 contract missing: ${reference}")
@@ -67,13 +75,13 @@ if(marker_pos EQUAL -1)
     message(FATAL_ERROR "Near-course marker spacing is not the v0.7.18 contract")
 endif()
 
-file(READ "${RUNNER_SOURCE_DIR}/tools/generate_v0718_sources.py" generator_text)
+file(READ "${RUNNER_SOURCE_DIR}/tools/generate_v0719_sources.py" generator_text)
 foreach(reference IN ITEMS
         "EXTENDED NURSERY BUDGET EXHAUSTED"
         "TOTAL UPDATES"
         "START"
         "TAB VIEW"
-        "runner-v0718-runtime-autosave.eppo"
+        "runner-v0719-general-autosave.eppo"
         "optional_art_enabled{ false }")
     string(FIND "${generator_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -99,15 +107,15 @@ foreach(path IN LISTS markdown_files)
 endforeach()
 
 foreach(stale IN ITEMS
-        tools/v0718.trigger
-        tools/v0718.prtrigger
-        tools/v0718-executor-merge-trigger.txt
-        tools/apply_v0718_runtime_recovery.py
-        tools/finalize_v0718_runtime_recovery.py
-        .github/workflows/apply-v0718-runtime-recovery.yml)
+        tools/v0719.trigger
+        tools/v0719.prtrigger
+        tools/v0719-executor-merge-trigger.txt
+        tools/apply_v0719_general_locomotion.py
+        tools/finalize_v0719_general_locomotion.py
+        .github/workflows/apply-v0719-general-locomotion.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
         message(FATAL_ERROR "Temporary v0.7.18 executor file remains: ${stale}")
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.18 repository hygiene passed")
+message(STATUS "Runner v0.7.19 repository hygiene passed")
