@@ -10,6 +10,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0720_UI_PREVIEW_ICON.md
         docs/RUNNER_V0721_READABLE_TELEMETRY.md
         docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
+        docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
         assets/ui/runner_icon_concept.svg
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
@@ -17,7 +18,7 @@ foreach(required IN ITEMS
         tests/v0720_ui_tests.cpp
         tests/v0721_readable_telemetry_tests.cpp
         tests/v0721_rig_gait_tests.cpp
-        tests/v0722_visible_frame_tests.cpp
+        tests/v0723_gray_frame_tests.cpp
         src/locomotion_strategy.hpp
         src/preview_sync.hpp
         src/training_explainer.hpp
@@ -32,20 +33,21 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.22 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.23 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "src/autonomy_commands.cpp"
         "src/main.cpp"
         "RunnerV0720UiTests"
         "RunnerV0721ReadableTelemetryTests"
-        "RunnerV0722VisibleFrameTests"
+        "RunnerV0723GrayFrameTests"
         "RUNNER_V0720_UI_PREVIEW_ICON.md"
         "RUNNER_V0721_READABLE_TELEMETRY.md"
         "RUNNER_V0722_BLACK_FRAME_HOTFIX.md"
+        "RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.21 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake v0.7.23 contract missing: ${reference}")
     endif()
 endforeach()
 foreach(stale IN ITEMS
@@ -74,10 +76,14 @@ foreach(reference IN ITEMS
         "WALK-RELEASE-283"
         "WALK-BLACK-FRAME-284"
         "WALK-FRAME-DIAGNOSTIC-287"
-        "WALK-RELEASE-289")
+        "WALK-RELEASE-289"
+        "WALK-TRUE-OUTLINE-290"
+        "WALK-COMPOSITE-292"
+        "WALK-ALL-VIEWS-293"
+        "WALK-RELEASE-295")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.21 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.23 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -123,6 +129,17 @@ string(FIND "${app_text}" "ui_render::transparent_fill" transparent_fill_pos)
 if(transparent_fill_pos EQUAL -1)
     message(FATAL_ERROR "Explicit transparent border-fill contract is not used")
 endif()
+string(FIND "${app_text}" "ui_render::rounded_rect" rounded_rect_pos)
+if(rounded_rect_pos EQUAL -1)
+    message(FATAL_ERROR "Application is not using the true rounded-outline helper")
+endif()
+file(READ "${RUNNER_SOURCE_DIR}/src/ui_render_contract.hpp" render_contract_text)
+foreach(reference IN ITEMS "stroke_rounded_rect" "rounded_corner_stroke" "border_width")
+    string(FIND "${render_contract_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "True rounded-outline contract missing: ${reference}")
+    endif()
+endforeach()
 
 file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
 if(release_notes)
@@ -150,10 +167,14 @@ foreach(stale IN ITEMS
         tools/v0722.cache-trigger2
         tools/v0722.cache-trigger3
         .github/workflows/cache-v0722-black-frame.yml
-        .github/workflows/apply-v0722-black-frame.yml)
+        .github/workflows/apply-v0722-black-frame.yml
+        tools/cache_v0723_gray_frame.py
+        tools/apply_v0723_gray_frame_hotfix.py
+        .github/workflows/cache-v0723-gray-frame.yml
+        .github/workflows/apply-v0723-gray-frame.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
         message(FATAL_ERROR "Temporary or stale source generator remains: ${stale}")
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.22 repository hygiene passed")
+message(STATUS "Runner v0.7.23 repository hygiene passed")

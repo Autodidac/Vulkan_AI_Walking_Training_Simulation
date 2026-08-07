@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.22 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.23 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -86,8 +86,17 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0720_UI_PREVIEW_ICON.md`](docs/RUNNER_V0720_UI_PREVIEW_ICON.md) documents logical DPI, clipping, preview continuity, and application icon integration.
 - [`docs/RUNNER_V0721_READABLE_TELEMETRY.md`](docs/RUNNER_V0721_READABLE_TELEMETRY.md) defines every plain-language training status, counter, goal, and color rule.
 - [`docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md`](docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md) documents the opaque border-fill regression and visible-frame tests.
+- [`docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md`](docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md) documents the true rounded-outline and center-preservation contract.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.23 true rounded-outline rendering hotfix
+
+- Replaces the fake outer-fill/transparent-inset border with actual bounded rounded perimeter geometry.
+- Keeps the center of every border-only card untouched instead of covering it with the linear-space border color.
+- Restores final-composite color-diversity checks so hidden source geometry cannot certify a flat black or gray frame.
+- Tests the center and edge pixels directly, then checks Live, dashboard, PIP, Rig Lab viewport, and all four Rig Lab pages.
+- Preserves v0.7.21 training, rig, gait, terrain, checkpoint, and autosave semantics.
 
 ## v0.7.22 black-frame hotfix
 

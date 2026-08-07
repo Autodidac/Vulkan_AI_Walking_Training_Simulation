@@ -89,42 +89,14 @@ namespace runner
 
         void fill_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color color)
         {
-            if (rect.size.x <= 0.0f || rect.size.y <= 0.0f)
-                return;
-            radius = std::clamp(radius, 0.0f,
-                std::min(rect.size.x, rect.size.y) * 0.5f);
-            if (radius <= 0.0f)
-            {
-                canvas.quad(rect.position, rect.position + rect.size, color);
-                return;
-            }
-            const Vec2 minimum = rect.position;
-            const Vec2 maximum = rect.position + rect.size;
-            canvas.quad({ minimum.x + radius, minimum.y },
-                { maximum.x - radius, maximum.y }, color);
-            canvas.quad({ minimum.x, minimum.y + radius },
-                { maximum.x, maximum.y - radius }, color);
-            canvas.circle({ minimum.x + radius, minimum.y + radius }, radius, color, 12);
-            canvas.circle({ maximum.x - radius, minimum.y + radius }, radius, color, 12);
-            canvas.circle({ minimum.x + radius, maximum.y - radius }, radius, color, 12);
-            canvas.circle({ maximum.x - radius, maximum.y - radius }, radius, color, 12);
+            ui_render::fill_rounded_rect(canvas, rect.position, rect.size, radius, color);
         }
 
         void add_rounded_rect(render::Canvas& canvas, Rect rect, float radius, Color fill,
             Color outline = {}, float border_width = 0.0f)
         {
-            if (border_width <= 0.0f)
-            {
-                fill_rounded_rect(canvas, rect, radius, fill);
-                return;
-            }
-            fill_rounded_rect(canvas, rect, radius, outline);
-            const float inset = std::clamp(border_width, 0.0f,
-                std::min(rect.size.x, rect.size.y) * 0.5f);
-            fill_rounded_rect(canvas,
-                { rect.position + Vec2{ inset, inset },
-                  rect.size - Vec2{ inset * 2.0f, inset * 2.0f } },
-                std::max(0.0f, radius - inset), fill);
+            ui_render::rounded_rect(canvas, rect.position, rect.size,
+                radius, fill, outline, border_width);
         }
 
         void add_text(render::Canvas& canvas, Vec2 position, std::string_view text, float scale, Color color)

@@ -1,3 +1,11 @@
+## 0.7.23
+
+- Replaced destructive rounded-card border overdraw with a true inset perimeter ring.
+- Prevented border-only cards from writing any center geometry.
+- Added direct final-composite center and edge sampling.
+- Restored final color-diversity requirements for Live, dashboard, PIP, and all Rig Lab pages.
+- Preserved v0.7.21 training/checkpoint semantics and moved equipment work to v0.7.24.
+
 ## 0.7.22
 
 - Fixed the black-interior regression covering Live Autopilot, its dashboard and PIP, Rig Lab, and all four Rig Lab pages.

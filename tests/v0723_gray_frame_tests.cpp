@@ -3,6 +3,7 @@
 #include "ui_layout.hpp"
 #include "ui_render_contract.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
@@ -44,6 +45,29 @@ int main()
         "border-only fill is not explicitly transparent");
     require(Color{}.a == 1.0f,
         "test fixture no longer proves that default Color is opaque");
+
+    {
+        render::Canvas border_canvas{};
+        constexpr Color background{ 0.12f, 0.31f, 0.55f, 1.0f };
+        constexpr Color outline{ 0.82f, 0.24f, 0.10f, 1.0f };
+        border_canvas.quad({ 0.0f, 0.0f }, { 200.0f, 120.0f }, background);
+        ui_render::rounded_rect(border_canvas, { 0.0f, 0.0f }, { 200.0f, 120.0f },
+            18.0f, ui_render::transparent_fill, outline, 4.0f);
+        const Color center = ui_frame_probe::sample_color(
+            border_canvas.vertices(), { 100.0f, 60.0f });
+        const Color edge = ui_frame_probe::sample_color(
+            border_canvas.vertices(), { 2.0f, 60.0f });
+        const auto close = [](float lhs, float rhs) noexcept
+        {
+            return std::abs(lhs - rhs) <= 1.0e-4f;
+        };
+        require(close(center.r, background.r) && close(center.g, background.g)
+                && close(center.b, background.b),
+            "border-only rounded rectangle changed the center composite");
+        require(std::abs(edge.r - background.r) + std::abs(edge.g - background.g)
+                + std::abs(edge.b - background.b) > 0.20f,
+            "rounded outline did not reach the perimeter sample");
+    }
 
     constexpr int width = 1600;
     constexpr int height = 900;
@@ -92,6 +116,6 @@ int main()
     select_page(3, "Rig Lab TEST page");
     select_page(0, "Rig Lab PRESETS page after repeated switching");
 
-    std::cout << "Runner v0.7.22 visible Live and Rig Lab frame tests passed\n";
+    std::cout << "Runner v0.7.23 rounded-outline and final-frame tests passed\n";
     return EXIT_SUCCESS;
 }
