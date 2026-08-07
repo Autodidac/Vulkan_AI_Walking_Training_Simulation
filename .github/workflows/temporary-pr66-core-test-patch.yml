@@ -1,23 +1,22 @@
 name: Temporary PR66 core-test patch helper
 
 on:
-  pull_request_target:
-    types: [reopened, synchronize]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
 
 jobs:
   patch-pr66:
-    if: github.event.pull_request.number == 66 && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.issue.number == 66 && github.event.issue.pull_request && github.event.comment.body == '/apply-v0718-core-fix'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Check out PR head
+      - name: Check out PR66 head
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: agent/v0719-walk-coordinate-recovery
           fetch-depth: 0
           token: ${{ github.token }}
       - name: Patch stale v0.7.18 marker assertions and push
@@ -48,7 +47,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add tests/core_tests.cpp
           git commit -m 'Update core marker tests for v0.7.18 near-course spacing'
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin HEAD:agent/v0719-walk-coordinate-recovery
       - name: Remove helper from main
         shell: bash
         run: |
