@@ -1,4 +1,5 @@
 #include "simulation.hpp"
+#include "locomotion_strategy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -798,14 +799,19 @@ namespace runner::sim
 
     void Environment::update_materials(float dt) noexcept
     {
-        if (course_stage_ != CourseStage::moving_hazards)
+        const bool mixed_hazards = course_stage_ == CourseStage::moving_hazards;
+        const bool falling_sand_lesson = course_stage_ == CourseStage::uneven
+            || course_stage_ == CourseStage::hurdles || mixed_hazards;
+        if (!falling_sand_lesson)
         {
             material_particles_.clear();
             return;
         }
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
-        const float interval = std::lerp(4.20f, 2.20f, course_difficulty_);
+        const float interval = mixed_hazards
+            ? std::lerp(4.20f, 2.20f, course_difficulty_)
+            : std::lerp(8.00f, 5.20f, course_difficulty_);
         while (elapsed_seconds_ >= next_material_event_seconds_)
         {
             ++material_event_sequence_;
@@ -813,7 +819,7 @@ namespace runner::sim
                 std::erase_if(material_particles_, [](const MaterialParticle& item) { return !item.active; });
             const float spawn_x = root_x + 3.2f + random_unit() * 3.0f
                 + (random_unit() - 0.5f) * 1.4f;
-            if ((material_event_sequence_ % 4u) == 0u)
+            if (mixed_hazards && (material_event_sequence_ % 4u) == 0u)
             {
                 const MaterialKind kind = (material_event_sequence_ % 8u) == 0u
                     ? MaterialKind::rock : MaterialKind::debris;
@@ -825,7 +831,7 @@ namespace runner::sim
             }
             else
             {
-                constexpr std::size_t burst_count = 10u;
+                const std::size_t burst_count = mixed_hazards ? 10u : 6u;
                 for (std::size_t index = 0; index < burst_count; ++index)
                 {
                     const float spread = (static_cast<float>(index)
@@ -862,7 +868,8 @@ namespace runner::sim
                 item.velocity.x *= 0.72f;
                 if (std::abs(item.velocity.x) < 0.08f && std::abs(item.velocity.y) < 0.08f)
                 {
-                    terrain_.deposit(terrain_sample_x(item.position.x, course_progress()), item.radius * 0.12f, item.density);
+                    terrain_.deposit(terrain_sample_x(item.position.x, course_progress()),
+                        item.radius * 0.12f, item.density);
                     item.active = false;
                 }
             }
@@ -998,6 +1005,7 @@ namespace runner::sim
     {
         course_features_.clear();
         if (course_stage_ != CourseStage::duck_press
+            && course_stage_ != CourseStage::uneven
             && course_stage_ != CourseStage::crouch_walk
             && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards)
@@ -3011,10 +3019,16 @@ step_not_qualified:
             body_rolling_seconds_ = 0.0f;
             head_contact_seconds_ = 0.0f;
         }
-        else if (body_rolling_seconds_ > body_rolling_limit(course_stage_, elapsed_seconds_)
-            || head_contact_seconds_ > head_contact_limit(elapsed_seconds_))
+        else
         {
-            invalidate(InvalidMotion::body_rolling);
+            const bool crawl_escape_window = course_stage_ == CourseStage::moving_hazards
+                && non_foot_grounded_
+                && (burial_depth_ > 0.08f || obstruction_mask_ != 0u)
+                && std::abs(free_space_direction_) >= 0.5f;
+            if ((!crawl_escape_window
+                    && body_rolling_seconds_ > body_rolling_limit(course_stage_, elapsed_seconds_))
+                || head_contact_seconds_ > head_contact_limit(elapsed_seconds_))
+                invalidate(InvalidMotion::body_rolling);
         }
 
         const bool locomotion_required = stage_requires_forward_gait(course_stage_);
@@ -3079,7 +3093,9 @@ step_not_qualified:
             hazard_stall_seconds_ += dt;
         else
             hazard_stall_seconds_ = std::max(0.0f, hazard_stall_seconds_ - dt * 1.75f);
-        if (hazard_stall_seconds_ > 1.35f)
+        const bool terrain_step_recovery = ground_height_at(root_x + 0.70f)
+            - ground_height_at(root_x) > 0.12f;
+        if (hazard_stall_seconds_ > (terrain_step_recovery ? 2.40f : 1.35f))
             invalidate(InvalidMotion::hazard_quiver);
 
         if (!left && !right)
@@ -3107,7 +3123,8 @@ step_not_qualified:
             const bool high_energy_stall = average_energy > 0.10f && net_progress < 0.05f;
             const bool inefficient_vibration = average_energy > 0.16f && net_progress < 0.12f
                 && root_path_window_ > std::max(0.08f, net_progress * 2.5f);
-            if (locomotion_required && (high_energy_stall || inefficient_vibration))
+            if (locomotion_required && !recovery_active_ && !terrain_step_recovery
+                && (high_energy_stall || inefficient_vibration))
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
@@ -3116,7 +3133,7 @@ step_not_qualified:
             const bool idle_window = locomotion_required
                 && elapsed_seconds_ > rolling_gate_warmup_end_seconds
                 && zero_progress_window(net_progress, new_steps,
-                    obstacle_lift_clearance_, recovery_active_);
+                    obstacle_lift_clearance_, recovery_active_ || terrain_step_recovery);
             zero_progress_seconds_ = update_zero_progress_seconds(
                 zero_progress_seconds_, idle_window, progress_window_seconds_);
             progress_window_start_steps_ = alternating_steps_;
@@ -3271,13 +3288,60 @@ step_not_qualified:
         const bool hard_fall = torso_y < local_ground + 0.18f || head_y < local_ground + 0.12f;
         fallen_ = geometric_fall;
 
+        locomotion::Signals motion_signals{};
+        motion_signals.uprightness = upright;
+        motion_signals.root_x = pelvis_position.x;
+        motion_signals.left_support_x = particles_[blueprint_.left_contact_node].position.x;
+        motion_signals.right_support_x = particles_[blueprint_.right_contact_node].position.x;
+        motion_signals.left_supported = contact_supported(blueprint_.left_contact_node);
+        motion_signals.right_supported = contact_supported(blueprint_.right_contact_node);
+        motion_signals.near_rise = ground_height_at(pelvis_position.x + 0.65f) - local_ground;
+        motion_signals.mid_rise = ground_height_at(pelvis_position.x + 1.50f) - local_ground;
+        motion_signals.far_rise = ground_height_at(pelvis_position.x + 3.00f) - local_ground;
+        motion_signals.slope = terrain_.slope_at(
+            terrain_sample_x(pelvis_position.x, course_progress()));
+        motion_signals.forward_speed = forward_speed_;
+        motion_signals.recovering = recovery_active_;
+        motion_signals.non_foot_grounded = non_foot_grounded_;
+        motion_signals.burial_depth = burial_depth_;
+        motion_signals.obstruction_mask = obstruction_mask_;
+        motion_signals.free_space_direction = free_space_direction_;
+        motion_signals.incoming_velocity_x = incoming_material_velocity_.x;
+        motion_signals.incoming_time_to_impact = incoming_time_to_impact_;
+        motion_signals.incoming_density = incoming_material_density_;
+        motion_signals.gait_cycles = gait_cycles();
+        for (const CourseFeature& feature : course_features_)
+        {
+            if (feature.kind != CourseFeatureKind::moving_hazard
+                && feature.kind != CourseFeatureKind::projectile)
+                continue;
+            const float dx = feature.center.x - pelvis_position.x;
+            const float relative_velocity = feature.velocity.x - forward_speed_;
+            const float closing_speed = dx > 0.0f
+                ? std::max(0.0f, -relative_velocity)
+                : std::max(0.0f, relative_velocity);
+            if (closing_speed <= 0.05f)
+                continue;
+            const float impact_time = std::abs(dx) / closing_speed;
+            if (impact_time < motion_signals.incoming_time_to_impact)
+            {
+                motion_signals.incoming_time_to_impact = impact_time;
+                motion_signals.incoming_velocity_x = relative_velocity;
+                motion_signals.incoming_density = feature.kind == CourseFeatureKind::moving_hazard
+                    ? 0.90f : 0.65f;
+            }
+        }
+        const locomotion::Plan motion_plan = locomotion::plan(motion_signals);
+        const bool emergency_crawl = course_stage_ == CourseStage::moving_hazards
+            && motion_plan.emergency_crawl;
+
         float recovery_reward = 0.0f;
         const bool supported = contact_supported(blueprint_.left_contact_node)
             || contact_supported(blueprint_.right_contact_node);
         const bool controlled_airborne_skill = powered_takeoff_
             && !supported && stage_allows_powered_airtime(course_stage_);
         if (!recovery_active_ && !controlled_airborne_skill && recovery_should_start(
-            collided_this_step_, upright, geometric_fall, hard_fall))
+            collided_this_step_, upright, geometric_fall, hard_fall && !emergency_crawl))
         {
             recovery_active_ = true;
             recovery_started_seconds_ = elapsed_seconds_;
@@ -3286,14 +3350,19 @@ step_not_qualified:
         }
         if (recovery_active_)
         {
+            const float prior_recovery_best = recovery_best_upright_;
             recovery_best_upright_ = std::max(recovery_best_upright_, upright);
+            recovery_reward += std::max(0.0f,
+                recovery_best_upright_ - prior_recovery_best) * 0.18f;
             const float recovery_time = elapsed_seconds_ - recovery_started_seconds_;
             if (upright >= 0.90f && supported && !geometric_fall && recovery_time >= 0.12f)
             {
                 recovery_active_ = false;
                 ++recovery_successes_;
+                recovery_reward += 0.12f;
             }
-            else if (hard_fall || recovery_time > 3.0f)
+            else if ((hard_fall && !emergency_crawl)
+                || recovery_time > (emergency_crawl ? 5.5f : 3.0f))
             {
                 recovery_active_ = false;
                 recovery_reward -= 0.12f;
@@ -3310,7 +3379,8 @@ step_not_qualified:
             : base_allowed_airtime;
         const float gated_upright = elapsed_seconds_ > 0.25f ? upright : 1.0f;
         const bool terminal_fall = recovery_terminal_fall(
-            geometric_fall, hard_fall, recovery_active_);
+            geometric_fall, hard_fall && !emergency_crawl,
+            recovery_active_ || emergency_crawl);
         InvalidMotion frame_gate = classify_motion_gate(gated_upright,
             maximum_speed_kmh_, pelvis_position, airborne_seconds_, allowed_airtime,
             micro_motion_seconds_, terminal_fall, course_stage_,
@@ -3350,7 +3420,8 @@ step_not_qualified:
             : 0.0f;
         const float gait = non_foot_grounded_ ? 0.0f
             : gait_progress_multiplier(alternating_steps_, single_support, swing_clearance);
-        const float safe_progress = clamp(frame_progress, -0.015f, 0.065f);
+        const float directed_progress = frame_progress * motion_plan.direction;
+        const float safe_progress = clamp(directed_progress, -0.015f, 0.065f);
         const float collision_penalty = collision_event_this_step_ ? 0.070f : 0.0f;
         // This is intentionally a mild shaping penalty. Natural knee lead
         // is now tolerated; only a large low-foot body-first obstacle shove reaches here.
@@ -3370,7 +3441,10 @@ step_not_qualified:
         const float hazard_stall_penalty = obstacle_approach_weight_
             * clamp(hazard_stall_seconds_, 0.0f, 1.5f) * 0.022f;
         const float body_contact_penalty = non_foot_grounded_
-            ? (head_ground_contact() ? 0.16f : 0.08f) : 0.0f;
+            ? emergency_crawl
+                ? (head_ground_contact() ? 0.10f : 0.012f)
+                : (head_ground_contact() ? 0.16f : 0.08f)
+            : 0.0f;
         const float burial_penalty = burial_depth_ * 0.22f
             + static_cast<float>(obstruction_mask_ != 0u) * 0.025f;
         const float burial_change = previous_burial_depth_ - burial_depth_;
@@ -3403,10 +3477,24 @@ step_not_qualified:
         const float uncontrolled_spin_penalty = controlled_flip_rotation ? 0.0f
             : clamp(spin_delta_turns, 0.0f, 0.08f) * 0.18f;
         const float pass_reward = passed_obstacle_this_step_ ? 0.18f : 0.0f;
-        const float target_speed = 0.90f + course_difficulty_ * 1.30f;
+        const float target_speed = std::max(0.10f, motion_plan.target_speed);
         const bool reward_requires_locomotion = stage_requires_forward_gait(course_stage_);
+        const float signed_speed = forward_speed_ * motion_plan.direction;
+        const float speed_quality = locomotion::target_speed_reward(motion_plan, signed_speed);
         const float run_reward = reward_requires_locomotion
-            ? clamp(forward_speed_ / target_speed, 0.0f, 1.0f) * 0.006f : 0.0f;
+            ? speed_quality * (0.0025f + gait * 0.0075f) : 0.0f;
+        const float balance_reward = reward_requires_locomotion
+            ? motion_plan.balance_reserve * 0.010f : 0.0f;
+        const float step_up_reward = motion_plan.step_up
+            ? obstacle_lift_ratio * (single_support ? 0.018f : 0.005f) : 0.0f;
+        const float brake_reward = motion_plan.brake
+            && std::abs(signed_speed) <= target_speed * 1.15f ? 0.008f : 0.0f;
+        const float controlled_overspeed_penalty = std::max(0.0f,
+            std::abs(signed_speed) - std::max(0.45f, target_speed * 1.45f)) * 0.018f;
+        const float crawl_escape_reward = emergency_crawl
+            ? std::max(0.0f, safe_progress) * 0.80f
+                + std::max(0.0f, burial_change) * 0.35f
+            : 0.0f;
         const float real_step_reward = alternating_step_this_step_ ? 0.070f : 0.0f;
         const float unearned_progress_penalty = alternating_steps_ == 0u
             ? std::max(0.0f, safe_progress) * 0.80f : 0.0f;
@@ -3502,20 +3590,22 @@ step_not_qualified:
         case CourseStage::uneven:
             last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.012f
                 + contact * 0.0006f + swing_reward + run_reward + real_step_reward
+                + balance_reward + step_up_reward + brake_reward
                 - backward_penalty - unearned_progress_penalty
                 - double_support_shuffle_penalty - action_energy * 0.0010f
                 - action_change_penalty - stance_slip_penalty - wheel_penalty
-                - body_contact_penalty;
+                - controlled_overspeed_penalty - body_contact_penalty;
             break;
         case CourseStage::hurdles:
             last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.011f
                 + swing_reward + run_reward + real_step_reward
+                + balance_reward + step_up_reward + brake_reward
                 + duck_reward * 0.60f + jump_reward + obstacle_lift_reward
                 + pass_reward - backward_penalty - unearned_progress_penalty
                 - double_support_shuffle_penalty - action_energy * 0.0010f
                 - action_change_penalty - collision_penalty - knee_first_penalty
                 - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
-                - body_contact_penalty;
+                - controlled_overspeed_penalty - body_contact_penalty;
             break;
         case CourseStage::duck_bars:
             last_reward_ = std::max(0.0f, upright) * 0.008f
@@ -3526,6 +3616,7 @@ step_not_qualified:
         case CourseStage::moving_hazards:
             last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.010f
                 + swing_reward + run_reward + real_step_reward
+                + balance_reward + step_up_reward + brake_reward + crawl_escape_reward
                 + duck_reward * 0.45f + jump_reward + spin_reward
                 + spin_landing_reward + obstacle_lift_reward + pass_reward
                 + escape_reward
@@ -3533,7 +3624,7 @@ step_not_qualified:
                 - double_support_shuffle_penalty - action_energy * 0.0010f
                 - action_change_penalty - collision_penalty - knee_first_penalty
                 - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
-                - body_contact_penalty;
+                - controlled_overspeed_penalty - body_contact_penalty;
             break;
         }
 

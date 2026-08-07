@@ -41,7 +41,7 @@ def patch_curriculum(out: Path) -> None:
         '''            if (catastrophic_invalid && !worker_.has_best_policy()
                 && nursery_policy_reset_allowed(stage_, fresh_updates, fresh_evaluations))
             {
-                worker_.reset_policy(0x718000u
+                worker_.reset_policy(0x719000u
                     + metrics.total_updates * 0x9E3779B97F4A7C15ULL);
                 worker_.set_course(stage_, difficulty_, false);
                 mastery_streak_ = 0;
@@ -61,7 +61,7 @@ def patch_curriculum(out: Path) -> None:
 def patch_persistence(out: Path) -> None:
     text = read("src/autonomy_persistence.cpp")
     text = text.replace('output << "RUNAUTONOMY 13\\n";', 'output << "RUNAUTONOMY 14\\n";')
-    text = text.replace('version != 13', 'version != 14')
+    text = text.replace('version != 13', 'version != 15')
     text = replace_once(text,
         '''        snapshot.status.pending_commands = pending_command_count();
         snapshot.status.updates_per_second = worker_updates_per_second_;
@@ -85,8 +85,8 @@ def patch_persistence(out: Path) -> None:
 
 def patch_commands(out: Path) -> None:
     text = read("src/autonomy_commands.cpp")
-    text = text.replace("NO V0.7.6 AUTOSAVE FOUND", "NO V0.7.18 AUTOSAVE FOUND")
-    text = text.replace("V0.7.6 AUTOSAVE RESUMED ASYNCHRONOUSLY", "V0.7.18 AUTOSAVE RESUMED ASYNCHRONOUSLY")
+    text = text.replace("NO V0.7.6 AUTOSAVE FOUND", "NO V0.7.19 AUTOSAVE FOUND")
+    text = text.replace("V0.7.6 AUTOSAVE RESUMED ASYNCHRONOUSLY", "V0.7.19 AUTOSAVE RESUMED ASYNCHRONOUSLY")
     write(out, "autonomy_commands.cpp", text)
 
 
@@ -108,9 +108,9 @@ def patch_app(out: Path) -> None:
     text = read("src/app.cpp")
     text = replace_once(text, 'bool optional_art_enabled{ true };',
         'bool optional_art_enabled{ false };', "body art default")
-    text = text.replace('runner-v0717-gait-autosave.eppo', 'runner-v0718-runtime-autosave.eppo')
-    text = text.replace('runner-v0717-gait-evolved.rig', 'runner-v0718-runtime-evolved.rig')
-    text = text.replace('runner-v0717-gait-autonomy.state', 'runner-v0718-runtime-autonomy.state')
+    text = text.replace('runner-v0717-gait-autosave.eppo', 'runner-v0719-general-autosave.eppo')
+    text = text.replace('runner-v0717-gait-evolved.rig', 'runner-v0719-general-evolved.rig')
+    text = text.replace('runner-v0717-gait-autonomy.state', 'runner-v0719-general-autonomy.state')
     text = replace_once(text, 'if (optional_art_enabled && optional_foot_art.loaded())',
         'if (optional_foot_art.loaded())', "foot sprite independence")
     text = replace_once(text,
@@ -207,7 +207,7 @@ def patch_app(out: Path) -> None:
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("usage: generate_v0718_sources.py <output-directory>", file=sys.stderr)
+        print("usage: generate_v0719_sources.py <output-directory>", file=sys.stderr)
         return 2
     out = Path(sys.argv[1]).resolve()
     patch_curriculum(out)
@@ -215,7 +215,7 @@ def main() -> int:
     patch_commands(out)
     patch_main(out)
     patch_app(out)
-    print(f"Runner v0.7.18 generated sources: {out}")
+    print(f"Runner v0.7.19 generated sources: {out}")
     return 0
 
 

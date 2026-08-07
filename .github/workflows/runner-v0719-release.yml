@@ -1,4 +1,4 @@
-name: Runner v0.7.18 validation and release
+name: Runner v0.7.19 validation and release
 
 on:
   push:
@@ -9,12 +9,13 @@ permissions:
   pull-requests: write
 
 env:
-  RELEASE_VERSION: 0.7.18
-  RELEASE_TAG: v0.7.18
-  PACKAGE_NAME: Runner-v0.7.18-windows-x64
+  RELEASE_VERSION: 0.7.19
+  RELEASE_TAG: v0.7.19
+  PACKAGE_NAME: Runner-v0.7.19-windows-x64
 
 jobs:
   linux-validation:
+    if: github.event.head_commit.message != 'Record Runner v0.7.19 release evidence [skip ci]'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     outputs:
@@ -30,25 +31,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build python3
-      - name: Audit source before build
+      - name: Audit release source
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          grep -F 'project(Runner VERSION 0.7.18 LANGUAGES CXX)' CMakeLists.txt
-          grep -F 'WALK-RUNTIME-RESET-211' missioncache.md
-          grep -F 'WALK-RELEASE-225' missioncache.md
-          grep -F 'WALK-COURSE-FRAME-226' missioncache.md
-          grep -F 'WALK-COORDINATE-TEST-232' missioncache.md
-          grep -F 'Runner v0.7.19 equipment, carry, and target curriculum' missioncache.md
-          test -f docs/RUNNER_V0718_RUNTIME_RECOVERY.md
-          test -f tools/generate_v0718_sources.py
-          test -f tests/v0718_runtime_recovery_tests.cpp
-          test ! -e tools/apply_v0718_runtime_recovery.py
-          test ! -e tools/finalize_v0718_runtime_recovery.py
-          test ! -e tools/v0718.trigger
-          test ! -e tools/v0718.prtrigger
-          test ! -e tools/v0718-executor-merge-trigger.txt
+          grep -F 'project(Runner VERSION 0.7.19 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'WALK-BALANCE-RESERVE-233' missioncache.md
+          grep -F 'WALK-RELEASE-252' missioncache.md
+          grep -F "training_semantics_version = 0x0007'1901u" src/ppo.hpp
+          grep -F 'preview_policy_' src/ppo_trainer.cpp
+          test -f src/locomotion_strategy.hpp
+          test -f tests/v0719_general_locomotion_tests.cpp
+          test -f docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
+          test -f tools/generate_v0719_sources.py
+          test ! -e tools/apply_v0719_general_locomotion.py
+          test ! -e tools/run_v0719_executor.py
+          test ! -e tools/v0719.prtrigger
+          test ! -d tools/__pycache__
       - name: Configure Linux deterministic suite
         env:
           CC: gcc-14
@@ -83,12 +83,12 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vcpkg-bincache
-          key: runner-v0718-release-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: runner-v0718-release-${{ runner.os }}-
+          key: runner-v0719-release-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: runner-v0719-release-${{ runner.os }}-
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-      - name: Configure and build Windows SDL3/Vulkan application
+      - name: Configure and build Windows SDL3 Vulkan application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
@@ -108,7 +108,7 @@ jobs:
           Push-Location $env:RUNNER_TEMP
           try {
             $version = (& $exe --version | Out-String).Trim()
-            if ($version -ne 'Runner 0.7.18') { throw "Version mismatch: $version" }
+            if ($version -ne 'Runner 0.7.19') { throw "Version mismatch: $version" }
             & $exe --diagnose-package
             if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
             & $exe --diagnose-acceptance
@@ -132,7 +132,7 @@ jobs:
             'assets/chicken.ppm','shaders/flat.vert.spv','shaders/flat.frag.spv',
             'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
             'docs/RUNNER_V0716_CAMERA_BATCH.md','docs/RUNNER_V0717_EYE_TEST_CORRECTION.md',
-            'docs/RUNNER_V0718_RUNTIME_RECOVERY.md')) {
+            'docs/RUNNER_V0718_RUNTIME_RECOVERY.md','docs/RUNNER_V0719_GENERAL_LOCOMOTION.md')) {
             if (-not (Test-Path (Join-Path $stage $required))) { throw "Missing package file: $required" }
           }
           "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -148,10 +148,10 @@ jobs:
             & "$env:STAGE/Runner.exe" --diagnose-camera
             if ($LASTEXITCODE -ne 0) { throw 'Installed camera diagnostic failed' }
             $launched = (& cmd.exe /d /c "call `"$env:STAGE\run.bat`" --version" | Out-String).Trim()
-            if ($launched -ne 'Runner 0.7.18') { throw "run.bat mismatch: $launched" }
+            if ($launched -ne 'Runner 0.7.19') { throw "run.bat mismatch: $launched" }
             $optional = Join-Path $env:STAGE 'assets/optional'
             if (Test-Path $optional) {
-              $backup = Join-Path $env:RUNNER_TEMP 'runner-v0718-optional-backup'
+              $backup = Join-Path $env:RUNNER_TEMP 'runner-v0719-optional-backup'
               Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
               Move-Item $optional $backup
               & "$env:STAGE/Runner.exe" --diagnose-package
@@ -174,11 +174,11 @@ jobs:
             $relative = $_.FullName.Substring($env:STAGE.Length + 1).Replace('\', '/')
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $relative"
           } | Set-Content $manifest -Encoding ascii
-      - name: Independently extract and re-audit archive
+      - name: Independently extract and audit archive
         shell: pwsh
         run: |
           $archive = Join-Path $env:GITHUB_WORKSPACE "$env:PACKAGE_NAME.zip"
-          $audit = Join-Path $env:RUNNER_TEMP 'runner-v0718-extracted'
+          $audit = Join-Path $env:RUNNER_TEMP 'runner-v0719-extracted'
           Remove-Item $audit -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $archive -DestinationPath $audit -Force
           Push-Location $env:RUNNER_TEMP
@@ -226,31 +226,31 @@ jobs:
           mission = Path('missioncache.md')
           text = mission.read_text(encoding='utf-8')
           text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',
-              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.')
-          for number in range(211, 233):
+              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.', 1)
+          for number in range(233, 253):
               text = re.sub(rf'(### WALK-[^\n]+-{number}[^\n]*\n)\*\*Status:\*\* [^\n]+',
                   rf'\1**Status:** VERIFIED — MAIN RELEASE GATE PASSED', text, count=1)
-          text = re.sub(r'(### WALK-RELEASE-225[^\n]*\n)\*\*Status:\*\* [^\n]+',
+          text = re.sub(r'(### WALK-RELEASE-252[^\n]*\n)\*\*Status:\*\* [^\n]+',
               r'\1**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED', text, count=1)
-          evidence = f"\n- v0.7.18 validation source: `{os.environ['VALIDATION_SOURCE']}`.\n- Main release workflow run: `{os.environ['GITHUB_RUN_ID']}`.\n"
-          text = text.replace('## Runner v0.7.17\n', '## Runner v0.7.18\n\n**Status:** PUBLISHED.\n' + evidence + '\n## Runner v0.7.17\n', 1)
+          evidence = f"\n- v0.7.19 validation source: `{os.environ['VALIDATION_SOURCE']}`.\n- Main release workflow run: `{os.environ['GITHUB_RUN_ID']}`.\n"
+          if '## Runner v0.7.19\n' not in text:
+              text = text.replace('## Runner v0.7.18\n',
+                  '## Runner v0.7.19\n\n**Status:** PUBLISHED.\n' + evidence + '\n## Runner v0.7.18\n', 1)
           mission.write_text(text, encoding='utf-8', newline='\n')
-
-          changelog = Path('CHANGELOG.md')
-          old = changelog.read_text(encoding='utf-8')
-          if not old.startswith('## 0.7.18'):
-              prefix = '''## 0.7.18\n\n- Removed the update-10 no-champion reset contradiction and kept cumulative totals visible.\n- Restored START plus 10 m / 50 ft near-course reference markers without changing terrain simulation.\n- Added stage-work, total/local update, evaluation, reset, pipeline, and throughput observability.\n- Corrected runtime controls and disabled optional body skin overlays by default while retaining sprite feet.\n- Strengthened early sagittal walking bootstrap without weakening crab-walk rejection.\n- Fixed terrain-relative walking distance, speed, and strike credit on the moving course.\n- Preserved safe incremental sagittal walkers so PPO can refine them into final mastery.\n- Added deterministic runtime-recovery and complete Linux/Windows/package release gates.\n\n'''
-              changelog.write_text(prefix + old, encoding='utf-8', newline='\n')
           PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add missioncache.md CHANGELOG.md
-          git commit -m 'Record Runner v0.7.18 release evidence [skip ci]'
-          git push origin HEAD:main
+          git add missioncache.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record Runner v0.7.19 release evidence [skip ci]'
+            git push origin HEAD:main
+          fi
       - name: Create tag and GitHub release
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main --tags
+          git checkout origin/main
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Tag $RELEASE_TAG already exists" >&2
             exit 1
@@ -258,19 +258,20 @@ jobs:
           git tag -a "$RELEASE_TAG" -m "Runner $RELEASE_VERSION"
           git push origin "$RELEASE_TAG"
           cat > release-notes.md <<'NOTES'
-          Runner v0.7.18 is the runtime-recovery release from direct v0.7.17 eye testing.
+          Runner v0.7.19 is the general-locomotion and game-AI transfer release.
 
-          - Terrain material/shape simulation is retained; moving-course locomotion accounting now uses terrain-relative progress.
-          - Prevents the no-champion nursery from resetting at update 10 before Stand's 120-update work gate.
-          - Makes cumulative and local updates, evaluations, resets, stage-work thresholds, pipeline state, and throughput visible.
-          - Restores START plus near-course 10 m / 50 ft reference markers.
-          - Corrects Tab/Space/1/2/3/T/U/A/R runtime controls.
-          - Defaults optional torso/helmet/weapon overlays off while keeping sprite feet independent.
-          - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.
-          - Fixes the treadmill/world coordinate mismatch so real side-view steps accumulate ground-relative distance and speed.
-          - Checkpoints safe incremental two-step sagittal walkers before final mastery instead of discarding them.
+          - Fixes the visible two-step preview loop by replaying the retained validated champion when one exists and varying deterministic restart seeds.
+          - Restricts anatomy motor-discovery probes to Balance so Walk training is no longer overwritten by discovery pulses.
+          - Adds balance-reserve and terrain-demand planning for hold, walk, run, recover, emergency crawl, and flee behavior.
+          - Teaches deliberate slowdown, swing lift, stance loading/extension, and braking for reachable ledges and plateaus.
+          - Gates running behind established gait, clear terrain, and adequate balance reserve.
+          - Adds signed-direction reversal and threat escape behavior for moving and thrown hazards.
+          - Allows crawling only as an obstructed/buried emergency escape; crawl never qualifies upright Walk/Run mastery.
+          - Adds low-rate falling/depositing sand to deformable Walk/Hurdle lessons while keeping locomotion material-independent.
+          - Reduces and deterministically varies structural plateau heights into reachable training ranges.
+          - Isolates v0.7.19 learned/runtime state from prior training semantics.
           NOTES
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Runner v0.7.18" --notes-file release-notes.md
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Runner v0.7.19" --notes-file release-notes.md
       - name: Re-download and byte-verify published assets
         shell: bash
         run: |
@@ -283,23 +284,16 @@ jobs:
             cmp --silent "$source" "release-download/$file"
           done
           (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
-      - name: Close stale recovery PRs and delete temporary branches
+      - name: Close stale PR and clean temporary branches
         shell: bash
         run: |
           set -euo pipefail
-          for pr in 59 61 62 67; do
-            gh pr close "$pr" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
-          done
-          branches=(
-            'agent/v0718-runtime-recovery'
-            'agent/v0718-runtime-recovery-exec'
-            'agent/v0718-runtime-recovery-clean'
-            'agent/v0718-executor-trigger'
-            'agent/v0717-eye-test-feet-gait-batch25'
-            'agent/v0719-walk-coordinate-recovery'
-            'agent/v0718-release-gate-trigger'
-          )
-          for branch in "${branches[@]}"; do
+          gh pr close 64 --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          for branch in \
+            agent/v0718-publisher-watch \
+            agent/v0718-release \
+            agent/v0718-release-trigger \
+            agent/v0719-general-locomotion; do
             encoded=${branch//\//%2F}
             gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
           done

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simulation.hpp"
+#include "locomotion_strategy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -20,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'1801u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'1901u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -350,6 +351,72 @@ namespace runner::rl
             sim::CourseStage::duck_press);
     }
 
+    [[nodiscard]] inline locomotion::Signals locomotion_signals(
+        const sim::Environment& environment) noexcept
+    {
+        locomotion::Signals signals{};
+        const auto& rig = environment.blueprint();
+        const auto particles = environment.particles();
+        if (!rig.valid() || particles.empty() || rig.root_node >= particles.size()
+            || rig.left_contact_node >= particles.size()
+            || rig.right_contact_node >= particles.size())
+            return signals;
+
+        const Vec2 root = particles[rig.root_node].position;
+        const float ground = environment.ground_height_at(root.x);
+        signals.uprightness = environment.uprightness();
+        signals.root_x = root.x;
+        signals.left_support_x = particles[rig.left_contact_node].position.x;
+        signals.right_support_x = particles[rig.right_contact_node].position.x;
+        signals.left_supported = environment.left_supported();
+        signals.right_supported = environment.right_supported();
+        signals.near_rise = environment.ground_height_at(root.x + 0.65f) - ground;
+        signals.mid_rise = environment.ground_height_at(root.x + 1.50f) - ground;
+        signals.far_rise = environment.ground_height_at(root.x + 3.00f) - ground;
+        signals.slope = environment.terrain().slope_at(
+            sim::terrain_sample_x(root.x, environment.course_progress()));
+        signals.forward_speed = environment.forward_speed();
+        signals.recovering = environment.recovering();
+        signals.non_foot_grounded = environment.non_foot_grounded();
+        signals.burial_depth = environment.burial_depth();
+        signals.obstruction_mask = environment.obstruction_mask();
+        signals.free_space_direction = environment.free_space_direction();
+        signals.incoming_velocity_x = environment.incoming_material_velocity().x;
+        signals.incoming_time_to_impact = environment.incoming_time_to_impact();
+        signals.incoming_density = environment.incoming_material_density();
+        signals.gait_cycles = environment.gait_cycles();
+
+        for (const sim::CourseFeature& feature : environment.course_features())
+        {
+            if (feature.kind != sim::CourseFeatureKind::moving_hazard
+                && feature.kind != sim::CourseFeatureKind::projectile)
+                continue;
+            const float dx = feature.center.x - root.x;
+            const float relative_velocity = feature.velocity.x
+                - environment.forward_speed();
+            const float closing_speed = dx > 0.0f
+                ? std::max(0.0f, -relative_velocity)
+                : std::max(0.0f, relative_velocity);
+            if (closing_speed <= 0.05f)
+                continue;
+            const float time = std::abs(dx) / closing_speed;
+            if (time < signals.incoming_time_to_impact)
+            {
+                signals.incoming_time_to_impact = time;
+                signals.incoming_velocity_x = relative_velocity;
+                signals.incoming_density = feature.kind == sim::CourseFeatureKind::moving_hazard
+                    ? 0.90f : 0.65f;
+            }
+        }
+        return signals;
+    }
+
+    [[nodiscard]] inline locomotion::Plan current_locomotion_plan(
+        const sim::Environment& environment) noexcept
+    {
+        return locomotion::plan(locomotion_signals(environment));
+    }
+
     [[nodiscard]] inline std::array<float, sim::action_count> walking_teacher_action(
         const sim::Environment& environment) noexcept
     {
@@ -357,23 +424,68 @@ namespace runner::rl
         const sim::CreatureBlueprint& rig = environment.blueprint();
         if (!rig.paired_leg_chains())
             return action;
-        const float phase = environment.elapsed_seconds() * 2.0f * pi * 0.96f;
+
+        const locomotion::Plan movement = current_locomotion_plan(environment);
+        const float phase = environment.elapsed_seconds() * 2.0f * pi
+            * movement.cadence_hz;
         const float swing = std::sin(phase);
+        const float directed_swing = swing * movement.direction;
         const float left_lift = std::max(0.0f, swing);
         const float right_lift = std::max(0.0f, -swing);
         const float span_brake = clamp(
             (environment.primary_support_span_ratio() - 1.08f) * 0.52f,
             0.0f, 0.34f);
-        // Sagittal side-view gate: hips drive fore/aft in opposite phase;
-        // knees lift only the swing chain, then extend before landing.
-        action[0] = clamp(action[0] + 0.58f * swing - span_brake, -0.90f, 0.90f);
-        action[1] = clamp(action[1] + 0.54f * left_lift
-            - 0.18f * right_lift, -0.92f, 0.92f);
-        action[2] = clamp(action[2] - 0.58f * swing + span_brake, -0.90f, 0.90f);
-        action[3] = clamp(action[3] - 0.54f * right_lift
-            + 0.18f * left_lift, -0.92f, 0.92f);
+
+        if (movement.intent == locomotion::Intent::crawl)
+        {
+            action[0] = clamp(action[0] - 0.24f + 0.20f * directed_swing,
+                -0.82f, 0.82f);
+            action[1] = clamp(action[1] + 0.58f + 0.18f * left_lift,
+                -0.90f, 0.90f);
+            action[2] = clamp(action[2] + 0.24f - 0.20f * directed_swing,
+                -0.82f, 0.82f);
+            action[3] = clamp(action[3] - 0.58f - 0.18f * right_lift,
+                -0.90f, 0.90f);
+            if (rig.active_motor_count >= 8u)
+            {
+                action[4] = clamp(action[4] - 0.34f * directed_swing, -0.70f, 0.70f);
+                action[5] = clamp(action[5] + 0.18f * left_lift, -0.55f, 0.55f);
+                action[6] = clamp(action[6] + 0.34f * directed_swing, -0.70f, 0.70f);
+                action[7] = clamp(action[7] - 0.18f * right_lift, -0.55f, 0.55f);
+            }
+            return bilateral_joint_synergy_action(environment, action,
+                sim::CourseStage::moving_hazards);
+        }
+
+        const float hip_amplitude = 0.34f + movement.stride_scale * 0.34f;
+        const float knee_amplitude = 0.24f + movement.swing_lift * 0.48f;
+        const float stance_extension = movement.stance_extension * 0.18f;
+        action[0] = clamp(action[0] + hip_amplitude * directed_swing - span_brake,
+            -0.92f, 0.92f);
+        action[1] = clamp(action[1] + knee_amplitude * left_lift
+            - 0.16f * right_lift, -0.94f, 0.94f);
+        action[2] = clamp(action[2] - hip_amplitude * directed_swing + span_brake,
+            -0.92f, 0.92f);
+        action[3] = clamp(action[3] - knee_amplitude * right_lift
+            + 0.16f * left_lift, -0.94f, 0.94f);
+
+        if (environment.left_supported() && !environment.right_supported())
+            action[1] = clamp(action[1] - stance_extension, -0.94f, 0.94f);
+        if (environment.right_supported() && !environment.left_supported())
+            action[3] = clamp(action[3] + stance_extension, -0.94f, 0.94f);
+
+        if (movement.brake)
+        {
+            action[0] *= 0.72f;
+            action[2] *= 0.72f;
+        }
+        if (rig.active_motor_count >= 8u)
+        {
+            action[4] = clamp(action[4] - 0.10f * directed_swing, -0.55f, 0.55f);
+            action[6] = clamp(action[6] + 0.10f * directed_swing, -0.55f, 0.55f);
+        }
         return bilateral_joint_synergy_action(environment, action,
-            sim::CourseStage::uneven);
+            environment.course_stage());
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
@@ -446,10 +558,15 @@ namespace runner::rl
         else if (stage == sim::CourseStage::uneven)
         {
             const auto teacher = walking_teacher_action(environment);
+            const locomotion::Plan movement = current_locomotion_plan(environment);
+            const float leg_assist = movement.intent == locomotion::Intent::recover
+                ? 0.68f : movement.step_up ? 0.56f : 0.34f;
+            const float body_assist = movement.intent == locomotion::Intent::recover
+                ? 0.60f : 0.42f;
             for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.34f);
+                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
             for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.42f);
+                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
         }
         else if (stage == sim::CourseStage::crouch_walk)
         {
@@ -467,6 +584,22 @@ namespace runner::rl
                 policy_action[index] = lerp(policy_action[index], teacher[index], 0.26f);
             for (std::size_t index = 4; index < active; ++index)
                 policy_action[index] = lerp(policy_action[index], teacher[index], 0.88f);
+        }
+        else if (stage == sim::CourseStage::hurdles
+            || stage == sim::CourseStage::moving_hazards)
+        {
+            const auto teacher = walking_teacher_action(environment);
+            const locomotion::Plan movement = current_locomotion_plan(environment);
+            const float leg_assist = movement.intent == locomotion::Intent::crawl
+                ? 0.78f : movement.intent == locomotion::Intent::flee
+                    ? 0.52f : movement.intent == locomotion::Intent::recover
+                        ? 0.62f : movement.step_up ? 0.48f : 0.24f;
+            const float body_assist = movement.intent == locomotion::Intent::crawl
+                ? 0.60f : movement.intent == locomotion::Intent::flee ? 0.34f : 0.20f;
+            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
+            for (std::size_t index = 4; index < active; ++index)
+                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
         }
 
         if (active >= 8u
@@ -1195,6 +1328,7 @@ namespace runner::rl
         std::vector<sim::Environment> environments_{};
         sim::Environment preview_{};
         PolicyNetwork policy_{};
+        PolicyNetwork preview_policy_{};
         AdamState adam_{};
         std::vector<Transition> rollout_{};
         std::vector<float> episode_rewards_{};
@@ -1221,6 +1355,7 @@ namespace runner::rl
         std::uint64_t rollout_update_seed_{};
         std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
+        std::uint64_t preview_reset_sequence_{};
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
         RolloutTotals staged_totals_{};

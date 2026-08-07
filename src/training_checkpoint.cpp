@@ -294,6 +294,7 @@ namespace runner::rl
             return false;
         }
         policy_.parameters() = std::move(data.parameters);
+        preview_policy_.parameters() = policy_.parameters();
         if (transfer_only)
         {
             reset_training_state();
@@ -309,6 +310,8 @@ namespace runner::rl
         random_state_ = data.random_state;
         metrics_ = data.metrics;
         best_parameters_ = std::move(data.best_parameters);
+        preview_policy_.parameters() = best_parameters_.empty()
+            ? policy_.parameters() : best_parameters_;
         reward_history_ = std::move(data.reward_history);
         speed_history_ = std::move(data.speed_history);
         course_stage_ = data.stage;

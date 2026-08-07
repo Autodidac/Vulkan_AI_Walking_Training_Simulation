@@ -468,9 +468,10 @@ namespace runner::rl
                 break;
             case sim::CourseStage::uneven:
                 metrics_.evaluation_score = metrics_.evaluation_reward
-                    + metrics_.evaluation_distance * 0.75f
-                    + metrics_.evaluation_stride_events * 0.04f
-                    + metrics_.evaluation_speed * 0.12f;
+                    + metrics_.evaluation_distance * 0.70f
+                    + metrics_.evaluation_stride_events * 0.06f
+                    + metrics_.evaluation_survival * 0.08f
+                    + metrics_.evaluation_speed * 0.04f;
                 break;
             case sim::CourseStage::crouch_walk:
                 metrics_.evaluation_score = metrics_.evaluation_reward
@@ -519,6 +520,7 @@ namespace runner::rl
         if (quality_regressed || score_regressed)
         {
             policy_.parameters() = best_parameters_;
+            preview_policy_.parameters() = best_parameters_;
             adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
             adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
             adam_.step = 0;
@@ -533,6 +535,9 @@ namespace runner::rl
                 metrics_.best_evaluation_score, has_best))
         {
             best_parameters_ = policy_.parameters();
+            preview_policy_.parameters() = best_parameters_;
+            preview_reset_sequence_ = 0u;
+            preview_.reset(0xDEADBEEFu + metrics_.update);
             metrics_.best_evaluation_distance = metrics_.evaluation_distance;
             metrics_.best_evaluation_score = metrics_.evaluation_score;
             metrics_.best_quality_key = metrics_.evaluation_quality_key;

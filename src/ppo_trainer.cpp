@@ -82,31 +82,16 @@ namespace runner::rl
                 return duck_teacher_action(environment);
             if (stage == sim::CourseStage::crouch_walk)
                 return crouch_walk_teacher_action(environment);
-            const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.25f;
-            const float swing = std::sin(phase);
-            const float lift_left = std::max(0.0f, swing);
-            const float lift_right = std::max(0.0f, -swing);
-            if (environment.blueprint().support_seed_count() <= 2u)
-            {
-                return {
-                    0.52f * swing,
-                    0.48f * lift_left - 0.10f,
-                    -0.52f * swing,
-                    0.48f * lift_right - 0.10f
-                };
-            }
-            return {
-                0.50f * swing,
-                -0.50f * swing,
-                -0.50f * swing,
-                0.50f * swing
-            };
+            if (sim::stage_requires_forward_gait(stage))
+                return walking_teacher_action(environment);
+            return balance_teacher_action(environment);
         }
     }
 
     PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count,
             bool enable_rollout_workers)
-            : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu)
+            : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu),
+              preview_policy_(0xBEEFBEEFu)
         {
             environment_count = std::clamp<std::size_t>(environment_count, 8, 256);
             const std::size_t hardware = std::max<std::size_t>(1, std::thread::hardware_concurrency());
@@ -180,8 +165,9 @@ namespace runner::rl
                         lerp(previous_action[action_index], guided_action, 0.60f), -1.0f, 1.0f);
                     previous_action[action_index] = transition.action[action_index];
                 }
-                const MotorDiscoveryProbe probe = motor_discovery_probe(
-                    environment, environment_index, metrics_.update, step);
+                const MotorDiscoveryProbe probe = course_stage_ == sim::CourseStage::balance
+                    ? motor_discovery_probe(environment, environment_index, metrics_.update, step)
+                    : MotorDiscoveryProbe{};
                 for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
                     transition.action[action_index] = lerp(transition.action[action_index],
                         probe.action[action_index], probe.weight);
@@ -385,6 +371,7 @@ namespace runner::rl
     void PpoTrainer::reset_policy(std::uint64_t seed)
     {
         policy_ = PolicyNetwork(seed);
+        preview_policy_.parameters() = policy_.parameters();
         reset_training_state();
         controller_state_ = ControllerState::fresh;
     }
@@ -607,6 +594,7 @@ namespace runner::rl
         if (best_parameters_.size() != policy_.parameter_count())
             return false;
         policy_.parameters() = best_parameters_;
+        preview_policy_.parameters() = best_parameters_;
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
@@ -711,14 +699,21 @@ namespace runner::rl
 
     void PpoTrainer::step_preview(float dt)
     {
-        const auto raw_action = policy_.deterministic_action(preview_.observation());
+        const PolicyNetwork& display_policy = best_parameters_.empty()
+            ? policy_ : preview_policy_;
+        const auto raw_action = display_policy.deterministic_action(preview_.observation());
         const auto action = effective_policy_action(preview_, raw_action, course_stage_);
         if (preview_.step(action, dt).terminated)
-            preview_.reset(0xDEADBEEFu + metrics_.update);
+        {
+            ++preview_reset_sequence_;
+            preview_.reset(0xDEADBEEFu + metrics_.update
+                + preview_reset_sequence_ * 7919u);
+        }
     }
 
     void PpoTrainer::reset_preview(std::uint64_t seed) noexcept
     {
+        preview_reset_sequence_ = 0u;
         preview_.reset(seed);
     }
 

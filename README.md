@@ -1,13 +1,13 @@
 # Runner
 
-Runner 0.7.18 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.19 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
 - CMake 3.28 or newer
 - C++23 compiler
 - Ninja or Visual Studio
-- Python 3 for deterministic v0.7.18 source generation
+- Python 3 for deterministic v0.7.19 source generation
 - vcpkg for SDL3, Vulkan, and shaderc on Windows
 
 The project pins and statically links the platform-neutral SandHybrid simulation library. Runner owns the SDL3/Vulkan application, rendering, training, editor, and package lifecycle.
@@ -82,8 +82,21 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive camera contract.
 - [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the crouch/gait/stub-foot correction.
 - [`docs/RUNNER_V0718_RUNTIME_RECOVERY.md`](docs/RUNNER_V0718_RUNTIME_RECOVERY.md) documents the update-loop, marker, control, telemetry, skin, and walking recovery.
+- [`docs/RUNNER_V0719_GENERAL_LOCOMOTION.md`](docs/RUNNER_V0719_GENERAL_LOCOMOTION.md) documents balance reserve, terrain adaptation, running, reversal, flee behavior, and emergency recovery.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.19 general locomotion
+
+- Uses a reusable material-independent locomotion strategy shared by PPO bootstrap and reward targeting.
+- Values balance reserve and controlled support transfer before raw speed.
+- Slows, lifts, loads, and levers over reachable ledges and plateaus instead of repeatedly striking them at fixed cadence.
+- Gates running behind established walking, clear terrain, and adequate balance reserve; braking is rewarded before difficult terrain.
+- Trains signed-direction reversal and flee behavior for imminent moving or thrown threats.
+- Allows crawling only as an obstructed/buried emergency escape and never counts it as upright Walk/Run mastery.
+- Adds low-rate falling sand to general deformable-terrain lessons; deposited sand changes the terrain through the same live SandHybrid bridge.
+- The large preview follows the best validated champion when available and varies deterministic restart seeds instead of replaying one failing two-step episode forever.
+- Restricts motor-discovery probes to the Balance nursery so they no longer overwrite early Walk actions for hundreds of updates.
 
 ## v0.7.18 runtime recovery
 
