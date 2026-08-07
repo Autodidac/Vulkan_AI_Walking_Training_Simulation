@@ -23,6 +23,8 @@ namespace runner::ui_frame_probe
         Vec2 a, Vec2 b, Vec2 c) noexcept
     {
         constexpr float epsilon = 1.0e-4f;
+        if (std::abs(cross(b - a, c - a)) <= epsilon)
+            return false;
         const float ab = cross(b - a, point - a);
         const float bc = cross(c - b, point - b);
         const float ca = cross(a - c, point - c);
