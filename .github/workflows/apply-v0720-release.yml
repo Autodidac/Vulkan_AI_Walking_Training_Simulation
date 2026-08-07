@@ -1,0 +1,44 @@
+name: Apply Runner v0.7.20 source refinement
+
+on:
+  push:
+    branches: [agent/v0720-ui-preview-icon]
+    paths:
+      - tools/apply_v0720_release.py
+      - .github/workflows/apply-v0720-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0720-ui-preview-icon
+          fetch-depth: 0
+      - name: Apply v0.7.20 refinement
+        run: |
+          set -euo pipefail
+          python3 tools/apply_v0720_release.py
+          rm tools/apply_v0720_release.py
+          rm -rf tools/__pycache__
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.20 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'preview_sync::decide' src/autonomy_runtime.cpp
+          grep -F 'SDL_SetWindowIcon' src/main.cpp
+          grep -F 'push_clip' src/renderer.hpp
+          test -f tools/generate_runner_icon.py
+          test -f tests/v0720_ui_tests.cpp
+          test -f docs/RUNNER_V0720_UI_PREVIEW_ICON.md
+          test ! -e tools/generate_v0719_sources.py
+      - name: Commit refined source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Implement Runner v0.7.20 UI and preview release'
+          git push origin HEAD:agent/v0720-ui-preview-icon
