@@ -417,37 +417,37 @@ Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complet
 
 # Runner v0.7.22 black-frame rendering hotfix
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 Direct packaged v0.7.20 and v0.7.21 eye testing shows that Live Autopilot, its right-side dashboard, the training PIP, Rig Lab, and all four Rig Lab pages can render only their outer borders over an opaque black interior. Source audit found the exact rendering fault: several post-content outline calls pass `Color{}` as an allegedly transparent fill, but `Color` defaults alpha to `1.0`. The renderer therefore draws the correct scene and controls, then covers each clipped region with an opaque black rounded rectangle. Existing UI tests verify only that clipped vertices do not escape; they do not require useful vertices to remain visible or detect an opaque full-panel overlay.
 
 ### WALK-BLACK-FRAME-284 — Remove opaque post-content masks
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Replace every border-only use of default-constructed `Color{}` with an explicitly transparent fill or a true outline primitive. Live world, dashboard, PIP, Rig Lab viewport, progress bars, and all four Rig Lab pages must retain their already-generated content after border rendering.
 
 ### WALK-ALL-VIEWS-285 — Verify every application view contains useful visible geometry
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The first rendered frame must contain non-background geometry inside Live world, Live dashboard, training PIP when available, Rig Lab viewport, and the `PRESETS`, `STRUCTURE`, `MOTORS`, and `TEST` pages. Switching pages repeatedly must not leak clip state or turn another panel black.
 
 ### WALK-CLIP-TEST-286 — Make clipping tests non-vacuous
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Canvas clipping tests must require a clipped primitive to emit a nonzero triangle set, remain inside the requested bounds, preserve nested clip behavior, and unwind to depth zero. Add a regression contract that explicit transparent overlay colors have zero alpha and cannot become opaque through default construction.
 
 ### WALK-FRAME-DIAGNOSTIC-287 — Add deterministic visible-frame diagnostics
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add a CPU-only diagnostic/test path that renders representative Live and Rig Lab frames and verifies useful vertex counts and color diversity inside every content rectangle. Layout-only checks are insufficient; the diagnostic must fail on the exact border-with-black-interior screenshot.
 
 ### WALK-HOTFIX-COMPAT-288 — Preserve v0.7.21 training semantics
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 This is a rendering-only hotfix. Preserve v0.7.21 policy dimensions, rig anatomy, gait rules, terrain behavior, checkpoints, and `runner-v0721-*` autosave compatibility. Bump only the application/package version to `0.7.22` and move the equipment curriculum heading to v0.7.23.
 
 ### WALK-RELEASE-289 — Publish audited Runner v0.7.22
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 Require Linux GCC 14 warnings-as-errors, the complete deterministic/live/UI/rig suite, a full Windows SDL3/Vulkan build, the new visible-frame diagnostic for Live plus all four Rig Lab pages, installed/extracted package execution, ZIP/checksum/manifest creation, release re-download byte verification, and cleanup leaving only `main`.
 
@@ -489,6 +489,13 @@ The existing anatomy motor slots remain anatomy controls. Equipment state, aim, 
 **Status:** OPEN
 
 # Recent immutable release evidence
+
+## Runner v0.7.22
+
+**Status:** PUBLISHED.
+
+- v0.7.22 validation source: `5186652c709afe726f3e648a82bc04907670e0f7`.
+- Main release workflow run: `31212158554`.
 
 ## Runner v0.7.21
 
