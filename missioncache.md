@@ -304,114 +304,114 @@ Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complet
 
 # Runner v0.7.21 plain-language training dashboard
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 The application now exposes enough internal training data to debug the trainer, but the default interface still requires reinforcement-learning knowledge. A normal failed evaluation can show a huge red negative score, `-INF`, hexadecimal quality keys, abbreviated counters, and rejection terminology without explaining whether training is healthy, what improved, what failed, or what must happen next. The default dashboard must answer five ordinary questions: Is it still learning? Is it getting better? What just happened? What is it trying to learn now? What specifically must improve before the next lesson?
 
 The v0.7.20 Rig Lab screenshots also reopen anatomy and locomotion correctness. Automatic training is accepting geometry mutations that alter leg length instead of learning to control a fixed game character. The biped presets are authored as wide frontal splits rather than compact side-view bodies, multi-legged presets use malformed support plates or unarticulated branches, and the two-page Rig Lab places unrelated preset, file, structure, policy, motor, and test controls into one overflowing panel. These are part of the same release because unreadable diagnostics cannot be separated from visibly incorrect rigs and gait evidence.
 
 ### WALK-HUMAN-STATUS-263 — Summarize learning health in ordinary language
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Derive one stable headline from trainer state: `STARTING`, `TRAINING NORMALLY`, `TESTING CURRENT POLICY`, `VALID ATTEMPT FOUND`, `IMPROVING BEST RESULT`, `RETRYING AFTER FAILED TEST`, `TRYING A FRESH POLICY`, `PAUSED`, or `LESSON MASTERED`. The headline must not infer failure merely because an internal score is negative.
 
 ### WALK-LESSON-PROGRESS-264 — Show understandable lesson completion
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Display total updates prominently, then show current-lesson progress as a percentage and a simple bar. Progress is the conservative minimum of required update, episode, and evaluation work, capped at 100%; mastery confirmation is shown separately. Labels use full words such as `UPDATES`, `ATTEMPTS`, and `TESTS`, not `UPD`, `EPS`, or `EVAL`.
 
 ### WALK-LATEST-TEST-265 — Explain the latest evaluation result
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The default results page says `LATEST TEST: PASSED` or `LATEST TEST: NOT YET PASSED`, followed by one plain-English reason such as `body touched the ground`, `needs more alternating steps`, `did not travel far enough`, `could not hold balance long enough`, or `joint motion was too violent`. A rejected test is presented as useful feedback, not as proof that learning is permanently broken.
 
 ### WALK-BEST-RESULT-266 — Report useful accomplishments instead of arbitrary score
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The default page reports stage-relevant best/current evidence: standing time and valid seeds; crouch/hold/recovery; walking distance, steps, and survival; jump landings; obstacles passed; controlled flip landings; or mixed-course survival. Raw evaluation score and packed quality key are hidden from the default page.
 
 ### WALK-NEXT-GOAL-267 — State exactly what advances the lesson
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Show a concise stage-specific next goal. Examples: stay upright for six seconds across test seeds; crouch, hold, and stand back up; take real alternating steps and cover the required distance; land a powered jump; clear a hurdle; land a controlled flip; or survive the mixed course. When the required training budget is incomplete, say that more training/test samples are needed before mastery can be judged.
 
 ### WALK-COLOR-SEMANTICS-268 — Reserve red for actionable current failure
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Negative score magnitude, uninitialized best score, ordinary rejection, and incomplete work do not paint the entire card red. Cyan indicates information/work in progress, yellow indicates an unmet current goal or retry, green indicates valid evidence/mastery, and red is limited to broken rig, invalid numerical state, package/runtime failure, or a presently terminal motion fault.
 
 ### WALK-ADVANCED-269 — Preserve expert diagnostics behind an explicit page
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add an `ADVANCED DIAGNOSTICS` page containing raw evaluation score, best score/update, quality key, rejection mask/name, policy/value loss, entropy, learning rate, environment steps, worker throughput, optimizer state, and pipeline details. The default page remains understandable without opening it.
 
 ### WALK-TOTALS-PLAIN-270 — Translate lifetime totals
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The totals page groups data under `THIS RIG`, `THIS SESSION`, and `ALL TIME` with full labels. It explains that `ATTEMPTS` are completed simulated episodes, `VALID` means the motion passed safety/skill gates, `RESETS` are policy/episode restarts rather than lost all-time progress, and `ROLLBACKS` mean the trainer restored a better retained controller.
 
 ### WALK-INLINE-HELP-271 — Make unfamiliar terms self-explanatory
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Provide a compact on-screen legend or explanatory lines for total updates, lesson progress, retained champion, latest test, attempts, valid attempts, resets, and rollbacks. The UI must not require README knowledge to interpret its primary state.
 
 ### WALK-TELEMETRY-TEST-272 — Deterministically test every human-facing state
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add pure C++23 tests covering no-evaluation startup, active training, valid evaluation, invalid evaluation, uninitialized infinities, fresh-policy retry, paused state, mastery, conservative progress calculation, stage-specific goal text, rejection translation, color severity, and advanced raw-value availability. Existing locomotion, UI, Windows, and package gates remain mandatory.
 
 ### WALK-STATE-273 — Isolate corrected rig and gait semantics
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 The readable dashboard remains presentation-only, but corrected preset geometry, gait evidence, and automatic tuning semantics invalidate silent reuse of v0.7.20 autosaves. Bump training/autonomy semantics and use `runner-v0721-*` autosave paths. Older checkpoints remain explicit transfer inputs only; malformed or structurally evolved v0.7.20 rigs may not silently resume as current presets.
 
 ### WALK-DOC-274 — Document the readable dashboard contract
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Update README, CHANGELOG, one focused v0.7.21 document, repository audit, package contents, and this single mission cache. Document every default label and its precise meaning without creating duplicate ledgers.
 
 ### WALK-AUTO-TUNING-275 — Stop automatic anatomy cheating
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Automatic curriculum refinement may tune motor strength, joint range, and structural stiffness only. It may not move nodes, change limb length, widen supports, add/remove/split branches, duplicate feet, or change semantic contacts while learning locomotion. Structural editing remains an explicit Rig Lab operation. Every automatically accepted candidate must preserve the exact node, radius, bone, topology, and support-semantic layout of its source rig.
 
 ### WALK-SIDE-GAIT-276 — Require real side-view fore/aft gait
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Biped, humanoid, scaffold, chicken, and monoped presentation must read as side-view anatomy rather than a frontal split. A credited crossing step requires the swing support to begin behind the stance support, clear the terrain, pass ahead of it, and land on the opposite contact phase. A leg that stays permanently ahead, spreads sideways, shuffles both supports, or gains progress only from the treadmill receives no sagittal gait credit.
 
 ### WALK-PRESET-ANATOMY-277 — Rebuild every shipped preset from explicit chains
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Audit scaffold, humanoid, biped, chicken, quadruped, four-leg crawler, hexapod, and monoped. Each preset must be connected, finite, centered, correctly scaled, have unique semantic supports, physically meaningful parent-pivot-child motor chains, no support-to-support brace masquerading as a limb, no fused feet, and a recognizable side silhouette. Presets are immutable templates; selecting one always restores its canonical anatomy.
 
 ### WALK-MULTILEG-278 — Give multi-legged rigs real support branches
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Quadruped and four-leg crawler use four distinct articulated two-segment legs with eight mapped joints and diagonal gait phases. The hexapod uses six distinct legs and alternating tripod support phases without rigid foot plates joining semantic supports. Multi-support gait bootstrap must drive support branches by semantic phase rather than returning a stationary balance action.
 
 ### WALK-RIG-LAB-279 — Replace the overflowing Rig Lab control wall
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Split Rig Lab into focused `PRESETS`, `STRUCTURE`, `MOTORS`, and `TEST` pages. Preset/file/policy/visual controls, node/bone editing, motor setup, and joint/traction testing may not share one unscrollable panel. Use responsive panel/world boxes, deterministic clipping, consistent spacing, full labels, and no overlapping or unreachable controls at every supported window size.
 
 ### WALK-RIG-FIT-280 — Center and fit every rig in the editor viewport
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Rig Lab computes bounds from the selected blueprint, centers the actual anatomy, and chooses a safe scale that keeps the full body, support nodes, labels, motor arc, and ground reference visible. Wide quadrupeds and hexapods may not be cropped or shoved to one edge; tall humanoids and monoped rigs may not overlap the joint-test area.
 
 ### WALK-RIG-TRUTH-281 — Make editor labels match actual behavior
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Replace `USE EVOLVED`, `RIG GENERATION`, and topology-nursery wording where automatic training now performs controller tuning only. Clearly distinguish canonical preset, manually edited custom rig, retained controller, fresh policy, and automatic parameter tuning. The UI may not imply that changing leg length is a valid walking solution.
 
 ### WALK-RIG-TEST-282 — Deterministically lock anatomy, gait, and layout
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add tests proving automatic tuning preserves anatomy byte-for-byte; every preset is valid, connected, finite, centered, uniquely supported, and appropriately articulated; biped rest poses are compact side-view silhouettes; quadruped/crawler have four distinct articulated legs; hexapod has six independent supports with alternating tripod phases; crossing credit requires behind-to-ahead order reversal; and all four Rig Lab pages fit every supported window size.
 
 ### WALK-RELEASE-283 — Publish audited Runner v0.7.21
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complete deterministic/live/UI/rig suites, readable-dashboard diagnostics, all-preset acceptance, installed/extracted execution, ZIP/checksum/manifest, published-asset re-download byte verification, and cleanup of temporary branches/workflows. The release includes every v0.7.20 locomotion, terrain, preview, DPI, clipping, and icon correction plus the corrected v0.7.21 rig and gait contract.
 
@@ -453,6 +453,13 @@ The existing anatomy motor slots remain anatomy controls. Equipment state, aim, 
 **Status:** OPEN
 
 # Recent immutable release evidence
+
+## Runner v0.7.21
+
+**Status:** PUBLISHED.
+
+- v0.7.21 validation source: `5094b0b2d54bf38a7e961d8384d696046b6781a3`.
+- Main release workflow run: `31205911599`.
 
 ## Runner v0.7.20
 
