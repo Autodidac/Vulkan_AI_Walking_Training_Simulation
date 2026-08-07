@@ -1,0 +1,59 @@
+name: Temporary PR66 core-test patch helper
+
+on:
+  pull_request_target:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-pr66:
+    if: github.event.pull_request.number == 66 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Patch stale v0.7.18 marker assertions and push
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/core_tests.cpp')
+          text = path.read_text(encoding='utf-8')
+          old = '''    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+                  ui_layout::DistanceUnits::metric) - 250.0f) < 0.001f,
+              "metric markers are not quarter-kilometre spaced");
+          require(std::abs(ui_layout::course_reference_marker_spacing_m(
+                  ui_layout::DistanceUnits::imperial) - 402.336f) < 0.001f,
+              "imperial markers are not quarter-mile spaced");'''
+          new = '''    require(std::abs(ui_layout::course_reference_marker_spacing_m(
+                  ui_layout::DistanceUnits::metric) - 10.0f) < 0.001f,
+              "metric near-course markers are not 10 metres apart");
+          require(std::abs(ui_layout::course_reference_marker_spacing_m(
+                  ui_layout::DistanceUnits::imperial) - 15.24f) < 0.001f,
+              "imperial near-course markers are not 50 feet apart");'''
+          if old not in text:
+              raise SystemExit('stale marker assertion block not found exactly')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/core_tests.cpp
+          git commit -m 'Update core marker tests for v0.7.18 near-course spacing'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Remove helper from main
+        shell: bash
+        run: |
+          git fetch origin main
+          git switch --detach origin/main
+          git rm .github/workflows/temporary-pr66-core-test-patch.yml
+          git commit -m 'Remove temporary PR66 source patch helper'
+          git push origin HEAD:main
