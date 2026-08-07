@@ -1,0 +1,47 @@
+name: Apply Runner v0.7.18 walk-coordinate recovery
+
+on:
+  push:
+    branches:
+      - agent/v0719-walk-coordinate-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: agent/v0719-walk-coordinate-recovery
+      - name: Configure commit identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Cache release-blocking correction first
+        run: |
+          python3 tools/apply_v0718_walk_coordinate_recovery.py cache
+          git add missioncache.md
+          git commit -m 'Cache v0.7.18 treadmill-coordinate walking correction'
+          git push origin HEAD:agent/v0719-walk-coordinate-recovery
+      - name: Apply coherent source correction
+        run: |
+          python3 tools/apply_v0718_walk_coordinate_recovery.py implement
+          python3 -m py_compile tools/apply_v0718_walk_coordinate_recovery.py
+          git diff --check
+      - name: Remove temporary executor infrastructure
+        run: |
+          git rm tools/apply_v0718_walk_coordinate_recovery.py
+          git rm .github/workflows/apply-v0718-walk-coordinate-recovery.yml
+      - name: Publish implementation branch
+        run: |
+          git add src/simulation.hpp src/simulation.cpp src/ppo.hpp src/ppo_trainer.cpp \
+            tests/v0718_runtime_recovery_tests.cpp CHANGELOG.md \
+            docs/RUNNER_V0718_RUNTIME_RECOVERY.md \
+            .github/workflows/runner-v0717-release.yml
+          git commit -m 'Fix treadmill-relative gait learning in Runner v0.7.18'
+          git push origin HEAD:agent/v0719-walk-coordinate-recovery
