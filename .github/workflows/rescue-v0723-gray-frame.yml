@@ -1,0 +1,63 @@
+name: Rescue Runner v0.7.23 gray-frame hotfix
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/v0723-gray-frame-hotfix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0723-gray-frame-hotfix
+          fetch-depth: 0
+      - name: Apply corrected rounded-outline repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/run_v0723_gray_frame_hotfix.py
+          rm -f tools/cache_v0723_gray_frame.py
+          rm -f tools/apply_v0723_gray_frame_hotfix.py
+          rm -f tools/run_v0723_gray_frame_hotfix.py
+          rm -f .github/workflows/cache-v0723-gray-frame.yml
+          rm -f .github/workflows/apply-v0723-gray-frame.yml
+          rm -f .github/workflows/rescue-v0723-gray-frame.yml
+          rm -rf tools/__pycache__
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.23 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'stroke_rounded_rect' src/ui_render_contract.hpp
+          grep -F 'distinct_color_buckets >= 3u' src/ui_frame_probe.hpp
+          grep -F 'border-only rounded rectangle changed the center composite' tests/v0723_gray_frame_tests.cpp
+          test -f .github/workflows/runner-v0723-release.yml
+          test -f docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
+      - name: Build focused CPU regression
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build python3
+          cmake -S . -B build/v0723-rescue -G Ninja \
+            -DRUNNER_BUILD_APP=OFF \
+            -DRUNNER_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/v0723-rescue --target RunnerV0723GrayFrameTests --parallel
+          ./build/v0723-rescue/RunnerV0723GrayFrameTests
+      - name: Commit repaired source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Implement Runner v0.7.23 true rounded outlines'
+          git push origin HEAD:agent/v0723-gray-frame-hotfix
