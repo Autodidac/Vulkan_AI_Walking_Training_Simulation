@@ -1,18 +1,16 @@
 name: Apply Runner v0.7.19 general locomotion
 
 on:
-  push:
-    branches: [agent/v0719-general-locomotion]
-    paths:
-      - tools/apply_v0719_general_locomotion.py
-      - tools/run_v0719_executor.py
-      - .github/workflows/apply-v0719-general-locomotion.yml
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.head_ref == 'agent/v0719-general-locomotion'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
