@@ -1,0 +1,39 @@
+name: Cache Runner v0.7.23 gray-frame hotfix
+
+on:
+  push:
+    branches: [agent/v0723-gray-frame-hotfix]
+    paths:
+      - tools/cache_v0723_gray_frame.py
+      - .github/workflows/cache-v0723-gray-frame.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cache:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0723-gray-frame-hotfix
+          fetch-depth: 0
+      - name: Cache observed gray-frame failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/cache_v0723_gray_frame.py
+          git diff --check
+          grep -F 'WALK-TRUE-OUTLINE-290' missioncache.md
+          grep -F 'WALK-RELEASE-295' missioncache.md
+          grep -F '# Runner v0.7.24 equipment' missioncache.md
+      - name: Commit mission cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add missioncache.md
+          git commit -m 'Cache Runner v0.7.23 gray-frame missions'
+          git push origin HEAD:agent/v0723-gray-frame-hotfix
