@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   linux-gcc14:
@@ -38,59 +38,3 @@ jobs:
         run: cmake --build build/pr-linux --parallel
       - name: Test
         run: ctest --test-dir build/pr-linux --output-on-failure -V --timeout 1800
-
-  correct-v0718-release-gate:
-    if: github.event.pull_request.title == 'Trigger v0.7.18 release gate correction' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ github.token }}
-      - name: Correct release evidence and remove helper
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          release = Path('.github/workflows/runner-v0717-release.yml')
-          text = release.read_text(encoding='utf-8')
-          old = "          grep -F 'WALK-RELEASE-225' missioncache.md\n"
-          if "grep -F 'WALK-COURSE-FRAME-226'" not in text:
-              assert old in text
-              text = text.replace(old, old +
-                  "          grep -F 'WALK-COURSE-FRAME-226' missioncache.md\n"
-                  "          grep -F 'WALK-COORDINATE-TEST-232' missioncache.md\n", 1)
-          old_state = "          text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',\n              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.', 1)\n"
-          new_state = "          text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',\n              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.')\n"
-          if old_state in text:
-              text = text.replace(old_state, new_state, 1)
-          text = text.replace('          for number in range(211, 225):\n',
-                              '          for number in range(211, 233):\n', 1)
-          text = text.replace(
-              '          - Terrain simulation and terrain coordinates are intentionally unchanged.\n',
-              '          - Terrain material/shape simulation is retained; moving-course locomotion accounting now uses terrain-relative progress.\n', 1)
-          bootstrap = '          - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.\n'
-          if 'Fixes the treadmill/world coordinate mismatch' not in text:
-              assert bootstrap in text
-              text = text.replace(bootstrap, bootstrap +
-                  '          - Fixes the treadmill/world coordinate mismatch so real side-view steps accumulate ground-relative distance and speed.\n'
-                  '          - Checkpoints safe incremental two-step sagittal walkers before final mastery instead of discarding them.\n', 1)
-          cleanup = "            'agent/v0717-eye-test-feet-gait-batch25'\n"
-          if "'agent/v0719-walk-coordinate-recovery'" not in text:
-              assert cleanup in text
-              text = text.replace(cleanup, cleanup +
-                  "            'agent/v0719-walk-coordinate-recovery'\n"
-                  "            'agent/v0718-release-gate-trigger'\n", 1)
-          release.write_text(text, encoding='utf-8', newline='\n')
-          PY
-          git diff --check
-          grep -F "WALK-COURSE-FRAME-226" .github/workflows/runner-v0717-release.yml
-          grep -F "range(211, 233)" .github/workflows/runner-v0717-release.yml
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git rm .github/workflows/temporary-v0718-release-gate-correction.yml
-          git add .github/workflows/runner-v0717-release.yml
-          git commit -m 'Finalize v0.7.18 treadmill-coordinate release evidence gate'
-          git push origin HEAD:main
