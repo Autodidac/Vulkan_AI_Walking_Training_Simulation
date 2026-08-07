@@ -38,6 +38,8 @@ jobs:
           grep -F 'project(Runner VERSION 0.7.18 LANGUAGES CXX)' CMakeLists.txt
           grep -F 'WALK-RUNTIME-RESET-211' missioncache.md
           grep -F 'WALK-RELEASE-225' missioncache.md
+          grep -F 'WALK-COURSE-FRAME-226' missioncache.md
+          grep -F 'WALK-COORDINATE-TEST-232' missioncache.md
           grep -F 'Runner v0.7.19 equipment, carry, and target curriculum' missioncache.md
           test -f docs/RUNNER_V0718_RUNTIME_RECOVERY.md
           test -f tools/generate_v0718_sources.py
@@ -224,8 +226,8 @@ jobs:
           mission = Path('missioncache.md')
           text = mission.read_text(encoding='utf-8')
           text = text.replace('**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.',
-              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.', 1)
-          for number in range(211, 225):
+              '**Release state:** PUBLISHED — LINUX/WINDOWS/PACKAGE/RE-DOWNLOAD/CLEANUP VERIFIED.')
+          for number in range(211, 233):
               text = re.sub(rf'(### WALK-[^\n]+-{number}[^\n]*\n)\*\*Status:\*\* [^\n]+',
                   rf'\1**Status:** VERIFIED — MAIN RELEASE GATE PASSED', text, count=1)
           text = re.sub(r'(### WALK-RELEASE-225[^\n]*\n)\*\*Status:\*\* [^\n]+',
@@ -237,7 +239,7 @@ jobs:
           changelog = Path('CHANGELOG.md')
           old = changelog.read_text(encoding='utf-8')
           if not old.startswith('## 0.7.18'):
-              prefix = '''## 0.7.18\n\n- Removed the update-10 no-champion reset contradiction and kept cumulative totals visible.\n- Restored START plus 10 m / 50 ft near-course reference markers without changing terrain simulation.\n- Added stage-work, total/local update, evaluation, reset, pipeline, and throughput observability.\n- Corrected runtime controls and disabled optional body skin overlays by default while retaining sprite feet.\n- Strengthened early sagittal walking bootstrap without weakening crab-walk rejection.\n- Added deterministic runtime-recovery and complete Linux/Windows/package release gates.\n\n'''
+              prefix = '''## 0.7.18\n\n- Removed the update-10 no-champion reset contradiction and kept cumulative totals visible.\n- Restored START plus 10 m / 50 ft near-course reference markers without changing terrain simulation.\n- Added stage-work, total/local update, evaluation, reset, pipeline, and throughput observability.\n- Corrected runtime controls and disabled optional body skin overlays by default while retaining sprite feet.\n- Strengthened early sagittal walking bootstrap without weakening crab-walk rejection.\n- Fixed terrain-relative walking distance, speed, and strike credit on the moving course.\n- Preserved safe incremental sagittal walkers so PPO can refine them into final mastery.\n- Added deterministic runtime-recovery and complete Linux/Windows/package release gates.\n\n'''
               changelog.write_text(prefix + old, encoding='utf-8', newline='\n')
           PY
           git config user.name 'github-actions[bot]'
@@ -258,13 +260,15 @@ jobs:
           cat > release-notes.md <<'NOTES'
           Runner v0.7.18 is the runtime-recovery release from direct v0.7.17 eye testing.
 
-          - Terrain simulation and terrain coordinates are intentionally unchanged.
+          - Terrain material/shape simulation is retained; moving-course locomotion accounting now uses terrain-relative progress.
           - Prevents the no-champion nursery from resetting at update 10 before Stand's 120-update work gate.
           - Makes cumulative and local updates, evaluations, resets, stage-work thresholds, pipeline state, and throughput visible.
           - Restores START plus near-course 10 m / 50 ft reference markers.
           - Corrects Tab/Space/1/2/3/T/U/A/R runtime controls.
           - Defaults optional torso/helmet/weapon overlays off while keeping sprite feet independent.
           - Strengthens early sagittal walking bootstrap without weakening crab-walk rejection.
+          - Fixes the treadmill/world coordinate mismatch so real side-view steps accumulate ground-relative distance and speed.
+          - Checkpoints safe incremental two-step sagittal walkers before final mastery instead of discarding them.
           NOTES
           gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Runner v0.7.18" --notes-file release-notes.md
       - name: Re-download and byte-verify published assets
@@ -283,7 +287,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for pr in 59 61 62; do
+          for pr in 59 61 62 67; do
             gh pr close "$pr" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           done
           branches=(
@@ -292,6 +296,8 @@ jobs:
             'agent/v0718-runtime-recovery-clean'
             'agent/v0718-executor-trigger'
             'agent/v0717-eye-test-feet-gait-batch25'
+            'agent/v0719-walk-coordinate-recovery'
+            'agent/v0718-release-gate-trigger'
           )
           for branch in "${branches[@]}"; do
             encoded=${branch//\//%2F}
