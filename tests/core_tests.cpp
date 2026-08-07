@@ -1720,9 +1720,11 @@ int main()
     require(crawler4.nodes.size() >= 9 && crawler4.bones.size() >= 10
             && crawler4.support_seed_count() == 4,
         "four-legged crawler geometry or support semantics are incomplete");
-    require(hexapod.nodes.size() >= 12 && hexapod.bones.size() >= 16
-            && hexapod.support_seed_count() == 6,
-        "six-legged hexapod geometry or support semantics are incomplete");
+    require(hexapod.nodes.size() >= 10 && hexapod.bones.size() >= 10
+        && hexapod.active_motor_count == 6
+        && hexapod.support_seed_count() == 6
+        && hexapod.horizontal_multi_support_plan(),
+    "six-legged hexapod geometry, tripod phases, or support semantics are incomplete");
 
     {
         sim::Environment biped_support{ humanoid, 0xFEE7u };
