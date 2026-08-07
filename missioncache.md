@@ -97,6 +97,47 @@ Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, every d
 
 Merge only validated source, tag `v0.7.18`, publish audited assets, re-download and byte-verify them, record exact evidence, delete temporary workflows/branches, close cleanup PRs, and leave only `main`.
 
+# Runner v0.7.18 treadmill-coordinate walking correction
+
+**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+
+The overnight v0.7.17 eye test reaches Walk but reports only zero-to-two credited steps while the course itself moves at walking speed. Source audit found a coordinate-frame contradiction: moving lessons scroll terrain with `course_progress()`, but gait strike displacement, `distance_travelled_`, `forward_speed_`, and forward reward are measured only in fixed screen/world X. A correct treadmill gait can therefore walk in place relative to the camera yet receive zero travelled distance, fail the 5.5 cm step-displacement gate, fail the 6 m qualification gate, and never create a valid Walk champion. The existing qualification gate also conflates a safe incremental candidate with final stage mastery, so a two-step improvement is discarded instead of checkpointed.
+
+### WALK-COURSE-FRAME-226 — Use terrain-relative locomotion coordinates
+**Status:** OPEN — RELEASE BLOCKING
+
+Moving-course locomotion distance and per-frame forward progress use the same transform as the scrolling terrain: world X plus `course_progress()`. Static Stand/Crouch/Jump lessons remain unchanged because their course speed is zero.
+
+### WALK-STEP-FRAME-227 — Credit real alternating strikes on the treadmill
+**Status:** OPEN — RELEASE BLOCKING
+
+Alternating step displacement is measured in terrain-relative locomotion X while foot crossing, swing-air time, swing clearance, and contact transitions remain physical world-space evidence. A walker may stay camera-centered without losing legitimate step credit.
+
+### WALK-SPEED-FRAME-228 — Report and train terrain-relative forward speed
+**Status:** OPEN — RELEASE BLOCKING
+
+Logical forward speed on moving lessons includes course speed plus physical root speed. PPO evaluation, speed mastery, reward shaping, telemetry, and overspeed use the resulting ground-relative speed; static lessons are numerically unchanged.
+
+### WALK-INCREMENTAL-CHAMPION-229 — Separate safe candidate qualification from mastery
+**Status:** OPEN — RELEASE BLOCKING
+
+Walk may checkpoint a physically valid incremental sagittal candidate after two alternating steps, at least one genuine limb crossing, one metre of terrain-relative progress, and two seconds of survival. Final Walk mastery remains strict at the existing 18 m / 16 stride / speed / survival requirements, and crab walking, body contact, invalid motion, and structural failures remain rejected.
+
+### WALK-IDLE-GATE-230 — Preserve anti-idle and anti-vibration behavior
+**Status:** OPEN — RELEASE BLOCKING
+
+The one-second zero-progress anti-idle window stays in camera/world space and still requires useful swing lift or a credited step. Merely standing still while terrain scrolls must not count as active gait.
+
+### WALK-BOOTSTRAP-231 — Keep useful guidance long enough to establish gait
+**Status:** OPEN — RELEASE BLOCKING
+
+Early Walk bootstrap remains strongly sagittal through the first meaningful training window, then decays gradually so PPO takes control after a valid incremental walker exists.
+
+### WALK-COORDINATE-TEST-232 — Deterministically lock the coordinate contract
+**Status:** OPEN — RELEASE BLOCKING
+
+Regression tests prove terrain-relative distance/frame progress, nonzero moving-course distance with a camera-centered rig, opposite-phase teacher drive, and the existing v0.7.18 reset/marker contracts. Full Linux and Windows release gates remain mandatory.
+
 # Carried open work
 
 ### WALK-CLIMB-134 — Reachable ledge climb and controlled backward descent
