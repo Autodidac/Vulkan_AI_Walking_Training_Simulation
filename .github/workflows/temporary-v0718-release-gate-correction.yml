@@ -1,17 +1,21 @@
 name: Temporary v0.7.18 release-gate correction helper
 
 on:
-  push:
+  pull_request_target:
+    types: [opened]
     branches: [main]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   correct:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.title == 'Trigger v0.7.18 release gate correction' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,3 +75,10 @@ jobs:
           git add .github/workflows/runner-v0717-release.yml
           git commit -m 'Finalize v0.7.18 treadmill-coordinate release evidence gate'
           git push origin HEAD:main
+      - name: Close and delete trigger PR
+        shell: bash
+        run: |
+          gh pr close "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY" || true
+          encoded=${{ github.event.pull_request.head.ref }}
+          encoded=${encoded//\//%2F}
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" || true
