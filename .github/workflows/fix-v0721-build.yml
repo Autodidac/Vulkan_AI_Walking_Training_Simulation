@@ -25,20 +25,13 @@ jobs:
           from pathlib import Path
           path = Path('CMakeLists.txt')
           text = path.read_text(encoding='utf-8')
-          old = '''    add_executable(RunnerV0721ReadableTelemetryTests
-              tests/v0721_readable_telemetry_tests.cpp)
-          target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
-              "${CMAKE_CURRENT_SOURCE_DIR}/src")
-          '''
-          new = '''    add_executable(RunnerV0721ReadableTelemetryTests
-              tests/v0721_readable_telemetry_tests.cpp)
-          target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)
-          target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE
-              "${CMAKE_CURRENT_SOURCE_DIR}/src")
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('telemetry target marker not found exactly once')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          marker = '    target_include_directories(RunnerV0721ReadableTelemetryTests PRIVATE\n'
+          link = '    target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)\n'
+          if link not in text:
+              if text.count(marker) != 1:
+                  raise SystemExit('telemetry include marker not found exactly once')
+              text = text.replace(marker, link + marker, 1)
+              path.write_text(text, encoding='utf-8', newline='\n')
           PY
           git diff --check
           grep -F 'target_link_libraries(RunnerV0721ReadableTelemetryTests PRIVATE Runner::Core)' CMakeLists.txt
@@ -48,5 +41,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add CMakeLists.txt
-          git commit -m 'Fix v0.7.21 telemetry test dependencies'
-          git push origin HEAD:agent/v0721-readable-telemetry
+          if ! git diff --cached --quiet; then
+            git commit -m 'Fix v0.7.21 telemetry test dependencies'
+            git push origin HEAD:agent/v0721-readable-telemetry
+          fi
