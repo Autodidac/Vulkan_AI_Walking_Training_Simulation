@@ -1,0 +1,42 @@
+name: Watch Runner v0.7.23 release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  watch:
+    if: github.head_ref == 'agent/v0723-release-watch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report current publisher state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=push&per_page=50")
+          run_id=$(jq -r '[.workflow_runs[] | select(.name == "Runner v0.7.23 validation and release")][0].id // empty' <<<"$json")
+          if [ -z "$run_id" ]; then
+            printf '%s\n' 'No Runner v0.7.23 release run is visible yet.' > /tmp/body.txt
+          else
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+            jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100")
+            {
+              printf 'Runner v0.7.23 release run: %s\n' "$run_id"
+              printf 'Status: %s\n' "$(jq -r '.status' <<<"$run")"
+              printf 'Conclusion: %s\n' "$(jq -r '.conclusion // "pending"' <<<"$run")"
+              printf 'Head: %s\n' "$(jq -r '.head_sha' <<<"$run")"
+              printf 'Jobs:\n'
+              jq -r '.jobs[] | "- \(.name): \(.status) / \(.conclusion // "pending") (job \(.id))"' <<<"$jobs"
+            } > /tmp/body.txt
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/body.txt
