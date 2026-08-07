@@ -1,1 +1,1 @@
-Trigger cache-first v0.7.22 mission commit after the pull_request_target workflow was installed on main.
+Trigger cache-first v0.7.22 mission commit after the full branch cache workflow was restored.
