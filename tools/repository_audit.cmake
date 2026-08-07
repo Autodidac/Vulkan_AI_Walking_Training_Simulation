@@ -95,6 +95,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
 foreach(reference IN ITEMS
         "--diagnose-ui"
+        "visible_application_frames"
         "SDL_SetWindowIcon"
         "application.frame(input, dt, logical_width, logical_height)"
         "logical_width, logical_height")
@@ -143,6 +144,7 @@ foreach(stale IN ITEMS
         .github/workflows/apply-v0721-rig-gait-repair.yml
         tools/cache_v0722_black_frame.py
         tools/apply_v0722_black_frame_hotfix.py
+        tools/add_v0722_frame_diagnostic.py
         tools/v0722.cache-trigger
         tools/v0722.cache-trigger2
         tools/v0722.cache-trigger3
