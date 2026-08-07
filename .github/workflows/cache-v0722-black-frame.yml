@@ -1,16 +1,16 @@
 name: Cache Runner v0.7.22 black-frame hotfix
 
 on:
-  push:
-    branches: [agent/v0722-black-frame-hotfix]
-    paths:
-      - .github/workflows/cache-v0722-black-frame.yml
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   cache:
+    if: github.head_ref == 'agent/v0722-black-frame-hotfix'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
