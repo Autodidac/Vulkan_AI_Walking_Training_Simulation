@@ -56,6 +56,7 @@ jobs:
           test ! -e .github/workflows/apply-v0721-readable-telemetry.yml
           test ! -e .github/workflows/cache-v0721-rig-repair.yml
           test ! -e .github/workflows/apply-v0721-rig-gait-repair.yml
+          test ! -e .github/workflows/fix-v0721-windows-shadow.yml
       - name: Configure
         env:
           CC: gcc-14
@@ -89,7 +90,9 @@ jobs:
         with:
           path: vcpkg-bincache
           key: runner-v0721-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: runner-v0721-pr-${{ runner.os }}-
+          restore-keys: |
+            runner-v0721-pr-${{ runner.os }}-
+            runner-v0720-pr-${{ runner.os }}-
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
