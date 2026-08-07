@@ -3,6 +3,7 @@
 #include "pixel_art.hpp"
 #include "renderer.hpp"
 #include "ui_layout.hpp"
+#include "ui_frame_probe.hpp"
 #include "view_camera.hpp"
 
 #include <SDL3/SDL.h>
@@ -192,6 +193,63 @@ namespace
         return error.find("VK_KHR_surface") != std::string_view::npos
             || error.find("VK_KHR_win32_surface") != std::string_view::npos;
     }
+
+    [[nodiscard]] bool visible_application_frames()
+    {
+        constexpr int width = 1600;
+        constexpr int height = 900;
+        constexpr float dt = 1.0f / 60.0f;
+        const runner::ui_layout::Box content = runner::ui_layout::content_box(
+            static_cast<float>(width), static_cast<float>(height));
+        const runner::ui_layout::Box live_world =
+            runner::ui_layout::live_world_box(content);
+        const runner::ui_layout::Box live_panel =
+            runner::ui_layout::live_panel_box(content);
+        const runner::ui_layout::Box live_pip =
+            runner::ui_layout::training_pip_box(live_world);
+        const runner::ui_layout::Box rig_panel =
+            runner::ui_layout::rig_lab_panel_box(content);
+        const runner::ui_layout::Box rig_world =
+            runner::ui_layout::rig_lab_world_box(content);
+
+        runner::Application application{};
+        auto visible = [&](runner::ui_layout::Box region)
+        {
+            return runner::ui_frame_probe::visibly_populated(
+                runner::ui_frame_probe::analyze(application.vertices(), region));
+        };
+
+        runner::InputState input{};
+        application.frame(input, dt, width, height);
+        if (!visible(live_world) || !visible(live_panel) || !visible(live_pip))
+            return false;
+
+        runner::InputState switch_to_rig{};
+        switch_to_rig.tab_pressed = true;
+        application.frame(switch_to_rig, dt, width, height);
+        if (!visible(rig_panel) || !visible(rig_world))
+            return false;
+
+        const float usable_width = rig_panel.width - 36.0f;
+        const float tab_width = (usable_width - 18.0f) * 0.25f;
+        const float tab_y = rig_panel.y + 71.5f;
+        for (int slot = 1; slot < 4; ++slot)
+        {
+            runner::InputState click{};
+            click.left_pressed = true;
+            click.mouse = {
+                rig_panel.x + 18.0f
+                    + static_cast<float>(slot) * (tab_width + 6.0f)
+                    + tab_width * 0.5f,
+                tab_y
+            };
+            application.frame(click, dt, width, height);
+            if (!visible(rig_panel) || !visible(rig_world))
+                return false;
+        }
+        return true;
+    }
+
 }
 
 int main(int argc, char** argv)
@@ -238,10 +296,12 @@ if (wants_camera_diagnostic(argc, argv))
             runner::ui_layout::logical_surface_scale(1600.0f, 900.0f,
                 2400.0f, 1350.0f);
         valid = valid && std::abs(dpi.x - 1.5f) < 1.0e-5f
-            && std::abs(dpi.y - 1.5f) < 1.0e-5f;
-        std::printf("Runner %s UI diagnostic: %s; layouts=%zu dpi=%.2fx%.2f\\n",
+            && std::abs(dpi.y - 1.5f) < 1.0e-5f
+            && visible_application_frames();
+        std::printf("Runner %s UI diagnostic: %s; layouts=%zu dpi=%.2fx%.2f frames=%s\n",
             RUNNER_VERSION, valid ? "passed" : "failed",
-            runner::ui_layout::validation_sizes.size(), dpi.x, dpi.y);
+            runner::ui_layout::validation_sizes.size(), dpi.x, dpi.y,
+            valid ? "visible" : "invalid");
         return valid ? 0 : 1;
     }
 

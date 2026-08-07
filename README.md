@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.21 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.22 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -71,7 +71,7 @@ Runner.exe --diagnose-acceptance
 Runner.exe --diagnose-camera
 ```
 
-`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale without opening a window.
+`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty.
 
 ## Repository records
 
@@ -85,8 +85,17 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0719_GENERAL_LOCOMOTION.md`](docs/RUNNER_V0719_GENERAL_LOCOMOTION.md) documents balance reserve, terrain adaptation, running, reversal, flee behavior, and emergency recovery.
 - [`docs/RUNNER_V0720_UI_PREVIEW_ICON.md`](docs/RUNNER_V0720_UI_PREVIEW_ICON.md) documents logical DPI, clipping, preview continuity, and application icon integration.
 - [`docs/RUNNER_V0721_READABLE_TELEMETRY.md`](docs/RUNNER_V0721_READABLE_TELEMETRY.md) defines every plain-language training status, counter, goal, and color rule.
+- [`docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md`](docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md) documents the opaque border-fill regression and visible-frame tests.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.22 black-frame hotfix
+
+- Restores the Live world, dashboard, training PIP, Rig Lab viewport, and all four Rig Lab pages after an opaque post-content border fill hid their interiors.
+- Replaces ambiguous default-constructed UI fill colors with one explicit zero-alpha border-only fill contract.
+- Makes Canvas clipping tests require real emitted triangles and validates nested clip intersections.
+- Adds CPU final-frame compositing tests that fail when a later opaque rectangle hides otherwise-correct content.
+- Preserves all v0.7.21 controller, rig, gait, terrain, checkpoint, and autosave semantics.
 
 ## v0.7.21 readable training dashboard
 

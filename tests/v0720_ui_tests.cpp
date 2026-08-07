@@ -1,6 +1,7 @@
 #include "preview_sync.hpp"
 #include "renderer.hpp"
 #include "ui_layout.hpp"
+#include "ui_render_contract.hpp"
 
 #include <algorithm>
 #include <array>
@@ -81,6 +82,10 @@ int main()
     canvas.quad({ -100.0f, -100.0f }, { 100.0f, 100.0f },
         { 1.0f, 1.0f, 1.0f, 1.0f });
     canvas.pop_clip();
+    require(!canvas.vertices().empty(),
+        "clipped primitive emitted no triangles and made the clip test vacuous");
+    require(canvas.vertices().size() % 3u == 0u,
+        "clipped canvas output is not a complete triangle list");
     require(canvas.clip_depth() == 0u, "canvas clip stack did not unwind");
     for (const runner::render::Vertex& vertex : canvas.vertices())
     {
@@ -88,6 +93,29 @@ int main()
                 && vertex.position.y >= 20.0f && vertex.position.y <= 50.0f,
             "clipped canvas vertex escaped its viewport");
     }
+
+    runner::render::Canvas nested{};
+    nested.push_clip({ 0.0f, 0.0f }, { 80.0f, 80.0f });
+    nested.push_clip({ 20.0f, 25.0f }, { 55.0f, 60.0f });
+    nested.quad({ -20.0f, -20.0f }, { 100.0f, 100.0f },
+        { 0.2f, 0.7f, 0.9f, 1.0f });
+    nested.pop_clip();
+    nested.pop_clip();
+    require(!nested.vertices().empty(),
+        "nested clip intersection emitted no visible geometry");
+    require(nested.clip_depth() == 0u,
+        "nested clip stack did not unwind to zero");
+    for (const runner::render::Vertex& vertex : nested.vertices())
+    {
+        require(vertex.position.x >= 20.0f && vertex.position.x <= 55.0f
+                && vertex.position.y >= 25.0f && vertex.position.y <= 60.0f,
+            "nested clipped vertex escaped the intersected viewport");
+    }
+    require(runner::ui_render::is_explicitly_transparent(
+            runner::ui_render::transparent_fill),
+        "named border-only fill is not transparent");
+    require(runner::Color{}.a == 1.0f,
+        "default Color no longer demonstrates why explicit transparency is required");
 
     const std::filesystem::path assets{ RUNNER_GENERATED_ASSET_DIRECTORY };
     const std::vector<std::uint8_t> ico = read_bytes(assets / "runner.ico");

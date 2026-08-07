@@ -1,3 +1,11 @@
+## 0.7.22
+
+- Fixed the black-interior regression covering Live Autopilot, its dashboard and PIP, Rig Lab, and all four Rig Lab pages.
+- Replaced opaque default `Color{}` border fills with the explicit zero-alpha UI transparency contract.
+- Made clipped-geometry tests non-vacuous and added nested clip validation.
+- Added CPU final-frame compositing tests for every Live and Rig Lab content region.
+- Preserved v0.7.21 training, anatomy, gait, terrain, checkpoint, and autosave semantics.
+
 ## 0.7.21
 
 - Replaced raw default evaluation scores with plain-language training health, test result, progress, evidence, and next-goal summaries.
