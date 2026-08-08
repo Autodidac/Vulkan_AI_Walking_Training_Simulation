@@ -1,0 +1,52 @@
+name: Clean Runner v0.7.25 temporary automation
+
+on:
+  workflow_run:
+    workflows: ["Runner v0.7.25 validation and release"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Remove temporary workflows and branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          rm -f .github/workflows/apply-v0725-pr-target.yml
+          rm -f .github/workflows/finalize-v0725-pr-target.yml
+          rm -f .github/workflows/finalize-v0725-pr-target-v2.yml
+          rm -f .github/workflows/merge-v0725-after-finalizer.yml
+          rm -f .github/workflows/cleanup-v0725-after-release.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Clean Runner v0.7.25 temporary automation [skip ci]'
+            for attempt in 1 2 3; do
+              git fetch origin main
+              git rebase origin/main && git push origin HEAD:main && break
+              test "$attempt" -lt 3
+              git rebase --abort 2>/dev/null || true
+              sleep 3
+            done
+          fi
+          gh pr close 80 --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh api --method DELETE \
+            "repos/$GITHUB_REPOSITORY/git/refs/heads/agent%2Fv0725-art-leg-hotfix" \
+            2>/dev/null || true
