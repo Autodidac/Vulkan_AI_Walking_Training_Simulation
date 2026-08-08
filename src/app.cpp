@@ -159,7 +159,7 @@ namespace runner
                 {
                     Color color = art.pixels[static_cast<std::size_t>(
                         y * art.width + x)];
-                    if (std::max({ color.r, color.g, color.b }) < 0.035f)
+                    if (art.transparent(color))
                         continue;
                     color.a *= alpha;
                     const Vec2 minimum = target.position + Vec2{
@@ -173,6 +173,48 @@ namespace runner
             }
         }
 
+        void draw_oriented_pixel_art(render::Canvas& canvas,
+            const art::PixelArt& art, Vec2 beginning, Vec2 ending,
+            float thickness, float alpha = 1.0f, bool mirror_vertical = false)
+        {
+            const Vec2 delta = ending - beginning;
+            const float span = length(delta);
+            if (!art.loaded() || span <= 1.0f || thickness <= 1.0f)
+                return;
+            const Vec2 axis = delta / span;
+            Vec2 normal{ -axis.y, axis.x };
+            if (mirror_vertical)
+                normal = normal * -1.0f;
+
+            auto point = [&](float u, float v) noexcept
+            {
+                return beginning + axis * (u * span)
+                    + normal * ((v - 0.5f) * thickness);
+            };
+            const float inverse_width = 1.0f / static_cast<float>(art.width);
+            const float inverse_height = 1.0f / static_cast<float>(art.height);
+            for (int y = 0; y < art.height; ++y)
+            {
+                for (int x = 0; x < art.width; ++x)
+                {
+                    Color color = art.pixels[static_cast<std::size_t>(
+                        y * art.width + x)];
+                    if (art.transparent(color))
+                        continue;
+                    color.a *= alpha;
+                    const float u0 = static_cast<float>(x) * inverse_width;
+                    const float u1 = static_cast<float>(x + 1) * inverse_width;
+                    const float v0 = static_cast<float>(y) * inverse_height;
+                    const float v1 = static_cast<float>(y + 1) * inverse_height;
+                    const Vec2 p00 = point(u0, v0);
+                    const Vec2 p10 = point(u1, v0);
+                    const Vec2 p11 = point(u1, v1);
+                    const Vec2 p01 = point(u0, v1);
+                    canvas.triangle(p00, p10, p11, color);
+                    canvas.triangle(p00, p11, p01, color);
+                }
+            }
+        }
         [[nodiscard]] float fit_text_scale(std::string_view text, float requested_scale,
             float maximum_width, float minimum_scale = ui_layout::minimum_readable_text_scale) noexcept
         {
@@ -352,6 +394,10 @@ namespace runner
         art::PixelArt optional_foot_art{};
         art::PixelArt optional_helmet_art{};
         art::PixelArt optional_torso_art{};
+        art::PixelArt optional_upper_arm_art{};
+        art::PixelArt optional_forearm_art{};
+        art::PixelArt optional_thigh_art{};
+        art::PixelArt optional_shin_art{};
         art::PixelArt optional_weapon_art{};
         bool optional_art_enabled{ false };
         bool debug_skeleton_overlay{};
@@ -958,10 +1004,25 @@ namespace runner
                 const Vec2 mount = environment.equipment_mount_position();
                 const Vec2 direction{ std::cos(environment.equipment_aim_angle()),
                     std::sin(environment.equipment_aim_angle()) };
-                canvas.line(world_to_screen(mount, viewport, camera, scale),
-                    world_to_screen(mount + direction * 0.55f, viewport, camera, scale),
-                    5.0f, environment.equipment_state() == sim::EquipmentState::ready
-                        ? accent : muted);
+                if (optional_art_enabled && optional_weapon_art.loaded())
+                {
+                    const Vec2 beginning = world_to_screen(
+                        mount - direction * 0.12f, viewport, camera, scale);
+                    const Vec2 ending = world_to_screen(
+                        mount + direction * 0.68f, viewport, camera, scale);
+                    const float thickness = std::clamp(scale * 0.42f, 24.0f, 42.0f);
+                    draw_oriented_pixel_art(canvas, optional_weapon_art,
+                        beginning, ending, thickness,
+                        environment.equipment_state() == sim::EquipmentState::ready
+                            ? 0.98f : 0.72f);
+                }
+                else
+                {
+                    canvas.line(world_to_screen(mount, viewport, camera, scale),
+                        world_to_screen(mount + direction * 0.55f, viewport, camera, scale),
+                        5.0f, environment.equipment_state() == sim::EquipmentState::ready
+                            ? accent : muted);
+                }
             }
         }
         void draw_creature(const sim::Environment& environment, Rect viewport, float camera,
@@ -989,6 +1050,15 @@ namespace runner
                     if (index == rig.motors[2].pivot || index == rig.motors[2].c
                         || index == rig.motors[3].pivot || index == rig.motors[3].c)
                         return 1;
+                    if (rig.active_motor_count >= 8u)
+                    {
+                        if (index == rig.motors[4].pivot || index == rig.motors[4].c
+                            || index == rig.motors[5].pivot || index == rig.motors[5].c)
+                            return -1;
+                        if (index == rig.motors[6].pivot || index == rig.motors[6].c
+                            || index == rig.motors[7].pivot || index == rig.motors[7].c)
+                            return 1;
+                    }
                 }
                 return 0;
             };
@@ -1070,9 +1140,57 @@ namespace runner
                 }
             };
 
+            auto draw_segment_art = [&](int pass)
+            {
+                if (!optional_art_enabled || !rig.paired_leg_chains())
+                    return;
+                auto draw_motor_art = [&](std::size_t motor_index,
+                    const art::PixelArt& sprite, float thickness_ratio)
+                {
+                    if (!sprite.loaded() || motor_index >= rig.active_motor_count)
+                        return;
+                    const sim::MotorConstraint& motor = rig.motors[motor_index];
+                    if (!motor.enabled || motor.pivot >= particles.size()
+                        || motor.c >= particles.size())
+                        return;
+                    const int side = leg_side(motor.c);
+                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const int layer = side == 0 ? 1 : near ? 2 : 0;
+                    if (layer != pass)
+                        return;
+                    Vec2 beginning = point(motor.pivot);
+                    Vec2 ending = point(motor.c);
+                    const Vec2 delta = ending - beginning;
+                    const float span = length(delta);
+                    if (span <= 1.0f)
+                        return;
+                    const Vec2 axis = delta / span;
+                    beginning = beginning - axis * (span * 0.08f);
+                    ending = ending + axis * (span * 0.08f);
+                    const float thickness = std::clamp(span * thickness_ratio,
+                        16.0f, 42.0f);
+                    draw_oriented_pixel_art(canvas, sprite, beginning, ending,
+                        thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
+                };
+
+                draw_motor_art(0u, optional_thigh_art, 0.46f);
+                draw_motor_art(1u, optional_shin_art, 0.40f);
+                draw_motor_art(2u, optional_thigh_art, 0.46f);
+                draw_motor_art(3u, optional_shin_art, 0.40f);
+                if (rig.active_motor_count >= 8u)
+                {
+                    draw_motor_art(4u, optional_upper_arm_art, 0.54f);
+                    draw_motor_art(5u, optional_forearm_art, 0.48f);
+                    draw_motor_art(6u, optional_upper_arm_art, 0.54f);
+                    draw_motor_art(7u, optional_forearm_art, 0.48f);
+                }
+            };
+
             draw_bones(0);
+            draw_segment_art(0);
             draw_nodes(0);
             draw_bones(1);
+            draw_segment_art(1);
             draw_nodes(1);
 
             if (optional_art_enabled
@@ -1101,68 +1219,77 @@ namespace runner
                         length(right_shoulder - left_shoulder));
                 }
 
-                const Vec2 chest_bottom = root + body_axis * (torso_length * 0.20f);
-                const Vec2 chest_top = torso - body_axis * (torso_length * 0.10f);
-                const float chest_radius = std::clamp(
-                    std::min(shoulder_span * 0.25f, torso_length * 0.28f),
-                    10.0f, 27.0f);
-                canvas.capsule(chest_bottom, chest_top, chest_radius + 2.0f,
-                    rgb(0x33414c, 0.96f), 20);
-                canvas.capsule(chest_bottom, chest_top, chest_radius,
-                    rgb(0x8c9aa5, 0.94f), 20);
-                canvas.capsule(chest_bottom + body_axis * 2.0f,
-                    chest_top - body_axis * 3.0f,
-                    std::max(7.0f, chest_radius * 0.62f),
-                    rgb(0xaeb9c1, 0.78f), 18);
-
-                const Vec2 indicator_center =
-                    chest_bottom + (chest_top - chest_bottom) * 0.55f;
-                const float indicator_half = std::clamp(
-                    chest_radius * 0.56f, 6.0f, 14.0f);
-                canvas.capsule(indicator_center - body_right * indicator_half,
-                    indicator_center + body_right * indicator_half,
-                    3.2f, rgb(0x0ed7e9), 12);
-
-                const float shoulder_cap_radius = std::clamp(
-                    shoulder_span * 0.15f, 7.0f, 14.0f);
-                auto shoulder_cap = [&](Vec2 center)
+                if (!optional_torso_art.loaded())
                 {
-                    canvas.circle(center, shoulder_cap_radius + 1.5f,
-                        rgb(0x34434f, 0.96f), 20);
-                    canvas.circle(center, shoulder_cap_radius,
-                        rgb(0x8b99a5, 0.92f), 20);
-                };
-                shoulder_cap(left_shoulder);
-                shoulder_cap(right_shoulder);
+                    const Vec2 chest_bottom = root + body_axis * (torso_length * 0.20f);
+                    const Vec2 chest_top = torso - body_axis * (torso_length * 0.10f);
+                    const float chest_radius = std::clamp(
+                        std::min(shoulder_span * 0.25f, torso_length * 0.28f),
+                        10.0f, 27.0f);
+                    canvas.capsule(chest_bottom, chest_top, chest_radius + 2.0f,
+                        rgb(0x33414c, 0.96f), 20);
+                    canvas.capsule(chest_bottom, chest_top, chest_radius,
+                        rgb(0x8c9aa5, 0.94f), 20);
+                    canvas.capsule(chest_bottom + body_axis * 2.0f,
+                        chest_top - body_axis * 3.0f,
+                        std::max(7.0f, chest_radius * 0.62f),
+                        rgb(0xaeb9c1, 0.78f), 18);
 
-                auto forearm_guard = [&](std::size_t motor_index)
+                    const Vec2 indicator_center =
+                        chest_bottom + (chest_top - chest_bottom) * 0.55f;
+                    const float indicator_half = std::clamp(
+                        chest_radius * 0.56f, 6.0f, 14.0f);
+                    canvas.capsule(indicator_center - body_right * indicator_half,
+                        indicator_center + body_right * indicator_half,
+                        3.2f, rgb(0x0ed7e9), 12);
+                }
+
+                if (!optional_upper_arm_art.loaded())
                 {
-                    if (motor_index >= rig.active_motor_count)
-                        return;
-                    const sim::MotorConstraint& motor = rig.motors[motor_index];
-                    if (!motor.enabled || motor.pivot >= particles.size()
-                        || motor.c >= particles.size())
-                        return;
-                    const Vec2 elbow = point(motor.pivot);
-                    const Vec2 hand = point(motor.c);
-                    const Vec2 start = elbow + (hand - elbow) * 0.22f;
-                    const Vec2 finish = elbow + (hand - elbow) * 0.78f;
-                    const float guard_radius = std::clamp(
-                        length(hand - elbow) * 0.10f, 3.8f, 7.0f);
-                    canvas.capsule(start, finish, guard_radius + 1.0f,
-                        rgb(0x34434f, 0.94f), 14);
-                    canvas.capsule(start, finish, guard_radius,
-                        rgb(0x7f8e9a, 0.88f), 14);
-                };
-                forearm_guard(5u);
-                forearm_guard(7u);
+                    const float shoulder_cap_radius = std::clamp(
+                        shoulder_span * 0.15f, 7.0f, 14.0f);
+                    auto shoulder_cap = [&](Vec2 center)
+                    {
+                        canvas.circle(center, shoulder_cap_radius + 1.5f,
+                            rgb(0x34434f, 0.96f), 20);
+                        canvas.circle(center, shoulder_cap_radius,
+                            rgb(0x8b99a5, 0.92f), 20);
+                    };
+                    shoulder_cap(left_shoulder);
+                    shoulder_cap(right_shoulder);
+                }
+
+                if (!optional_forearm_art.loaded())
+                {
+                    auto forearm_guard = [&](std::size_t motor_index)
+                    {
+                        if (motor_index >= rig.active_motor_count)
+                            return;
+                        const sim::MotorConstraint& motor = rig.motors[motor_index];
+                        if (!motor.enabled || motor.pivot >= particles.size()
+                            || motor.c >= particles.size())
+                            return;
+                        const Vec2 elbow = point(motor.pivot);
+                        const Vec2 hand = point(motor.c);
+                        const Vec2 start = elbow + (hand - elbow) * 0.22f;
+                        const Vec2 finish = elbow + (hand - elbow) * 0.78f;
+                        const float guard_radius = std::clamp(
+                            length(hand - elbow) * 0.10f, 3.8f, 7.0f);
+                        canvas.capsule(start, finish, guard_radius + 1.0f,
+                            rgb(0x34434f, 0.94f), 14);
+                        canvas.capsule(start, finish, guard_radius,
+                            rgb(0x7f8e9a, 0.88f), 14);
+                    };
+                    forearm_guard(5u);
+                    forearm_guard(7u);
+                }
             }
             if (optional_art_enabled && optional_torso_art.loaded()
                 && rig.active_motor_count >= 8u && rig.paired_leg_chains()
                 && rig.root_node < particles.size()
                 && rig.torso_node < particles.size())
             {
-                // User-supplied modular armor, bounded to the physical torso.
+                // Remade modular armor, bounded to the physical torso.
                 // This is a single chest component, never the old full-sheet overlay.
                 const Vec2 root = point(rig.root_node);
                 const Vec2 torso = point(rig.torso_node);
@@ -1191,6 +1318,7 @@ namespace runner
                       { width, height } }, 0.92f);
             }
             draw_bones(2);
+            draw_segment_art(2);
             draw_nodes(2);
 
             if (show_nodes && optional_art_enabled && optional_weapon_art.loaded()
@@ -1204,9 +1332,9 @@ namespace runner
                     const float height = width
                         * static_cast<float>(optional_weapon_art.height)
                         / static_cast<float>(optional_weapon_art.width);
-                    draw_pixel_art(canvas, optional_weapon_art,
-                        { anchor + Vec2{ -12.0f, -height * 0.58f },
-                          { width, height } }, 0.90f);
+                    draw_oriented_pixel_art(canvas, optional_weapon_art,
+                        anchor + Vec2{ -12.0f, 0.0f },
+                        anchor + Vec2{ width - 12.0f, 0.0f }, height, 0.90f);
                 }
             }
         }
@@ -2915,10 +3043,18 @@ namespace runner
         load_optional("foot_side.ppm", impl_->optional_foot_art);
         load_optional("helmet_side.ppm", impl_->optional_helmet_art);
         load_optional("torso_side.ppm", impl_->optional_torso_art);
+        load_optional("upper_arm_side.ppm", impl_->optional_upper_arm_art);
+        load_optional("forearm_side.ppm", impl_->optional_forearm_art);
+        load_optional("thigh_side.ppm", impl_->optional_thigh_art);
+        load_optional("shin_side.ppm", impl_->optional_shin_art);
         load_optional("weapon_side.ppm", impl_->optional_weapon_art);
         impl_->optional_art_enabled = impl_->optional_foot_art.loaded()
             || impl_->optional_helmet_art.loaded()
             || impl_->optional_torso_art.loaded()
+            || impl_->optional_upper_arm_art.loaded()
+            || impl_->optional_forearm_art.loaded()
+            || impl_->optional_thigh_art.loaded()
+            || impl_->optional_shin_art.loaded()
             || impl_->optional_weapon_art.loaded();
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,

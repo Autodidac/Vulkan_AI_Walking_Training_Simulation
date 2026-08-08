@@ -1,5 +1,6 @@
 #include "pixel_art.hpp"
 
+#include <array>
 #include <charconv>
 #include <cstddef>
 #include <fstream>
@@ -178,6 +179,30 @@ namespace runner::art
                 + path.string();
             return false;
         }
+
+        auto magenta_key = [](Color color) noexcept
+        {
+            return color.r >= 0.95f && color.g <= 0.05f && color.b >= 0.95f;
+        };
+        const std::array<std::size_t, 4> corner_indices{
+            0u,
+            static_cast<std::size_t>(width - 1),
+            static_cast<std::size_t>(height - 1) * static_cast<std::size_t>(width),
+            pixel_count - 1u
+        };
+        const Color candidate_key = loaded.pixels[corner_indices[0]];
+        loaded.chroma_keyed = magenta_key(candidate_key)
+            && std::all_of(corner_indices.begin(), corner_indices.end(),
+                [&](std::size_t index)
+                {
+                    const Color corner = loaded.pixels[index];
+                    constexpr float tolerance = 0.5f / 255.0f;
+                    return std::abs(corner.r - candidate_key.r) <= tolerance
+                        && std::abs(corner.g - candidate_key.g) <= tolerance
+                        && std::abs(corner.b - candidate_key.b) <= tolerance;
+                });
+        if (loaded.chroma_keyed)
+            loaded.transparent_key = candidate_key;
 
         art = std::move(loaded);
         error.clear();

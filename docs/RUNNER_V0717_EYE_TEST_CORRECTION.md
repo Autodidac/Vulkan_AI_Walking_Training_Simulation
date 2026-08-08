@@ -22,11 +22,6 @@ Horizontal body plans receive a shallower, slower press target. Four-chain
 compression and authored-pose extension are bounded, and recovery must be held
 stably after retraction before the stage can complete.
 
-## Optional user art
+## Optional art history
 
-All four supplied concept sheets are represented by compact derived P3 references under
-`assets/optional/runner_armor_concepts/source/`, with original and packaged SHA-256 values recorded in `PROVENANCE.md`. Derived P3 runtime sprites live
-under `runtime/` for feet, helmet, torso, and a Rig Lab-only fictional weapon
-preview. Optional art is visual only and can be disabled independently from the
-debug skeleton. Missing or malformed optional assets fall back to procedural
-rendering without changing physics or training.
+The v0.7.17 concept-sheet derivatives were superseded in v0.7.29. The old packaged source references and provenance bundle are removed. The current package contains eight purpose-built side-view runtime sprites with explicit keyed transparency, authored-segment placement, and per-part procedural fallback. Optional art remains independently toggleable and cannot change physics or training.

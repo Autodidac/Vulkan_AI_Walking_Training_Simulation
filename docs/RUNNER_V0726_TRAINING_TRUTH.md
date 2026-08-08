@@ -20,4 +20,4 @@ Automatic preview termination records the invalid-motion reason before reset. Th
 
 ## Art
 
-The packaged runtime `foot_side.ppm`, `helmet_side.ppm`, `torso_side.ppm`, and `weapon_side.ppm` are enabled automatically when present. Torso art is bounded to the real root/torso span; the renderer never draws an entire concept sheet over the rig.
+The v0.7.26 package enabled the then-current foot, helmet, torso, and weapon sprites. In v0.7.29 that set is superseded by eight purpose-built keyed side-view parts, including authored-segment arm and leg plates. Torso art remains bounded to the real root/torso span; the renderer never draws an entire concept sheet over the rig.

@@ -13,6 +13,9 @@ struct SDL_Window;
 
 namespace runner::render
 {
+    inline constexpr std::size_t maximum_frame_vertex_bytes =
+        8u * 1024u * 1024u;
+
     struct Vertex
     {
         Vec2 position{};

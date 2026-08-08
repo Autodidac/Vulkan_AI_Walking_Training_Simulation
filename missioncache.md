@@ -902,3 +902,38 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, compl
 - Published manifest SHA-256: `85d94257cb83b3ab3a7e8bfeaec3a492b27792b094f53ab592e73f54089d4d23`; all 45 independently extracted files match with no missing or extra paths.
 - Two subsequent fresh public downloads matched each other byte-for-byte for all three assets. The extracted public `run.bat`, launched from an unrelated directory, passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, four-rig training, and course diagnostics.
 - The merged implementation branch was deleted; the completed-release audit found zero open PRs and only `main`. This ledger-only closeout branch exists solely to persist that result and is deleted on merge.
+
+# Runner v0.7.29 modular armor art remake
+
+**Release state:** LOCAL IMPLEMENTATION AND VALIDATION COMPLETE — PUBLICATION NOT REQUESTED
+
+The user-supplied modular alien armor sheet is visual direction for a clean runtime remake. Do not package the source sheet or create an attribution ledger for it. Runtime art must be purpose-built for Runner's side view, bounded to authored rig segments, optional, and physically inert.
+
+### WALK-ART-REMAKE-345 — Remake the modular side-view runtime asset set
+**Status:** VERIFIED
+
+Create a clean side-view helmet, torso, upper-arm, forearm, thigh, shin, boot, and compact energy-weapon set with a consistent dark navy, warm ivory, and cyan-emissive material language. Use a deterministic atlas/crop pipeline; do not draw or package the supplied multi-view concept sheet directly.
+
+### WALK-ART-RIG-346 — Attach remade art to actual authored topology
+**Status:** VERIFIED
+
+Torso and helmet remain bounded to their physical nodes. Arm and leg plates rotate and scale with their corresponding authored segments, respect near/far layering, and never create duplicate limbs, hide contact truth, or assume non-biped rigs have humanoid anatomy.
+
+### WALK-ART-KEY-347 — Preserve silhouettes and dark material detail
+**Status:** VERIFIED
+
+Use an explicit removable chroma key rather than treating all black pixels as transparent. Preserve dark outlines and interior armor detail while keeping the background invisible and maintaining a safe procedural fallback when any optional part is absent or malformed.
+
+### WALK-ART-REGRESSION-348 — Prove optional-art isolation and packaging
+**Status:** VERIFIED
+
+Add deterministic positive, negative, adversarial, and repeated-load coverage for atlas dimensions, key removal, required part presence, bounded placement/orientation helpers, missing/malformed optional assets, physics/policy identity with art on or off, CMake install contents, and repository hygiene.
+
+## v0.7.29 validation evidence
+
+- The image-generation remake is retained as a transparent 1536x1024 source atlas; the deterministic generator reproduced all eight compact P3 runtime derivatives with the documented SHA-256 hashes. The source concept sheet, its old derivatives, and attribution/provenance files are absent.
+- Windows Visual Studio 2022 Release built the complete SDL3/Vulkan application and all test targets. CTest passed 27/27, including repository hygiene, keyed pixel art, the v0.7.29 modular-art contract, package layout, camera, course, UI, and the new art-budget diagnostic.
+- `Runner.exe --diagnose-art` rendered the fixed production frame at 212,175 vertices / 5,092,200 bytes: 60.7% of the shared 8 MiB hard limit and below the 75% acceptance ceiling. The DPI-correct Vulkan eye-test capture is `validation/v0729_modular_art_eye_test.png`.
+- Direct build-tree execution from `C:\Windows\Temp` passed version 0.7.29, Vulkan, package, 24/24 acceptance, camera, UI, art, rig-training, and course diagnostics. The course diagnostic retained exact 20/60/240 Hz frame-independence evidence.
+- WSL GCC 14.3 compiled the CPU/core build with `-Werror`; all 22 Linux CTest suites passed. `git diff --check`, deterministic regeneration, and the v0.7.29 repository audit passed.
+- Art remains presentation-only and absent from simulation, observations, rewards, curriculum, policy dimensions, checkpoint state, persistence, and non-biped topology. No tag, release, push, or publication was performed in this pass.

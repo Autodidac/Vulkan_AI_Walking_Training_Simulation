@@ -220,7 +220,7 @@ int main()
         const std::string app = read_text(source_root / "src/app.cpp");
         require(app.find("draw_pixel_art(canvas, optional_torso_art")
                 != std::string::npos
-                && app.find("User-supplied modular armor, bounded to the physical torso")
+                && app.find("Remade modular armor, bounded to the physical torso")
                     != std::string::npos
                 && app.find("std::clamp(body_span * 0.72f, 42.0f, 76.0f)")
                     != std::string::npos,

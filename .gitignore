@@ -4,6 +4,7 @@
 /vcpkg/
 /vcpkg-bincache/
 /vcpkg_installed/
+/vcpkg_installed-*/
 *.rig
 *.eppo
 *.user
