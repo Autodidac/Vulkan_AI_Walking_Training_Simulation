@@ -296,7 +296,7 @@ if(RUNNER_BUILD_TESTS)
     target_compile_features(RunnerV0724StructuralMetricsIconTests PRIVATE cxx_std_23)
     target_compile_definitions(RunnerV0724StructuralMetricsIconTests PRIVATE
         RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}"
-        RUNNER_SOURCE_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.png")
+        RUNNER_SOURCE_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64")
     runner_enable_warnings(RunnerV0724StructuralMetricsIconTests)
     add_test(NAME Runner.V0724StructuralMetricsIcon
         COMMAND RunnerV0724StructuralMetricsIconTests)
