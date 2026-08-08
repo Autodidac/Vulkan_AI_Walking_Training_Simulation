@@ -7,7 +7,7 @@ import sys
 import zlib
 from pathlib import Path
 
-SOURCE_PNG_SHA256 = "9c2d23f5e2518df45c3b98cba1492c83328bcbc088b5b9eab5b453beb2807439"
+SOURCE_PNG_SHA256 = "7e0e834ba7cb78a39b6f31df12e52440b050327c7a59e46cd70abdc286c808a7"
 
 
 def png_chunks(data: bytes):
