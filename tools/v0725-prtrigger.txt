@@ -1,1 +1,1 @@
-Runner v0.7.25 art, stance, font, and progress migration trigger 6.
+Runner v0.7.25 art, stance, font, and progress migration trigger 7.
