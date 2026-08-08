@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -128,6 +129,12 @@ def patch_application() -> None:
 ''',
         "logical line advance")
 
+    # Catch every remaining measurement expression, including calls whose first
+    # argument is not named text/candidate/label. The old multiplier described
+    # bitmap cell size; the new style scale describes logical glyph height.
+    text = re.sub(r"\s*\*\s*ui_font_scale\b", "", text)
+    text = re.sub(r"\bui_font_scale\s*\*\s*", "", text)
+
     work_helper = '''        [[nodiscard]] std::string format_work_counter(
             std::string_view label, std::uint64_t completed,
             std::uint64_t required)
@@ -193,7 +200,13 @@ def patch_application() -> None:
         "noob-readable progress counters")
 
     if "ui_font_scale" in text:
-        raise RuntimeError("legacy ui_font_scale remains after synchronization")
+        remaining = [
+            f"{line_number}: {line}"
+            for line_number, line in enumerate(text.splitlines(), 1)
+            if "ui_font_scale" in line
+        ]
+        raise RuntimeError("legacy ui_font_scale remains after synchronization:\n"
+            + "\n".join(remaining))
     write(path, text)
 
 
