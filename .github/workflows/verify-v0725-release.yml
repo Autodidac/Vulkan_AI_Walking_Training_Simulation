@@ -48,9 +48,8 @@ jobs:
       - name: Report verification
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
-          gh pr comment "$GITHUB_EVENT_PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" \
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --body 'Runner v0.7.25 release verified: tag points to merged main, all three assets are present, published ZIP checksum passes, and every published asset is byte-identical to workflow 31250177528.'
-        env:
-          GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
