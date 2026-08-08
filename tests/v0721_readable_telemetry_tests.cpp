@@ -1,5 +1,6 @@
 #include "training_explainer.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -65,8 +66,12 @@ int main()
             "attempt progress should use completed simulated episodes");
         require(progress.tests == 1.0f,
             "test progress should clamp at one");
-        require(progress.overall == 0.25f,
-            "lesson progress must be the conservative minimum");
+        require(progress.training_work == 0.25f,
+            "training work must remain the conservative minimum budget");
+        require(progress.mastery == 0.0f,
+            "zero repeat confirmations must report zero mastery");
+        require(std::abs(progress.overall - 0.20f) < 0.0001f,
+            "lesson completion must reserve twenty percent for mastery evidence");
         require(!progress.sample_budget_complete,
             "partial work must not report a complete sample budget");
         require(runner::telemetry::sample_budget_message(progress).find("updates")
