@@ -551,10 +551,9 @@ namespace runner::rl
         result.blueprint = source;
         sim::CreatureBlueprint& candidate = result.blueprint;
         const std::uint64_t original_signature = source.signature();
-        const float direction = ((generation / 3u) & 1u) == 0u ? 1.0f : -1.0f;
-        switch (generation % 3u)
-        {
-        case 0u:
+        const float direction = ((generation / 2u) & 1u) == 0u ? 1.0f : -1.0f;
+
+        if ((generation % 2u) == 0u)
         {
             result.kind = RigMutationKind::motor_strength;
             if (candidate.active_motor_count > 0u)
@@ -565,9 +564,8 @@ namespace runner::rl
                     candidate.motors[index].strength + direction * 0.0020f,
                     0.020f, 0.11f);
             }
-            break;
         }
-        case 1u:
+        else
         {
             result.kind = RigMutationKind::joint_range;
             if (candidate.active_motor_count > 0u)
@@ -585,22 +583,10 @@ namespace runner::rl
                 motor.minimum_angle = motor.neutral_angle - negative;
                 motor.maximum_angle = motor.neutral_angle + positive;
             }
-            break;
         }
-        default:
-        {
-            result.kind = RigMutationKind::bone_stiffness;
-            if (!candidate.bones.empty())
-            {
-                const std::size_t index = static_cast<std::size_t>(
-                    generation % candidate.bones.size());
-                candidate.bones[index].stiffness = clamp(
-                    candidate.bones[index].stiffness + direction * 0.025f,
-                    0.20f, 1.0f);
-            }
-            break;
-        }
-        }
+
+        // Automatic learning may tune controls only. Nodes, radii, supports,
+        // rest lengths, stiffness, topology, and semantics remain byte-stable.
         result.changed = candidate.valid()
             && candidate.signature() != original_signature;
         result.topology_changed = false;

@@ -1,0 +1,123 @@
+name: Runner v0.7.24 pull-request validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-gcc14:
+    if: github.head_ref == 'agent/v0724-structural-metrics-icon'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 140
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install deterministic build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build python3
+      - name: Audit source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.24 LANGUAGES CXX)' CMakeLists.txt
+          grep -F 'WALK-SCREENSHOT-ICON-296' missioncache.md
+          grep -F 'WALK-BONE-LENGTH-297' missioncache.md
+          grep -F 'WALK-LOAD-BEARING-298' missioncache.md
+          grep -F 'WALK-AUTO-STIFFNESS-299' missioncache.md
+          grep -F 'WALK-DEBUG-TRUTH-300' missioncache.md
+          grep -F 'WALK-PROGRESS-301' missioncache.md
+          grep -F 'WALK-TOTALS-302' missioncache.md
+          grep -F 'WALK-VISUAL-303' missioncache.md
+          grep -F 'WALK-STATE-304' missioncache.md
+          grep -F 'WALK-REGRESSION-305' missioncache.md
+          grep -F 'WALK-RELEASE-306' missioncache.md
+          grep -F "training_semantics_version = 0x0007'2401u" src/ppo.hpp
+          grep -F 'project_structure_rigid' src/simulation.cpp
+          grep -F 'maximum_bone_length_error_ratio' src/simulation.cpp
+          grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
+          grep -F 'PASSED STAGE CHECKS' src/app.cpp
+          grep -F 'MASTERY PASSES' src/app.cpp
+          grep -F 'runner_icon_source.rgba.zlib.b64' tools/generate_runner_icon.py
+          grep -F 'RGBA_SHA256=6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad' assets/ui/runner_icon_source.rgba.zlib.b64
+          test ! -e assets/ui/runner_icon_source.png
+          test -f tests/v0724_structural_metrics_icon_tests.cpp
+          test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
+          test ! -e tools/apply_v0724_structural_metrics_icon.py
+          test ! -e tools/run_v0724_migration.py
+          test ! -e tools/cache_v0724_structural_metrics_icon.py
+      - name: Configure
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/pr-linux -G Ninja
+          -DRUNNER_BUILD_APP=OFF
+          -DRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build/pr-linux --parallel
+      - name: Test
+        run: ctest --test-dir build/pr-linux --output-on-failure -V --timeout 1800
+
+  windows-sdl3-vulkan:
+    if: github.head_ref == 'agent/v0724-structural-metrics-icon'
+    runs-on: windows-2025
+    timeout-minutes: 220
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+      - uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: runner-v0724-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            runner-v0724-pr-${{ runner.os }}-
+            runner-v0723-release-${{ runner.os }}-
+            runner-v0723-pr-${{ runner.os }}-
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+          cmake --preset windows-release --fresh
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
+          cmake --build --preset windows-release --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+      - name: Test
+        shell: pwsh
+        run: |
+          ctest --preset windows-release --output-on-failure -V --timeout 1800
+          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
+          & 'build/windows-release/Release/RunnerV0724StructuralMetricsIconTests.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'v0.7.24 focused regression failed' }
+      - name: Runtime diagnostics
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
+          $version = (& $exe --version | Out-String).Trim()
+          if ($version -ne 'Runner 0.7.24') { throw "Version mismatch: $version" }
+          & $exe --diagnose-ui
+          if ($LASTEXITCODE -ne 0) { throw 'UI diagnostic failed' }
+          & $exe --diagnose-camera
+          if ($LASTEXITCODE -ne 0) { throw 'Camera diagnostic failed' }
+          & $exe --diagnose-package
+          if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
+          & $exe --diagnose-acceptance
+          if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }

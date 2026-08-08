@@ -55,7 +55,9 @@ namespace
         {
             const auto& a = lhs.bones[index];
             const auto& b = rhs.bones[index];
-            if (a.a != b.a || a.b != b.b || a.rest_length != b.rest_length)
+            if (a.a != b.a || a.b != b.b
+                || a.rest_length != b.rest_length
+                || a.stiffness != b.stiffness)
                 return false;
         }
         for (std::size_t index = 0; index < lhs.active_motor_count; ++index)

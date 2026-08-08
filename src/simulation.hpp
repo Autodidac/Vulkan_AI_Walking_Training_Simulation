@@ -556,7 +556,8 @@ namespace runner::sim
         press_penetration,
         duck_body_contact,
         buried_no_escape,
-        duck_hip_hinge
+        duck_hip_hinge,
+        structural_compression
     };
 
     [[nodiscard]] inline std::string_view invalid_motion_name(InvalidMotion reason) noexcept
@@ -582,6 +583,7 @@ namespace runner::sim
         case InvalidMotion::duck_body_contact: return "DUCK CONTACT - FEET ONLY";
         case InvalidMotion::buried_no_escape: return "BURIED / NO ESCAPE SPACE";
         case InvalidMotion::duck_hip_hinge: return "HIP HINGE - NOT A CROUCH";
+        case InvalidMotion::structural_compression: return "BONE LENGTH ERROR";
         }
         return "INVALID";
     }
@@ -855,8 +857,19 @@ namespace runner::sim
         std::uint16_t a{};
         std::uint16_t b{};
         float rest_length{};
+        // Authored stiffness remains part of the physical rig. v0.7.24
+        // applies a separate exact projection only to the primary walking-leg
+        // chains, preventing telescoping without freezing compliant braces.
         float stiffness{ 1.0f };
     };
+
+    [[nodiscard]] inline float bone_length_error_ratio(
+        float current_length, float rest_length) noexcept
+    {
+        if (rest_length <= 1.0e-6f)
+            return std::numeric_limits<float>::infinity();
+        return std::abs(current_length - rest_length) / rest_length;
+    }
 
     struct MotorConstraint
     {
@@ -1161,6 +1174,7 @@ namespace runner::sim
         [[nodiscard]] InvalidMotion invalid_reason() const noexcept { return invalid_reason_; }
         [[nodiscard]] float uprightness() const noexcept { return torso_uprightness(); }
         [[nodiscard]] bool body_integrity_valid() const noexcept;
+        [[nodiscard]] float maximum_bone_length_error_ratio() const noexcept;
         [[nodiscard]] bool current_display_posture_valid() const noexcept;
         [[nodiscard]] bool left_supported() const noexcept
         {
@@ -1175,6 +1189,7 @@ namespace runner::sim
         friend struct EnvironmentTestAccess;
 
         void solve_distance(const DistanceConstraint& constraint) noexcept;
+        void project_structure_rigid(float dt) noexcept;
         void separate_support_clusters() noexcept;
         void stabilize_passive_appendages() noexcept;
         void stabilize_balance_posture() noexcept;

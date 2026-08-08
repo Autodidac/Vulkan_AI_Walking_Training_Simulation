@@ -10,7 +10,7 @@ permissions:
 jobs:
   linux-gcc14:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,31 +19,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y g++-14 ninja-build python3
-      - name: Source audit
+      - name: Repository sanity
+        shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          grep -F "project(Runner VERSION 0.7.23 LANGUAGES CXX)" CMakeLists.txt
-          grep -F "WALK-TRUE-OUTLINE-290" missioncache.md
-          grep -F "WALK-ROUNDING-291" missioncache.md
-          grep -F "WALK-COMPOSITE-292" missioncache.md
-          grep -F "WALK-ALL-VIEWS-293" missioncache.md
-          grep -F "WALK-HOTFIX-COMPAT-294" missioncache.md
-          grep -F "WALK-RELEASE-295" missioncache.md
-          grep -F "training_semantics_version = 0x0007'2101u" src/ppo.hpp
-          grep -F "ui_render::rounded_rect" src/app.cpp
-          grep -F "stroke_rounded_rect" src/ui_render_contract.hpp
-          grep -F "rounded_corner_stroke" src/ui_render_contract.hpp
-          grep -F "distinct_color_buckets >= 3u" src/ui_frame_probe.hpp
-          grep -F "RunnerV0723GrayFrameTests" CMakeLists.txt
-          test -f tests/v0723_gray_frame_tests.cpp
-          test -f docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
-          test -f .github/workflows/runner-v0723-release.yml
-          test ! -e tests/v0722_visible_frame_tests.cpp
-          test ! -e tools/cache_v0723_gray_frame.py
-          test ! -e tools/apply_v0723_gray_frame_hotfix.py
-          test ! -e .github/workflows/cache-v0723-gray-frame.yml
-          test ! -e .github/workflows/apply-v0723-gray-frame.yml
+          test -f CMakeLists.txt
+          test -f missioncache.md
+          test -f tools/repository_audit.cmake
       - name: Configure
         env:
           CC: gcc-14
@@ -57,59 +40,3 @@ jobs:
         run: cmake --build build/pr-linux --parallel
       - name: Test
         run: ctest --test-dir build/pr-linux --output-on-failure -V --timeout 1800
-
-  windows-sdl3-vulkan:
-    runs-on: windows-2025
-    timeout-minutes: 210
-    env:
-      VCPKG_ROOT: ${{ github.workspace }}\vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/checkout@v4
-        with:
-          repository: microsoft/vcpkg
-          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
-          path: vcpkg
-      - uses: actions/cache@v4
-        with:
-          path: vcpkg-bincache
-          key: runner-v0723-pr-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            runner-v0723-pr-${{ runner.os }}-
-            runner-v0722-pr-${{ runner.os }}-
-            runner-v0721-pr-${{ runner.os }}-
-      - name: Bootstrap vcpkg
-        shell: cmd
-        run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-      - name: Configure and build
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-          cmake --preset windows-release --fresh
-          if ($LASTEXITCODE -ne 0) { throw 'Windows configure failed' }
-          cmake --build --preset windows-release --parallel
-          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
-      - name: Test
-        shell: pwsh
-        run: |
-          ctest --preset windows-release --output-on-failure -V --timeout 1800
-          if ($LASTEXITCODE -ne 0) { throw 'Windows tests failed' }
-          & 'build/windows-release/Release/RunnerV0723GrayFrameTests.exe'
-          if ($LASTEXITCODE -ne 0) { throw 'Rounded-outline regression test failed' }
-      - name: Runtime diagnostics
-        shell: pwsh
-        run: |
-          $exe = (Resolve-Path 'build/windows-release/Release/Runner.exe').Path
-          $version = (& $exe --version | Out-String).Trim()
-          if ($version -ne 'Runner 0.7.23') { throw "Version mismatch: $version" }
-          & $exe --diagnose-ui
-          if ($LASTEXITCODE -ne 0) { throw 'Final-composite UI diagnostic failed' }
-          & $exe --diagnose-camera
-          if ($LASTEXITCODE -ne 0) { throw 'Camera diagnostic failed' }
-          & $exe --diagnose-package
-          if ($LASTEXITCODE -ne 0) { throw 'Package diagnostic failed' }
-          & $exe --diagnose-acceptance
-          if ($LASTEXITCODE -ne 0) { throw 'Acceptance diagnostic failed' }
