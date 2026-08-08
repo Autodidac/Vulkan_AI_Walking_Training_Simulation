@@ -24,7 +24,8 @@ jobs:
       - id: gate
         shell: bash
         run: |
-          if [ -f tools/apply_v0725_art_leg_hotfix.py ]; then
+          if [ -f tools/apply_v0725_art_leg_hotfix.py ] \
+            && [ -f tools/apply_v0725_font_sync.py ]; then
             echo 'apply=true' >> "$GITHUB_OUTPUT"
           else
             echo 'apply=false' >> "$GITHUB_OUTPUT"
@@ -77,9 +78,15 @@ jobs:
           text = text.replace(stale_result_old, stale_result_new, 1)
           path.write_text(text, encoding='utf-8', newline='\n')
           PY
-            python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
+            python3 -m py_compile \
+              tools/apply_v0725_art_leg_hotfix.py \
+              tools/apply_v0725_font_sync.py
             python3 tools/apply_v0725_art_leg_hotfix.py
-            rm -f tools/apply_v0725_art_leg_hotfix.py tools/v0725-prtrigger.txt
+            python3 tools/apply_v0725_font_sync.py
+            rm -f \
+              tools/apply_v0725_art_leg_hotfix.py \
+              tools/apply_v0725_font_sync.py \
+              tools/v0725-prtrigger.txt
             rm -rf tools/__pycache__
             git diff --check
             grep -F 'project(Runner VERSION 0.7.25 LANGUAGES CXX)' CMakeLists.txt
@@ -87,6 +94,11 @@ jobs:
             grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
             grep -F 'minimum_stance_ratio' src/simulation.cpp
             grep -F 'solve_chain_ik' src/simulation.cpp
+            grep -F 'font::make_bitmap_font_metrics' src/app.cpp
+            grep -F 'TRAINING SAMPLES READY' src/app.cpp
+            grep -F "case '%'" src/ui_font.hpp
+            grep -F '130f33fe31d73564a35a622f3bb5ddcc2b5105d5' src/ui_font.hpp
+            ! grep -Fq 'ui_font_scale' src/app.cpp
             ! grep -Fq 'draw_pixel_art(canvas, optional_torso_art' src/app.cpp
             sudo apt-get update
             sudo apt-get install -y g++-14 ninja-build python3
@@ -109,7 +121,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Implement Runner v0.7.25 compact armor and stance-leg integrity'
+          git commit -m 'Implement Runner v0.7.25 art, stance, font, and progress fixes'
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Report
         if: always()
