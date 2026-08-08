@@ -86,21 +86,38 @@ jobs:
           from pathlib import Path
           path = Path('src/simulation.cpp')
           text = path.read_text(encoding='utf-8')
-          old = '''        solve_chain_ik(legs[0]);
-                  solve_chain_ik(legs[1]);
+
+          early_old = '''        if (!upright_walking_stage
+              || !blueprint_.paired_leg_chains()
+              || blueprint_.horizontal_multi_support_plan()
+              || recovery_active_ || non_foot_grounded_)
+              return;
           '''
-          new = '''        constexpr int chain_convergence_passes = 8;
-                  for (int pass = 0; pass < chain_convergence_passes; ++pass)
-                  {
-                      solve_chain_ik(legs[0]);
-                      solve_chain_ik(legs[1]);
-                  }
+          early_new = '''        if (!upright_walking_stage
+              || !blueprint_.paired_leg_chains()
+              || blueprint_.horizontal_multi_support_plan())
+              return;
           '''
-          if text.count(old) != 1:
+          if text.count(early_old) != 1:
               raise SystemExit(
-                  f'expected one paired-chain solve block, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1),
-              encoding='utf-8', newline='\n')
+                  f'expected one walking-chain early-return block, found {text.count(early_old)}')
+          text = text.replace(early_old, early_new, 1)
+
+          solve_old = '''        solve_chain_ik(legs[0]);
+              solve_chain_ik(legs[1]);
+          '''
+          solve_new = '''        constexpr int chain_convergence_passes = 16;
+              for (int pass = 0; pass < chain_convergence_passes; ++pass)
+              {
+                  solve_chain_ik(legs[0]);
+                  solve_chain_ik(legs[1]);
+              }
+          '''
+          if text.count(solve_old) != 1:
+              raise SystemExit(
+                  f'expected one paired-chain solve block, found {text.count(solve_old)}')
+          text = text.replace(solve_old, solve_new, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
           PY
             python3 tools/apply_v0725_font_sync.py
             rm -f \
@@ -114,7 +131,8 @@ jobs:
             grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
             grep -F 'minimum_stance_ratio' src/simulation.cpp
             grep -F 'solve_chain_ik' src/simulation.cpp
-            grep -F 'chain_convergence_passes = 8' src/simulation.cpp
+            grep -F 'chain_convergence_passes = 16' src/simulation.cpp
+            ! grep -Fq 'recovery_active_ || non_foot_grounded_' src/simulation.cpp
             grep -F 'font::make_bitmap_font_metrics' src/app.cpp
             grep -F 'TRAINING SAMPLES READY' src/app.cpp
             grep -F "case '%'" src/ui_font.hpp
@@ -157,9 +175,9 @@ jobs:
               echo
               echo '```text'
               if grep -q 'FAILED:' /tmp/v0725-migration.log; then
-                grep -E 'FAILED:|Test +#[0-9]+:|tests passed|tests failed|The following tests FAILED|[0-9]+% tests passed' /tmp/v0725-migration.log | tail -n 80
+                grep -E 'FAILED:|Test +#[0-9]+:|tests passed|tests failed|The following tests FAILED|[0-9]+% tests passed' /tmp/v0725-migration.log | tail -n 100
               else
-                tail -n 80 /tmp/v0725-migration.log
+                tail -n 100 /tmp/v0725-migration.log
               fi
               echo '```'
             fi
