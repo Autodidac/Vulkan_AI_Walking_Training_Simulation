@@ -1,4 +1,4 @@
-name: Watch merged Runner v0.7.25 release
+name: Publish exact validated Runner v0.7.25
 
 on:
   push:
@@ -7,35 +7,135 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
   pull-requests: write
 
+env:
+  VALIDATED_SHA: 56f5977cb3ac3a814702efb5d81a9dd196d5f59a
+  MERGED_SHA: 4d3b6b8a8f2b9bc78a05aaabccda6470c3268d75
+  SOURCE_RUN_ID: 31249578242
+  RELEASE_TAG: v0.7.25
+  PACKAGE_NAME: Runner-v0.7.25-windows-x64
+
 jobs:
-  watch:
+  publish:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - name: Cancel obsolete runs and report main v0.7.25 release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MERGED_SHA: 4d3b6b8a8f2b9bc78a05aaabccda6470c3268d75
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Verify merged product is byte-identical to validated source
         shell: bash
         run: |
           set -euo pipefail
-          for stale in 31249578242 31249967313; do
-            gh run cancel "$stale" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
-          done
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=push&per_page=100")
-          run_id=$(jq -r --arg sha "$MERGED_SHA" '[.workflow_runs[] | select(.name == "Runner v0.7.25 validation and release" and .head_sha == $sha)][0].id // empty' <<<"$runs")
-          if [ -z "$run_id" ]; then
-            body="No main v0.7.25 push run found yet for $MERGED_SHA"
-          else
-            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
-            jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100")
-            body=$(printf 'Main v0.7.25 run: %s\nStatus: %s / %s\nHead: %s\nJobs:\n%s\n' \
-              "$run_id" \
-              "$(jq -r '.status' <<<"$run")" \
-              "$(jq -r '.conclusion // "pending"' <<<"$run")" \
-              "$(jq -r '.head_sha' <<<"$run")" \
-              "$(jq -r '.jobs[] | "- \(.name): \(.status) / \(.conclusion // "pending") [job \(.id)]"' <<<"$jobs")")
+          git fetch origin --tags
+          test "$(git rev-parse HEAD)" = "$MERGED_SHA"
+          git diff --quiet "$VALIDATED_SHA" "$MERGED_SHA" -- \
+            CMakeLists.txt CHANGELOG.md README.md missioncache.md \
+            docs/RUNNER_V0725_ART_LEG_HOTFIX.md \
+            src/app.cpp src/ppo.hpp src/simulation.cpp \
+            src/training_explainer.hpp src/ui_font.hpp \
+            tests/v0725_art_leg_hotfix_tests.cpp tools/repository_audit.cmake
+          test ! -e validated-artifact
+          test ! -e tools/apply_v0725_art_leg_hotfix.py
+          test ! -e tools/apply_v0725_font_sync.py
+          test ! -e tools/finalize_v0725.py
+          test ! -e tools/finalize_v0725_audit.py
+          test ! -e tools/finalize_v0725_strict_geometry.py
+      - name: Download exact green Windows artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf release-assets
+          mkdir release-assets
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$PACKAGE_NAME" --dir release-assets
+          test -f "release-assets/$PACKAGE_NAME.zip"
+          test -f "release-assets/$PACKAGE_NAME.zip.sha256"
+          test -f "release-assets/$PACKAGE_NAME.manifest.sha256"
+          (cd release-assets && sha256sum -c "$PACKAGE_NAME.zip.sha256")
+      - name: Publish merged main as v0.7.25
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG already exists" >&2
+            exit 1
           fi
-          gh pr comment 82 --repo "$GITHUB_REPOSITORY" --body "$body"
+          git tag -a "$RELEASE_TAG" "$MERGED_SHA" -m "Runner 0.7.25"
+          git push origin "$RELEASE_TAG"
+          cat > release-notes.md <<'NOTES'
+          Runner v0.7.25 is the compact-art, stance-integrity, EpochGui-font-sync, and readable-progress release.
+
+          - Keeps the approved helmet and foot artwork while replacing the oversized torso/shoulder overlay with compact node-attached geometry.
+          - Prevents paired walking legs from telescoping by enforcing authored two-link geometry through recovery and contact frames.
+          - Synchronizes Runner to EpochGui's published logical-pixel font contract without modifying EpochGui.
+          - Adds the missing percent glyph and turns overflowing compact counters into READY states.
+          - Separates sample completion from mastery so zero mastery cannot present as complete.
+          - Removes the tracked validated-artifact staging directory and temporary migration/finalizer files.
+          - Package is reused byte-for-byte from workflow 31249578242, whose Linux and complete Windows SDL3/Vulkan build, tests, runtime diagnostics, install, independent extraction, archive checksum, manifest, and artifact upload all passed. Runtime/product files at merged main are byte-identical to that validated source.
+          NOTES
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Runner v0.7.25" --notes-file release-notes.md
+      - name: Re-download and byte-verify published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf release-download
+          mkdir release-download
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir release-download
+          for source in release-assets/*; do
+            file=$(basename "$source")
+            test -f "release-download/$file"
+            cmp --silent "$source" "release-download/$file"
+          done
+          (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
+      - name: Clean main and temporary branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run cancel 31250177528 --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          rm -rf validated-artifact
+          rm -f \
+            .github/workflows/runner-v0725-release.yml \
+            .github/workflows/cleanup-v0725-final-sweep.yml \
+            .github/workflows/finalize-v0725-authoritative.yml \
+            .github/workflows/watch-v0725-completion.yml \
+            .github/workflows/apply-v0725-pr-target.yml \
+            .github/workflows/finalize-v0725-pr-target.yml \
+            .github/workflows/finalize-v0725-pr-target-v2.yml \
+            .github/workflows/merge-v0725-after-finalizer.yml \
+            .github/workflows/merge-v0725-after-finalizer-v2.yml \
+            .github/workflows/cleanup-v0725-after-release.yml \
+            .github/workflows/cleanup-v0725-authoritative-after-release.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Complete Runner v0.7.25 release cleanup [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          for branch in \
+            agent/v0725-final-release-copy \
+            agent/v0725-final-release \
+            agent/v0725-current-main-final \
+            agent/v0725-art-leg-hotfix; do
+            encoded=${branch//\//%2F}
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
+          done
