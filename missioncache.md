@@ -905,7 +905,7 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, compl
 
 # Runner v0.7.29 modular armor art remake
 
-**Release state:** LOCAL ORTHOGRAPHIC CORRECTION AND VALIDATION COMPLETE — PUBLICATION NOT REAUTHORIZED
+**Release state:** PUBLICATION AUTHORIZED — V0.7.29 RELEASE AUDIT IN PROGRESS
 
 The user-supplied modular alien armor sheet is visual direction for a clean runtime remake. Do not package the source sheet or create an attribution ledger for it. Runtime art must be purpose-built for Runner's side view, bounded to authored rig segments, optional, and physically inert.
 
@@ -946,6 +946,11 @@ The user rejected the generated armor because its individual parts retain a thre
 **Status:** VERIFIED — SOURCE, RUNTIME, DUAL-FRAME DIAGNOSTIC, AND VULKAN CLOSE-UP PASSED
 
 Every helmet, torso, arm plate, leg plate, boot, and weapon must be drawn in exact lateral orthographic elevation: one visible side face, no visible front/chest plane, no three-quarter rotation, no foreshortening, no converging edges, and no perspective depth. Add deterministic source/runtime checks and a close-up production eye-test frame that makes projection errors obvious.
+
+### WALK-RELEASE-350 — Publish and independently verify Runner v0.7.29
+**Status:** IN PROGRESS — USER AUTHORIZED PUBLICATION
+
+Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the complete Windows SDL3/Vulkan build and tests, every feature diagnostic, installed and independently extracted launch from an unrelated directory, ZIP checksum and per-file manifest audit, published-asset re-download and byte comparison, direct packaged orthographic eye-test evidence, zero open cleanup PRs, and final main-only remote branch state.
 
 ## v0.7.29 orthographic correction evidence
 

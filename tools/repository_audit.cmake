@@ -139,7 +139,8 @@ foreach(reference IN ITEMS
         "WALK-ART-RIG-346"
         "WALK-ART-KEY-347"
         "WALK-ART-REGRESSION-348"
-        "WALK-ART-ORTHO-349")
+        "WALK-ART-ORTHO-349"
+        "WALK-RELEASE-350")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache v0.7.28 contract missing: ${reference}")
