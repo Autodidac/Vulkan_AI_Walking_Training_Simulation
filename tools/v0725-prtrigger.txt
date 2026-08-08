@@ -1,1 +1,1 @@
-Runner v0.7.25 converged art, stance, font, and progress migration trigger 9.
+Runner v0.7.25 full-chain art, stance, font, and progress migration trigger 10.
