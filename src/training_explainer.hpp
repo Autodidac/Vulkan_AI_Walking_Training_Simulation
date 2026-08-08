@@ -286,7 +286,7 @@ namespace runner::telemetry
         return metrics.evaluation_valid ? Tone::success : Tone::caution;
     }
 
-    [[nodiscard]] constexpr bool raw_score_available(float score) noexcept
+    [[nodiscard]] inline bool raw_score_available(float score) noexcept
     {
         return std::isfinite(score);
     }

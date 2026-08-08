@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'2601u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'2701u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -749,7 +749,7 @@ namespace runner::rl
         std::uint64_t quality_key{};
     };
 
-    [[nodiscard]] inline std::uint32_t evidence_bit(MotionEvidenceFailure failure) noexcept
+    [[nodiscard]] inline constexpr std::uint32_t evidence_bit(MotionEvidenceFailure failure) noexcept
     {
         return static_cast<std::uint32_t>(failure);
     }
@@ -1406,6 +1406,7 @@ namespace runner::rl
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::uint64_t preview_reset_sequence_{};
         sim::InvalidMotion preview_last_reset_reason_{ sim::InvalidMotion::none };
+        double preview_accumulator_seconds_{};
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
         RolloutTotals staged_totals_{};

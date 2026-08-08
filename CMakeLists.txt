@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.26 LANGUAGES CXX)
+project(Runner VERSION 0.7.27 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -19,7 +19,7 @@ execute_process(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE RUNNER_ICON_RESULT)
 if(NOT RUNNER_ICON_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner v0.7.25 screenshot icon generation failed")
+    message(FATAL_ERROR "Runner screenshot icon generation failed")
 endif()
 set(RUNNER_ICON_SOURCE "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.png")
 set(RUNNER_ICON_SOURCE_SHA256 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.sha256")
@@ -51,6 +51,7 @@ add_library(RunnerCore STATIC
     src/ppo_network.cpp
     src/ppo_trainer.cpp
     src/ppo_parallel.cpp
+    src/rig_training_diagnostic.cpp
     src/self_imitation.cpp
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
@@ -157,16 +158,17 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0726_TRAINING_TRUTH.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
-    install(TARGETS Runner RUNTIME DESTINATION .)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION .)
-    install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders)
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets)
+    install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION . COMPONENT RunnerRuntime)
+    install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders COMPONENT RunnerRuntime)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets COMPONENT RunnerRuntime)
     install(FILES "${RUNNER_ICON_SOURCE}" "${RUNNER_ICON_SOURCE_SHA256}"
         "${RUNNER_ICON_PNG}" "${RUNNER_ICON_PNG_512}"
-        "${RUNNER_ICON_BMP}" "${RUNNER_ICON_ICO}" DESTINATION assets/ui)
+        "${RUNNER_ICON_BMP}" "${RUNNER_ICON_ICO}" DESTINATION assets/ui COMPONENT RunnerRuntime)
     install(FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/SANDHYBRID_INTEGRATION_BRIDGE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0715_VIEWPORT_RECOVERY.md"
@@ -181,8 +183,9 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md"
-        DESTINATION docs)
-    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
+        DESTINATION docs COMPONENT RunnerRuntime)
+    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
 
 if(RUNNER_BUILD_TESTS)
@@ -330,6 +333,17 @@ if(RUNNER_BUILD_TESTS)
         COMMAND RunnerV0726TrainingTruthTests)
     set_tests_properties(Runner.V0726TrainingTruth PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerV0727RigTrainingTests
+        tests/v0727_rig_training_tests.cpp)
+    target_link_libraries(RunnerV0727RigTrainingTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0727RigTrainingTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0727RigTrainingTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0727RigTrainingTests)
+    add_test(NAME Runner.V0727RigTraining
+        COMMAND RunnerV0727RigTrainingTests)
+    set_tests_properties(Runner.V0727RigTraining PROPERTIES TIMEOUT 600)
+
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)
     target_compile_features(RunnerLiveAcceptanceTests PRIVATE cxx_std_23)
@@ -342,7 +356,7 @@ if(RUNNER_BUILD_TESTS)
     target_compile_features(RunnerConcurrencyBenchmark PRIVATE cxx_std_23)
     runner_enable_warnings(RunnerConcurrencyBenchmark)
     add_test(NAME Runner.ConcurrencyBenchmark COMMAND RunnerConcurrencyBenchmark)
-    set_tests_properties(Runner.ConcurrencyBenchmark PROPERTIES TIMEOUT 45)
+    set_tests_properties(Runner.ConcurrencyBenchmark PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerRuntimePipelineTests tests/runtime_pipeline_tests.cpp)
     target_link_libraries(RunnerRuntimePipelineTests PRIVATE Runner::Core)

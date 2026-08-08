@@ -2,6 +2,7 @@
 #include "app.hpp"
 #include "pixel_art.hpp"
 #include "renderer.hpp"
+#include "rig_training_diagnostic.hpp"
 #include "ui_layout.hpp"
 #include "ui_frame_probe.hpp"
 #include "view_camera.hpp"
@@ -75,6 +76,14 @@ namespace
             && argv != nullptr
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--diagnose-camera";
+    }
+
+    [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-rig-training";
     }
 
     [[nodiscard]] bool wants_ui_diagnostic(int argc, char** argv) noexcept
@@ -258,6 +267,29 @@ int main(int argc, char** argv)
     {
         std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
+    }
+
+    if (wants_rig_training_diagnostic(argc, argv))
+    {
+        const runner::diagnostics::RigTrainingReport report =
+            runner::diagnostics::run_rig_training_diagnostic();
+        for (const runner::diagnostics::RigTrainingResult& rig : report.rigs)
+        {
+            std::printf(
+                "%.*s mean=%.4f evaluation=%.4f strides=%.2f invalid=%u "
+                "preview_resets=%llu reason=%.*s conveyor=%s\n",
+                static_cast<int>(rig.name.size()), rig.name.data(),
+                rig.mean_episode_distance, rig.evaluation_distance,
+                rig.evaluation_stride_events, rig.evaluation_invalid_runs,
+                static_cast<unsigned long long>(rig.preview_resets),
+                static_cast<int>(runner::sim::invalid_motion_name(
+                    rig.preview_reset_reason).size()),
+                runner::sim::invalid_motion_name(rig.preview_reset_reason).data(),
+                rig.rollout_course_motion_enabled ? "enabled" : "disabled");
+        }
+        std::printf("Runner %s rig-training diagnostic: %s\n",
+            RUNNER_VERSION, report.passed ? "passed" : "failed");
+        return report.passed ? 0 : 1;
     }
 
 if (wants_camera_diagnostic(argc, argv))

@@ -1261,6 +1261,7 @@ namespace runner::sim
 
         support_contact_latch_.assign(particles_.size(), 0u);
         support_contact_anchor_x_.resize(particles_.size());
+        previous_support_grounded_.assign(particles_.size(), 0u);
         for (std::size_t index = 0; index < particles_.size(); ++index)
             support_contact_anchor_x_[index] = particles_[index].position.x;
         previous_pelvis_ = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position : Vec2{};
@@ -1363,6 +1364,7 @@ namespace runner::sim
         foot_pivot_rolling_seconds_ = 0.0f;
         zero_progress_seconds_ = 0.0f;
         head_contact_seconds_ = 0.0f;
+        last_support_transfer_seconds_ = -100.0f;
         torso_turn_speed_ = 0.0f;
         stance_slip_speed_ = 0.0f;
         hazard_stall_seconds_ = 0.0f;
@@ -2298,6 +2300,44 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         return false;
     }
 
+    std::size_t Environment::support_seed_grounded_count(bool left) const noexcept
+    {
+        std::size_t count{};
+        const auto count_node = [this, &count](std::uint16_t node)
+        {
+            if (valid_node(node) && particles_[node].grounded)
+                ++count;
+        };
+        count_node(left ? blueprint_.left_contact_node : blueprint_.right_contact_node);
+        const auto& additional = left ? blueprint_.additional_left_contact_nodes
+                                      : blueprint_.additional_right_contact_nodes;
+        for (const std::uint16_t node : additional)
+            count_node(node);
+        return count;
+    }
+
+    std::size_t Environment::support_seed_lifted_count(float minimum_clearance) const noexcept
+    {
+        std::size_t count{};
+        const auto count_node = [this, minimum_clearance, &count](std::uint16_t node)
+        {
+            if (!valid_node(node))
+                return;
+            const Particle& particle = particles_[node];
+            const float clearance = particle.position.y - particle.radius
+                - ground_height_at(particle.position.x);
+            if (!particle.grounded && clearance >= minimum_clearance)
+                ++count;
+        };
+        count_node(blueprint_.left_contact_node);
+        count_node(blueprint_.right_contact_node);
+        for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+            count_node(node);
+        for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+            count_node(node);
+        return count;
+    }
+
     bool Environment::contact_supported(std::uint16_t contact_node) const noexcept
     {
         for (std::size_t index = 0; index < particles_.size(); ++index)
@@ -2814,11 +2854,35 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
 
     void Environment::update_gait_metrics(float dt, float action_energy) noexcept
     {
+        const std::size_t left_seed_count = 1u
+            + blueprint_.additional_left_contact_nodes.size();
+        const std::size_t right_seed_count = 1u
+            + blueprint_.additional_right_contact_nodes.size();
+        const std::size_t left_grounded_count = support_seed_grounded_count(true);
+        const std::size_t right_grounded_count = support_seed_grounded_count(false);
         const bool left = contact_supported(blueprint_.left_contact_node);
         const bool right = contact_supported(blueprint_.right_contact_node);
+        const bool left_swinging = left_grounded_count < left_seed_count;
+        const bool right_swinging = right_grounded_count < right_seed_count;
         const bool was_supported = previous_left_grounded_ || previous_right_grounded_;
-        const bool new_left = left && !previous_left_grounded_;
-        const bool new_right = right && !previous_right_grounded_;
+        const auto new_seed_contact = [this](bool left_side)
+        {
+            const auto is_new = [this](std::uint16_t node)
+            {
+                return valid_node(node) && particles_[node].grounded
+                    && node < previous_support_grounded_.size()
+                    && previous_support_grounded_[node] == 0u;
+            };
+            if (is_new(left_side ? blueprint_.left_contact_node
+                                 : blueprint_.right_contact_node))
+                return true;
+            const auto& additional = left_side
+                ? blueprint_.additional_left_contact_nodes
+                : blueprint_.additional_right_contact_nodes;
+            return std::ranges::any_of(additional, is_new);
+        };
+        const bool new_left = new_seed_contact(true);
+        const bool new_right = new_seed_contact(false);
         const int strike_side = new_left == new_right ? 0 : (new_left ? -1 : 1);
         const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float locomotion_x = terrain_sample_x(root_x, course_progress());
@@ -2826,17 +2890,17 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
         const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
         const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
-        if (!left && previous_left_grounded_)
+        if (left_swinging && left_swing_seconds_ <= 0.0f)
         {
             left_swing_started_behind_ = left_center < right_center - 0.035f;
             left_swing_crossed_ = false;
         }
-        if (!right && previous_right_grounded_)
+        if (right_swinging && right_swing_seconds_ <= 0.0f)
         {
             right_swing_started_behind_ = right_center < left_center - 0.035f;
             right_swing_crossed_ = false;
         }
-        if (!left)
+        if (left_swinging)
         {
             left_swing_seconds_ += dt;
             left_swing_clearance_ = std::max(left_swing_clearance_, left_clearance);
@@ -2844,7 +2908,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 || completes_side_view_crossing(left_swing_started_behind_,
                     left_center, right_center, left_clearance);
         }
-        if (!right)
+        if (right_swinging)
         {
             right_swing_seconds_ += dt;
             right_swing_clearance_ = std::max(right_swing_clearance_, right_clearance);
@@ -2875,6 +2939,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         {
             const float swing_air_seconds = new_left ? left_swing_seconds_ : right_swing_seconds_;
             const float swing_clearance = new_left ? left_swing_clearance_ : right_swing_clearance_;
+            if (blueprint_.support_seed_count() > 2u
+                && swing_air_seconds >= 0.06f && swing_clearance >= 0.04f)
+                last_support_transfer_seconds_ = elapsed_seconds_;
             if (last_contact_side_ == 0)
             {
                 last_contact_side_ = strike_side;
@@ -2906,13 +2973,13 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             }
         }
 step_not_qualified:
-        if (left)
+        if (!left_swinging)
         {
             left_swing_seconds_ = 0.0f;
             left_swing_clearance_ = 0.0f;
             left_swing_started_behind_ = false;
         }
-        if (right)
+        if (!right_swinging)
         {
             right_swing_seconds_ = 0.0f;
             right_swing_clearance_ = 0.0f;
@@ -3263,6 +3330,11 @@ step_not_qualified:
 
         previous_left_grounded_ = left;
         previous_right_grounded_ = right;
+        for (std::size_t index = 0; index < previous_support_grounded_.size(); ++index)
+        {
+            previous_support_grounded_[index] = blueprint_.is_support_seed(index)
+                && particles_[index].grounded ? 1u : 0u;
+        }
         const float active_flip_turns = std::abs(current_airborne_rotation_) / (2.0f * pi);
         const float evaluated_turns = spin_landing_this_step_
             ? maximum_spin_turns_ : active_flip_turns;
@@ -3356,8 +3428,12 @@ step_not_qualified:
             ++obstacles_passed_;
             passed_obstacle_this_step_ = true;
         }
+        const std::size_t lifted_supports = support_seed_lifted_count(0.085f);
+        const bool recent_support_transfer = elapsed_seconds_
+            - last_support_transfer_seconds_ <= 0.90f;
         if (stage_requires_forward_gait(course_stage_) && foot_pivot_rolling_motion(root_speed,
-            left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_))
+            left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_,
+            blueprint_.support_seed_count(), lifted_supports, recent_support_transfer))
             foot_pivot_rolling_seconds_ += dt;
         else
             foot_pivot_rolling_seconds_ = std::max(0.0f, foot_pivot_rolling_seconds_ - dt * 2.5f);

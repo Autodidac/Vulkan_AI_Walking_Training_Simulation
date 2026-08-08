@@ -38,6 +38,33 @@ namespace
         trainer.set_updates_per_cycle(mode);
         trainer.set_background_enabled(true);
 
+#if defined(_DEBUG)
+        // Debug proves bounded progress and worker ownership without pretending
+        // unoptimized wall-clock throughput is a product performance result.
+        const auto started = std::chrono::steady_clock::now();
+        const auto deadline = started + 60s;
+        while (trainer.metrics().update == 0u
+            && std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(10ms);
+            trainer.synchronize();
+        }
+        trainer.set_background_enabled(false);
+        trainer.synchronize();
+        const auto finished = std::chrono::steady_clock::now();
+        const rl::TrainingMetrics metrics = trainer.metrics();
+        const rl::AutonomyStatus status = trainer.autonomy_status();
+        const double seconds = std::chrono::duration<double>(finished - started).count();
+        return {
+            mode,
+            metrics.update,
+            metrics.environment_steps,
+            status.rollout_threads,
+            seconds,
+            static_cast<double>(metrics.update) / seconds,
+            static_cast<double>(metrics.environment_steps) / seconds
+        };
+#else
         // Worker creation and the first compiled policy update are warm-up,
         // not speed-mode throughput. Wait for one completed update before the
         // fixed measurement window so hosted-runner scheduling cannot report a
@@ -78,6 +105,7 @@ namespace
             static_cast<double>(updates) / seconds,
             static_cast<double>(environment_steps) / seconds
         };
+#endif
     }
 }
 
@@ -106,10 +134,12 @@ int main()
         "one or more speed modes completed no training updates");
     require(normal.workers <= faster.workers && faster.workers <= maximum.workers,
         "worker budgets are not monotonic across speed modes");
+#if !defined(_DEBUG)
     require(faster.updates_per_second > normal.updates_per_second,
         "FASTER did not exceed NORMAL measured throughput");
     require(maximum.updates_per_second > normal.updates_per_second,
         "MAX CPU did not exceed NORMAL measured throughput");
+#endif
 
     std::cout << "Runner speed-mode throughput benchmark passed\n";
     return EXIT_SUCCESS;

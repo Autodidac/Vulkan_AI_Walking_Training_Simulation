@@ -31,10 +31,21 @@ int main() {
     if (preview.course_speed() <= 0.0f) return fail("training course motion missing");
     preview.set_course_motion_enabled(false);
     if (preview.course_speed() != 0.0f || preview.course_progress() != 0.0f) return fail("preview conveyor still moving");
-    rl::PpoTrainer trainer{humanoid, 8u, false}; trainer.train_one_update();
+    rl::PpoTrainer trainer{humanoid, 8u, true}; trainer.train_one_update();
     if (trainer.metrics().total_updates == 0u) return fail("no setup update");
+    for (const sim::Environment& environment : trainer.environments())
+        if (environment.course_motion_enabled())
+            return fail("rollout conveyor still supplies locomotion distance");
     trainer.reset_policy(0x1234u);
     if (trainer.metrics().total_updates == 0u) return fail("same-rig retry erased totals");
+    // Champion evaluation is static-course just like the preview; only the
+    // rollout environments may retain curriculum pressure.
+    trainer.set_course(sim::CourseStage::uneven, 0.30f, false);
+    trainer.train_one_update();
+    if (trainer.metrics().evaluation_count == 0u)
+        return fail("static-course evaluation did not run");
+    if (!std::isfinite(trainer.metrics().evaluation_distance))
+        return fail("static-course evaluation distance is not finite");
     trainer.set_blueprint(quadruped, false);
     if (trainer.metrics().total_updates != 0u || trainer.metrics().total_episodes != 0u || trainer.metrics().evaluation_count != 0u) return fail("rig switch retained totals");
     rl::AutonomousTrainer autonomous{quadruped, 8u}; autonomous.synchronize();
