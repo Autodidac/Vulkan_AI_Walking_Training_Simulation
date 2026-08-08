@@ -41,6 +41,25 @@ jobs:
           set -o pipefail
           {
             set -euo pipefail
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply_v0725_art_leg_hotfix.py')
+          text = path.read_text(encoding='utf-8')
+          old = """'''        if (elapsed_seconds_ >= 0.75f
+                      && (!std::isfinite(structural_error) || structural_error > 0.040f))
+                      invalidate(InvalidMotion::structural_compression);
+          '''"""
+          new = """'''        if (elapsed_seconds_ >= 0.75f
+                      && stage_requires_forward_gait(course_stage_)
+                      && blueprint_.paired_leg_chains()
+                      && !blueprint_.horizontal_multi_support_plan()
+                      && (!std::isfinite(structural_error) || structural_error > 0.040f))
+                      invalidate(InvalidMotion::structural_compression);
+          '''"""
+          if old not in text:
+              raise SystemExit('migration structural-gate source pattern was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
             python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
             python3 tools/apply_v0725_art_leg_hotfix.py
             rm -f tools/apply_v0725_art_leg_hotfix.py tools/v0725-prtrigger.txt
