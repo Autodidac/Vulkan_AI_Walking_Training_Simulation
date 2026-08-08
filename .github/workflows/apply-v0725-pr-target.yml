@@ -126,7 +126,7 @@ jobs:
                   continue
               if 'format_work_counter(' in line:
                   if not work_counter_written:
-                      output.append('        "format_work_counter"')
+                      output.append('        "format_work_counter")')
                       work_counter_written = True
                   continue
               output.append(line)
