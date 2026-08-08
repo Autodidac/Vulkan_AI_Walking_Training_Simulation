@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'2101u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'2401u;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -973,6 +973,13 @@ namespace runner::rl
             break;
         }
         return { true, 0u, quality };
+    }
+
+    [[nodiscard]] inline bool completed_episode_passes_stage_checks(
+        sim::CourseStage stage, const sim::Environment& environment) noexcept
+    {
+        return environment.body_integrity_valid()
+            && stage_motion_qualification(stage, environment).valid;
     }
 
 

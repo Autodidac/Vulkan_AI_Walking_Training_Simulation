@@ -331,9 +331,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0721-rig-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0721-rig-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0721-rig-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0724-rig-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0724-rig-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0724-rig-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -886,8 +886,8 @@ namespace runner
                         ? rig.radii[bone.a] : 0.15f;
                     const float radius_b = bone.b < rig.radii.size()
                         ? rig.radii[bone.b] : 0.15f;
-                    const float radius = std::max(0.050f,
-                        std::min(radius_a, radius_b) * 0.52f) * scale;
+                    const float radius = std::max(0.035f,
+                        std::min(radius_a, radius_b) * 0.34f) * scale;
                     const Color color = side == 0 ? body
                         : near ? leg : rgb(0x5f493b);
                     canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
@@ -910,7 +910,7 @@ namespace runner
                     if (rig.is_support_seed(index))
                     {
                         const Vec2 center = point(index);
-                        if (optional_foot_art.loaded())
+                        if (optional_art_enabled && optional_foot_art.loaded())
                         {
                             const float width = std::max(34.0f, scale * 0.78f);
                             const float height = width
@@ -931,7 +931,10 @@ namespace runner
                     }
                     else
                     {
-                        canvas.circle(point(index), radius, color, 22);
+                        const float visual_radius = index == rig.head_node
+                            ? std::clamp(radius, 9.0f, 18.0f)
+                            : std::clamp(radius * 0.48f, 4.5f, 10.0f);
+                        canvas.circle(point(index), visual_radius, color, 22);
                     }
                     if (show_nodes || debug_skeleton_overlay)
                     {
@@ -1148,7 +1151,7 @@ namespace runner
                 0.98f, white, usable_width, 0.80f);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor,
-                std::format("LESSON PROGRESS {}%", progress_percent),
+                std::format("LESSON COMPLETION {}%", progress_percent),
                 1.02f, human_color, usable_width);
             cursor.y += 23.0f;
             const Rect progress_track{ cursor, { usable_width, 12.0f } };
@@ -1160,16 +1163,18 @@ namespace runner
             add_rounded_rect(canvas, progress_track, 6.0f, ui_render::transparent_fill, border, 1.0f);
             cursor.y += 21.0f;
             add_text_fit(canvas, cursor,
-                std::format("UPDATES {} / {}   ATTEMPTS {} / {}",
-                    autonomy.stage_fresh_updates, autonomy.stage_required_updates,
-                    autonomy.stage_fresh_episodes, autonomy.stage_required_episodes),
-                0.78f, muted, usable_width, 0.68f);
+                std::format("TRAINING WORK {}%   MASTERY PASSES {} / {}",
+                    static_cast<int>(std::lround(progress.training_work * 100.0f)),
+                    autonomy.mastery_streak,
+                    rl::required_mastery_confirmations(autonomy.stage)),
+                0.78f, human_color, usable_width, 0.64f);
             cursor.y += 20.0f;
             add_text_fit(canvas, cursor,
-                std::format("REPEAT TESTS {} / {}   STATUS: {}",
-                    autonomy.stage_fresh_evaluations, autonomy.stage_required_evaluations,
-                    human_status.headline),
-                0.78f, human_color, usable_width, 0.64f);
+                std::format("UPDATES {}/{}   RUNS {}/{}   TESTS {}/{}",
+                    autonomy.stage_fresh_updates, autonomy.stage_required_updates,
+                    autonomy.stage_fresh_episodes, autonomy.stage_required_episodes,
+                    autonomy.stage_fresh_evaluations, autonomy.stage_required_evaluations),
+                0.74f, muted, usable_width, 0.60f);
             cursor.y += 28.0f;
 
             const float third = (usable_width - 12.0f) / 3.0f;
@@ -1239,7 +1244,7 @@ namespace runner
                     0.78f, white, usable_width, 3.0f);
                 cursor.y += 8.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("TOTAL UPDATES {}   LESSON {}%",
+                    std::format("TOTAL UPDATES {}   COMPLETION {}%",
                         metrics.total_updates, progress_percent),
                     1.10f, white, usable_width, 0.86f);
                 cursor.y += 25.0f;
@@ -1300,7 +1305,7 @@ namespace runner
                     break;
                 case sim::CourseStage::hurdles:
                     evidence = std::format(
-                        "CURRENT EVIDENCE: OBSTACLES {:.0f}   LANDINGS {:.0f}   DISTANCE {}",
+                        "CURRENT EVIDENCE: FEATURES {:.0f}   LANDINGS {:.0f}   DISTANCE {}",
                         metrics.evaluation_obstacles_passed,
                         metrics.evaluation_jump_landings,
                         format_distance(std::max(0.0f, metrics.evaluation_distance)));
@@ -1314,7 +1319,7 @@ namespace runner
                     break;
                 case sim::CourseStage::moving_hazards:
                     evidence = std::format(
-                        "CURRENT EVIDENCE: DISTANCE {}   STRIDES {:.0f}   HAZARDS PASSED {:.0f}",
+                        "CURRENT EVIDENCE: DISTANCE {}   STRIDES {:.0f}   FEATURES CLEARED {:.0f}",
                         format_distance(std::max(0.0f, metrics.evaluation_distance)),
                         metrics.evaluation_stride_events,
                         metrics.evaluation_obstacles_passed);
@@ -1356,7 +1361,7 @@ namespace runner
                     0.76f, white, usable_width, 0.64f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("ATTEMPTS {}   VALID {}   FAILED CHECKS {}",
+                    std::format("SIMULATED RUNS {}   PASSED STAGE CHECKS {}   FAILED STAGE CHECKS {}",
                         ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
                         ui_layout::lifetime_delta(metrics.total_valid_episodes,
                             rig_start_valid_episodes),
@@ -1374,7 +1379,7 @@ namespace runner
                     0.74f, white, usable_width, 0.60f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("COLLISIONS {}   OBSTACLES PASSED {}   BEST LESSON {}",
+                    std::format("COLLISIONS {}   FEATURES CLEARED {}   BEST LESSON {}",
                         ui_layout::lifetime_delta(metrics.total_collisions,
                             rig_start_collisions),
                         ui_layout::lifetime_delta(metrics.total_obstacles_passed,
@@ -1393,7 +1398,7 @@ namespace runner
                     0.74f, white, usable_width, 0.60f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("ATTEMPTS {}   RESETS {}   ROLLBACKS {}",
+                    std::format("SIMULATED RUNS {}   RESETS {}   ROLLBACKS {}",
                         ui_layout::lifetime_delta(metrics.total_episodes,
                             session_start_episodes),
                         ui_layout::lifetime_delta(metrics.total_resets,
@@ -1403,7 +1408,7 @@ namespace runner
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("DISTANCE {}   COLLISIONS {}   HAZARDS PASSED {}",
+                    std::format("DISTANCE {}   COLLISIONS {}   FEATURES CLEARED {}",
                         format_distance(static_cast<float>(std::max(0.0,
                             metrics.total_distance - session_start_distance))),
                         ui_layout::lifetime_delta(metrics.total_collisions,
@@ -1416,7 +1421,7 @@ namespace runner
                 add_text(canvas, cursor, "ALL TIME", 1.05f, accent);
                 cursor.y += 25.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("TOTAL UPDATES {}   ATTEMPTS {}   VALID {}",
+                    std::format("TOTAL UPDATES {}   SIMULATED RUNS {}   PASSED STAGE CHECKS {}",
                         metrics.total_updates, metrics.total_episodes,
                         metrics.total_valid_episodes),
                     0.76f, white, usable_width, 0.62f);
@@ -1508,7 +1513,7 @@ namespace runner
                     0.70f, muted, usable_width, 0.56f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("RIG GENERATION {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                    std::format("CONTROLLER TUNING {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
                         autonomy.rig_generation, autonomy.accepted_rig_changes,
                         autonomy.rejected_rig_changes, autonomy.rollback_count),
                     0.68f, muted, usable_width, 0.54f);
@@ -1606,7 +1611,7 @@ namespace runner
                 0.84f, environment.recovering() ? yellow : muted, text_width);
             line.y += 23.0f;
             add_text_fit(canvas, line,
-                std::format("LEFT FOOT {}   RIGHT FOOT {}   OBSTACLES PASSED {}",
+                std::format("LEFT FOOT {}   RIGHT FOOT {}   FEATURES CLEARED {}",
                     sim::foot_contact_phase_name(environment.left_foot_phase()),
                     sim::foot_contact_phase_name(environment.right_foot_phase()),
                     environment.obstacles_passed()),

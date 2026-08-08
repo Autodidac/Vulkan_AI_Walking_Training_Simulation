@@ -185,7 +185,8 @@ namespace runner::rl
                     totals.completed_reward += episode_rewards_[environment_index];
                     totals.completed_distance += episode_distances_[environment_index];
                     ++totals.completed_episodes;
-                    if (result.valid_motion)
+                    if (completed_episode_passes_stage_checks(
+                            course_stage_, environment))
                         ++totals.valid_episodes;
                     else
                         ++totals.invalid_episodes;

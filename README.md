@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.23 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.24 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -87,8 +87,21 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0721_READABLE_TELEMETRY.md`](docs/RUNNER_V0721_READABLE_TELEMETRY.md) defines every plain-language training status, counter, goal, and color rule.
 - [`docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md`](docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md) documents the opaque border-fill regression and visible-frame tests.
 - [`docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md`](docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md) documents the true rounded-outline and center-preservation contract.
+- [`docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md`](docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md) documents rigid bones, stage-qualified totals, mastery-aware completion, and the exact screenshot icon source.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.24 structural integrity and truthful telemetry
+
+- Uses the exact selected gameplay screenshot crop as the canonical application icon source.
+- Treats every load-bearing distance constraint as a rigid fixed-length bone.
+- Performs a final post-contact structural projection and rejects excessive residual bone-length error.
+- Restricts automatic refinement to motor strength and joint range; anatomy and stiffness remain fixed.
+- Counts completed rollouts as passed only when they satisfy the current stage checks.
+- Separates training work, repeat tests, and mastery passes so zero mastery cannot show 100% completion.
+- Renames high-volume totals to simulated runs, passed/failed stage checks, and features cleared.
+- Uses smaller procedural joints and limbs by default; optional overlay art remains explicitly opt-in.
+- Isolates v0.7.24 autosaves and training semantics from older compressible-rig state.
 
 ## v0.7.23 true rounded-outline rendering hotfix
 
@@ -114,7 +127,7 @@ A release is incomplete until Linux and Windows tests, build-tree and installed 
 - Reports stage-specific useful evidence and the exact current mastery goal.
 - Explains total updates, attempts, valid attempts, resets, rollbacks, and retained champions on-screen.
 - Keeps raw score, quality key, losses, optimizer state, throughput, and pipeline data on an explicit Advanced page.
-- Automatic training tunes motor strength, joint range, and stiffness without changing the character's anatomy.
+- Automatic training tunes motor strength and joint range without changing anatomy, rest lengths, or structural stiffness.
 - Shipped bipeds use compact side-view rest poses and gait credit requires a real behind-to-ahead support crossing.
 - Quadruped and crawler presets use four articulated two-segment legs; the hexapod uses six independent tripod-phase supports.
 - Rig Lab is split into Presets, Structure, Motors, and Test pages and auto-fits every preset in the editor viewport.

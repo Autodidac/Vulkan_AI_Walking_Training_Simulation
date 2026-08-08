@@ -35,6 +35,7 @@ namespace runner::telemetry
         float updates{};
         float attempts{};
         float tests{};
+        float training_work{};
         float overall{};
         float mastery{};
         bool sample_budget_complete{};
@@ -68,11 +69,17 @@ namespace runner::telemetry
             status.stage_required_episodes);
         result.tests = completion_ratio(status.stage_fresh_evaluations,
             status.stage_required_evaluations);
-        result.overall = std::min({ result.updates, result.attempts, result.tests });
+        result.training_work = std::min({
+            result.updates, result.attempts, result.tests });
         result.mastery = completion_ratio(
             static_cast<std::uint64_t>(std::max(0, status.mastery_streak)),
             static_cast<std::uint64_t>(rl::required_mastery_confirmations(status.stage)));
-        result.sample_budget_complete = result.overall >= 1.0f;
+        result.overall = std::clamp(
+            result.training_work * 0.80f + result.mastery * 0.20f,
+            0.0f, 1.0f);
+        if (result.mastery < 1.0f)
+            result.overall = std::min(result.overall, 0.99f);
+        result.sample_budget_complete = result.training_work >= 1.0f;
         return result;
     }
 
@@ -291,7 +298,7 @@ namespace runner::telemetry
 
     [[nodiscard]] constexpr std::string_view attempts_help() noexcept
     {
-        return "ATTEMPTS = completed simulated runs. VALID means a run passed the current safety and skill gates.";
+        return "SIMULATED RUNS are completed parallel simulated runs. PASSED STAGE CHECKS means a run proved the current skill safely; FAILED STAGE CHECKS did not.";
     }
 
     [[nodiscard]] constexpr std::string_view reset_help() noexcept

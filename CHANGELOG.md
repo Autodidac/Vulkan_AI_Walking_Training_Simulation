@@ -1,3 +1,14 @@
+## 0.7.24
+
+- Replaced the synthetic application icon with generated assets derived from the exact committed gameplay screenshot crop.
+- Normalized all structural bones to fixed length and added a final post-contact rigid projection.
+- Added explicit structural-compression rejection and removed automatic stiffness mutation.
+- Changed rollout totals to stage-qualified pass/fail accounting.
+- Split lesson completion into training work and mastery evidence so zero mastery cannot report 100%.
+- Renamed totals to simulated runs, passed/failed stage checks, and features cleared.
+- Reduced default procedural joint/limb bulk and kept optional overlay art disabled by default.
+- Bumped training semantics and isolated v0.7.24 autosaves.
+
 ## 0.7.23
 
 - Replaced destructive rounded-card border overdraw with a true inset perimeter ring.
