@@ -12,7 +12,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
         docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
         docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
-        assets/ui/runner_icon_source.png
+        assets/ui/runner_icon_source.rgba.zlib.b64
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
@@ -32,6 +32,10 @@ foreach(required IN ITEMS
         message(FATAL_ERROR "Missing required repository file: ${required}")
     endif()
 endforeach()
+
+if(EXISTS "${RUNNER_SOURCE_DIR}/assets/ui/runner_icon_source.png")
+    message(FATAL_ERROR "Corrupted legacy screenshot PNG remains in source tree")
+endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
@@ -124,10 +128,23 @@ if(NOT opaque_default_pos EQUAL -1)
     message(FATAL_ERROR "Opaque default Color remains in application border rendering")
 endif()
 
+file(READ "${RUNNER_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64" source_text)
+foreach(reference IN ITEMS
+        "WIDTH=320"
+        "HEIGHT=320"
+        "RGBA_SHA256=6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad"
+        "ZLIB_BASE64_BEGIN"
+        "ZLIB_BASE64_END")
+    string(FIND "${source_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Exact screenshot pixel source contract missing: ${reference}")
+    endif()
+endforeach()
+
 file(READ "${RUNNER_SOURCE_DIR}/tools/generate_runner_icon.py" generator_text)
 foreach(reference IN ITEMS
-        "assets"
-        "runner_icon_source.png"
+        "runner_icon_source.rgba.zlib.b64"
+        "SOURCE_RGBA_SHA256"
         "SOURCE_PNG_SHA256"
         "resize_nearest")
     string(FIND "${generator_text}" "${reference}" pos)
