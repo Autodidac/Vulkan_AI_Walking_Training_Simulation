@@ -74,14 +74,22 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.cpp" simulation_text)
 foreach(reference IN ITEMS
         "project_structure_rigid"
+        "primary_leg_segment"
         "maximum_bone_length_error_ratio"
         "InvalidMotion::structural_compression"
-        "bone.stiffness = 1.0f")
+        "elapsed_seconds_ < 0.75f"
+        "structural_error > 0.040f")
     string(FIND "${simulation_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Rigid skeleton contract missing: ${reference}")
+        message(FATAL_ERROR "Walking-leg rigidity contract missing: ${reference}")
     endif()
 endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_curriculum.cpp" curriculum_text)
+string(FIND "${curriculum_text}" "RigMutationKind::structural_stiffness" stiffness_mutation_pos)
+if(NOT stiffness_mutation_pos EQUAL -1)
+    message(FATAL_ERROR "Automatic structural-stiffness mutation remains enabled")
+endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
@@ -145,7 +153,7 @@ file(READ "${RUNNER_SOURCE_DIR}/tools/generate_runner_icon.py" generator_text)
 foreach(reference IN ITEMS
         "runner_icon_source.rgba.zlib.b64"
         "SOURCE_RGBA_SHA256"
-        "SOURCE_PNG_SHA256"
+        "source_png_hash"
         "resize_nearest")
     string(FIND "${generator_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -168,11 +176,13 @@ foreach(stale IN ITEMS
         tools/apply_v0724_structural_metrics_icon.py
         tools/run_v0724_migration.py
         tools/cache_v0724_structural_metrics_icon.py
+        tools/fix_v0724_scoped_rigidity.py
         tools/v0724-trigger.txt
         tools/v0724-pr-target-trigger.txt
         tools/v0724-prtarget-kick2.txt
         tools/v0724-reopen-trigger.txt
-        tools/v0724-rescue-trigger.txt)
+        tools/v0724-rescue-trigger.txt
+        .github/workflows/fix-v0724-scoped-rigidity.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
         message(FATAL_ERROR "Temporary v0.7.24 migration file remains: ${stale}")
     endif()
