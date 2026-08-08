@@ -1,0 +1,42 @@
+name: Watch Runner v0.7.24 final gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  watch:
+    if: github.head_ref == 'agent/v0724-structural-metrics-icon'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report latest runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=agent/v0724-structural-metrics-icon&per_page=50")
+          {
+            printf 'Runner v0.7.24 current head: %s\n' "${{ github.event.pull_request.head.sha }}"
+            printf 'Version: %s\n' "$(grep -o 'project(Runner VERSION [0-9.]*' CMakeLists.txt | head -1 || true)"
+            printf 'Screenshot icon source: %s\n' "$(test -s assets/ui/runner_icon_source.png && echo present || echo MISSING)"
+            for name in \
+              'Rescue Runner v0.7.24 migration' \
+              'Finalize Runner v0.7.24' \
+              'Runner v0.7.24 pull-request validation'; do
+              row=$(jq -c --arg name "$name" '[.workflow_runs[] | select(.name == $name)][0] // empty' <<<"$runs")
+              if [ -n "$row" ]; then
+                printf '%s: run %s — %s / %s\n' "$name" \
+                  "$(jq -r '.id' <<<"$row")" "$(jq -r '.status' <<<"$row")" \
+                  "$(jq -r '.conclusion // "pending"' <<<"$row")"
+              fi
+            done
+          } > /tmp/v0724.txt
+          gh pr comment 78 --repo "$GITHUB_REPOSITORY" --body-file /tmp/v0724.txt
