@@ -1,0 +1,34 @@
+name: Probe Runner v0.7.24 Actions
+
+on:
+  push:
+    branches: [agent/v0724-structural-metrics-icon]
+    paths:
+      - .github/workflows/probe-v0724-actions.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0724-structural-metrics-icon
+          fetch-depth: 0
+      - name: Capture workflow state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=agent/v0724-structural-metrics-icon&per_page=50" > tools/v0724-actions.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/v0724-actions.json
+          git commit -m 'Capture v0.7.24 workflow state [skip ci]'
+          git push origin HEAD:agent/v0724-structural-metrics-icon
