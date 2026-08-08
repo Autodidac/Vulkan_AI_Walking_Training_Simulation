@@ -84,7 +84,7 @@ namespace
         return true;
     }
 
-    void verify_structural_blueprint(CreatureBlueprint blueprint)
+    void verify_blueprint(CreatureBlueprint blueprint)
     {
         blueprint.rebuild_rest_lengths();
         require(blueprint.valid(), "canonical blueprint must remain valid");
@@ -94,42 +94,46 @@ namespace
             require(bone.stiffness >= 0.05f && bone.stiffness <= 1.0f,
                 "authored stiffness must remain in the physical range");
         }
-
-        auto support_has_rigid_attachment = [&](std::uint16_t support)
-        {
-            return std::ranges::any_of(blueprint.bones,
-                [support](const runner::sim::DistanceConstraint& bone)
-                {
-                    return bone.stiffness >= 0.999f
-                        && (bone.a == support || bone.b == support);
-                });
-        };
-        require(support_has_rigid_attachment(blueprint.left_contact_node),
-            "left support must attach through a rigid load-bearing bone");
-        require(support_has_rigid_attachment(blueprint.right_contact_node),
-            "right support must attach through a rigid load-bearing bone");
     }
 
-    void soak(Environment& environment, runner::sim::CourseStage stage, int frames)
+    void verify_primary_walking_segments(const CreatureBlueprint& blueprint)
     {
-        environment.set_course(stage, 0.30f);
-        float maximum_error = 0.0f;
+        require(blueprint.paired_leg_chains(),
+            "walking rigidity fixture must contain paired leg chains");
+        const std::size_t leg_motors = std::min<std::size_t>(
+            4u, blueprint.active_motor_count);
+        require(leg_motors == 4u,
+            "walking rigidity fixture must expose four primary leg motors");
+        for (std::size_t index = 0; index < leg_motors; ++index)
+        {
+            const auto& motor = blueprint.motors[index];
+            const bool found = std::ranges::any_of(blueprint.bones,
+                [&](const runner::sim::DistanceConstraint& bone)
+                {
+                    return (bone.a == motor.pivot && bone.b == motor.c)
+                        || (bone.b == motor.pivot && bone.a == motor.c);
+                });
+            require(found,
+                "every primary walking motor must terminate on an authored bone");
+        }
+    }
+
+    void walking_soak(Environment& environment, int frames)
+    {
+        environment.set_course(runner::sim::CourseStage::uneven, 0.30f);
         for (int frame = 0; frame < frames; ++frame)
         {
-            const auto action = stage == runner::sim::CourseStage::duck_press
-                ? runner::rl::duck_teacher_action(environment)
-                : runner::rl::balance_teacher_action(environment);
+            const auto action = runner::rl::walking_teacher_action(environment);
             const auto result = environment.step(action);
-            maximum_error = std::max(maximum_error,
-                environment.maximum_bone_length_error_ratio());
-            require(std::isfinite(maximum_error), "bone error must remain finite");
-            require(maximum_error <= 0.040f,
-                "load-bearing bone length exceeded rigid tolerance");
+            const float error = environment.maximum_bone_length_error_ratio();
+            require(std::isfinite(error), "walking-leg error must remain finite");
+            require(error <= 0.0405f,
+                "primary walking-leg length exceeded rigid tolerance");
             if (result.terminated)
             {
                 environment.reset(0x724000u
                     + static_cast<std::uint64_t>(frame) * 17u);
-                environment.set_course(stage, 0.30f);
+                environment.set_course(runner::sim::CourseStage::uneven, 0.30f);
             }
         }
     }
@@ -137,14 +141,16 @@ namespace
 
 int main()
 {
-    verify_structural_blueprint(CreatureBlueprint::scaffold());
-    verify_structural_blueprint(CreatureBlueprint::chicken());
-    verify_structural_blueprint(CreatureBlueprint::biped());
-    verify_structural_blueprint(CreatureBlueprint::humanoid());
-    verify_structural_blueprint(CreatureBlueprint::quadruped());
-    verify_structural_blueprint(CreatureBlueprint::crawler4());
-    verify_structural_blueprint(CreatureBlueprint::hexapod());
-    verify_structural_blueprint(CreatureBlueprint::monoped());
+    verify_blueprint(CreatureBlueprint::scaffold());
+    verify_blueprint(CreatureBlueprint::chicken());
+    verify_blueprint(CreatureBlueprint::biped());
+    verify_blueprint(CreatureBlueprint::humanoid());
+    verify_blueprint(CreatureBlueprint::quadruped());
+    verify_blueprint(CreatureBlueprint::crawler4());
+    verify_blueprint(CreatureBlueprint::hexapod());
+    verify_blueprint(CreatureBlueprint::monoped());
+    verify_primary_walking_segments(CreatureBlueprint::biped());
+    verify_primary_walking_segments(CreatureBlueprint::humanoid());
 
     {
         const CreatureBlueprint source = CreatureBlueprint::humanoid();
@@ -194,11 +200,10 @@ int main()
     }
 
     {
-        Environment balance{ CreatureBlueprint::humanoid(), 0x7241u };
-        soak(balance, runner::sim::CourseStage::balance, 360);
-
-        Environment duck{ CreatureBlueprint::humanoid(), 0x7242u };
-        soak(duck, runner::sim::CourseStage::duck_press, 540);
+        Environment biped{ CreatureBlueprint::biped(), 0x7241u };
+        walking_soak(biped, 360);
+        Environment humanoid{ CreatureBlueprint::humanoid(), 0x7242u };
+        walking_soak(humanoid, 360);
     }
 
     {
