@@ -27,19 +27,29 @@ jobs:
           git diff --check
           grep -F 'project(Runner VERSION 0.7.24 LANGUAGES CXX)' CMakeLists.txt
           grep -F 'WALK-SCREENSHOT-ICON-296' missioncache.md
-          grep -F 'WALK-RIGID-BONES-297' missioncache.md
-          grep -F 'WALK-STAGE-COUNTERS-300' missioncache.md
+          grep -F 'WALK-BONE-LENGTH-297' missioncache.md
+          grep -F 'WALK-LOAD-BEARING-298' missioncache.md
+          grep -F 'WALK-AUTO-STIFFNESS-299' missioncache.md
+          grep -F 'WALK-DEBUG-TRUTH-300' missioncache.md
           grep -F 'WALK-PROGRESS-301' missioncache.md
+          grep -F 'WALK-TOTALS-302' missioncache.md
+          grep -F 'WALK-VISUAL-303' missioncache.md
+          grep -F 'WALK-STATE-304' missioncache.md
+          grep -F 'WALK-REGRESSION-305' missioncache.md
           grep -F 'WALK-RELEASE-306' missioncache.md
           grep -F "training_semantics_version = 0x0007'2401u" src/ppo.hpp
-          grep -F 'project_rigid_structure' src/simulation.cpp
-          grep -F 'completed_episode_passes_stage' src/ppo_trainer.cpp
+          grep -F 'project_structure_rigid' src/simulation.cpp
+          grep -F 'maximum_bone_length_error_ratio' src/simulation.cpp
+          grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
           grep -F 'PASSED STAGE CHECKS' src/app.cpp
+          grep -F 'MASTERY PASSES' src/app.cpp
           grep -F 'runner_icon_source.png' tools/generate_runner_icon.py
           test -s assets/ui/runner_icon_source.png
           test -f tests/v0724_structural_metrics_icon_tests.cpp
           test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
           test ! -e tools/apply_v0724_structural_metrics_icon.py
+          test ! -e tools/run_v0724_migration.py
+          test ! -e tools/cache_v0724_structural_metrics_icon.py
       - name: Configure
         env:
           CC: gcc-14
