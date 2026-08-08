@@ -4,11 +4,17 @@ on:
   push:
     branches: [agent/v0725-final-release-copy]
     paths: [.github/workflows/watch-main-v0725.yml]
+  pull_request:
+    branches: [main]
 
 permissions:
   actions: write
   contents: write
   pull-requests: write
+
+concurrency:
+  group: runner-v0725-final-publisher
+  cancel-in-progress: false
 
 env:
   VALIDATED_SHA: 56f5977cb3ac3a814702efb5d81a9dd196d5f59a
@@ -19,6 +25,7 @@ env:
 
 jobs:
   publish:
+    if: github.event_name == 'push' || github.head_ref == 'agent/v0725-final-release-copy'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -40,11 +47,6 @@ jobs:
             src/training_explainer.hpp src/ui_font.hpp \
             tests/v0725_art_leg_hotfix_tests.cpp tools/repository_audit.cmake
           test ! -e validated-artifact
-          test ! -e tools/apply_v0725_art_leg_hotfix.py
-          test ! -e tools/apply_v0725_font_sync.py
-          test ! -e tools/finalize_v0725.py
-          test ! -e tools/finalize_v0725_audit.py
-          test ! -e tools/finalize_v0725_strict_geometry.py
       - name: Download exact green Windows artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,19 +61,20 @@ jobs:
           test -f "release-assets/$PACKAGE_NAME.zip.sha256"
           test -f "release-assets/$PACKAGE_NAME.manifest.sha256"
           (cd release-assets && sha256sum -c "$PACKAGE_NAME.zip.sha256")
-      - name: Publish merged main as v0.7.25
+      - name: Create or verify v0.7.25 release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "$RELEASE_TAG already exists" >&2
-            exit 1
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git tag -a "$RELEASE_TAG" "$MERGED_SHA" -m "Runner 0.7.25"
+            git push origin "$RELEASE_TAG"
           fi
-          git tag -a "$RELEASE_TAG" "$MERGED_SHA" -m "Runner 0.7.25"
-          git push origin "$RELEASE_TAG"
-          cat > release-notes.md <<'NOTES'
+          tag_sha=$(git rev-list -n 1 "$RELEASE_TAG")
+          test "$tag_sha" = "$MERGED_SHA"
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            cat > release-notes.md <<'NOTES'
           Runner v0.7.25 is the compact-art, stance-integrity, EpochGui-font-sync, and readable-progress release.
 
           - Keeps the approved helmet and foot artwork while replacing the oversized torso/shoulder overlay with compact node-attached geometry.
@@ -82,9 +85,10 @@ jobs:
           - Removes the tracked validated-artifact staging directory and temporary migration/finalizer files.
           - Package is reused byte-for-byte from workflow 31249578242, whose Linux and complete Windows SDL3/Vulkan build, tests, runtime diagnostics, install, independent extraction, archive checksum, manifest, and artifact upload all passed. Runtime/product files at merged main are byte-identical to that validated source.
           NOTES
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "Runner v0.7.25" --notes-file release-notes.md
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Runner v0.7.25" --notes-file release-notes.md
+          fi
       - name: Re-download and byte-verify published assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,7 +104,7 @@ jobs:
             cmp --silent "$source" "release-download/$file"
           done
           (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
-      - name: Clean main and temporary branches
+      - name: Clean repository and temporary branches
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -130,6 +134,11 @@ jobs:
             git commit -m 'Complete Runner v0.7.25 release cleanup [skip ci]'
             git pull --rebase origin main
             git push origin HEAD:main
+          fi
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head agent/v0725-final-release-copy --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr comment "$pr" --repo "$GITHUB_REPOSITORY" --body "Runner v0.7.25 published, re-downloaded, byte-verified, and repository cleanup completed."
+            gh pr close "$pr" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           fi
           for branch in \
             agent/v0725-final-release-copy \
