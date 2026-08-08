@@ -114,9 +114,9 @@ namespace
         const std::uint16_t knee = rig.motors[hip_motor].c;
         const std::uint16_t foot = rig.motors[knee_motor].c;
         const auto& particles = environment.particles();
-        const float maximum = runner::sim::length(rig.nodes[knee] - rig.nodes[hip])
-            + runner::sim::length(rig.nodes[foot] - rig.nodes[knee]);
-        return runner::sim::length(particles[foot].position - particles[hip].position)
+        const float maximum = runner::length(rig.nodes[knee] - rig.nodes[hip])
+            + runner::length(rig.nodes[foot] - rig.nodes[knee]);
+        return runner::length(particles[foot].position - particles[hip].position)
             / std::max(maximum, 1.0e-5f);
     }
 
@@ -129,11 +129,11 @@ namespace
         const std::uint16_t knee = rig.motors[hip_motor].c;
         const std::uint16_t foot = rig.motors[knee_motor].c;
         const auto& particles = environment.particles();
-        const float upper_rest = runner::sim::length(rig.nodes[knee] - rig.nodes[hip]);
-        const float lower_rest = runner::sim::length(rig.nodes[foot] - rig.nodes[knee]);
-        const float upper = runner::sim::length(
+        const float upper_rest = runner::length(rig.nodes[knee] - rig.nodes[hip]);
+        const float lower_rest = runner::length(rig.nodes[foot] - rig.nodes[knee]);
+        const float upper = runner::length(
             particles[knee].position - particles[hip].position);
-        const float lower = runner::sim::length(
+        const float lower = runner::length(
             particles[foot].position - particles[knee].position);
         return std::max(
             std::abs(upper - upper_rest) / std::max(upper_rest, 1.0e-5f),
