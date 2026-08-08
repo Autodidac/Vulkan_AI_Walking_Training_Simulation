@@ -43,8 +43,9 @@ jobs:
           grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
           grep -F 'PASSED STAGE CHECKS' src/app.cpp
           grep -F 'MASTERY PASSES' src/app.cpp
-          grep -F 'runner_icon_source.png' tools/generate_runner_icon.py
-          test -s assets/ui/runner_icon_source.png
+          grep -F 'runner_icon_source.rgba.zlib.b64' tools/generate_runner_icon.py
+          grep -F 'RGBA_SHA256=6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad' assets/ui/runner_icon_source.rgba.zlib.b64
+          test ! -e assets/ui/runner_icon_source.png
           test -f tests/v0724_structural_metrics_icon_tests.cpp
           test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
           test ! -e tools/apply_v0724_structural_metrics_icon.py
