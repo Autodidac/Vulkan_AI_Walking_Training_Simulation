@@ -6,7 +6,7 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
   pull-requests: write
 
 env:
@@ -45,11 +45,14 @@ jobs:
           for file in "$PACKAGE_NAME.zip" "$PACKAGE_NAME.zip.sha256" "$PACKAGE_NAME.manifest.sha256"; do
             cmp --silent "published/$file" "validated/$file"
           done
-      - name: Report verification
+      - name: Report and self-clean
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
+          set -euo pipefail
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
             --body 'Runner v0.7.25 release verified: tag points to merged main, all three assets are present, published ZIP checksum passes, and every published asset is byte-identical to workflow 31250177528.'
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/agent%2Fv0725-verify-release"
