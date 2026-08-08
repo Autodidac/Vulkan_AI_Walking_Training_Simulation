@@ -105,8 +105,11 @@ namespace runner::rl
             {
                 environments_.emplace_back(blueprint_, 0x1000u + index * 7919u);
                 environments_.back().set_course(course_stage_, course_difficulty_);
+                environments_.back().set_course_motion_enabled(false);
             }
             preview_.set_course(course_stage_, course_difficulty_);
+            preview_.set_course_motion_enabled(false);
+            preview_accumulator_seconds_ = 0.0;
             episode_rewards_.assign(environment_count, 0.0f);
             episode_distances_.assign(environment_count, 0.0f);
             rollout_previous_actions_.assign(environment_count,
@@ -257,6 +260,7 @@ namespace runner::rl
         }
         preview_.set_blueprint(blueprint_);
         preview_.set_course(course_stage_, course_difficulty_);
+        preview_accumulator_seconds_ = 0.0;
         if (!changed)
             return;
 
@@ -281,8 +285,13 @@ namespace runner::rl
         course_stage_ = stage;
         course_difficulty_ = difficulty;
         for (sim::Environment& environment : environments_)
+        {
             environment.set_course(course_stage_, course_difficulty_);
+            environment.set_course_motion_enabled(false);
+        }
         preview_.set_course(course_stage_, course_difficulty_);
+        preview_.set_course_motion_enabled(false);
+        preview_accumulator_seconds_ = 0.0;
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
         for (auto& action : rollout_previous_actions_)
@@ -373,6 +382,7 @@ namespace runner::rl
         }
         preview_.set_course(course_stage_, course_difficulty_);
         preview_.reset(0xDEADBEEFu);
+        preview_accumulator_seconds_ = 0.0;
     }
 
     void PpoTrainer::reset_policy(std::uint64_t seed, bool clear_totals)
@@ -706,24 +716,39 @@ namespace runner::rl
 
     void PpoTrainer::step_preview(float dt)
     {
-        const PolicyNetwork& display_policy = best_parameters_.empty()
-            ? policy_ : preview_policy_;
-        const auto raw_action = display_policy.deterministic_action(preview_.observation());
-        const auto action = effective_policy_action(preview_, raw_action, course_stage_);
-        const sim::StepResult result = preview_.step(action, dt);
-        if (result.terminated)
+        if (!std::isfinite(dt) || dt <= 0.0f)
+            return;
+        constexpr double fixed_step = static_cast<double>(1.0f / 60.0f);
+        constexpr double maximum_backlog = 0.25;
+        preview_accumulator_seconds_ = std::min(maximum_backlog,
+            preview_accumulator_seconds_ + static_cast<double>(dt));
+        while (preview_accumulator_seconds_ + 1.0e-8 >= fixed_step)
         {
-            preview_last_reset_reason_ = result.invalid_reason;
-            ++preview_reset_sequence_;
-            preview_.reset(0xDEADBEEFu + metrics_.update
-                + preview_reset_sequence_ * 7919u);
+            const PolicyNetwork& display_policy = best_parameters_.empty()
+                ? policy_ : preview_policy_;
+            const auto raw_action = display_policy.deterministic_action(
+                preview_.observation());
+            const auto action = effective_policy_action(
+                preview_, raw_action, course_stage_);
+            const sim::StepResult result = preview_.step(action,
+                static_cast<float>(fixed_step));
+            preview_accumulator_seconds_ -= fixed_step;
+            if (result.terminated)
+            {
+                preview_last_reset_reason_ = result.invalid_reason;
+                ++preview_reset_sequence_;
+                preview_.reset(0xDEADBEEFu + metrics_.update
+                    + preview_reset_sequence_ * 7919u);
+            }
         }
+        preview_accumulator_seconds_ = std::max(0.0, preview_accumulator_seconds_);
     }
 
     void PpoTrainer::reset_preview(std::uint64_t seed) noexcept
     {
         preview_reset_sequence_ = 0u;
         preview_last_reset_reason_ = sim::InvalidMotion::none;
+        preview_accumulator_seconds_ = 0.0;
         preview_.reset(seed);
     }
 

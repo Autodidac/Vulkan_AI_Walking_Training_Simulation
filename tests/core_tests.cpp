@@ -1250,6 +1250,15 @@ int main()
         "single-support lifted-foot walking is incorrectly rejected as foot-node rolling");
     require(sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f, 0.02f),
         "straight double-supported skating around planted feet is not rejected");
+    require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
+            0.02f, 4u, 1u),
+        "a multi-support rig with an authored leg lifted is rejected as skating");
+    require(sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
+            0.02f, 6u, 0u),
+        "a planted multi-support rig can evade the anti-skating rejection");
+    require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
+            0.02f, 6u, 0u, true),
+        "a recent physical multi-support transfer is rejected during its planted phase");
     require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
         "long flat sand-sim patrol zones are missing");
     require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),

@@ -165,6 +165,10 @@ namespace runner::rl
                                 + static_cast<std::uint64_t>(agent) * 4099u;
                             sim::Environment environment{ owner.blueprint_, seed };
                             environment.set_course(current_stage, current_difficulty);
+                            // Evaluation and the visible preview answer the same
+                            // question: can this policy move its authored rig?
+                            // Curriculum conveyor pressure belongs only to rollouts.
+                            environment.set_course_motion_enabled(false);
                             float episode_reward{};
                             for (int step = 0; step < maximum_steps; ++step)
                             {

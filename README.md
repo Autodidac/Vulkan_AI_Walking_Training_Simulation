@@ -1,15 +1,16 @@
 # Runner
 
-## v0.7.26 rig-scoped training truth and topology-aware locomotion
+## v0.7.27 authored-contact gait evidence
 
-- Classifies support motors from rig topology instead of assuming motors 0-3 are legs and 4+ are arms. Quadruped, crawler, and hexapod support motors now retain authority through Stand, Crouch, Walk/Run, and later stages.
-- A canonical rig switch starts a genuinely fresh training subject: rig totals, lesson baselines, tests, optimizer state, and policy state reset together. Episode and policy retries within the same rig still preserve that rig's cumulative totals.
-- The large live preview disables course conveyor motion. It must move itself across a static course while the training workers remain free to use moving-course pressure.
-- Preview auto-restarts now retain and display the terminating motion reason and restart count instead of silently snapping back to spawn.
-- Runtime modular armor art is enabled automatically when packaged assets are available. The supplied torso component is bounded to the physical torso instead of drawing an oversized sheet.
-- Autosave names and messages are isolated to v0.7.26.
+- Tracks strikes, swing time, and lift at each authored support seed while retaining topology-derived controller phase groups.
+- Distinguishes a real multi-legged support transfer from fully planted skating without weakening the planted anti-skating rejection.
+- Removes conveyor-derived locomotion credit from rollouts, champion evaluation, and the large preview; progress must come from simulated rig displacement.
+- Adds `Runner.exe --diagnose-rig-training`, a deterministic 100-update biped/quadruped/crawler/hexapod comparison with distance, stride, invalid-seed, and preview-reset evidence.
+- Advances every runtime simulation at fixed 60 Hz regardless of render cadence; 20, 60, and 240 Hz produce the same preview physics state.
+- Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
+- Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.26 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.27 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -78,6 +79,8 @@ Runner.exe --diagnose-vulkan
 Runner.exe --diagnose-package
 Runner.exe --diagnose-acceptance
 Runner.exe --diagnose-camera
+Runner.exe --diagnose-ui
+Runner.exe --diagnose-rig-training
 ```
 
 `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty.
@@ -98,6 +101,8 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md`](docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md) documents the true rounded-outline and center-preservation contract.
 - [`docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md`](docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md) documents rigid bones, stage-qualified totals, mastery-aware completion, and the exact screenshot icon source.
 - [`docs/RUNNER_V0725_ART_LEG_HOTFIX.md`](docs/RUNNER_V0725_ART_LEG_HOTFIX.md) documents compact node-attached armor and supported stance-leg extension.
+- [`docs/RUNNER_V0726_TRAINING_TRUTH.md`](docs/RUNNER_V0726_TRAINING_TRUTH.md) documents rig-scoped training truth, static preview motion, and reset telemetry.
+- [`docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md`](docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md) documents authored-contact gait evidence and the fixed four-rig comparison.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 

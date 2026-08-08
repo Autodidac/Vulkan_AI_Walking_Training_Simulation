@@ -550,42 +550,42 @@ Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complet
 
 # Runner v0.7.25 compact armor and stance-leg integrity
 
-**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+**Release state:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED.
 
 Direct packaged v0.7.24 eye testing confirms that the approved helmet and foot assets are usable, but the translucent torso sheet, circular shoulder masses, and duplicate ghost arms obscure the actual gait. Fixed segment lengths also remain insufficient: a two-link leg can preserve both bone lengths while folding until the knee appears to telescope into the pelvis. The same screenshots expose stale font-cell scaling, a missing percent glyph, and sample counters such as RUNS 17465/8 that are internally true but useless in the compact noob-facing header.
 
 ### WALK-COMPACT-ARMOR-307 — Replace the oversized torso overlay
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Keep the approved helmet and foot presentation. Replace only the torso, shoulder, and forearm overlay with compact geometry attached to the real body nodes. No rectangular sprite sheet, giant shoulder circles, duplicate arms, or physics changes are allowed.
 
 ### WALK-STANCE-EXTENSION-308 — Preserve supported leg extension
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 A supported walking leg must retain enough hip-to-foot extension to remain a usable stance chain. Fixed upper/lower lengths may not be satisfied by folding the knee into the pelvis.
 
 ### WALK-CHAIN-IK-309 — Reconstruct paired legs from authored lengths
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 After stance reserve is restored, reconstruct each knee from exact two-link geometry, preserve its bend side, pin supported feet, and retain natural swing-leg flexion.
 
 ### WALK-STARTUP-310 — Remove the visible startup compression window
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Walking-chain projection and error measurement begin during startup rather than waiting 0.75 seconds while the visible preview collapses.
 
 ### WALK-STATE-311 — Isolate v0.7.25 locomotion semantics
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Bump training semantics and use v0.7.25 autosave paths so older controllers cannot silently resume against the corrected stance-chain behavior.
 
 ### WALK-REGRESSION-312 — Lock art and stance-chain behavior
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** VERIFIED — MAIN RELEASE GATE PASSED
 
 Add forced-compression recovery, exact segment-length, natural walking soak, compact-art source, approved helmet/foot retention, EpochGui logical font metrics, percent-glyph, READY-counter, complete Linux, complete Windows SDL3/Vulkan, installed/extracted package, and runtime diagnostic tests.
 
 ### WALK-RELEASE-313 — Publish and clean Runner v0.7.25
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 Merge only validated source, publish `v0.7.25`, re-download and byte-verify every asset, record evidence, close temporary PRs, and delete temporary branches/workflows.
 
@@ -596,9 +596,9 @@ Merge only validated source, publish `v0.7.25`, re-download and byte-verify ever
 
 Add a hard-wall curriculum where a rig climbs without jumping when hands can reach a ledge and turns backward to lower itself when the remaining fall is no greater than standing height. Completion requires hand/ledge contact, support transfer, no powered takeoff, and controlled feet-first recovery.
 
-# Runner v0.7.26 equipment, carry, and target curriculum
+# Future equipment, carry, and target curriculum
 
-**Release state:** CACHED AND OPEN — intentionally separated from the v0.7.24 structural/telemetry release because equipment changes policy dimensions and checkpoint compatibility.
+**Release state:** CACHED AND OPEN — intentionally separated from the structural, telemetry, and rig-truth releases because equipment changes policy dimensions and checkpoint compatibility.
 
 ### WALK-EQUIPMENT-148 — Unarmed, safe carry, ready, disarmed, and dropped states
 **Status:** OPEN
@@ -715,7 +715,7 @@ All earlier closed mission definitions, imported legacy copies, validation findi
 
 # Runner v0.7.26 rig-scoped training truth and multi-rig locomotion
 
-**Release state:** IMPLEMENTED FOR VALIDATION
+**Release state:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD VERIFIED; POST-RELEASE EYE TEST REOPENED MATCHING BEHAVIOR
 
 - **WALK-RIG-ROLE-314:** Remove the humanoid-only assumption that motors 4+ are upper-body. Classify every motor by whether its driven branch reaches a semantic support node.
 - **WALK-RIG-ROLE-315:** Preserve quadruped/crawler/hexapod support authority during Stand, Duck Press, Walk/Run, Crouch Walk, ramps, hurdles, and hazard recovery.
@@ -728,3 +728,87 @@ All earlier closed mission definitions, imported legacy copies, validation findi
 - **WALK-STATE-322:** Isolate v0.7.26 autosave/checkpoint filenames and update stale v0.7.20 status messages.
 - **WALK-REGRESSION-323:** Add deterministic tests for support-role classification, non-biped motor authority, static preview course, and new-rig counter reset.
 - **WALK-RELEASE-324:** Require Linux GCC14 warnings-as-errors, Windows SDL3/Vulkan build/tests, installed/extracted diagnostics, checksum/manifest, release re-download verification, and clean main-only repository state.
+
+## Runner v0.7.26 immutable evidence
+
+- Tag and published release: `v0.7.26` at `a471b675bdaa7d9a4da54f3288e7b7f9bd8477b9`.
+- Successful validation/release workflow: `31257952197`.
+- Published package digest: `d4ca9f4b0ddf628c6fcc8ea659c9ff70f7159e36264b49b553895f6293ed9e0a`.
+- Published checksum digest: `33714222ec891efda967ac2932cd2575cf6cf63c261dc7cd96197d0884aa073a`.
+- Published manifest digest: `f25ef74a64f6359b77f96f4ca41d64b4ec9d64f5530bc27fc84bf4a9dacf97ce`.
+- Cleanup is contradicted by the surviving remote `agent/v0726-release-trigger` branch; remove it only after the next release is independently verified.
+
+# Runner v0.7.27 authored-contact gait evidence and release integrity
+
+**Release state:** VALIDATED — FINAL PACKAGE REGENERATION AND PUBLICATION PENDING
+
+The complete conversation chain from v0.7.8 through v0.7.26 was re-read before implementation. The permanent product contract remains: authored anatomy may articulate but may not silently mutate or compress; side-view locomotion requires real support transfer, lift, traction, and controlled speed; terrain, contacts, preview, workers, evaluation, telemetry, editor, persistence, and packaged runtime must describe the same physical subject; crawling is emergency-only; slow recovery is valid; and screenshot/runtime evidence outranks inferred success.
+
+The original ad hoc probe was invalid because it disabled evaluation workers; its zero-evaluation claim is discarded. The permanent diagnostic uses real evaluation workers and static courses for rollout, evaluation, and preview. At 100 fixed-seed updates it reports:
+
+- biped: mean episode `1.7262 m`, evaluation `-2.1223 m`, `0.83` stride events, 6 invalid evaluation seeds, 12 preview resets ending in `FLIPPED`;
+- quadruped: mean episode `0.7443 m`, evaluation `-0.5082 m`, `9.00` stride events, 6 invalid evaluation seeds, 8 preview resets ending in `MICRO-MOTION EXPLOIT`;
+- crawler: mean episode `-0.2256 m`, evaluation `-0.1396 m`, `7.50` stride events, 6 invalid evaluation seeds, 12 preview resets ending in `MICRO-MOTION EXPLOIT`;
+- hexapod: mean episode `0.2367 m`, evaluation `0.9435 m`, `13.00` stride events, 5 invalid evaluation seeds, 5 preview resets ending in `FOOT-NODE SKATING / ROLLING`.
+
+This proves the requested comparative regression: every non-biped curve reaches the biped baseline within the fixed margin and produces authored stride evidence. It does not claim Walk mastery or an accepted champion at 100 updates; invalid evaluation seeds remain visible and are future tuning evidence rather than being zeroed or hidden.
+
+### WALK-RIG-REJECTION-325 — Separate physical skating from valid multi-support gait
+**Status:** VERIFIED
+
+Track grounded state per authored support seed, retain controller phase groups, count individual physical transfers, and exempt only a currently lifted or recently transferred multi-support leg from foot-pivot accumulation. Fully planted multi-support translation remains rejected. Positive, negative, adversarial, and deterministic fixed-seed coverage is present.
+
+### WALK-RIG-EVALUATION-326 — Produce comparable non-biped evaluation curves
+**Status:** VERIFIED AT THE 100-UPDATE COMPARATIVE GATE — MASTERY NOT CLAIMED
+
+Rollout, evaluation, and preview locomotion distance are now static-course and rig-driven. The fixed diagnostic requires each non-biped evaluation distance to reach the biped baseline within `0.25 m` and produce at least two stride events. Invalid seed counts and reset causes remain reported; an accepted six-seed champion is intentionally not inferred.
+
+### WALK-RIG-DIAGNOSTIC-327 — Make the comparison a permanent headless diagnostic
+**Status:** VERIFIED IN BUILD-TREE; UPDATED INSTALLED AND EXTRACTED PACKAGE RUNS PENDING
+
+`--diagnose-rig-training` and `Runner.V0727RigTraining` run the bounded four-rig comparison and report distance, stride, invalid-seed, preview-reset, reset-reason, and conveyor-leak evidence.
+
+### WALK-WINDOWS-CONSTEXPR-328 — Restore the complete MSVC test build
+**Status:** VERIFIED IN COMPLETE DEBUG AND RELEASE MATRICES
+
+`evidence_bit` is constant-evaluable and `raw_score_available` is a runtime finite-value check, restoring coherent MSVC semantics without pretending `std::isfinite` is constexpr on every supported toolchain.
+
+### WALK-PIPELINE-TIMING-329 — Make Debug pipeline validation deterministic
+**Status:** VERIFIED IN COMPLETE DEBUG AND RELEASE MATRICES
+
+The asynchronous test now proves one complete staged publication with one requested update and a bounded 60-second correctness deadline instead of requiring two four-update optimized-throughput batches within 20 seconds.
+
+### WALK-RIG-STATE-330 — Isolate corrected v0.7.27 training state
+**Status:** VERIFIED
+
+Application version, training semantics, autosave/checkpoint names, documentation, package identity, and workflow contracts are isolated to v0.7.27.
+
+### WALK-RIG-DOC-331 — Reconcile cache, changelog, README, focused docs, and packaging
+**Status:** VERIFIED
+
+The cache, changelog, README, focused evidence document, CMake install/test lists, repository audit, and release workflow are updated. Obsolete one-use workflows, the v0.7.10 publication trigger, and redundant release-notes file are removed.
+
+### WALK-FRAME-333 — Make every runtime simulation path render-frame independent
+**Status:** VERIFIED — 20/60/240 HZ EXACT-STATE AND RESET/INVALID-DELTA COVERAGE PASSED
+
+Rollout, evaluation, self-imitation, acceptance, and diagnostic environments already use the fixed `1/60 s` simulation step. The large Live preview now accumulates render elapsed time and advances the policy plus Verlet/contact/terrain solver only in bounded fixed `1/60 s` ticks. Rig/course/reset boundaries discard partial ticks. Camera smoothing and UI timers remain elapsed-time based; rendering cannot change training work or physics state. Deterministic coverage compares the complete preview physics state at 20, 60, and 240 Hz and adversarially proves that partial-tick resets, negative deltas, and non-finite deltas cannot advance or contaminate simulation state.
+
+### WALK-RIG-RELEASE-332 — Publish and independently verify Runner v0.7.27
+**Status:** VALIDATED — FINAL PACKAGE, PUBLICATION, AND PUBLISHED-ASSET RE-DOWNLOAD PENDING
+
+Require repository hygiene, Linux GCC 14 warnings-as-errors and all CTest suites, the complete Windows SDL3/Vulkan build and tests, package/acceptance/camera/UI/rig-training diagnostics, installed and independently extracted `run.bat`, ZIP checksum and manifest audit, published-asset re-download and byte comparison, zero open cleanup PRs, and main-only branch state.
+
+Pre-publication final-source evidence:
+
+- Linux GCC 14 warnings-as-errors build and complete 20/20 CTest matrix passed; the final test-only pipeline isolation was rebuilt and rerun successfully.
+- Windows SDL3/Vulkan Release build and complete 23/23 CTest matrix passed; the final test-only pipeline isolation was rebuilt and rerun successfully.
+- Windows SDL3/Vulkan Debug product matrix passed every target. The 22 unaffected targets passed together on the exact final product source, including the 409-second rig/frame test; the only subsequently edited target, `Runner.RuntimePipeline`, passed its final isolated repeated-request form in 33.5 seconds. This is recorded explicitly instead of misreporting the preceding wall-clock-sensitive assertion as a 23/23 pass.
+- The fixed-step regression produces the same complete preview physics state at 20, 60, and 240 render Hz and rejects partial-tick reset contamination, negative delta, and non-finite delta.
+- Final build-tree/package/acceptance/camera/UI/rig-training diagnostics, runtime-only install, independent extraction, per-file manifest, and ZIP checksum are rerun after this ledger is frozen into the candidate package.
+- The tag, workflow run, published-asset digests, re-download comparison, PR cleanup, and branch cleanup remain publication evidence and are added in the post-release cache round rather than predicted here.
+
+# Runner post-v0.7.27 carried completion round
+
+**Release state:** CACHED AND OPEN — BEGIN ONLY AFTER v0.7.27 EYE TEST AND RELEASE AUDIT
+
+The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. It must implement reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and a fully audited release. These missions remain open until their physical, policy, editor, persistence, diagnostic, package, and eye-test evidence exists.

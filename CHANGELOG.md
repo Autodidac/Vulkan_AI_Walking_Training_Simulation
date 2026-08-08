@@ -1,3 +1,14 @@
+## 0.7.27
+
+- Replaced aggregate two-group gait evidence with authored support-seed strike, swing, and lift accounting for multi-legged rigs.
+- Kept strict fully planted anti-skating rejection while recognizing recent physical multi-support transfers.
+- Removed conveyor-derived locomotion distance from rollout workers, evaluation workers, and the visible preview.
+- Added the deterministic `--diagnose-rig-training` four-rig comparison and CTest coverage.
+- Made the Live preview physics frame-independent with a bounded fixed 60 Hz accumulator and 20/60/240 Hz exact-state regression coverage.
+- Fixed MSVC Debug constexpr compilation and removed optimizer-speed dependence from the staged pipeline test.
+- Bumped checkpoint semantics and isolated v0.7.27 autosaves.
+- Removed obsolete one-use release workflows, the old publication trigger, and the redundant release-notes file.
+
 ## 0.7.26
 
 - Fixed non-biped training by replacing hard-coded motor-index roles with topology-derived support-motor classification.

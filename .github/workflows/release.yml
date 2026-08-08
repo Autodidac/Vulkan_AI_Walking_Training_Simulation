@@ -1,4 +1,4 @@
-name: Windows tagged release
+name: Audited tagged release
 
 on:
   push:
@@ -13,62 +13,114 @@ env:
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
 
 jobs:
-  build-test-release:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: windows-2025
+  linux-gcc14:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install GCC 14 and Ninja
+        run: sudo apt-get update && sudo apt-get install -y g++-14 ninja-build
+      - name: Configure warnings-as-errors core build
+        env:
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/linux-gcc14 -G Ninja
+          -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build and run every Linux test
+        run: |
+          cmake --build build/linux-gcc14 --parallel
+          ctest --test-dir build/linux-gcc14 --output-on-failure -V
 
+  build-test-release:
+    needs: linux-gcc14
+    runs-on: windows-2025
     steps:
       - name: Checkout exact tagged source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Checkout pinned vcpkg
         uses: actions/checkout@v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
-
       - name: Bootstrap vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-
       - name: Configure full MSVC release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
-
-      - name: Build full Vulkan application
+      - name: Build full SDL3/Vulkan application
         run: cmake --build --preset windows-release
-
-      - name: Run deterministic, concurrency, throughput, course, and recovery tests
+      - name: Run every Windows test
         run: ctest --preset windows-release --output-on-failure -V
-
-      - name: Verify packaged executable identity
+      - name: Run every feature diagnostic
         shell: pwsh
-        run: build/windows-release/Release/Runner.exe --version
-
-      - name: Verify SDL3 and Vulkan runtime path
-        shell: pwsh
-        run: build/windows-release/Release/Runner.exe --diagnose-vulkan
-
-      - name: Package exact tagged build
+        run: |
+          $runner = "build/windows-release/Release/Runner.exe"
+          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training")) {
+            & $runner $argument
+            if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
+          }
+      - name: Package exact tagged build and create manifests
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
           $package = Join-Path $PWD "package/Runner-$tag-windows-x64"
           New-Item -ItemType Directory -Force $package | Out-Null
-          cmake --install build/windows-release --config Release --prefix $package
+          cmake --install build/windows-release --config Release --component RunnerRuntime --prefix $package
           Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
             Copy-Item -Destination $package -Force
           Copy-Item README.md, LICENSE, missioncache.md -Destination $package -Force
+          $manifest = "Runner-$tag-windows-x64.manifest.sha256"
+          Get-ChildItem $package -Recurse -File | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($package, $_.FullName).Replace('\', '/')
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
+          } | Set-Content -Encoding ascii $manifest
           $archive = "Runner-$tag-windows-x64.zip"
           Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
-          (Get-FileHash $archive -Algorithm SHA256).Hash | Set-Content "$archive.sha256"
-
-      - name: Publish release and record immutable evidence
+          (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content -Encoding ascii "$archive.sha256"
+      - name: Audit installed and independently extracted launchers
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $package = Join-Path $PWD "package/Runner-$tag-windows-x64"
+          $archive = Join-Path $PWD "Runner-$tag-windows-x64.zip"
+          $manifest = Join-Path $PWD "Runner-$tag-windows-x64.manifest.sha256"
+          $auditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-independent"
+          New-Item -ItemType Directory -Force $auditRoot | Out-Null
+          function Invoke-RunnerAudit([string] $launcher) {
+            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training")) {
+              & $launcher $argument
+              if ($LASTEXITCODE -ne 0) { throw "$launcher $argument failed with exit code $LASTEXITCODE" }
+            }
+          }
+          Push-Location $env:RUNNER_TEMP
+          Invoke-RunnerAudit (Join-Path $package "run.bat")
+          Pop-Location
+          Expand-Archive $archive -DestinationPath $auditRoot -Force
+          Push-Location $env:RUNNER_TEMP
+          Invoke-RunnerAudit (Join-Path $auditRoot "run.bat")
+          Pop-Location
+          $manifestEntries = @(Get-Content $manifest)
+          $extractedFiles = @(Get-ChildItem $auditRoot -Recurse -File)
+          if ($extractedFiles.Count -ne $manifestEntries.Count) {
+            throw "Manifest file count mismatch: expected $($manifestEntries.Count), extracted $($extractedFiles.Count)"
+          }
+          $manifestEntries | ForEach-Object {
+            $hash, $relative = $_ -split '  ', 2
+            $target = Join-Path $auditRoot $relative
+            if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Manifest file missing: $relative" }
+            $actual = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $hash) { throw "Manifest mismatch: $relative" }
+          }
+      - name: Publish and re-download exact assets
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,33 +128,17 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $archive = "Runner-$tag-windows-x64.zip"
+          $checksum = "$archive.sha256"
+          $manifest = "Runner-$tag-windows-x64.manifest.sha256"
           $sourceSha = (git rev-parse HEAD).Trim()
-          $checksum = (Get-Content "$archive.sha256").Trim()
-          gh release create $tag $archive "$archive.sha256" `
-            --target $sourceSha `
-            --title "Runner $tag" `
-            --generate-notes
-
-          git fetch origin main
-          git switch main
-          New-Item -ItemType Directory -Force validation | Out-Null
-          @"
-          # Runner $tag release evidence
-
-          - Source commit: `$sourceSha`
-          - Windows runner: `windows-2025`
-          - Generator: `Visual Studio 18 2026`
-          - Full Vulkan application build: passed
-          - Deterministic/core tests: passed
-          - Concurrency/throughput tests: passed
-          - Procedural course/recovery tests: passed
-          - SDL3/Vulkan diagnostic: passed
-          - Package: `$archive`
-          - SHA-256: `$checksum`
-          "@ | Set-Content -Encoding UTF8 "validation/$tag.md"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "validation/$tag.md"
-          git commit -m "Record $tag release evidence"
-          git push origin main
+          gh release create $tag $archive $checksum $manifest `
+            --target $sourceSha --title "Runner $tag" --generate-notes --draft
+          $download = Join-Path $env:RUNNER_TEMP "runner-$tag-download"
+          New-Item -ItemType Directory -Force $download | Out-Null
+          gh release download $tag --dir $download
+          foreach ($asset in @($archive, $checksum, $manifest)) {
+            $local = (Get-FileHash $asset -Algorithm SHA256).Hash
+            $remote = (Get-FileHash (Join-Path $download $asset) -Algorithm SHA256).Hash
+            if ($local -ne $remote) { throw "Published asset byte mismatch: $asset" }
+          }
+          gh release edit $tag --draft=false

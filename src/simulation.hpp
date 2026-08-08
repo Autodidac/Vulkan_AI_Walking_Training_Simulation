@@ -329,12 +329,17 @@ namespace runner::sim
 
     [[nodiscard]] inline bool foot_pivot_rolling_motion(float root_speed,
         bool left_supported, bool right_supported, float stance_slip_speed,
-        float maximum_foot_clearance, float torso_turn_speed) noexcept
+        float maximum_foot_clearance, float torso_turn_speed,
+        std::size_t authored_support_count = 2u,
+        std::size_t meaningfully_lifted_supports = 0u,
+        bool recent_authored_support_transfer = false) noexcept
     {
         return left_supported && right_supported
             && std::abs(root_speed) > 0.085f
             && stance_slip_speed < 0.080f
             && maximum_foot_clearance < 0.085f
+            && (authored_support_count <= 2u
+                || (meaningfully_lifted_supports == 0u && !recent_authored_support_transfer))
             && (std::abs(torso_turn_speed) > 0.12f || std::abs(root_speed) > 0.18f);
     }
 
@@ -1226,6 +1231,9 @@ namespace runner::sim
         [[nodiscard]] bool valid_node(std::uint16_t index) const noexcept;
         [[nodiscard]] bool contact_cluster_contains(std::uint16_t contact_node,
             std::size_t particle_index) const noexcept;
+        [[nodiscard]] std::size_t support_seed_grounded_count(bool left) const noexcept;
+        [[nodiscard]] std::size_t support_seed_lifted_count(
+            float minimum_clearance) const noexcept;
         [[nodiscard]] bool contact_supported(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] bool non_foot_ground_contact() const noexcept;
         [[nodiscard]] bool head_ground_contact() const noexcept;
@@ -1342,6 +1350,7 @@ namespace runner::sim
         float zero_progress_seconds_{};
         float head_contact_seconds_{};
         float previous_torso_angle_{};
+        float last_support_transfer_seconds_{ -100.0f };
         float torso_turn_speed_{};
         float stance_slip_speed_{};
         float hazard_stall_seconds_{};
@@ -1353,6 +1362,7 @@ namespace runner::sim
         int last_contact_side_{};
         bool previous_left_grounded_{};
         bool previous_right_grounded_{};
+        std::vector<std::uint8_t> previous_support_grounded_{};
         bool collided_this_step_{};
         bool recovery_active_{};
         float recovery_started_seconds_{};
