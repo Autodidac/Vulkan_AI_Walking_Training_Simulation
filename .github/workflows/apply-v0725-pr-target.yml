@@ -29,43 +29,40 @@ jobs:
           else
             echo 'apply=false' >> "$GITHUB_OUTPUT"
           fi
-      - name: Apply cached source repair
+      - id: execute
+        name: Apply, build, and test cached repair
         if: steps.gate.outputs.apply == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
-          python3 tools/apply_v0725_art_leg_hotfix.py
-          rm -f tools/apply_v0725_art_leg_hotfix.py
-          rm -rf tools/__pycache__
-          git diff --check
-          grep -F 'project(Runner VERSION 0.7.25 LANGUAGES CXX)' CMakeLists.txt
-          grep -F "training_semantics_version = 0x0007'2501u" src/ppo.hpp
-          grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
-          grep -F 'minimum_stance_ratio' src/simulation.cpp
-          grep -F 'solve_chain_ik' src/simulation.cpp
-          ! grep -Fq 'draw_pixel_art(canvas, optional_torso_art' src/app.cpp
-      - name: Install Linux toolchain
-        if: steps.gate.outputs.apply == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-14 ninja-build python3
-      - name: Configure, build, and test
-        if: steps.gate.outputs.apply == 'true'
+        continue-on-error: true
         env:
           CC: gcc-14
           CXX: g++-14
         shell: bash
         run: |
-          set -euo pipefail
-          cmake -S . -B build/v0725-migration -G Ninja \
-            -DRUNNER_BUILD_APP=OFF \
-            -DRUNNER_BUILD_TESTS=ON \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/v0725-migration --parallel
-          ctest --test-dir build/v0725-migration --output-on-failure -V --timeout 1800
+          set -o pipefail
+          {
+            set -euo pipefail
+            python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
+            python3 tools/apply_v0725_art_leg_hotfix.py
+            rm -f tools/apply_v0725_art_leg_hotfix.py tools/v0725-prtrigger.txt
+            rm -rf tools/__pycache__
+            git diff --check
+            grep -F 'project(Runner VERSION 0.7.25 LANGUAGES CXX)' CMakeLists.txt
+            grep -F "training_semantics_version = 0x0007'2501u" src/ppo.hpp
+            grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
+            grep -F 'minimum_stance_ratio' src/simulation.cpp
+            grep -F 'solve_chain_ik' src/simulation.cpp
+            ! grep -Fq 'draw_pixel_art(canvas, optional_torso_art' src/app.cpp
+            sudo apt-get update
+            sudo apt-get install -y g++-14 ninja-build python3
+            cmake -S . -B build/v0725-migration -G Ninja \
+              -DRUNNER_BUILD_APP=OFF \
+              -DRUNNER_BUILD_TESTS=ON \
+              -DCMAKE_BUILD_TYPE=Release
+            cmake --build build/v0725-migration --parallel
+            ctest --test-dir build/v0725-migration --output-on-failure -V --timeout 1800
+          } 2>&1 | tee /tmp/v0725-migration.log
       - name: Commit validated source to PR branch
-        if: steps.gate.outputs.apply == 'true'
+        if: steps.gate.outputs.apply == 'true' && steps.execute.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -80,5 +77,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh pr comment 80 --repo "$GITHUB_REPOSITORY" \
-            --body "v0.7.25 source migration and Linux gate: ${{ job.status }}"
+          {
+            echo "v0.7.25 source migration result: ${{ steps.execute.outcome }}"
+            if [ -f /tmp/v0725-migration.log ]; then
+              echo
+              echo '```text'
+              tail -n 120 /tmp/v0725-migration.log
+              echo '```'
+            fi
+          } > /tmp/v0725-report.md
+          gh pr comment 80 --repo "$GITHUB_REPOSITORY" --body-file /tmp/v0725-report.md
+          test '${{ steps.gate.outputs.apply }}' != 'true' \
+            || test '${{ steps.execute.outcome }}' = 'success'
