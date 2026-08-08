@@ -87,32 +87,24 @@ jobs:
           path = Path('src/simulation.cpp')
           text = path.read_text(encoding='utf-8')
 
-          early_old = '''        if (!upright_walking_stage
-              || !blueprint_.paired_leg_chains()
-              || blueprint_.horizontal_multi_support_plan()
-              || recovery_active_ || non_foot_grounded_)
-              return;
-          '''
-          early_new = '''        if (!upright_walking_stage
-              || !blueprint_.paired_leg_chains()
-              || blueprint_.horizontal_multi_support_plan())
-              return;
-          '''
+          early_old = (
+              '            || blueprint_.horizontal_multi_support_plan()\n'
+              '            || recovery_active_ || non_foot_grounded_)')
+          early_new = '            || blueprint_.horizontal_multi_support_plan())'
           if text.count(early_old) != 1:
               raise SystemExit(
-                  f'expected one walking-chain early-return block, found {text.count(early_old)}')
+                  f'expected one walking-chain recovery/body-contact clause, found {text.count(early_old)}')
           text = text.replace(early_old, early_new, 1)
 
-          solve_old = '''        solve_chain_ik(legs[0]);
-              solve_chain_ik(legs[1]);
-          '''
+          solve_old = (
+              '        solve_chain_ik(legs[0]);\n'
+              '        solve_chain_ik(legs[1]);')
           solve_new = '''        constexpr int chain_convergence_passes = 16;
-              for (int pass = 0; pass < chain_convergence_passes; ++pass)
-              {
-                  solve_chain_ik(legs[0]);
-                  solve_chain_ik(legs[1]);
-              }
-          '''
+          for (int pass = 0; pass < chain_convergence_passes; ++pass)
+          {
+              solve_chain_ik(legs[0]);
+              solve_chain_ik(legs[1]);
+          }'''
           if text.count(solve_old) != 1:
               raise SystemExit(
                   f'expected one paired-chain solve block, found {text.count(solve_old)}')
