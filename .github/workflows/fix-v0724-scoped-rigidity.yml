@@ -28,7 +28,7 @@ jobs:
           git diff --check
           grep -F 'bone.stiffness < 0.999f' src/simulation.cpp
           grep -F 'structural_error > 0.040f' src/simulation.cpp
-          ! grep -Fq 'bone.stiffness = 1.0f;' src/simulation.cpp
+          grep -F 'bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);' src/simulation.cpp
       - name: Build selected regressions
         env:
           CC: gcc-14
