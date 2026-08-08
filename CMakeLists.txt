@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.24 LANGUAGES CXX)
+project(Runner VERSION 0.7.25 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -19,7 +19,7 @@ execute_process(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE RUNNER_ICON_RESULT)
 if(NOT RUNNER_ICON_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner v0.7.24 screenshot icon generation failed")
+    message(FATAL_ERROR "Runner v0.7.25 screenshot icon generation failed")
 endif()
 set(RUNNER_ICON_SOURCE "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.png")
 set(RUNNER_ICON_SOURCE_SHA256 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.sha256")
@@ -155,6 +155,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -177,6 +178,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
@@ -301,6 +303,19 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0724StructuralMetricsIcon
         COMMAND RunnerV0724StructuralMetricsIconTests)
     set_tests_properties(Runner.V0724StructuralMetricsIcon PROPERTIES TIMEOUT 180)
+
+    add_executable(RunnerV0725ArtLegHotfixTests
+        tests/v0725_art_leg_hotfix_tests.cpp)
+    target_link_libraries(RunnerV0725ArtLegHotfixTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0725ArtLegHotfixTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0725ArtLegHotfixTests PRIVATE cxx_std_23)
+    target_compile_definitions(RunnerV0725ArtLegHotfixTests PRIVATE
+        RUNNER_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    runner_enable_warnings(RunnerV0725ArtLegHotfixTests)
+    add_test(NAME Runner.V0725ArtLegHotfix
+        COMMAND RunnerV0725ArtLegHotfixTests)
+    set_tests_properties(Runner.V0725ArtLegHotfix PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

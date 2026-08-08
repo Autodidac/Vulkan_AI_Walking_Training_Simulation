@@ -1,3 +1,14 @@
+## 0.7.25
+
+- Retained the approved helmet and foot artwork while replacing the oversized torso bitmap with compact node-attached armor.
+- Added bounded shoulder caps, forearm guards, a narrow chest plate, and a compact cyan status indicator.
+- Added supported stance-leg extension so fixed-length legs cannot fold into a telescoping-looking vertical stack.
+- Reconstructed paired knees analytically from authored upper/lower leg lengths after each upright walking solve.
+- Applied walking-chain integrity during startup and tightened early structural error rejection.
+- Added forced-compression, natural walking, segment-length, and armor-source regression tests.
+- Bumped training semantics and isolated v0.7.25 autosaves.
+- Synchronized EpochGui logical-pixel font sizing, added the missing percent glyph, and replaced overflowing work counters with clear READY states.
+
 ## 0.7.24
 
 - Replaced the synthetic application icon with generated assets derived from the exact committed gameplay screenshot crop.

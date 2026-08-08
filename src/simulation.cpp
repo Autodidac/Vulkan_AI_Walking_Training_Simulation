@@ -1422,65 +1422,199 @@ namespace runner::sim
     void Environment::project_structure_rigid(float dt) noexcept
     {
         static_cast<void>(dt);
-        if (elapsed_seconds_ < 0.75f
-            || !stage_requires_forward_gait(course_stage_)
+        const bool upright_walking_stage = course_stage_ == CourseStage::uneven
+            || course_stage_ == CourseStage::hurdles
+            || course_stage_ == CourseStage::moving_hazards;
+        if (!upright_walking_stage
             || !blueprint_.paired_leg_chains()
             || blueprint_.horizontal_multi_support_plan())
             return;
 
-        auto primary_leg_segment = [&](const DistanceConstraint& bone) noexcept
+        struct LegChain
         {
-            const std::size_t leg_motors = std::min<std::size_t>(
-                4u, blueprint_.active_motor_count);
-            for (std::size_t index = 0; index < leg_motors; ++index)
-            {
-                const MotorConstraint& motor = blueprint_.motors[index];
-                if (!motor.enabled)
-                    continue;
-                if ((bone.a == motor.pivot && bone.b == motor.c)
-                    || (bone.b == motor.pivot && bone.a == motor.c))
-                    return true;
-            }
-            return false;
+            std::uint16_t hip{};
+            std::uint16_t knee{};
+            std::uint16_t foot{};
+            float upper_length{};
+            float lower_length{};
+            bool supported{};
         };
 
-        auto project = [&](const DistanceConstraint& bone)
+        auto make_chain = [&](std::size_t hip_motor_index,
+            std::size_t knee_motor_index) noexcept
         {
-            if (!primary_leg_segment(bone)
-                || bone.a >= particles_.size() || bone.b >= particles_.size())
-                return;
-            Particle& lhs = particles_[bone.a];
-            Particle& rhs = particles_[bone.b];
-            const Vec2 delta = rhs.position - lhs.position;
-            const float distance = length(delta);
-            if (distance <= 1.0e-6f)
-                return;
-
-            float lhs_weight = lhs.inverse_mass;
-            float rhs_weight = rhs.inverse_mass;
-            if (lhs.grounded && blueprint_.is_support_seed(bone.a))
-                lhs_weight = 0.0f;
-            if (rhs.grounded && blueprint_.is_support_seed(bone.b))
-                rhs_weight = 0.0f;
-            const float weight = lhs_weight + rhs_weight;
-            if (weight <= 1.0e-6f)
-                return;
-
-            const Vec2 correction = delta
-                * ((distance - bone.rest_length) / distance);
-            lhs.position += correction * (lhs_weight / weight);
-            rhs.position -= correction * (rhs_weight / weight);
+            const MotorConstraint& hip_motor = blueprint_.motors[hip_motor_index];
+            const MotorConstraint& knee_motor = blueprint_.motors[knee_motor_index];
+            return LegChain{
+                hip_motor.pivot,
+                hip_motor.c,
+                knee_motor.c,
+                length(blueprint_.nodes[hip_motor.c]
+                    - blueprint_.nodes[hip_motor.pivot]),
+                length(blueprint_.nodes[knee_motor.c]
+                    - blueprint_.nodes[hip_motor.c]),
+                contact_supported(knee_motor.c)
+            };
         };
 
-        // Only the four authored humanoid/biped walking segments are projected.
-        // Static crouch, multi-support rigs, and the treadmill bootstrap retain
-        // the already-validated v0.7.23 dynamics.
-        constexpr int projection_passes = 10;
-        for (int pass = 0; pass < projection_passes; ++pass)
+        std::array<LegChain, 2> legs{
+            make_chain(0u, 1u), make_chain(2u, 3u)
+        };
+        for (const LegChain& leg : legs)
         {
-            for (const DistanceConstraint& bone : blueprint_.bones)
-                project(bone);
+            if (!valid_node(leg.hip) || !valid_node(leg.knee)
+                || !valid_node(leg.foot)
+                || leg.upper_length <= 1.0e-5f
+                || leg.lower_length <= 1.0e-5f)
+                return;
         }
+
+        const std::size_t supported_count = static_cast<std::size_t>(legs[0].supported)
+            + static_cast<std::size_t>(legs[1].supported);
+        const float single_support_ratio = course_stage_ == CourseStage::hurdles
+            ? 0.72f : course_stage_ == CourseStage::moving_hazards
+                ? 0.76f : 0.80f;
+        const float minimum_stance_ratio = supported_count >= 2u
+            ? std::max(0.84f, single_support_ratio) : single_support_ratio;
+
+        // A two-link leg can keep both bone lengths yet still fold until the
+        // knee appears to telescope into the pelvis. Lift the complete upper
+        // body just enough to restore reserve above each planted support.
+        float required_upper_body_lift = 0.0f;
+        for (const LegChain& leg : legs)
+        {
+            if (!leg.supported)
+                continue;
+            const Vec2 hip = particles_[leg.hip].position;
+            const Vec2 foot = particles_[leg.foot].position;
+            const float maximum_extension = leg.upper_length + leg.lower_length;
+            const float target_extension = maximum_extension * minimum_stance_ratio;
+            const float horizontal = hip.x - foot.x;
+            const float horizontal_squared = std::min(
+                horizontal * horizontal,
+                target_extension * target_extension);
+            const float target_vertical = std::sqrt(std::max(0.0f,
+                target_extension * target_extension - horizontal_squared));
+            required_upper_body_lift = std::max(required_upper_body_lift,
+                target_vertical - (hip.y - foot.y));
+        }
+
+        if (required_upper_body_lift > 0.0f)
+        {
+            const Vec2 lift{ 0.0f, required_upper_body_lift };
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+            {
+                const bool knee = index == legs[0].knee || index == legs[1].knee;
+                if (knee || blueprint_.is_support_seed(index))
+                    continue;
+                particles_[index].position += lift;
+                particles_[index].previous += lift;
+            }
+        }
+
+        auto solve_chain_ik = [&](const LegChain& leg)
+        {
+            Particle& hip_particle = particles_[leg.hip];
+            Particle& knee_particle = particles_[leg.knee];
+            Particle& foot_particle = particles_[leg.foot];
+            Vec2 hip = hip_particle.position;
+            Vec2 foot = foot_particle.position;
+            Vec2 hip_to_foot = foot - hip;
+            float distance = length(hip_to_foot);
+            const float minimum_reach = std::abs(
+                leg.upper_length - leg.lower_length) + 0.0001f;
+            const float maximum_reach = leg.upper_length + leg.lower_length - 0.0001f;
+
+            if (distance > maximum_reach)
+            {
+                const Vec2 direction = normalized(hip_to_foot, { 0.0f, -1.0f });
+                const Vec2 correction = direction * (distance - maximum_reach);
+                if (leg.supported)
+                {
+                    for (std::size_t index = 0; index < particles_.size(); ++index)
+                    {
+                        const bool knee = index == legs[0].knee || index == legs[1].knee;
+                        if (knee || blueprint_.is_support_seed(index))
+                            continue;
+                        particles_[index].position += correction;
+                        particles_[index].previous += correction;
+                    }
+                    hip = hip_particle.position;
+                }
+                else
+                {
+                    foot_particle.position -= correction;
+                    foot_particle.previous -= correction;
+                    foot = foot_particle.position;
+                }
+                hip_to_foot = foot - hip;
+                distance = length(hip_to_foot);
+            }
+            if (distance < minimum_reach)
+            {
+                const Vec2 direction = normalized(hip_to_foot, { 0.0f, -1.0f });
+                const Vec2 correction = direction * (minimum_reach - distance);
+                if (leg.supported)
+                {
+                    const Vec2 lift{ 0.0f, minimum_reach - distance };
+                    for (std::size_t index = 0; index < particles_.size(); ++index)
+                    {
+                        const bool knee = index == legs[0].knee || index == legs[1].knee;
+                        if (knee || blueprint_.is_support_seed(index))
+                            continue;
+                        particles_[index].position += lift;
+                        particles_[index].previous += lift;
+                    }
+                    hip = hip_particle.position;
+                }
+                else
+                {
+                    foot_particle.position += correction;
+                    foot_particle.previous += correction;
+                    foot = foot_particle.position;
+                }
+                hip_to_foot = foot - hip;
+                distance = length(hip_to_foot);
+            }
+
+            const Vec2 axis = normalized(hip_to_foot, { 0.0f, -1.0f });
+            const Vec2 perpendicular{ -axis.y, axis.x };
+            const float safe_distance = std::clamp(distance,
+                minimum_reach, maximum_reach);
+            const float along = (
+                leg.upper_length * leg.upper_length
+                - leg.lower_length * leg.lower_length
+                + safe_distance * safe_distance)
+                / (2.0f * safe_distance);
+            const float height = std::sqrt(std::max(0.0f,
+                leg.upper_length * leg.upper_length - along * along));
+            const Vec2 base = hip + axis * along;
+
+            float side = dot(knee_particle.position - base, perpendicular);
+            if (std::abs(side) <= 0.001f)
+            {
+                const Vec2 rest_axis = normalized(
+                    blueprint_.nodes[leg.foot] - blueprint_.nodes[leg.hip], axis);
+                const Vec2 rest_perpendicular{ -rest_axis.y, rest_axis.x };
+                side = dot(blueprint_.nodes[leg.knee]
+                    - blueprint_.nodes[leg.hip], rest_perpendicular);
+            }
+            const float bend_sign = side < 0.0f ? -1.0f : 1.0f;
+            const Vec2 target_knee = base + perpendicular * (height * bend_sign);
+            const Vec2 knee_delta = target_knee - knee_particle.position;
+            knee_particle.position = target_knee;
+            knee_particle.previous += knee_delta;
+        };
+
+        // Reconstruct both knees from exact two-link geometry. This preserves
+        // natural swing-leg bend while preventing a planted stance chain from
+        // folding into a visually compressed telescoping leg.
+        constexpr int chain_convergence_passes = 16;
+for (int pass = 0; pass < chain_convergence_passes; ++pass)
+{
+    solve_chain_ik(legs[0]);
+    solve_chain_ik(legs[1]);
+}
     }
 
     void Environment::separate_support_clusters() noexcept
@@ -1540,8 +1674,7 @@ namespace runner::sim
     float Environment::maximum_bone_length_error_ratio() const noexcept
     {
         float maximum_error = 0.0f;
-        if (elapsed_seconds_ < 0.75f
-            || !stage_requires_forward_gait(course_stage_)
+        if (!stage_requires_forward_gait(course_stage_)
             || !blueprint_.paired_leg_chains()
             || blueprint_.horizontal_multi_support_plan())
             return 0.0f;
@@ -3384,11 +3517,8 @@ step_not_qualified:
         apply_support_pressure(dt);
         project_structure_rigid(dt);
         const float structural_error = maximum_bone_length_error_ratio();
-        if (elapsed_seconds_ >= 0.75f
-            && stage_requires_forward_gait(course_stage_)
-            && blueprint_.paired_leg_chains()
-            && !blueprint_.horizontal_multi_support_plan()
-            && (!std::isfinite(structural_error) || structural_error > 0.040f))
+        if (elapsed_seconds_ >= 0.10f
+            && (!std::isfinite(structural_error) || structural_error > 0.020f))
             invalidate(InvalidMotion::structural_compression);
         if (stage_uses_deformable_terrain(course_stage_))
             terrain_.step(dt);

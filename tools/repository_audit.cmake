@@ -12,6 +12,8 @@ foreach(required IN ITEMS
         docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
         docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
         docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
+        docs/RUNNER_V0725_ART_LEG_HOTFIX.md
+        tests/v0725_art_leg_hotfix_tests.cpp
         assets/ui/runner_icon_source.rgba.zlib.b64
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
@@ -39,11 +41,13 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.24 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.25 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
         "RunnerV0724StructuralMetricsIconTests"
+        "RunnerV0725ArtLegHotfixTests"
+        "RUNNER_V0725_ART_LEG_HOTFIX.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -64,7 +68,14 @@ foreach(reference IN ITEMS
         "WALK-VISUAL-303"
         "WALK-STATE-304"
         "WALK-REGRESSION-305"
-        "WALK-RELEASE-306")
+        "WALK-RELEASE-306"
+        "WALK-COMPACT-ARMOR-307"
+        "WALK-STANCE-EXTENSION-308"
+        "WALK-CHAIN-IK-309"
+        "WALK-STARTUP-310"
+        "WALK-STATE-311"
+        "WALK-REGRESSION-312"
+        "WALK-RELEASE-313")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache v0.7.24 contract missing: ${reference}")
@@ -77,8 +88,8 @@ foreach(reference IN ITEMS
         "primary_leg_segment"
         "maximum_bone_length_error_ratio"
         "InvalidMotion::structural_compression"
-        "elapsed_seconds_ < 0.75f"
-        "structural_error > 0.040f")
+        "chain_convergence_passes = 16"
+        "structural_error > 0.020f")
     string(FIND "${simulation_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Walking-leg rigidity contract missing: ${reference}")
@@ -93,7 +104,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'2401u"
+        "training_semantics_version = 0x0007'2501u"
         "completed_episode_passes_stage_checks")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -125,7 +136,9 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0724-rig-autosave.eppo")
+        "runner-v0725-rig-autosave.eppo"
+        "COMPACT SEGMENTED BODY ARMOR"
+        "shoulder_cap_radius")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "v0.7.24 application contract missing: ${reference}")
@@ -135,6 +148,32 @@ string(FIND "${app_text}" "Color{}" opaque_default_pos)
 if(NOT opaque_default_pos EQUAL -1)
     message(FATAL_ERROR "Opaque default Color remains in application border rendering")
 endif()
+
+foreach(reference IN ITEMS
+        "font::make_bitmap_font_metrics"
+        "TRAINING SAMPLES READY"
+        "format_work_counter")
+    string(FIND "${app_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.25 readable font/progress contract missing: ${reference}")
+    endif()
+endforeach()
+string(FIND "${app_text}" "ui_font_scale" legacy_font_scale_pos)
+if(NOT legacy_font_scale_pos EQUAL -1)
+    message(FATAL_ERROR "Legacy bitmap-cell font multiplier remains")
+endif()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/ui_font.hpp" font_text)
+foreach(reference IN ITEMS
+        "130f33fe31d73564a35a622f3bb5ddcc2b5105d5"
+        "default_logical_height = 16.0F"
+        "make_bitmap_font_metrics"
+        "case '%'")
+    string(FIND "${font_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "EpochGui font synchronization missing: ${reference}")
+    endif()
+endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64" source_text)
 foreach(reference IN ITEMS
@@ -167,6 +206,16 @@ foreach(forbidden IN ITEMS "rounded_background" "polygon(" "gold =" "cyan =")
     endif()
 endforeach()
 
+string(FIND "${app_text}" "draw_pixel_art(canvas, optional_torso_art" torso_bitmap_pos)
+if(NOT torso_bitmap_pos EQUAL -1)
+    message(FATAL_ERROR "Oversized torso bitmap rendering remains")
+endif()
+string(FIND "${simulation_text}" "minimum_stance_ratio" stance_ratio_pos)
+string(FIND "${simulation_text}" "solve_chain_ik" chain_ik_pos)
+if(stance_ratio_pos EQUAL -1 OR chain_ik_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.25 stance-chain correction is missing")
+endif()
+
 file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
 if(release_notes)
     message(FATAL_ERROR "Per-release note files remain; CHANGELOG.md is canonical")
@@ -182,10 +231,12 @@ foreach(stale IN ITEMS
         tools/v0724-prtarget-kick2.txt
         tools/v0724-reopen-trigger.txt
         tools/v0724-rescue-trigger.txt
+        tools/apply_v0725_art_leg_hotfix.py
+        tools/apply_v0725_font_sync.py
         .github/workflows/fix-v0724-scoped-rigidity.yml)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
         message(FATAL_ERROR "Temporary v0.7.24 migration file remains: ${stale}")
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.24 repository hygiene passed")
+message(STATUS "Runner v0.7.25 repository hygiene passed")
