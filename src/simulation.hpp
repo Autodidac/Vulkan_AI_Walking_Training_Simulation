@@ -857,8 +857,9 @@ namespace runner::sim
         std::uint16_t a{};
         std::uint16_t b{};
         float rest_length{};
-        // Retained in the file format for compatibility. Runtime structural
-        // constraints are rigid and normalize this value to 1.0.
+        // Authored stiffness remains part of the physical rig. v0.7.24
+        // applies a separate exact projection only to the primary walking-leg
+        // chains, preventing telescoping without freezing compliant braces.
         float stiffness{ 1.0f };
     };
 

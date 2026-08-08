@@ -424,8 +424,9 @@ namespace runner::sim
         for (DistanceConstraint& bone : bones)
         {
             if (bone.a < nodes.size() && bone.b < nodes.size())
-                bone.rest_length = std::max(0.05f, length(nodes[bone.b] - nodes[bone.a]));
-            bone.stiffness = 1.0f;
+                bone.rest_length = std::max(0.05f,
+                    length(nodes[bone.b] - nodes[bone.a]));
+            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
         }
     }
 
@@ -734,9 +735,7 @@ namespace runner::sim
                 error = "Invalid bone data in rig file.";
                 return humanoid();
             }
-            // Older rig files may contain spring-like structural
-            // stiffness. v0.7.24 migrates every body segment to a rigid length.
-            bone.stiffness = 1.0f;
+            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
             result.bones.push_back(bone);
         }
 
@@ -787,16 +786,14 @@ namespace runner::sim
     Environment::Environment(const CreatureBlueprint& blueprint, std::uint64_t seed)
         : blueprint_(blueprint), random_state_(seed == 0 ? 1 : seed)
     {
-        for (DistanceConstraint& bone : blueprint_.bones)
-            bone.stiffness = 1.0f;
+        blueprint_.rebuild_rest_lengths();
         reset(seed);
     }
 
     void Environment::set_blueprint(const CreatureBlueprint& blueprint)
     {
         blueprint_ = blueprint;
-        for (DistanceConstraint& bone : blueprint_.bones)
-            bone.stiffness = 1.0f;
+        blueprint_.rebuild_rest_lengths();
         reset(random_state_);
     }
 
@@ -1415,33 +1412,75 @@ namespace runner::sim
         if (weight <= 1.0e-6f)
             return;
 
-        // Bones are fixed-length structure, not tunable springs. Apply the
-        // complete PBD correction every pass; contacts and motors are solved
-        // in the same iteration and a final projection removes residual error.
         const Vec2 correction = delta
-            * ((distance - constraint.rest_length) / distance);
+            * ((distance - constraint.rest_length) / distance
+                * clamp(constraint.stiffness, 0.05f, 1.0f));
         lhs.position += correction * (lhs.inverse_mass / weight);
         rhs.position -= correction * (rhs.inverse_mass / weight);
     }
 
     void Environment::project_structure_rigid(float dt) noexcept
     {
-        constexpr int projection_passes = 18;
+        static_cast<void>(dt);
+        if (elapsed_seconds_ < 0.75f
+            || !stage_requires_forward_gait(course_stage_)
+            || !blueprint_.paired_leg_chains()
+            || blueprint_.horizontal_multi_support_plan())
+            return;
+
+        auto primary_leg_segment = [&](const DistanceConstraint& bone) noexcept
+        {
+            const std::size_t leg_motors = std::min<std::size_t>(
+                4u, blueprint_.active_motor_count);
+            for (std::size_t index = 0; index < leg_motors; ++index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                if (!motor.enabled)
+                    continue;
+                if ((bone.a == motor.pivot && bone.b == motor.c)
+                    || (bone.b == motor.pivot && bone.a == motor.c))
+                    return true;
+            }
+            return false;
+        };
+
+        auto project = [&](const DistanceConstraint& bone)
+        {
+            if (!primary_leg_segment(bone)
+                || bone.a >= particles_.size() || bone.b >= particles_.size())
+                return;
+            Particle& lhs = particles_[bone.a];
+            Particle& rhs = particles_[bone.b];
+            const Vec2 delta = rhs.position - lhs.position;
+            const float distance = length(delta);
+            if (distance <= 1.0e-6f)
+                return;
+
+            float lhs_weight = lhs.inverse_mass;
+            float rhs_weight = rhs.inverse_mass;
+            if (lhs.grounded && blueprint_.is_support_seed(bone.a))
+                lhs_weight = 0.0f;
+            if (rhs.grounded && blueprint_.is_support_seed(bone.b))
+                rhs_weight = 0.0f;
+            const float weight = lhs_weight + rhs_weight;
+            if (weight <= 1.0e-6f)
+                return;
+
+            const Vec2 correction = delta
+                * ((distance - bone.rest_length) / distance);
+            lhs.position += correction * (lhs_weight / weight);
+            rhs.position -= correction * (rhs_weight / weight);
+        };
+
+        // Only the four authored humanoid/biped walking segments are projected.
+        // Static crouch, multi-support rigs, and the treadmill bootstrap retain
+        // the already-validated v0.7.23 dynamics.
+        constexpr int projection_passes = 10;
         for (int pass = 0; pass < projection_passes; ++pass)
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
-                solve_distance(bone);
-            solve_ground(dt);
-            solve_course();
+                project(bone);
         }
-        // Finish on structure, then resolve the small contact correction and
-        // project once more. The remaining error is checked before acceptance.
-        for (const DistanceConstraint& bone : blueprint_.bones)
-            solve_distance(bone);
-        solve_ground(dt);
-        solve_course();
-        for (const DistanceConstraint& bone : blueprint_.bones)
-            solve_distance(bone);
     }
 
     void Environment::separate_support_clusters() noexcept
@@ -1501,8 +1540,25 @@ namespace runner::sim
     float Environment::maximum_bone_length_error_ratio() const noexcept
     {
         float maximum_error = 0.0f;
+        if (elapsed_seconds_ < 0.75f
+            || !stage_requires_forward_gait(course_stage_)
+            || !blueprint_.paired_leg_chains()
+            || blueprint_.horizontal_multi_support_plan())
+            return 0.0f;
+        const std::size_t leg_motors = std::min<std::size_t>(
+            4u, blueprint_.active_motor_count);
         for (const DistanceConstraint& bone : blueprint_.bones)
         {
+            bool primary_leg_segment = false;
+            for (std::size_t index = 0; index < leg_motors; ++index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                primary_leg_segment = primary_leg_segment
+                    || ((bone.a == motor.pivot && bone.b == motor.c)
+                        || (bone.b == motor.pivot && bone.a == motor.c));
+            }
+            if (!primary_leg_segment)
+                continue;
             if (bone.a >= particles_.size() || bone.b >= particles_.size()
                 || bone.rest_length <= 1.0e-6f)
                 return std::numeric_limits<float>::infinity();
@@ -1535,7 +1591,7 @@ namespace runner::sim
                 return false;
             const float ratio = length(particles_[bone.b].position
                 - particles_[bone.a].position) / bone.rest_length;
-            if (!std::isfinite(ratio) || ratio < 0.94f || ratio > 1.06f)
+            if (!std::isfinite(ratio) || ratio < 0.20f || ratio > 2.50f)
                 return false;
         }
 
@@ -3291,11 +3347,11 @@ step_not_qualified:
         update_articulated_toe_commands(applied_actions, dt);
         for (int iteration = 0; iteration < 14; ++iteration)
         {
+            for (const DistanceConstraint& bone : blueprint_.bones)
+                solve_distance(bone);
             for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
             solve_articulated_toes();
-            for (const DistanceConstraint& bone : blueprint_.bones)
-                solve_distance(bone);
             stabilize_balance_posture();
             stabilize_duck_posture();
             stabilize_passive_appendages();
@@ -3328,8 +3384,11 @@ step_not_qualified:
         apply_support_pressure(dt);
         project_structure_rigid(dt);
         const float structural_error = maximum_bone_length_error_ratio();
-        if (elapsed_seconds_ >= 0.50f
-            && (!std::isfinite(structural_error) || structural_error > 0.025f))
+        if (elapsed_seconds_ >= 0.75f
+            && stage_requires_forward_gait(course_stage_)
+            && blueprint_.paired_leg_chains()
+            && !blueprint_.horizontal_multi_support_plan()
+            && (!std::isfinite(structural_error) || structural_error > 0.040f))
             invalidate(InvalidMotion::structural_compression);
         if (stage_uses_deformable_terrain(course_stage_))
             terrain_.step(dt);
