@@ -1,5 +1,7 @@
 #include "ppo.hpp"
 #include "simulation.hpp"
+#include "ui_font.hpp"
+#include "ui_layout.hpp"
 
 #include <algorithm>
 #include <array>
@@ -85,7 +87,6 @@ namespace
 {
     using runner::sim::CreatureBlueprint;
     using runner::sim::Environment;
-    using runner::sim::Vec2;
 
     void require(bool condition, const char* message)
     {
@@ -142,6 +143,31 @@ namespace
 
 int main()
 {
+    {
+        using namespace runner::ui_font;
+        require(epochgui_font_contract_commit
+                == "130f33fe31d73564a35a622f3bb5ddcc2b5105d5",
+            "Runner font contract is not synchronized to the latest EpochGui commit");
+        const BitmapFontMetrics metrics = make_bitmap_font_metrics(FontSize{
+            .logical_height = 16.0f,
+            .dpi_scale = 1.5f
+        });
+        require(std::abs(metrics.pixel_height - 24.0f) <= 1.0e-5f,
+            "logical font height does not resolve through DPI scaling");
+        require(std::abs(metrics.cell_size * 7.0f - metrics.pixel_height)
+                <= 1.0e-5f,
+            "font geometry and requested glyph height disagree");
+        require(default_glyph('%').rows != default_glyph('?').rows,
+            "percent still falls back to the question-mark glyph");
+        require(measure_text("80%", FontSize{}).x
+                > measure_text("80", FontSize{}).x,
+            "percent glyph does not participate in shared text measurement");
+        require(default_logical_height
+                * runner::ui_layout::minimum_readable_text_scale
+                >= minimum_readable_logical_height,
+            "default Runner minimum text scale violates EpochGui readability");
+    }
+
     {
         Environment environment{ CreatureBlueprint::humanoid(), 0x725u };
         runner::sim::EnvironmentTestAccess::force_compressed_double_support(environment);
@@ -203,8 +229,17 @@ int main()
             "approved foot art was removed");
         require(app.find("shoulder_cap_radius") != std::string::npos,
             "compact shoulder caps are not bounded explicitly");
+        require(app.find("ui_font_scale") == std::string::npos,
+            "legacy bitmap-cell font multiplier remains in the renderer");
+        require(app.find("font::make_bitmap_font_metrics") != std::string::npos,
+            "renderer is not using shared logical font metrics");
+        require(app.find("TRAINING SAMPLES READY") != std::string::npos,
+            "sample-ready state is not explained in plain language");
+        require(app.find("format_work_counter(\"RUNS\"") != std::string::npos
+                && app.find("format_work_counter(\"TESTS\"") != std::string::npos,
+            "overflowing compact progress fractions were not replaced by READY states");
     }
 
-    std::cout << "Runner v0.7.25 art and leg-chain hotfix tests passed\n";
+    std::cout << "Runner v0.7.25 art, leg-chain, font, and progress tests passed\n";
     return EXIT_SUCCESS;
 }
