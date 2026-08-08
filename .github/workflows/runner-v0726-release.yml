@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: [tools/v0726-release-trigger.txt]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -158,14 +160,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Install failed' }
           Copy-Item README.md,LICENSE,CHANGELOG.md,missioncache.md,AGENTS.md -Destination $stage -Force
           Get-ChildItem "$env:BUILD_DIR/Release" -Filter *.dll -File -ErrorAction SilentlyContinue | Copy-Item -Destination $stage -Force
-          foreach ($required in @(
-            'Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md','AGENTS.md',
-            'assets/chicken.ppm','assets/optional/runner_armor_concepts/runtime/foot_side.ppm',
-            'assets/optional/runner_armor_concepts/runtime/helmet_side.ppm',
-            'assets/optional/runner_armor_concepts/runtime/torso_side.ppm',
-            'assets/optional/runner_armor_concepts/runtime/weapon_side.ppm',
-            'assets/ui/runner_icon.png','assets/ui/runner.ico',
-            'shaders/flat.vert.spv','shaders/flat.frag.spv','docs/RUNNER_V0726_TRAINING_TRUTH.md')) {
+          foreach ($required in @('Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md','AGENTS.md','assets/chicken.ppm','assets/optional/runner_armor_concepts/runtime/foot_side.ppm','assets/optional/runner_armor_concepts/runtime/helmet_side.ppm','assets/optional/runner_armor_concepts/runtime/torso_side.ppm','assets/optional/runner_armor_concepts/runtime/weapon_side.ppm','assets/ui/runner_icon.png','assets/ui/runner.ico','shaders/flat.vert.spv','shaders/flat.frag.spv','docs/RUNNER_V0726_TRAINING_TRUTH.md')) {
             if (-not (Test-Path (Join-Path $stage $required))) { throw "Missing package file: $required" }
           }
           "STAGE=$stage" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
@@ -241,11 +236,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$RELEASE_TAG" | wc -l)" -eq 0 || { echo "$RELEASE_TAG already exists"; exit 1; }
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$SOURCE_SHA" \
-            --title "Runner v0.7.26" \
-            --notes "Topology-aware multi-rig training fix. Quadruped/crawler/hexapod support motors are no longer mistaken for arms; switching rigs now starts clean rig-scoped totals and lesson baselines; the large preview runs a static real course and reports why it auto-restarted; packaged modular armor art is enabled and bounded to the physical rig. Linux GCC14 and complete Windows SDL3/Vulkan build/tests/package diagnostics passed."
+          gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --title "Runner v0.7.26" --notes "Topology-aware multi-rig training fix. Quadruped/crawler/hexapod support motors are no longer mistaken for arms; switching rigs now starts clean rig-scoped totals and lesson baselines; the large preview runs a static real course and reports why it auto-restarted; packaged modular armor art is enabled and bounded to the physical rig. Linux GCC14 and complete Windows SDL3/Vulkan build/tests/package diagnostics passed."
           mkdir verify
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verify
           cd verify
