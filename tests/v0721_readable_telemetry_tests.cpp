@@ -205,9 +205,9 @@ int main()
         require(runner::telemetry::total_updates_help().find("never resets")
                 != std::string_view::npos,
             "total updates help must explain persistence");
-        require(runner::telemetry::reset_help().find("All-time totals stay")
+        require(runner::telemetry::reset_help().find("selected rig")
                 != std::string_view::npos,
-            "reset help must explain that all-time work survives");
+            "reset help must explain rig-scoped persistence");
     }
 
     std::cout << "Runner v0.7.21 readable telemetry tests passed\n";

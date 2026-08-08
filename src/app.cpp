@@ -356,9 +356,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0725-rig-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0725-rig-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0725-rig-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0726-rig-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0726-rig-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0726-rig-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1059,6 +1059,26 @@ namespace runner
                 forearm_guard(5u);
                 forearm_guard(7u);
             }
+            if (optional_art_enabled && optional_torso_art.loaded()
+                && rig.active_motor_count >= 8u && rig.paired_leg_chains()
+                && rig.root_node < particles.size()
+                && rig.torso_node < particles.size())
+            {
+                // User-supplied modular armor, bounded to the physical torso.
+                // This is a single chest component, never the old full-sheet overlay.
+                const Vec2 root = point(rig.root_node);
+                const Vec2 torso = point(rig.torso_node);
+                const Vec2 center = (root + torso) * 0.5f;
+                const float body_span = length(torso - root);
+                const float height = std::clamp(body_span * 0.72f, 42.0f, 76.0f);
+                const float width = height
+                    * static_cast<float>(optional_torso_art.width)
+                    / static_cast<float>(optional_torso_art.height);
+                draw_pixel_art(canvas, optional_torso_art,
+                    { center - Vec2{ width * 0.50f, height * 0.54f },
+                      { width, height } }, 0.90f);
+            }
+
             if (optional_art_enabled && optional_helmet_art.loaded()
                 && rig.head_node < particles.size())
             {
@@ -1195,7 +1215,7 @@ namespace runner
             canvas.pop_clip();
 
             const std::string pip_metrics = std::format(
-                "TOTAL UPDATES {}  LESSON UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
+                "TOTAL RIG UPDATES {}  POLICY UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
                 trainer.metrics().total_updates, trainer.metrics().update,
                 environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
@@ -1346,7 +1366,7 @@ namespace runner
                     0.78f, white, usable_width, 3.0f);
                 cursor.y += 8.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("TOTAL UPDATES {}   COMPLETION {}%",
+                    std::format("TOTAL RIG UPDATES {}   LESSON COMPLETION {}%",
                         metrics.total_updates, progress_percent),
                     1.10f, white, usable_width, 0.86f);
                 cursor.y += 25.0f;
@@ -1523,7 +1543,7 @@ namespace runner
                 add_text(canvas, cursor, "ALL TIME", 1.05f, accent);
                 cursor.y += 25.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("TOTAL UPDATES {}   SIMULATED RUNS {}   PASSED STAGE CHECKS {}",
+                    std::format("TOTAL RIG UPDATES {}   SIMULATED RUNS {}   PASSED STAGE CHECKS {}",
                         metrics.total_updates, metrics.total_episodes,
                         metrics.total_valid_episodes),
                     0.76f, white, usable_width, 0.62f);
@@ -1720,10 +1740,19 @@ namespace runner
                 0.82f, muted, text_width);
             line.y += 23.0f;
             add_text_fit(canvas, line,
-                std::format("MOTION {}   TOTAL UPDATES {}   LESSON UPDATE {}",
+                std::format("MOTION {}   TOTAL RIG UPDATES {}   POLICY UPDATE {}",
                     sim::invalid_motion_name(environment.invalid_reason()),
                     trainer.metrics().total_updates, trainer.metrics().update),
                 0.80f, environment.valid_motion() ? accent : danger, text_width);
+            line.y += 21.0f;
+            const std::uint64_t preview_restarts = trainer.preview_reset_count();
+            const sim::InvalidMotion preview_reason = trainer.preview_last_reset_reason();
+            add_text_fit(canvas, line,
+                preview_restarts == 0u
+                    ? "PREVIEW RESTARTS 0 - REAL STATIC COURSE"
+                    : std::format("PREVIEW RESTARTS {}   LAST {}",
+                        preview_restarts, sim::invalid_motion_name(preview_reason)),
+                0.72f, preview_restarts == 0u ? muted : yellow, text_width);
 
             draw_training_pip({ { pip_box.x, pip_box.y },
                 { pip_box.width, pip_box.height } });
@@ -2688,6 +2717,10 @@ namespace runner
         load_optional("helmet_side.ppm", impl_->optional_helmet_art);
         load_optional("torso_side.ppm", impl_->optional_torso_art);
         load_optional("weapon_side.ppm", impl_->optional_weapon_art);
+        impl_->optional_art_enabled = impl_->optional_foot_art.loaded()
+            || impl_->optional_helmet_art.loaded()
+            || impl_->optional_torso_art.loaded()
+            || impl_->optional_weapon_art.loaded();
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);

@@ -21,7 +21,11 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'2501u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'2601u;
+
+    [[nodiscard]] inline bool motor_drives_support_branch(
+        const sim::CreatureBlueprint& rig,
+        const sim::MotorConstraint& motor) noexcept;
 
     [[nodiscard]] inline std::array<float, sim::action_count> balance_teacher_action(
         const sim::Environment& environment) noexcept
@@ -78,8 +82,11 @@ namespace runner::rl
             || environment.right_supported();
         const float upper_body_authority = support_loaded
             && environment.stable_stance_seconds() >= 0.75f ? 0.35f : 0.10f;
-        for (std::size_t index = 4; index < rig.active_motor_count; ++index)
-            action[index] *= upper_body_authority;
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            if (!motor_drives_support_branch(rig, rig.motors[index]))
+                action[index] *= upper_body_authority;
+        }
         return action;
     }
 
@@ -345,8 +352,11 @@ namespace runner::rl
             action[2] = clamp(action[2] + hip_flex, -0.62f, 0.62f);
             action[3] = clamp(action[3] - knee_flex, -0.82f, 0.82f);
         }
-        for (std::size_t index = 4; index < rig.active_motor_count; ++index)
-            action[index] = 0.0f;
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            if (!motor_drives_support_branch(rig, rig.motors[index]))
+                action[index] = 0.0f;
+        }
         return bilateral_joint_synergy_action(environment, action,
             sim::CourseStage::duck_press);
     }
@@ -542,8 +552,11 @@ namespace runner::rl
                     -0.86f, 0.86f);
             }
         }
-        for (std::size_t index = 4; index < rig.active_motor_count; ++index)
-            action[index] = 0.0f;
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            if (!motor_drives_support_branch(rig, rig.motors[index]))
+                action[index] = 0.0f;
+        }
         return bilateral_joint_synergy_action(environment, action,
             sim::CourseStage::crouch_walk);
     }
@@ -553,81 +566,76 @@ namespace runner::rl
         std::array<float, sim::action_count> policy_action,
         sim::CourseStage stage) noexcept
     {
-        const std::size_t active = environment.blueprint().active_motor_count;
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        const std::size_t active = rig.active_motor_count;
+        auto support_motor = [&rig](std::size_t index) noexcept
+        {
+            return index < rig.active_motor_count
+                && motor_drives_support_branch(rig, rig.motors[index]);
+        };
+        auto blend_teacher = [&](const std::array<float, sim::action_count>& teacher,
+            float support_assist, float body_assist) noexcept
+        {
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                const float assist = support_motor(index) ? support_assist : body_assist;
+                policy_action[index] = lerp(policy_action[index], teacher[index], assist);
+            }
+        };
+        auto neutralize_non_support = [&](float amount) noexcept
+        {
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                if (!support_motor(index))
+                    policy_action[index] = lerp(policy_action[index], 0.0f, amount);
+            }
+        };
         if (stage == sim::CourseStage::balance)
         {
             const auto teacher = balance_teacher_action(environment);
             const bool established = environment.stable_stance_seconds() >= 0.75f;
-            const float leg_assist = established ? 0.46f : 0.72f;
-            const float body_assist = established ? 0.52f : 0.78f;
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
+            blend_teacher(teacher, established ? 0.46f : 0.72f, established ? 0.52f : 0.78f);
         }
         else if (stage == sim::CourseStage::duck_press)
         {
             const auto teacher = duck_teacher_action(environment);
-            const float pressure = environment.duck_obstacle_weight();
-            const float leg_assist = 0.76f + pressure * 0.16f;
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], 0.0f, 0.995f);
+            blend_teacher(teacher, 0.76f + environment.duck_obstacle_weight() * 0.16f, 0.0f);
+            neutralize_non_support(0.995f);
         }
         else if (stage == sim::CourseStage::uneven)
         {
             const auto teacher = walking_teacher_action(environment);
             const locomotion::Plan movement = current_locomotion_plan(environment);
-            const float leg_assist = movement.intent == locomotion::Intent::recover
-                ? 0.68f : movement.step_up ? 0.56f : 0.34f;
-            const float body_assist = movement.intent == locomotion::Intent::recover
-                ? 0.60f : 0.42f;
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
+            const float support_assist = movement.intent == locomotion::Intent::recover ? 0.68f : movement.step_up ? 0.56f : 0.34f;
+            const float body_assist = movement.intent == locomotion::Intent::recover ? 0.60f : 0.42f;
+            blend_teacher(teacher, support_assist, body_assist);
         }
         else if (stage == sim::CourseStage::crouch_walk)
         {
             const auto teacher = crouch_walk_teacher_action(environment);
-            const float leg_assist = 0.58f + environment.duck_obstacle_weight() * 0.24f;
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], 0.0f, 0.98f);
+            blend_teacher(teacher, 0.58f + environment.duck_obstacle_weight() * 0.24f, 0.0f);
+            neutralize_non_support(0.98f);
         }
         else if (stage == sim::CourseStage::ramps)
         {
             const auto teacher = balance_teacher_action(environment);
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.26f);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], 0.88f);
+            blend_teacher(teacher, 0.26f, 0.88f);
         }
-        else if (stage == sim::CourseStage::hurdles
-            || stage == sim::CourseStage::moving_hazards)
+        else if (stage == sim::CourseStage::hurdles || stage == sim::CourseStage::moving_hazards)
         {
             const auto teacher = walking_teacher_action(environment);
             const locomotion::Plan movement = current_locomotion_plan(environment);
-            const float leg_assist = movement.intent == locomotion::Intent::crawl
-                ? 0.78f : movement.intent == locomotion::Intent::flee
-                    ? 0.52f : movement.intent == locomotion::Intent::recover
-                        ? 0.62f : movement.step_up ? 0.48f : 0.24f;
-            const float body_assist = movement.intent == locomotion::Intent::crawl
-                ? 0.60f : movement.intent == locomotion::Intent::flee ? 0.34f : 0.20f;
-            for (std::size_t index = 0; index < std::min<std::size_t>(4u, active); ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], leg_assist);
-            for (std::size_t index = 4; index < active; ++index)
-                policy_action[index] = lerp(policy_action[index], teacher[index], body_assist);
+            const float support_assist = movement.intent == locomotion::Intent::crawl ? 0.78f : movement.intent == locomotion::Intent::flee ? 0.52f : movement.intent == locomotion::Intent::recover ? 0.62f : movement.step_up ? 0.48f : 0.24f;
+            const float body_assist = movement.intent == locomotion::Intent::crawl ? 0.60f : movement.intent == locomotion::Intent::flee ? 0.34f : 0.20f;
+            blend_teacher(teacher, support_assist, body_assist);
         }
-
-        if (active >= 8u
-            && environment.longest_stable_stance_seconds() < 1.0f
-            && !sim::stage_allows_controlled_flips(stage))
+        if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
         {
-            for (std::size_t index = 4; index < 8; ++index)
-                policy_action[index] *= 0.08f;
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                if (!support_motor(index))
+                    policy_action[index] *= 0.08f;
+            }
         }
         return bilateral_joint_synergy_action(environment, policy_action, stage);
     }
@@ -1215,7 +1223,8 @@ namespace runner::rl
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
-        void reset_policy(std::uint64_t seed = 0xC0FFEEu);
+        void reset_policy(std::uint64_t seed = 0xC0FFEEu,
+            bool clear_totals = false);
         void set_exploration(float standard_deviation) noexcept;
         void neutralize_action_slot(std::size_t slot) noexcept
         {
@@ -1242,6 +1251,18 @@ namespace runner::rl
         void train_one_update();
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+        void set_preview_course_motion_enabled(bool enabled) noexcept
+        {
+            preview_.set_course_motion_enabled(enabled);
+        }
+        [[nodiscard]] std::uint64_t preview_reset_count() const noexcept
+        {
+            return preview_reset_sequence_;
+        }
+        [[nodiscard]] sim::InvalidMotion preview_last_reset_reason() const noexcept
+        {
+            return preview_last_reset_reason_;
+        }
 
         [[nodiscard]] const PolicyNetwork& policy() const noexcept { return policy_; }
         [[nodiscard]] PolicyNetwork& policy() noexcept { return policy_; }
@@ -1328,7 +1349,8 @@ namespace runner::rl
         void refresh_self_imitation_prior();
         void clear_self_imitation_prior() noexcept;
         void apply_self_imitation_prior();
-        void reset_training_state(bool clear_best = true) noexcept;
+        void reset_training_state(bool clear_best = true,
+            bool clear_totals = false) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
         void append_history(std::vector<float>& history, float value);
         [[nodiscard]] RolloutTotals collect_rollout_partition(std::size_t worker_index,
@@ -1383,6 +1405,7 @@ namespace runner::rl
         std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::uint64_t preview_reset_sequence_{};
+        sim::InvalidMotion preview_last_reset_reason_{ sim::InvalidMotion::none };
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
         RolloutTotals staged_totals_{};

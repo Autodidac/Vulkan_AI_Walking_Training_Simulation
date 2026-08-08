@@ -13,7 +13,13 @@ foreach(required IN ITEMS
         docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
         docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
         docs/RUNNER_V0725_ART_LEG_HOTFIX.md
+        docs/RUNNER_V0726_TRAINING_TRUTH.md
         tests/v0725_art_leg_hotfix_tests.cpp
+        tests/v0726_training_truth_tests.cpp
+        assets/optional/runner_armor_concepts/runtime/foot_side.ppm
+        assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
+        assets/optional/runner_armor_concepts/runtime/torso_side.ppm
+        assets/optional/runner_armor_concepts/runtime/weapon_side.ppm
         assets/ui/runner_icon_source.rgba.zlib.b64
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
@@ -41,18 +47,20 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.25 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.26 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
         "RunnerV0724StructuralMetricsIconTests"
         "RunnerV0725ArtLegHotfixTests"
+        "RunnerV0726TrainingTruthTests"
         "RUNNER_V0725_ART_LEG_HOTFIX.md"
+        "RUNNER_V0726_TRAINING_TRUTH.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.24 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake v0.7.26 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -75,10 +83,21 @@ foreach(reference IN ITEMS
         "WALK-STARTUP-310"
         "WALK-STATE-311"
         "WALK-REGRESSION-312"
-        "WALK-RELEASE-313")
+        "WALK-RELEASE-313"
+        "WALK-RIG-ROLE-314"
+        "WALK-RIG-ROLE-315"
+        "WALK-RIG-RESET-316"
+        "WALK-RIG-RETRY-317"
+        "WALK-PREVIEW-318"
+        "WALK-PREVIEW-319"
+        "WALK-TELEMETRY-320"
+        "WALK-ART-321"
+        "WALK-STATE-322"
+        "WALK-REGRESSION-323"
+        "WALK-RELEASE-324")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.24 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.26 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -104,7 +123,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'2501u"
+        "training_semantics_version = 0x0007'2601u"
         "completed_episode_passes_stage_checks")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -136,12 +155,12 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0725-rig-autosave.eppo"
+        "runner-v0726-rig-autosave.eppo"
         "COMPACT SEGMENTED BODY ARMOR"
         "shoulder_cap_radius")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.24 application contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.26 application contract missing: ${reference}")
     endif()
 endforeach()
 string(FIND "${app_text}" "Color{}" opaque_default_pos)
@@ -206,15 +225,40 @@ foreach(forbidden IN ITEMS "rounded_background" "polygon(" "gold =" "cyan =")
     endif()
 endforeach()
 
-string(FIND "${app_text}" "draw_pixel_art(canvas, optional_torso_art" torso_bitmap_pos)
-if(NOT torso_bitmap_pos EQUAL -1)
-    message(FATAL_ERROR "Oversized torso bitmap rendering remains")
-endif()
+foreach(reference IN ITEMS
+        "draw_pixel_art(canvas, optional_torso_art"
+        "User-supplied modular armor, bounded to the physical torso"
+        "optional_art_enabled = impl_->optional_foot_art.loaded()")
+    string(FIND "${app_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.26 runtime art contract missing: ${reference}")
+    endif()
+endforeach()
 string(FIND "${simulation_text}" "minimum_stance_ratio" stance_ratio_pos)
 string(FIND "${simulation_text}" "solve_chain_ik" chain_ik_pos)
 if(stance_ratio_pos EQUAL -1 OR chain_ik_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.25 stance-chain correction is missing")
 endif()
+
+foreach(reference IN ITEMS
+        "motor_drives_support_branch"
+        "clear_totals = false"
+        "preview_last_reset_reason")
+    string(FIND "${ppo_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.26 PPO contract missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" simulation_header_text)
+foreach(reference IN ITEMS
+        "course_motion_enabled_"
+        "set_course_motion_enabled")
+    string(FIND "${simulation_header_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.26 static-preview contract missing: ${reference}")
+    endif()
+endforeach()
 
 file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
 if(release_notes)
@@ -239,4 +283,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.25 repository hygiene passed")
+message(STATUS "Runner v0.7.26 repository hygiene passed")

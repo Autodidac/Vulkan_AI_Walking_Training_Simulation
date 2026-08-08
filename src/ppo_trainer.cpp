@@ -267,7 +267,9 @@ namespace runner::rl
         }
         else
         {
-            reset_policy();
+            // A canonical rig switch is a new training subject. Preserve totals
+            // across episode/policy retries, but never carry another rig's totals.
+            reset_policy(0xC0FFEEu, true);
         }
     }
 
@@ -319,29 +321,33 @@ namespace runner::rl
         }
     }
 
-    void PpoTrainer::reset_training_state(bool clear_best) noexcept
+    void PpoTrainer::reset_training_state(bool clear_best,
+        bool clear_totals) noexcept
     {
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
         const TrainingMetrics previous_metrics = metrics_;
         metrics_ = {};
-        metrics_.total_updates = previous_metrics.total_updates;
-        metrics_.total_environment_steps = previous_metrics.total_environment_steps;
-        metrics_.total_episodes = previous_metrics.total_episodes;
-        metrics_.total_valid_episodes = previous_metrics.total_valid_episodes;
-        metrics_.total_invalid_episodes = previous_metrics.total_invalid_episodes;
-        metrics_.total_resets = previous_metrics.total_resets + 1u;
-        metrics_.total_alternating_steps = previous_metrics.total_alternating_steps;
-        metrics_.total_falls = previous_metrics.total_falls;
-        metrics_.total_collisions = previous_metrics.total_collisions;
-        metrics_.total_powered_jumps = previous_metrics.total_powered_jumps;
-        metrics_.total_landed_jumps = previous_metrics.total_landed_jumps;
-        metrics_.total_landed_flips = previous_metrics.total_landed_flips;
-        metrics_.total_obstacles_passed = previous_metrics.total_obstacles_passed;
-        metrics_.total_distance = previous_metrics.total_distance;
-        metrics_.total_training_seconds = previous_metrics.total_training_seconds;
-        metrics_.evaluation_count = previous_metrics.evaluation_count;
+        if (!clear_totals)
+        {
+            metrics_.total_updates = previous_metrics.total_updates;
+            metrics_.total_environment_steps = previous_metrics.total_environment_steps;
+            metrics_.total_episodes = previous_metrics.total_episodes;
+            metrics_.total_valid_episodes = previous_metrics.total_valid_episodes;
+            metrics_.total_invalid_episodes = previous_metrics.total_invalid_episodes;
+            metrics_.total_resets = previous_metrics.total_resets + 1u;
+            metrics_.total_alternating_steps = previous_metrics.total_alternating_steps;
+            metrics_.total_falls = previous_metrics.total_falls;
+            metrics_.total_collisions = previous_metrics.total_collisions;
+            metrics_.total_powered_jumps = previous_metrics.total_powered_jumps;
+            metrics_.total_landed_jumps = previous_metrics.total_landed_jumps;
+            metrics_.total_landed_flips = previous_metrics.total_landed_flips;
+            metrics_.total_obstacles_passed = previous_metrics.total_obstacles_passed;
+            metrics_.total_distance = previous_metrics.total_distance;
+            metrics_.total_training_seconds = previous_metrics.total_training_seconds;
+            metrics_.evaluation_count = previous_metrics.evaluation_count;
+        }
         if (!clear_best)
         {
             metrics_.best_evaluation_distance = previous_metrics.best_evaluation_distance;
@@ -369,11 +375,11 @@ namespace runner::rl
         preview_.reset(0xDEADBEEFu);
     }
 
-    void PpoTrainer::reset_policy(std::uint64_t seed)
+    void PpoTrainer::reset_policy(std::uint64_t seed, bool clear_totals)
     {
         policy_ = PolicyNetwork(seed);
         preview_policy_.parameters() = policy_.parameters();
-        reset_training_state();
+        reset_training_state(true, clear_totals);
         controller_state_ = ControllerState::fresh;
     }
 
@@ -704,8 +710,10 @@ namespace runner::rl
             ? policy_ : preview_policy_;
         const auto raw_action = display_policy.deterministic_action(preview_.observation());
         const auto action = effective_policy_action(preview_, raw_action, course_stage_);
-        if (preview_.step(action, dt).terminated)
+        const sim::StepResult result = preview_.step(action, dt);
+        if (result.terminated)
         {
+            preview_last_reset_reason_ = result.invalid_reason;
             ++preview_reset_sequence_;
             preview_.reset(0xDEADBEEFu + metrics_.update
                 + preview_reset_sequence_ * 7919u);
@@ -715,6 +723,7 @@ namespace runner::rl
     void PpoTrainer::reset_preview(std::uint64_t seed) noexcept
     {
         preview_reset_sequence_ = 0u;
+        preview_last_reset_reason_ = sim::InvalidMotion::none;
         preview_.reset(seed);
     }
 

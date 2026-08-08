@@ -1056,6 +1056,14 @@ namespace runner::sim
         }
         [[nodiscard]] CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
+        void set_course_motion_enabled(bool enabled) noexcept
+        {
+            course_motion_enabled_ = enabled;
+        }
+        [[nodiscard]] bool course_motion_enabled() const noexcept
+        {
+            return course_motion_enabled_;
+        }
         [[nodiscard]] float elapsed_seconds() const noexcept { return elapsed_seconds_; }
         [[nodiscard]] float distance_travelled() const noexcept { return distance_travelled_; }
         [[nodiscard]] float forward_speed() const noexcept { return forward_speed_; }
@@ -1074,6 +1082,8 @@ namespace runner::sim
         [[nodiscard]] std::uint8_t obstruction_mask() const noexcept { return obstruction_mask_; }
         [[nodiscard]] float course_speed() const noexcept
         {
+            if (!course_motion_enabled_)
+                return 0.0f;
             if (course_stage_ == CourseStage::balance
                 || course_stage_ == CourseStage::duck_press
                 || course_stage_ == CourseStage::ramps
@@ -1251,6 +1261,7 @@ namespace runner::sim
 
         CourseStage course_stage_{ CourseStage::balance };
         float course_difficulty_{ 0.25f };
+        bool course_motion_enabled_{ true };
         float collision_count_{};
         float airborne_seconds_{};
         float cumulative_airborne_{};

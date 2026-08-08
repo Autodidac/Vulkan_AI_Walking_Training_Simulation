@@ -712,3 +712,19 @@ The existing anatomy motor slots remain anatomy controls. Equipment state, aim, 
 ## Historical ledger preservation
 
 All earlier closed mission definitions, imported legacy copies, validation findings, and exact release evidence remain available in Git history and release tags. This consolidation removes duplicate/stale copies from the active file; it does not erase or reclassify historical evidence. Any historical requirement that becomes relevant again is reopened here with a new current mission and explicit acceptance criteria.
+
+# Runner v0.7.26 rig-scoped training truth and multi-rig locomotion
+
+**Release state:** IMPLEMENTED FOR VALIDATION
+
+- **WALK-RIG-ROLE-314:** Remove the humanoid-only assumption that motors 4+ are upper-body. Classify every motor by whether its driven branch reaches a semantic support node.
+- **WALK-RIG-ROLE-315:** Preserve quadruped/crawler/hexapod support authority during Stand, Duck Press, Walk/Run, Crouch Walk, ramps, hurdles, and hazard recovery.
+- **WALK-RIG-RESET-316:** Selecting a different canonical rig starts a fresh training subject and clears that rig's cumulative counters, optimizer/policy state, best state, and lesson baselines.
+- **WALK-RIG-RETRY-317:** Same-rig episode/policy retries preserve cumulative rig totals so failures do not make training history disappear.
+- **WALK-PREVIEW-318:** Large Live preview runs against a static course rather than receiving conveyor progress.
+- **WALK-PREVIEW-319:** Surface preview automatic-restart count and terminating invalid-motion reason.
+- **WALK-TELEMETRY-320:** Label the monotonic counter as TOTAL RIG UPDATES and distinguish it from POLICY UPDATE.
+- **WALK-ART-321:** Enable packaged modular art automatically and attach the supplied torso component to bounded physical rig geometry.
+- **WALK-STATE-322:** Isolate v0.7.26 autosave/checkpoint filenames and update stale v0.7.20 status messages.
+- **WALK-REGRESSION-323:** Add deterministic tests for support-role classification, non-biped motor authority, static preview course, and new-rig counter reset.
+- **WALK-RELEASE-324:** Require Linux GCC14 warnings-as-errors, Windows SDL3/Vulkan build/tests, installed/extracted diagnostics, checksum/manifest, release re-download verification, and clean main-only repository state.

@@ -1,3 +1,11 @@
+## 0.7.26
+
+- Fixed non-biped training by replacing hard-coded motor-index roles with topology-derived support-motor classification.
+- Reset cumulative training totals and lesson baselines when switching to a different canonical rig while preserving them across same-rig retries.
+- Disabled conveyor motion in the large live preview and surfaced automatic preview restart count/reason.
+- Enabled packaged modular armor art by default when present and bounded the supplied torso component to the physical rig.
+- Updated v0.7.26 autosave isolation and telemetry wording.
+
 ## 0.7.25
 
 - Retained the approved helmet and foot artwork while replacing the oversized torso bitmap with compact node-attached armor.

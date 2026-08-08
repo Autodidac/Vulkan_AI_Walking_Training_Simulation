@@ -26,7 +26,7 @@ namespace runner::rl
         }
         if (!exists)
         {
-            message = "NO V0.7.20 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.26 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load();
@@ -116,8 +116,12 @@ namespace runner::rl
             worker_.set_course(stage_, difficulty_, false);
             mastery_streak_ = 0;
             degradation_streak_ = 0;
-            last_evaluation_count_ = 0;
+            last_evaluation_count_ = worker_.metrics().evaluation_count;
             last_saved_best_update_ = 0;
+            stage_entry_total_updates_ = worker_.metrics().total_updates;
+            stage_entry_total_episodes_ = worker_.metrics().total_episodes;
+            stage_entry_evaluation_count_ = worker_.metrics().evaluation_count;
+            stage_entry_baseline_initialized_ = true;
             worker_message_ = command.preserve_policy
                 ? "RIG UPDATED WITHOUT BLOCKING THE UI - CONTROLLER RECALIBRATING"
                 : "RIG UPDATED WITHOUT BLOCKING THE UI - FRESH STAND LESSON STARTED";
@@ -128,8 +132,12 @@ namespace runner::rl
             worker_.set_course(stage_, difficulty_, false);
             mastery_streak_ = 0;
             degradation_streak_ = 0;
-            last_evaluation_count_ = 0;
+            last_evaluation_count_ = worker_.metrics().evaluation_count;
             last_saved_best_update_ = 0;
+            stage_entry_total_updates_ = worker_.metrics().total_updates;
+            stage_entry_total_episodes_ = worker_.metrics().total_episodes;
+            stage_entry_evaluation_count_ = worker_.metrics().evaluation_count;
+            stage_entry_baseline_initialized_ = true;
             worker_message_ = "CONTROLLER RESET - CURRENT SKILL RESTARTED";
             break;
 
@@ -184,7 +192,7 @@ namespace runner::rl
                     accepted_rig_changes_ = command.accepted_rig_changes;
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
-                    worker_message_ = "V0.7.20 AUTOSAVE RESUMED ASYNCHRONOUSLY";
+                    worker_message_ = "V0.7.26 AUTOSAVE RESUMED ASYNCHRONOUSLY";
                 }
                 else
                 {

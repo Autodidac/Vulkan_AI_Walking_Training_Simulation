@@ -293,7 +293,7 @@ namespace runner::telemetry
 
     [[nodiscard]] constexpr std::string_view total_updates_help() noexcept
     {
-        return "TOTAL UPDATES = every completed controller-learning cycle; this never resets when an attempt fails.";
+        return "TOTAL RIG UPDATES = completed learning cycles for the selected rig. It never resets during episode or policy retries for the same rig; selecting a different rig starts at zero.";
     }
 
     [[nodiscard]] constexpr std::string_view attempts_help() noexcept
@@ -303,6 +303,6 @@ namespace runner::telemetry
 
     [[nodiscard]] constexpr std::string_view reset_help() noexcept
     {
-        return "RESETS restart an episode or weak policy; ROLLBACKS restore a better retained controller. All-time totals stay.";
+        return "RESETS restart an episode or weak policy; ROLLBACKS restore a better retained controller. Rig totals stay for the selected rig and clear when a different rig is selected.";
     }
 }

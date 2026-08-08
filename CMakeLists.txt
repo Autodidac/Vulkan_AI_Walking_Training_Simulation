@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.25 LANGUAGES CXX)
+project(Runner VERSION 0.7.26 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -156,6 +156,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0726_TRAINING_TRUTH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -179,6 +180,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0725_ART_LEG_HOTFIX.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md"
         DESTINATION docs)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md)
 endif()
@@ -316,6 +318,17 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0725ArtLegHotfix
         COMMAND RunnerV0725ArtLegHotfixTests)
     set_tests_properties(Runner.V0725ArtLegHotfix PROPERTIES TIMEOUT 180)
+
+    add_executable(RunnerV0726TrainingTruthTests
+        tests/v0726_training_truth_tests.cpp)
+    target_link_libraries(RunnerV0726TrainingTruthTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0726TrainingTruthTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0726TrainingTruthTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0726TrainingTruthTests)
+    add_test(NAME Runner.V0726TrainingTruth
+        COMMAND RunnerV0726TrainingTruthTests)
+    set_tests_properties(Runner.V0726TrainingTruth PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

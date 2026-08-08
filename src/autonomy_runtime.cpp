@@ -54,6 +54,9 @@ namespace runner::rl
     {
         worker_.set_course(stage_, difficulty_, false);
         live_.set_course(stage_, difficulty_, false);
+        // The large preview is a real locomotion test, not a conveyor-belt
+        // visualization. Training workers may still use moving-course pressure.
+        live_.set_preview_course_motion_enabled(false);
         publish_locked();
         synchronize();
         persistence_thread_ = std::jthread([this](std::stop_token stop_token)

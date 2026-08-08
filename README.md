@@ -1,6 +1,15 @@
 # Runner
 
-Runner 0.7.25 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+## v0.7.26 rig-scoped training truth and topology-aware locomotion
+
+- Classifies support motors from rig topology instead of assuming motors 0-3 are legs and 4+ are arms. Quadruped, crawler, and hexapod support motors now retain authority through Stand, Crouch, Walk/Run, and later stages.
+- A canonical rig switch starts a genuinely fresh training subject: rig totals, lesson baselines, tests, optimizer state, and policy state reset together. Episode and policy retries within the same rig still preserve that rig's cumulative totals.
+- The large live preview disables course conveyor motion. It must move itself across a static course while the training workers remain free to use moving-course pressure.
+- Preview auto-restarts now retain and display the terminating motion reason and restart count instead of silently snapping back to spawn.
+- Runtime modular armor art is enabled automatically when packaged assets are available. The supplied torso component is bounded to the physical torso instead of drawing an oversized sheet.
+- Autosave names and messages are isolated to v0.7.26.
+
+Runner 0.7.26 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 

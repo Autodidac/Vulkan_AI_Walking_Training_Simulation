@@ -187,6 +187,14 @@ namespace runner::rl
         [[nodiscard]] bool restore_best_policy() noexcept;
 
         [[nodiscard]] const sim::Environment& preview() const noexcept { return live_.preview(); }
+        [[nodiscard]] std::uint64_t preview_reset_count() const noexcept
+        {
+            return live_.preview_reset_count();
+        }
+        [[nodiscard]] sim::InvalidMotion preview_last_reset_reason() const noexcept
+        {
+            return live_.preview_last_reset_reason();
+        }
         [[nodiscard]] const sim::Environment& training_preview() const noexcept
         {
             return cached_training_preview_;
