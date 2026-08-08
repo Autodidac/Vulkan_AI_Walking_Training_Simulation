@@ -19,14 +19,15 @@ jobs:
         with:
           ref: agent/v0724-structural-metrics-icon
           fetch-depth: 0
-      - name: Apply scoped rigidity repair
+      - name: Apply walking-chain rigidity repair
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile tools/fix_v0724_scoped_rigidity.py
           python3 tools/fix_v0724_scoped_rigidity.py
           git diff --check
-          grep -F 'bone.stiffness < 0.999f' src/simulation.cpp
+          grep -F 'primary_leg_segment' src/simulation.cpp
+          grep -F 'elapsed_seconds_ < 0.75f' src/simulation.cpp
           grep -F 'structural_error > 0.040f' src/simulation.cpp
           grep -F 'bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);' src/simulation.cpp
       - name: Build selected regressions
@@ -55,7 +56,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'Scope v0.7.24 rigidity to load-bearing structure'
+          git commit -m 'Keep walking leg lengths invariant without regressing crouch'
           git push origin HEAD:agent/v0724-structural-metrics-icon
       - name: Report repair status
         if: always()
@@ -64,4 +65,4 @@ jobs:
         shell: bash
         run: |
           gh pr comment 78 --repo "$GITHUB_REPOSITORY" \
-            --body "Scoped rigidity repair and selected regressions: ${{ job.status }}"
+            --body "Walking-chain rigidity repair and selected regressions: ${{ job.status }}"
