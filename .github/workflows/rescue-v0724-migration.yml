@@ -30,6 +30,15 @@ jobs:
             python3 -m py_compile tools/run_v0724_migration.py
             python3 tools/run_v0724_migration.py
           fi
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('CMakeLists.txt')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.png',
+              '${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64')
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
           git diff --check
           grep -F 'project(Runner VERSION 0.7.24 LANGUAGES CXX)' CMakeLists.txt
           grep -F "training_semantics_version = 0x0007'2401u" src/ppo.hpp
@@ -38,6 +47,7 @@ jobs:
           grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
           grep -F 'PASSED STAGE CHECKS' src/app.cpp
           grep -F 'MASTERY PASSES' src/app.cpp
+          grep -F 'runner_icon_source.rgba.zlib.b64' CMakeLists.txt
           test -f tests/v0724_structural_metrics_icon_tests.cpp
           test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
       - name: Build focused regression
