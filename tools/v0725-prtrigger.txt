@@ -1,1 +1,1 @@
-Runner v0.7.25 corrected audit, art, stance, font, and progress migration trigger 13.
+Runner v0.7.25 tightened-tolerance audit, art, stance, font, and progress trigger 14.
