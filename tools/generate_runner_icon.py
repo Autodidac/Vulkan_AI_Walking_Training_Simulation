@@ -9,7 +9,6 @@ import zlib
 from pathlib import Path
 
 SOURCE_RGBA_SHA256 = "6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad"
-SOURCE_PNG_SHA256 = "73c533024cdba3abc7b30fbf948a6144c4eac889c448d4beda7ad59da6b02b9e"
 
 
 def load_source(path: Path) -> tuple[int, int, bytes]:
@@ -161,12 +160,11 @@ def main() -> int:
     if width != height:
         raise ValueError("Runner screenshot icon source must be square")
 
+    # The source of truth is the exact RGBA pixel hash above. PNG compression
+    # bytes legitimately differ between zlib versions/platforms, so record the
+    # generated PNG hash rather than requiring one platform's compressed bytes.
     source_png = png_bytes(width, height, rgba)
     source_png_hash = hashlib.sha256(source_png).hexdigest()
-    if source_png_hash != SOURCE_PNG_SHA256:
-        raise ValueError(
-            f"Generated screenshot PNG hash mismatch: {source_png_hash} != {SOURCE_PNG_SHA256}"
-        )
 
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
