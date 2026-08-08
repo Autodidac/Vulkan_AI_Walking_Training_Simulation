@@ -736,11 +736,11 @@ All earlier closed mission definitions, imported legacy copies, validation findi
 - Published package digest: `d4ca9f4b0ddf628c6fcc8ea659c9ff70f7159e36264b49b553895f6293ed9e0a`.
 - Published checksum digest: `33714222ec891efda967ac2932cd2575cf6cf63c261dc7cd96197d0884aa073a`.
 - Published manifest digest: `f25ef74a64f6359b77f96f4ca41d64b4ec9d64f5530bc27fc84bf4a9dacf97ce`.
-- Cleanup is contradicted by the surviving remote `agent/v0726-release-trigger` branch; remove it only after the next release is independently verified.
+- The obsolete PR #85 and remote `agent/v0726-release-trigger` branch were removed after v0.7.27 was independently published and verified.
 
 # Runner v0.7.27 authored-contact gait evidence and release integrity
 
-**Release state:** VALIDATED — FINAL PACKAGE REGENERATION AND PUBLICATION PENDING
+**Release state:** PUBLISHED — TAG/ASSETS/RE-DOWNLOAD/CLEANUP VERIFIED
 
 The complete conversation chain from v0.7.8 through v0.7.26 was re-read before implementation. The permanent product contract remains: authored anatomy may articulate but may not silently mutate or compress; side-view locomotion requires real support transfer, lift, traction, and controlled speed; terrain, contacts, preview, workers, evaluation, telemetry, editor, persistence, and packaged runtime must describe the same physical subject; crawling is emergency-only; slow recovery is valid; and screenshot/runtime evidence outranks inferred success.
 
@@ -764,7 +764,7 @@ Track grounded state per authored support seed, retain controller phase groups, 
 Rollout, evaluation, and preview locomotion distance are now static-course and rig-driven. The fixed diagnostic requires each non-biped evaluation distance to reach the biped baseline within `0.25 m` and produce at least two stride events. Invalid seed counts and reset causes remain reported; an accepted six-seed champion is intentionally not inferred.
 
 ### WALK-RIG-DIAGNOSTIC-327 — Make the comparison a permanent headless diagnostic
-**Status:** VERIFIED IN BUILD-TREE; UPDATED INSTALLED AND EXTRACTED PACKAGE RUNS PENDING
+**Status:** VERIFIED IN BUILD-TREE, INSTALLED, EXTRACTED, AND PUBLISHED RUNTIMES
 
 `--diagnose-rig-training` and `Runner.V0727RigTraining` run the bounded four-rig comparison and report distance, stride, invalid-seed, preview-reset, reset-reason, and conveyor-leak evidence.
 
@@ -794,21 +794,28 @@ The cache, changelog, README, focused evidence document, CMake install/test list
 Rollout, evaluation, self-imitation, acceptance, and diagnostic environments already use the fixed `1/60 s` simulation step. The large Live preview now accumulates render elapsed time and advances the policy plus Verlet/contact/terrain solver only in bounded fixed `1/60 s` ticks. Rig/course/reset boundaries discard partial ticks. Camera smoothing and UI timers remain elapsed-time based; rendering cannot change training work or physics state. Deterministic coverage compares the complete preview physics state at 20, 60, and 240 Hz and adversarially proves that partial-tick resets, negative deltas, and non-finite deltas cannot advance or contaminate simulation state.
 
 ### WALK-RIG-RELEASE-332 — Publish and independently verify Runner v0.7.27
-**Status:** VALIDATED — FINAL PACKAGE, PUBLICATION, AND PUBLISHED-ASSET RE-DOWNLOAD PENDING
+**Status:** PUBLISHED AND INDEPENDENTLY VERIFIED
 
 Require repository hygiene, Linux GCC 14 warnings-as-errors and all CTest suites, the complete Windows SDL3/Vulkan build and tests, package/acceptance/camera/UI/rig-training diagnostics, installed and independently extracted `run.bat`, ZIP checksum and manifest audit, published-asset re-download and byte comparison, zero open cleanup PRs, and main-only branch state.
 
-Pre-publication final-source evidence:
+## Runner v0.7.27 immutable evidence
 
 - Linux GCC 14 warnings-as-errors build and complete 20/20 CTest matrix passed; the final test-only pipeline isolation was rebuilt and rerun successfully.
 - Windows SDL3/Vulkan Release build and complete 23/23 CTest matrix passed; the final test-only pipeline isolation was rebuilt and rerun successfully.
 - Windows SDL3/Vulkan Debug product matrix passed every target. The 22 unaffected targets passed together on the exact final product source, including the 409-second rig/frame test; the only subsequently edited target, `Runner.RuntimePipeline`, passed its final isolated repeated-request form in 33.5 seconds. This is recorded explicitly instead of misreporting the preceding wall-clock-sensitive assertion as a 23/23 pass.
 - The fixed-step regression produces the same complete preview physics state at 20, 60, and 240 render Hz and rejects partial-tick reset contamination, negative delta, and non-finite delta.
-- Final build-tree/package/acceptance/camera/UI/rig-training diagnostics, runtime-only install, independent extraction, per-file manifest, and ZIP checksum are rerun after this ledger is frozen into the candidate package.
-- The tag, workflow run, published-asset digests, re-download comparison, PR cleanup, and branch cleanup remain publication evidence and are added in the post-release cache round rather than predicted here.
+- Final build-tree/package/acceptance/camera/UI/rig-training diagnostics, runtime-only install, independent extraction, per-file manifest, and ZIP checksum all passed before tagging.
+- Release PR #86 merged to `main` at `72b3fbfe4ef8a2c35a25e84158e3e2a2a82dbcae`; independent PR validation workflow `31265118511` passed.
+- Published tag and release: `v0.7.27`, targeting the exact merge commit above.
+- Audited release workflow `31265241890` passed Linux GCC 14, the complete Windows SDL3/Vulkan build and test matrix, every feature diagnostic, runtime-only packaging, installed and independently extracted launcher audits, draft upload, published-asset re-download, and byte comparison.
+- Published ZIP SHA-256: `5beb26194934415bcd2d6b4ec3fb62c08eb66f1d186fd82018ad6979ac0b29f9`.
+- Published checksum-asset SHA-256: `ce73d5f8f0602c1bf3b85157c4007ed5e88662c6c0d68afeed386059fd1e4161`; its contents match the ZIP digest.
+- Published manifest SHA-256: `5a8a13677cb1274961312900df0676e4e9dabe517f1e7a64af07e0971b3f2920`; all 44 independently extracted files match it with no missing or extra files.
+- A second independent download passed API-digest comparison plus extracted version, package, and rig-training diagnostics. The published rig metrics match the fixed local evidence exactly.
+- Obsolete PR #85 and `agent/v0726-release-trigger` were deleted. There are zero open PRs and `main` is the only remote branch.
 
 # Runner post-v0.7.27 carried completion round
 
-**Release state:** CACHED AND OPEN — BEGIN ONLY AFTER v0.7.27 EYE TEST AND RELEASE AUDIT
+**Release state:** CACHED AND OPEN — RELEASE AUDIT COMPLETE; USER EYE TEST AND IMPLEMENTATION PENDING
 
 The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. It must implement reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and a fully audited release. These missions remain open until their physical, policy, editor, persistence, diagnostic, package, and eye-test evidence exists.
