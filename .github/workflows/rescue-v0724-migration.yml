@@ -13,13 +13,13 @@ jobs:
   apply:
     if: github.head_ref == 'agent/v0724-structural-metrics-icon'
     runs-on: ubuntu-24.04
-    timeout-minutes: 70
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/v0724-structural-metrics-icon
           fetch-depth: 0
-      - name: Apply hardened migration if pending
+      - name: Apply direct migration if pending
         shell: bash
         run: |
           set -euo pipefail
@@ -27,15 +27,19 @@ jobs:
             echo 'Migration already present; validating current source.'
           else
             test -s assets/ui/runner_icon_source.png
+            python3 -m py_compile tools/run_v0724_migration.py
             python3 tools/run_v0724_migration.py
           fi
           git diff --check
           grep -F 'project(Runner VERSION 0.7.24 LANGUAGES CXX)' CMakeLists.txt
           grep -F "training_semantics_version = 0x0007'2401u" src/ppo.hpp
-          grep -F 'project_rigid_structure' src/simulation.cpp
-          grep -F 'completed_episode_passes_stage' src/ppo_trainer.cpp
+          grep -F 'project_structure_rigid' src/simulation.cpp
+          grep -F 'maximum_bone_length_error_ratio' src/simulation.cpp
+          grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
           grep -F 'PASSED STAGE CHECKS' src/app.cpp
+          grep -F 'MASTERY PASSES' src/app.cpp
           test -f tests/v0724_structural_metrics_icon_tests.cpp
+          test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
       - name: Build focused regression
         env:
           CC: gcc-14
@@ -52,12 +56,18 @@ jobs:
           cmake --build build/v0724-rescue \
             --target RunnerV0724StructuralMetricsIconTests --parallel
           ./build/v0724-rescue/RunnerV0724StructuralMetricsIconTests
-      - name: Commit migration
+      - name: Commit direct source migration
         shell: bash
         run: |
           set -euo pipefail
           rm -f tools/apply_v0724_structural_metrics_icon.py
           rm -f tools/run_v0724_migration.py
+          rm -f tools/cache_v0724_structural_metrics_icon.py
+          rm -f tools/v0724-trigger.txt
+          rm -f tools/v0724-pr-target-trigger.txt
+          rm -f tools/v0724-prtarget-kick2.txt
+          rm -f tools/v0724-reopen-trigger.txt
+          rm -f tools/v0724-rescue-trigger.txt
           rm -rf tools/__pycache__
           if git diff --quiet; then
             exit 0
@@ -74,4 +84,4 @@ jobs:
         shell: bash
         run: |
           gh pr comment 78 --repo "$GITHUB_REPOSITORY" \
-            --body "Hardened v0.7.24 migration finished: ${{ job.status }}"
+            --body "Direct v0.7.24 migration and focused regression finished: ${{ job.status }}"
