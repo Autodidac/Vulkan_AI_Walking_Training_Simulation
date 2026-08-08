@@ -119,10 +119,15 @@ jobs:
           output = []
           work_counter_written = False
           replaced_delay = False
+          replaced_tolerance = False
           for line in lines:
               if 'elapsed_seconds_ < 0.75f' in line:
                   output.append('        "chain_convergence_passes = 16"')
                   replaced_delay = True
+                  continue
+              if 'structural_error > 0.040f' in line:
+                  output.append('        "structural_error > 0.020f")')
+                  replaced_tolerance = True
                   continue
               if 'format_work_counter(' in line:
                   if not work_counter_written:
@@ -132,6 +137,8 @@ jobs:
               output.append(line)
           if not replaced_delay:
               raise SystemExit('obsolete 0.75-second audit expectation was not found')
+          if not replaced_tolerance:
+              raise SystemExit('obsolete 4-percent tolerance expectation was not found')
           if not work_counter_written:
               raise SystemExit('malformed work-counter audit entries were not found')
           path.write_text('\n'.join(output) + '\n', encoding='utf-8', newline='\n')
@@ -148,6 +155,7 @@ jobs:
             grep -F 'minimum_stance_ratio' src/simulation.cpp
             grep -F 'solve_chain_ik' src/simulation.cpp
             grep -F 'chain_convergence_passes = 16' src/simulation.cpp
+            grep -F 'structural_error > 0.020f' src/simulation.cpp
             ! grep -Fq 'recovery_active_ || non_foot_grounded_' src/simulation.cpp
             grep -F 'font::make_bitmap_font_metrics' src/app.cpp
             grep -F 'TRAINING SAMPLES READY' src/app.cpp
@@ -156,6 +164,7 @@ jobs:
             ! grep -Fq 'ui_font_scale' src/app.cpp
             ! grep -Fq 'draw_pixel_art(canvas, optional_torso_art' src/app.cpp
             ! grep -Fq 'elapsed_seconds_ < 0.75f' tools/repository_audit.cmake
+            ! grep -Fq 'structural_error > 0.040f' tools/repository_audit.cmake
             cmake -DRUNNER_SOURCE_DIR="$PWD" -P tools/repository_audit.cmake
             sudo apt-get update
             sudo apt-get install -y g++-14 ninja-build python3
