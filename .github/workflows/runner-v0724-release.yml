@@ -39,10 +39,10 @@ jobs:
           git diff --check
           grep -F 'project(Runner VERSION 0.7.24 LANGUAGES CXX)' CMakeLists.txt
           grep -F 'WALK-SCREENSHOT-ICON-296' missioncache.md
-          grep -F 'WALK-RIGID-BONES-297' missioncache.md
-          grep -F 'WALK-FINAL-PROJECTION-298' missioncache.md
-          grep -F 'WALK-NO-STIFFNESS-CHEAT-299' missioncache.md
-          grep -F 'WALK-STAGE-COUNTERS-300' missioncache.md
+          grep -F 'WALK-BONE-LENGTH-297' missioncache.md
+          grep -F 'WALK-LOAD-BEARING-298' missioncache.md
+          grep -F 'WALK-AUTO-STIFFNESS-299' missioncache.md
+          grep -F 'WALK-DEBUG-TRUTH-300' missioncache.md
           grep -F 'WALK-PROGRESS-301' missioncache.md
           grep -F 'WALK-TOTALS-302' missioncache.md
           grep -F 'WALK-VISUAL-303' missioncache.md
@@ -50,15 +50,24 @@ jobs:
           grep -F 'WALK-REGRESSION-305' missioncache.md
           grep -F 'WALK-RELEASE-306' missioncache.md
           grep -F "training_semantics_version = 0x0007'2401u" src/ppo.hpp
-          grep -F 'project_rigid_structure' src/simulation.cpp
-          grep -F 'completed_episode_passes_stage' src/ppo_trainer.cpp
+          grep -F 'project_structure_rigid' src/simulation.cpp
+          grep -F 'maximum_bone_length_error_ratio' src/simulation.cpp
+          grep -F 'completed_episode_passes_stage_checks' src/ppo_trainer.cpp
           grep -F 'PASSED STAGE CHECKS' src/app.cpp
-          grep -F 'runner_icon_source.png' tools/generate_runner_icon.py
-          test -s assets/ui/runner_icon_source.png
+          grep -F 'MASTERY PASSES' src/app.cpp
+          grep -F 'runner_icon_source.rgba.zlib.b64' tools/generate_runner_icon.py
+          grep -F 'RGBA_SHA256=6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad' assets/ui/runner_icon_source.rgba.zlib.b64
+          test ! -e assets/ui/runner_icon_source.png
           test -f tests/v0724_structural_metrics_icon_tests.cpp
           test -f docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
           test ! -e tools/apply_v0724_structural_metrics_icon.py
           test ! -e tools/run_v0724_migration.py
+          test ! -e tools/cache_v0724_structural_metrics_icon.py
+          test ! -e tools/.probe-do-not-merge
+          test ! -e tools/.probe-local-file
+          test ! -e tools/v0724-actions.json
+          test ! -e .github/workflows/rescue-v0724-migration.yml
+          test ! -e .github/workflows/probe-v0724-actions.yml
       - name: Configure Linux deterministic suite
         env:
           CC: gcc-14
@@ -146,13 +155,14 @@ jobs:
             Copy-Item -Destination $stage -Force
           foreach ($required in @(
             'Runner.exe','run.bat','README.md','LICENSE','CHANGELOG.md','missioncache.md','AGENTS.md',
-            'assets/chicken.ppm','assets/ui/runner_icon_source.png','assets/ui/runner_icon.png',
-            'assets/ui/runner_icon_512.png','assets/ui/runner_icon.bmp','assets/ui/runner.ico',
+            'assets/chicken.ppm','assets/ui/runner_icon_source.png','assets/ui/runner_icon_source.sha256',
+            'assets/ui/runner_icon.png','assets/ui/runner_icon_512.png','assets/ui/runner_icon.bmp','assets/ui/runner.ico',
             'shaders/flat.vert.spv','shaders/flat.frag.spv',
             'docs/SANDHYBRID_INTEGRATION_BRIDGE.md','docs/SandHybrid-missioncache.md',
             'docs/RUNNER_V0718_RUNTIME_RECOVERY.md','docs/RUNNER_V0719_GENERAL_LOCOMOTION.md',
             'docs/RUNNER_V0720_UI_PREVIEW_ICON.md','docs/RUNNER_V0721_READABLE_TELEMETRY.md',
-            'docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md','docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md')) {
+            'docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md','docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md',
+            'docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md')) {
             if (-not (Test-Path (Join-Path $stage $required))) { throw "Missing package file: $required" }
           }
           "STAGE=$stage" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -228,7 +238,7 @@ jobs:
   publish-release:
     needs: [linux-validation, windows-package]
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
       VALIDATION_SOURCE: ${{ needs.linux-validation.outputs.source_sha }}
@@ -278,18 +288,28 @@ jobs:
           PY
           rm -f .github/workflows/runner-v0724-release.yml
           rm -f .github/workflows/runner-v0724-pr-validation.yml
-          rm -f .github/workflows/apply-v0724-structural-metrics-icon.yml
-          rm -f .github/workflows/apply-v0724-pr.yml
           rm -f .github/workflows/rescue-v0724-migration.yml
-          rm -f .github/workflows/watch-v0724-apply.yml
+          rm -f .github/workflows/probe-v0724-actions.yml
+          rm -f tools/apply_v0724_structural_metrics_icon.py
+          rm -f tools/run_v0724_migration.py
+          rm -f tools/cache_v0724_structural_metrics_icon.py
+          rm -f tools/.probe-do-not-merge tools/.probe-local-file tools/v0724-actions.json
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'Record Runner v0.7.24 release evidence [skip ci]'
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            for attempt in 1 2 3; do
+              git fetch origin main
+              git rebase origin/main
+              if git push origin HEAD:main; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                exit 1
+              fi
+              sleep 3
+            done
           fi
       - name: Create tag and GitHub release
         shell: bash
@@ -306,14 +326,15 @@ jobs:
           cat > release-notes.md <<'NOTES'
           Runner v0.7.24 is the structural-integrity, truthful-telemetry, and screenshot-icon release.
 
-          - Uses the exact selected in-game screenshot crop as the canonical application icon source.
-          - Makes load-bearing bone lengths rigid and performs a final post-contact structural projection.
-          - Removes automatic bone-stiffness mutation and rejects excessive final length error.
-          - Counts passed/failed stage checks instead of calling every intact rollout valid.
-          - Separates training work, tests run, and mastery passes; zero mastery cannot show 100% completion.
-          - Renames totals to SIM EPISODES, PASSED/FAILED STAGE CHECKS, and FEATURES CLEARED.
-          - Cleans the default side-view rig rendering while preserving physics geometry.
-          - Isolates v0.7.24 learned/runtime state from older compressible-rig state.
+          - Uses the exact selected gameplay screenshot pixels as the canonical Windows/runtime icon source.
+          - Enforces fixed-length structural bones after motor, collision, crouch, toe, terrain, and support-pressure operations.
+          - Rejects residual structural compression instead of allowing telescoping legs as a learned shortcut.
+          - Removes automatic stiffness mutation; automatic refinement is limited to motor strength and joint range.
+          - Counts a simulated run as passed only when it satisfies body integrity and the current lesson qualification.
+          - Separates training work, tests, and mastery evidence so zero mastery cannot display 100% lesson completion.
+          - Renames totals to simulated runs, passed/failed stage checks, and features cleared.
+          - Reduces default procedural limb and joint bulk while leaving optional overlay art disabled by default.
+          - Isolates v0.7.24 autosaves and training semantics from older compressible-rig state.
           NOTES
           gh release create "$RELEASE_TAG" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --verify-tag \
@@ -331,12 +352,14 @@ jobs:
             cmp --silent "$source" "release-download/$file"
           done
           (cd release-download && sha256sum -c "$PACKAGE_NAME.zip.sha256")
-      - name: Close PR and clean branches
+      - name: Close release PR and clean v0.7.24 branches
         shell: bash
         run: |
           set -euo pipefail
           gh pr close 78 --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
-          for branch in agent/v0724-structural-metrics-icon; do
+          while IFS= read -r branch; do
+            [ -n "$branch" ] || continue
             encoded=${branch//\//%2F}
             gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
-          done
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/branches?per_page=100" \
+            --jq '.[].name' | grep '^agent/v0724-' || true)
