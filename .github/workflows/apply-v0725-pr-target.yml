@@ -82,6 +82,26 @@ jobs:
               tools/apply_v0725_art_leg_hotfix.py \
               tools/apply_v0725_font_sync.py
             python3 tools/apply_v0725_art_leg_hotfix.py
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/simulation.cpp')
+          text = path.read_text(encoding='utf-8')
+          old = '''        solve_chain_ik(legs[0]);
+                  solve_chain_ik(legs[1]);
+          '''
+          new = '''        constexpr int chain_convergence_passes = 8;
+                  for (int pass = 0; pass < chain_convergence_passes; ++pass)
+                  {
+                      solve_chain_ik(legs[0]);
+                      solve_chain_ik(legs[1]);
+                  }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(
+                  f'expected one paired-chain solve block, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1),
+              encoding='utf-8', newline='\n')
+          PY
             python3 tools/apply_v0725_font_sync.py
             rm -f \
               tools/apply_v0725_art_leg_hotfix.py \
@@ -94,6 +114,7 @@ jobs:
             grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
             grep -F 'minimum_stance_ratio' src/simulation.cpp
             grep -F 'solve_chain_ik' src/simulation.cpp
+            grep -F 'chain_convergence_passes = 8' src/simulation.cpp
             grep -F 'font::make_bitmap_font_metrics' src/app.cpp
             grep -F 'TRAINING SAMPLES READY' src/app.cpp
             grep -F "case '%'" src/ui_font.hpp
