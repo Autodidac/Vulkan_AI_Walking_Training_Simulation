@@ -44,8 +44,16 @@ namespace runner::rl
             float longest_stance{};
             float duck_recoveries{};
             float maximum_joint_speed{};
+            float hand_contacts{};
+            float climb_transfers{};
+            float climbs{};
+            float descents{};
+            float shots{};
+            float target_hits{};
+            float equipment_transitions{};
             std::uint64_t minimum_quality{ std::numeric_limits<std::uint64_t>::max() };
             std::uint32_t rejection_mask{};
+            sim::InvalidMotion invalid_reason{ sim::InvalidMotion::none };
             std::size_t speed_samples{};
             std::uint32_t invalid_runs{};
         };
@@ -122,6 +130,9 @@ namespace runner::rl
                     GradientTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();
+                    local.set_equipment_enabled(
+                        current_stage == sim::CourseStage::equipment_targets
+                        || current_stage == sim::CourseStage::combat_course);
                     local.zero_gradients();
 
                     if (worker_index < current_active && current_indices != nullptr)
@@ -155,6 +166,9 @@ namespace runner::rl
                     EvaluationTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();
+                    local.set_equipment_enabled(
+                        current_stage == sim::CourseStage::equipment_targets
+                        || current_stage == sim::CourseStage::combat_course);
 
                     if (worker_index < current_active)
                     {
@@ -198,6 +212,9 @@ namespace runner::rl
                                 if (!environment.body_integrity_valid())
                                     totals.rejection_mask |= evidence_bit(
                                         MotionEvidenceFailure::invalid_motion);
+                                if (totals.invalid_reason == sim::InvalidMotion::none
+                                    && environment.invalid_reason() != sim::InvalidMotion::none)
+                                    totals.invalid_reason = environment.invalid_reason();
                             }
                             else
                             {
@@ -221,6 +238,13 @@ namespace runner::rl
                             totals.stable_stance += environment.stable_stance_seconds();
                             totals.longest_stance += environment.longest_stable_stance_seconds();
                             totals.duck_recoveries += static_cast<float>(environment.duck_recoveries());
+                            totals.hand_contacts += static_cast<float>(environment.hand_ledge_contacts());
+                            totals.climb_transfers += static_cast<float>(environment.climb_support_transfers());
+                            totals.climbs += static_cast<float>(environment.ledge_climbs());
+                            totals.descents += static_cast<float>(environment.controlled_descents());
+                            totals.shots += static_cast<float>(environment.shots_fired());
+                            totals.target_hits += static_cast<float>(environment.target_hits());
+                            totals.equipment_transitions += static_cast<float>(environment.equipment_transitions());
                             totals.maximum_joint_speed = std::max(
                                 totals.maximum_joint_speed, environment.maximum_joint_speed());
                         }
@@ -402,10 +426,20 @@ namespace runner::rl
             totals.stable_stance += local.stable_stance;
             totals.longest_stance += local.longest_stance;
             totals.duck_recoveries += local.duck_recoveries;
+            totals.hand_contacts += local.hand_contacts;
+            totals.climb_transfers += local.climb_transfers;
+            totals.climbs += local.climbs;
+            totals.descents += local.descents;
+            totals.shots += local.shots;
+            totals.target_hits += local.target_hits;
+            totals.equipment_transitions += local.equipment_transitions;
             totals.maximum_joint_speed = std::max(
                 totals.maximum_joint_speed, local.maximum_joint_speed);
             totals.minimum_quality = std::min(totals.minimum_quality, local.minimum_quality);
             totals.rejection_mask |= local.rejection_mask;
+            if (totals.invalid_reason == sim::InvalidMotion::none
+                && local.invalid_reason != sim::InvalidMotion::none)
+                totals.invalid_reason = local.invalid_reason;
             totals.speed_samples += local.speed_samples;
             totals.invalid_runs += local.invalid_runs;
         }
@@ -430,6 +464,13 @@ namespace runner::rl
         metrics_.evaluation_longest_stance = totals.longest_stance * inverse_agents;
         metrics_.evaluation_duck_recoveries = totals.duck_recoveries * inverse_agents;
         metrics_.evaluation_max_joint_speed = totals.maximum_joint_speed;
+        metrics_.evaluation_hand_contacts = totals.hand_contacts * inverse_agents;
+        metrics_.evaluation_climb_transfers = totals.climb_transfers * inverse_agents;
+        metrics_.evaluation_climbs = totals.climbs * inverse_agents;
+        metrics_.evaluation_descents = totals.descents * inverse_agents;
+        metrics_.evaluation_shots = totals.shots * inverse_agents;
+        metrics_.evaluation_target_hits = totals.target_hits * inverse_agents;
+        metrics_.evaluation_equipment_transitions = totals.equipment_transitions * inverse_agents;
         constexpr std::uint32_t robust_balance_failures_allowed = 2u;
         const std::uint32_t allowed_invalid_runs = course_stage_ == sim::CourseStage::balance
             ? robust_balance_failures_allowed : 0u;
@@ -438,6 +479,8 @@ namespace runner::rl
             && totals.minimum_quality != std::numeric_limits<std::uint64_t>::max();
         metrics_.evaluation_rejection_mask = metrics_.evaluation_valid
             ? 0u : totals.rejection_mask;
+        metrics_.evaluation_invalid_reason = metrics_.evaluation_valid
+            ? sim::InvalidMotion::none : totals.invalid_reason;
         metrics_.evaluation_quality_key = metrics_.evaluation_valid
             ? totals.minimum_quality : 0u;
 
@@ -508,6 +551,27 @@ namespace runner::rl
                     + metrics_.evaluation_spin_landings * 0.30f
                     + metrics_.evaluation_duck_seconds * 0.08f
                     - metrics_.evaluation_collisions * 0.10f;
+                break;
+            case sim::CourseStage::climb_descent:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_climbs * 1.50f
+                    + metrics_.evaluation_descents * 2.00f
+                    + metrics_.evaluation_climb_transfers * 0.45f
+                    + metrics_.evaluation_hand_contacts * 0.20f;
+                break;
+            case sim::CourseStage::equipment_targets:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_target_hits * 2.00f
+                    - std::max(0.0f, metrics_.evaluation_shots
+                        - metrics_.evaluation_target_hits) * 0.10f
+                    + metrics_.evaluation_longest_stance * 0.06f;
+                break;
+            case sim::CourseStage::combat_course:
+                metrics_.evaluation_score = metrics_.evaluation_reward
+                    + metrics_.evaluation_target_hits * 1.35f
+                    + metrics_.evaluation_distance * 0.55f
+                    + metrics_.evaluation_stride_events * 0.08f
+                    - metrics_.evaluation_collisions * 0.12f;
                 break;
             }
         }

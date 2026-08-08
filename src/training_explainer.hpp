@@ -198,6 +198,12 @@ namespace runner::telemetry
             return "It needs a controlled flip followed by a supported landing.";
         case sim::CourseStage::moving_hazards:
             return "It needs to avoid a hazard and keep moving under control.";
+        case sim::CourseStage::climb_descent:
+            return "It needs a hand contact, support transfer, climb, and controlled feet-first descent.";
+        case sim::CourseStage::equipment_targets:
+            return "It needs safe handling, accurate shots, and stable target engagement.";
+        case sim::CourseStage::combat_course:
+            return "It needs to keep a real gait while aiming and hitting targets.";
         }
         return "It has not shown enough of the lesson skill yet.";
     }
@@ -262,6 +268,12 @@ namespace runner::telemetry
             return "Complete 2 powered jumps and land 2 controlled flips between 0.85 and 3 turns.";
         case sim::CourseStage::moving_hazards:
             return "Travel 11 m, make 8 stride events, pass 4 hazards, and keep collisions controlled.";
+        case sim::CourseStage::climb_descent:
+            return "Climb the reachable ledge by hand support, transfer onto it, then descend backward feet first.";
+        case sim::CourseStage::equipment_targets:
+            return "Transition from safe carry to ready and hit 3 varied-distance targets while staying stable.";
+        case sim::CourseStage::combat_course:
+            return "Travel 6 m with 6 gait cycles while safely hitting 2 targets under course pressure.";
         }
         return "Complete the current lesson safely and repeatedly.";
     }

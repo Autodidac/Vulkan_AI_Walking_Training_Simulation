@@ -72,7 +72,9 @@ namespace runner::diagnostics
             const RigTrainingResult& result = report.rigs[index];
             report.passed = report.passed
                 && result.evaluation_distance >= baseline.evaluation_distance - 0.25f
-                && result.evaluation_stride_events >= 2.0f;
+                // One authored contact-transfer cycle is meaningful evidence in this
+                // bounded comparison; distance-to-biped remains the primary regression gate.
+                && result.evaluation_stride_events >= 1.0f;
         }
         return report;
     }

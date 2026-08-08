@@ -1,4 +1,15 @@
 # Runner
+## v0.7.28 physical material course completion
+
+- Replaces Walk / Run launch hazards with a protected physical runway and seeded contiguous firm ground, dry sand, waterlogged ground, shallow water, and recoverable holes.
+- Keeps falling sand/debris and authored obstacles out of basic gait; advanced material pressure requires both runway distance and real gait cycles.
+- Renders the actual near-surface cells, water column, hole profile, target, weapon, and projectiles instead of deep decorative geology or mislabeled sand grains.
+- Adds full rejection-mask decoding, invalid-motion detail, live terrain/water/equipment truth, and nearest-feature distance.
+- Completes reachable hand-ledged climbing with support transfer and controlled backward descent, plus optional sidearm/carbine/launcher target and combat lessons.
+- Preserves v0.7.27 anatomy behavior when equipment is disabled and supports explicit EPPO28 checkpoint transfer into neutral new channels.
+- Keeps preview, water, material, projectile, climb, and equipment timing fixed-step equivalent at 20, 60, and 240 render Hz.
+- Adds `Runner.exe --diagnose-course` and repeated-seed positive, negative, adversarial, compatibility, and cadence gates.
+- Adds `Runner.exe --course-eye-test`, a fixed production start frame that fits the protected runway and all material regions into one packaged visual audit.
 
 ## v0.7.27 authored-contact gait evidence
 
@@ -10,7 +21,7 @@
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.27 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.28 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -81,9 +92,11 @@ Runner.exe --diagnose-acceptance
 Runner.exe --diagnose-camera
 Runner.exe --diagnose-ui
 Runner.exe --diagnose-rig-training
+Runner.exe --diagnose-course
+Runner.exe --course-eye-test
 ```
 
-`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty.
+`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection.
 
 ## Repository records
 
@@ -103,6 +116,7 @@ Runner.exe --diagnose-rig-training
 - [`docs/RUNNER_V0725_ART_LEG_HOTFIX.md`](docs/RUNNER_V0725_ART_LEG_HOTFIX.md) documents compact node-attached armor and supported stance-leg extension.
 - [`docs/RUNNER_V0726_TRAINING_TRUTH.md`](docs/RUNNER_V0726_TRAINING_TRUTH.md) documents rig-scoped training truth, static preview motion, and reset telemetry.
 - [`docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md`](docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md) documents authored-contact gait evidence and the fixed four-rig comparison.
+- [`docs/RUNNER_V0728_COURSE_COMPLETION.md`](docs/RUNNER_V0728_COURSE_COMPLETION.md) documents the physical material course, climb/equipment completion, checkpoint migration, and diagnostic contract.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 

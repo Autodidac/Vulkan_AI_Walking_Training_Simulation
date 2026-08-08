@@ -15,9 +15,13 @@ foreach(required IN ITEMS
         docs/RUNNER_V0725_ART_LEG_HOTFIX.md
         docs/RUNNER_V0726_TRAINING_TRUTH.md
         docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md
+        docs/RUNNER_V0728_COURSE_COMPLETION.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0727_rig_training_tests.cpp
+        tests/v0728_course_completion_tests.cpp
+        src/course_completion_diagnostic.cpp
+        src/course_completion_diagnostic.hpp
         assets/optional/runner_armor_concepts/runtime/foot_side.ppm
         assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
         assets/optional/runner_armor_concepts/runtime/torso_side.ppm
@@ -49,7 +53,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.27 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.28 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -57,14 +61,16 @@ foreach(reference IN ITEMS
         "RunnerV0725ArtLegHotfixTests"
         "RunnerV0726TrainingTruthTests"
         "RunnerV0727RigTrainingTests"
+        "RunnerV0728CourseCompletionTests"
         "RUNNER_V0725_ART_LEG_HOTFIX.md"
         "RUNNER_V0726_TRAINING_TRUTH.md"
         "RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
+        "RUNNER_V0728_COURSE_COMPLETION.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.27 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake v0.7.28 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -106,10 +112,21 @@ foreach(reference IN ITEMS
         "WALK-PIPELINE-TIMING-329"
         "WALK-RIG-STATE-330"
         "WALK-RIG-DOC-331"
-        "WALK-RIG-RELEASE-332")
+        "WALK-RIG-RELEASE-332"
+        "WALK-COURSE-334"
+        "WALK-MATERIAL-335"
+        "WALK-TERRAIN-RENDER-336"
+        "WALK-MATERIAL-TRUTH-337"
+        "WALK-DEBUG-338"
+        "WALK-FRAME-339"
+        "WALK-CARRIED-340"
+        "WALK-CARRIED-341"
+        "WALK-COURSE-DIAGNOSTIC-342"
+        "WALK-STATE-DOC-343"
+        "WALK-RELEASE-344")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.27 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.28 contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -135,7 +152,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'2701u"
+        "training_semantics_version = 0x0007'2801u"
         "completed_episode_passes_stage_checks")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -167,14 +184,20 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0727-rig-autosave.eppo"
+        "runner-v0728-course-autosave.eppo"
+        "PACKAGED COURSE EYE TEST"
         "COMPACT SEGMENTED BODY ARMOR"
         "shoulder_cap_radius")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.27 application contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.28 application contract missing: ${reference}")
     endif()
 endforeach()
+file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
+string(FIND "${main_text}" "--course-eye-test" course_eye_test_pos)
+if(course_eye_test_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.28 packaged course eye-test launch contract missing")
+endif()
 string(FIND "${app_text}" "Color{}" opaque_default_pos)
 if(NOT opaque_default_pos EQUAL -1)
     message(FATAL_ERROR "Opaque default Color remains in application border rendering")
@@ -272,6 +295,55 @@ foreach(reference IN ITEMS
     endif()
 endforeach()
 
+file(READ "${RUNNER_SOURCE_DIR}/src/course_completion_diagnostic.cpp" course_diagnostic_text)
+foreach(reference IN ITEMS
+        "safe_runway"
+        "material_regions"
+        "water_and_holes"
+        "delayed_material_pressure"
+        "equipment_off_identity"
+        "same_course_preview"
+        "CourseStage::combat_course"
+        "frame_independent")
+    string(FIND "${course_diagnostic_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.28 course diagnostic contract missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
+foreach(reference IN ITEMS
+        "v0727_checkpoint_magic"
+        "v0727_parameter_count = 8'017u"
+        "migrate_v0727_parameters"
+        "NEW MATERIAL/EQUIPMENT CHANNELS NEUTRAL")
+    string(FIND "${checkpoint_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.28 checkpoint migration contract missing: ${reference}")
+    endif()
+endforeach()
+
+foreach(reference IN ITEMS
+        "TerrainRegion::hole"
+        "gait_cycles() < 2u"
+        "manipulator_endpoint"
+        "update_equipment"
+        "apply_water_forces")
+    string(FIND "${simulation_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.28 physical course contract missing: ${reference}")
+    endif()
+endforeach()
+string(FIND "${simulation_text}" "append_material_features" legacy_material_adapter_pos)
+if(NOT legacy_material_adapter_pos EQUAL -1)
+    message(FATAL_ERROR "Legacy material-to-hazard adapter remains")
+endif()
+
+file(READ "${RUNNER_SOURCE_DIR}/.github/workflows/release.yml" release_workflow_text)
+string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
+if(course_workflow_pos EQUAL -1)
+    message(FATAL_ERROR "Release workflow does not run the v0.7.28 course diagnostic")
+endif()
 file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
 if(release_notes)
     message(FATAL_ERROR "Per-release note files remain; CHANGELOG.md is canonical")
@@ -302,4 +374,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.27 repository hygiene passed")
+message(STATUS "Runner v0.7.28 repository hygiene passed")

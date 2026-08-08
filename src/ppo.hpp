@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'2701u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'2801u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -31,8 +31,8 @@ namespace runner::rl
         const sim::Environment& environment) noexcept
     {
         constexpr std::size_t joint_angle_begin = 4;
-        constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::action_count;
-        static_assert(sim::observation_count == 50);
+        constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::anatomy_action_count;
+        static_assert(sim::observation_count == 60);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
         const sim::CreatureBlueprint& rig = environment.blueprint();
@@ -590,6 +590,30 @@ namespace runner::rl
                     policy_action[index] = lerp(policy_action[index], 0.0f, amount);
             }
         };
+        auto apply_equipment_teacher = [&]() noexcept
+        {
+            for (std::size_t index = sim::anatomy_action_count;
+                index < sim::action_count; ++index)
+                policy_action[index] = 0.0f;
+
+            const sim::EquipmentTarget& target = environment.equipment_target();
+            if (environment.weapon_class() == sim::WeaponClass::none || !target.active)
+                return;
+
+            const Vec2 delta = target.position
+                - environment.equipment_mount_position();
+            const float desired_angle = std::atan2(delta.y, delta.x);
+            const float aim_error = std::remainder(
+                desired_angle - environment.equipment_aim_angle(), 2.0f * pi);
+            policy_action[sim::anatomy_action_count] = 0.72f;
+            policy_action[sim::anatomy_action_count + 1u] = clamp(
+                desired_angle / (pi * 0.42f), -1.0f, 1.0f);
+            policy_action[sim::anatomy_action_count + 2u] =
+                environment.equipment_state() == sim::EquipmentState::ready
+                    && std::abs(aim_error) < 0.10f
+                    && environment.equipment_cooldown() <= 0.0f
+                ? 1.0f : -1.0f;
+        };
         if (stage == sim::CourseStage::balance)
         {
             const auto teacher = balance_teacher_action(environment);
@@ -621,13 +645,31 @@ namespace runner::rl
             const auto teacher = balance_teacher_action(environment);
             blend_teacher(teacher, 0.26f, 0.88f);
         }
-        else if (stage == sim::CourseStage::hurdles || stage == sim::CourseStage::moving_hazards)
+        else if (stage == sim::CourseStage::hurdles
+            || stage == sim::CourseStage::moving_hazards
+            || stage == sim::CourseStage::climb_descent
+            || stage == sim::CourseStage::combat_course)
         {
             const auto teacher = walking_teacher_action(environment);
             const locomotion::Plan movement = current_locomotion_plan(environment);
             const float support_assist = movement.intent == locomotion::Intent::crawl ? 0.78f : movement.intent == locomotion::Intent::flee ? 0.52f : movement.intent == locomotion::Intent::recover ? 0.62f : movement.step_up ? 0.48f : 0.24f;
             const float body_assist = movement.intent == locomotion::Intent::crawl ? 0.60f : movement.intent == locomotion::Intent::flee ? 0.34f : 0.20f;
             blend_teacher(teacher, support_assist, body_assist);
+        }
+        else if (stage == sim::CourseStage::equipment_targets)
+        {
+            const auto teacher = balance_teacher_action(environment);
+            blend_teacher(teacher, 0.58f, 0.66f);
+        }
+
+        if (stage == sim::CourseStage::equipment_targets
+            || stage == sim::CourseStage::combat_course)
+            apply_equipment_teacher();
+        else
+        {
+            for (std::size_t index = sim::anatomy_action_count;
+                index < sim::action_count; ++index)
+                policy_action[index] = 0.0f;
         }
         if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
         {
@@ -685,9 +727,17 @@ namespace runner::rl
         float evaluation_longest_stance{};
         float evaluation_duck_recoveries{};
         float evaluation_max_joint_speed{};
+        float evaluation_hand_contacts{};
+        float evaluation_climb_transfers{};
+        float evaluation_climbs{};
+        float evaluation_descents{};
+        float evaluation_shots{};
+        float evaluation_target_hits{};
+        float evaluation_equipment_transitions{};
         std::uint64_t evaluation_quality_key{};
         std::uint32_t evaluation_rejection_mask{};
         std::uint32_t evaluation_invalid_runs{};
+        sim::InvalidMotion evaluation_invalid_reason{ sim::InvalidMotion::none };
         bool evaluation_valid{};
 
         float best_evaluation_distance{ -std::numeric_limits<float>::infinity() };
@@ -752,6 +802,31 @@ namespace runner::rl
     [[nodiscard]] inline constexpr std::uint32_t evidence_bit(MotionEvidenceFailure failure) noexcept
     {
         return static_cast<std::uint32_t>(failure);
+    }
+
+    [[nodiscard]] inline std::string motion_rejection_summary(std::uint32_t mask)
+    {
+        std::string result{};
+        auto append = [&](MotionEvidenceFailure failure, std::string_view name)
+        {
+            if ((mask & evidence_bit(failure)) == 0u)
+                return;
+            if (!result.empty())
+                result += " + ";
+            result += name;
+        };
+        append(MotionEvidenceFailure::invalid_motion, "INVALID MOTION");
+        append(MotionEvidenceFailure::no_stable_stance, "NO STABLE STANCE");
+        append(MotionEvidenceFailure::missing_recovery, "NO RECOVERY");
+        append(MotionEvidenceFailure::missing_skill, "MISSING SKILL");
+        append(MotionEvidenceFailure::missing_progress, "NO PROGRESS");
+        append(MotionEvidenceFailure::unstable_joints, "UNSTABLE JOINTS");
+        append(MotionEvidenceFailure::body_contact, "BODY CONTACT");
+        append(MotionEvidenceFailure::non_neutral_posture, "NON-NEUTRAL POSTURE");
+        append(MotionEvidenceFailure::excessive_rotation, "EXCESSIVE ROTATION");
+        append(MotionEvidenceFailure::invalid_crouch_posture, "INVALID CROUCH");
+        append(MotionEvidenceFailure::lateral_crab_gait, "LATERAL GAIT");
+        return result.empty() ? "STAGE VALID" : result;
     }
 
     [[nodiscard]] inline std::string_view primary_motion_rejection_name(
@@ -916,6 +991,32 @@ namespace runner::rl
             if (environment.distance_travelled() < 2.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
             break;
+        case sim::CourseStage::climb_descent:
+            if (environment.hand_ledge_contacts() < 1u
+                || environment.climb_support_transfers() < 2u
+                || environment.ledge_climbs() < 1u
+                || environment.controlled_descents() < 1u
+                || environment.powered_jumps() != 0u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            break;
+        case sim::CourseStage::equipment_targets:
+            if (environment.longest_stable_stance_seconds() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.target_hits() < 3u
+                || environment.shots_fired() < environment.target_hits()
+                || environment.equipment_transitions() < 1u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            break;
+        case sim::CourseStage::combat_course:
+            if (environment.longest_stable_stance_seconds() < 1.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::no_stable_stance);
+            if (environment.target_hits() < 2u || environment.gait_cycles() < 3u
+                || environment.equipment_state() == sim::EquipmentState::dropped
+                || environment.equipment_state() == sim::EquipmentState::disarmed)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
+            if (environment.distance_travelled() < 2.0f)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            break;
         }
 
         if (rejection != 0u)
@@ -977,6 +1078,28 @@ namespace runner::rl
                 quality_bucket(std::min(environment.maximum_flip_turns(), 3.0f), 100.0f),
                 static_cast<std::uint16_t>(std::min<std::uint32_t>(
                     environment.landed_jumps(), 65535u)),
+                quality_bucket(environment.elapsed_seconds()));
+            break;
+        case sim::CourseStage::climb_descent:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(environment.controlled_descents()),
+                static_cast<std::uint16_t>(environment.ledge_climbs()),
+                static_cast<std::uint16_t>(environment.climb_support_transfers()),
+                static_cast<std::uint16_t>(environment.hand_ledge_contacts()));
+            break;
+        case sim::CourseStage::equipment_targets:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(environment.target_hits()),
+                static_cast<std::uint16_t>(65535u - std::min<std::uint32_t>(
+                    environment.shots_fired() - environment.target_hits(), 65535u)),
+                static_cast<std::uint16_t>(environment.equipment_transitions()),
+                quality_bucket(environment.longest_stable_stance_seconds()));
+            break;
+        case sim::CourseStage::combat_course:
+            quality = pack_quality(
+                static_cast<std::uint16_t>(environment.target_hits()),
+                static_cast<std::uint16_t>(environment.gait_cycles()),
+                quality_bucket(std::max(0.0f, environment.distance_travelled())),
                 quality_bucket(environment.elapsed_seconds()));
             break;
         }
@@ -1147,6 +1270,14 @@ namespace runner::rl
         [[nodiscard]] std::vector<float>& gradients() noexcept { return gradients_; }
         [[nodiscard]] std::array<float, output_size> standard_deviation() const noexcept;
         void set_exploration(float standard_deviation) noexcept;
+        void set_equipment_enabled(bool enabled) noexcept
+        {
+            active_output_count_ = enabled ? output_size : sim::anatomy_action_count;
+        }
+        [[nodiscard]] std::size_t active_output_count() const noexcept
+        {
+            return active_output_count_;
+        }
         void neutralize_action_slot(std::size_t slot) noexcept;
         [[nodiscard]] float mean_exploration() const noexcept;
         [[nodiscard]] float log_probability(
@@ -1192,6 +1323,7 @@ namespace runner::rl
         std::vector<float> parameters_{};
         std::vector<float> gradients_{};
         std::uint64_t random_state_{ 1 };
+        std::size_t active_output_count_{ sim::anatomy_action_count };
     };
 
     class PpoTrainer

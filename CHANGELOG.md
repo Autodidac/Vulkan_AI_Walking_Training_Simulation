@@ -1,3 +1,16 @@
+## 0.7.28
+
+- Replaced launch-area Walk / Run hazards with a protected runway and seeded firm, dry-sand, waterlogged, shallow-water, and hole regions.
+- Required real gait cycles and runway progress before advanced falling material can spawn; sand grains are no longer promoted to thrown-object hazards.
+- Aligned deformable contacts, water buoyancy/drag, hole geometry, observations, reward evidence, and near-surface rendering.
+- Added readable rejection-mask, invalid-motion, terrain, water, feature-distance, and equipment diagnostics.
+- Completed physical ledge grasp/climb/regrasp/backward descent and optional sidearm, carbine, launcher, target, and combat lessons.
+- Expanded the policy to 60 observations and 11 actions while masking equipment when disabled and preserving v0.7.27 anatomy initialization.
+- Added authentic EPPO28 checkpoint migration with neutral new channels and reset optimizer/mastery state.
+- Removed frame-rate assumptions from velocities, damping, impulses, water, material, projectile, and preview timing; 20/60/240 Hz checks are exact.
+- Added `--diagnose-course`, repeated-seed material/contract coverage, package integration, and audited v0.7.28 state isolation.
+- Added `--course-eye-test`, a frozen production Vulkan frame that makes the protected start, material sequence, pressure gate, and label spacing directly auditable in the packaged app.
+
 ## 0.7.27
 
 - Replaced aggregate two-group gait evidence with authored support-seed strike, swing, and lift accounting for multi-legged rigs.

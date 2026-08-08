@@ -280,6 +280,10 @@ namespace runner::rl
     void PpoTrainer::set_course(sim::CourseStage stage, float difficulty, bool preserve_best)
     {
         difficulty = clamp(difficulty, 0.10f, 1.0f);
+        const bool equipment_enabled = stage == sim::CourseStage::equipment_targets
+            || stage == sim::CourseStage::combat_course;
+        policy_.set_equipment_enabled(equipment_enabled);
+        preview_policy_.set_equipment_enabled(equipment_enabled);
         if (stage == course_stage_ && std::abs(difficulty - course_difficulty_) < 1.0e-5f)
             return;
         course_stage_ = stage;
@@ -314,6 +318,13 @@ namespace runner::rl
         metrics_.evaluation_longest_stance = 0.0f;
         metrics_.evaluation_duck_recoveries = 0.0f;
         metrics_.evaluation_max_joint_speed = 0.0f;
+        metrics_.evaluation_hand_contacts = 0.0f;
+        metrics_.evaluation_climb_transfers = 0.0f;
+        metrics_.evaluation_climbs = 0.0f;
+        metrics_.evaluation_descents = 0.0f;
+        metrics_.evaluation_shots = 0.0f;
+        metrics_.evaluation_target_hits = 0.0f;
+        metrics_.evaluation_equipment_transitions = 0.0f;
         metrics_.evaluation_quality_key = 0u;
         metrics_.evaluation_rejection_mask = 0u;
         metrics_.evaluation_invalid_runs = 0;
@@ -388,6 +399,10 @@ namespace runner::rl
     void PpoTrainer::reset_policy(std::uint64_t seed, bool clear_totals)
     {
         policy_ = PolicyNetwork(seed);
+        const bool equipment_enabled = course_stage_ == sim::CourseStage::equipment_targets
+            || course_stage_ == sim::CourseStage::combat_course;
+        policy_.set_equipment_enabled(equipment_enabled);
+        preview_policy_.set_equipment_enabled(equipment_enabled);
         preview_policy_.parameters() = policy_.parameters();
         reset_training_state(true, clear_totals);
         controller_state_ = ControllerState::fresh;
@@ -427,7 +442,7 @@ namespace runner::rl
     {
         const auto stddev = policy_.standard_deviation();
         std::array<float, sim::action_count> action{};
-        for (std::size_t index = 0; index < action.size(); ++index)
+        for (std::size_t index = 0; index < policy_.active_output_count(); ++index)
             action[index] = clamp(evaluation.mean[index] + stddev[index] * next_normal(random_state), -1.0f, 1.0f);
         log_probability = policy_.log_probability(action, evaluation);
         return action;

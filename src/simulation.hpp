@@ -14,8 +14,11 @@
 
 namespace runner::sim
 {
-    inline constexpr std::size_t action_count = 8;
-    inline constexpr std::size_t observation_count = 50;
+    inline constexpr std::size_t anatomy_action_count = 8;
+    inline constexpr std::size_t equipment_action_count = 3;
+    inline constexpr std::size_t action_count =
+        anatomy_action_count + equipment_action_count;
+    inline constexpr std::size_t observation_count = 60;
 
     enum class CourseStage : std::uint8_t
     {
@@ -26,17 +29,21 @@ namespace runner::sim
         ramps,
         hurdles,
         duck_bars,
-        moving_hazards
+        moving_hazards,
+        climb_descent,
+        equipment_targets,
+        combat_course
     };
 
-    inline constexpr std::size_t course_stage_count = 8;
+    inline constexpr std::size_t course_stage_count = 11;
 
     [[nodiscard]] inline bool stage_uses_deformable_terrain(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven
             || stage == CourseStage::crouch_walk
             || stage == CourseStage::hurdles
-            || stage == CourseStage::moving_hazards;
+            || stage == CourseStage::moving_hazards
+            || stage == CourseStage::combat_course;
     }
 
     [[nodiscard]] constexpr float terrain_sample_x(float world_x,
@@ -69,7 +76,9 @@ namespace runner::sim
         return stage == CourseStage::uneven
             || stage == CourseStage::crouch_walk
             || stage == CourseStage::hurdles
-            || stage == CourseStage::moving_hazards;
+            || stage == CourseStage::moving_hazards
+            || stage == CourseStage::climb_descent
+            || stage == CourseStage::combat_course;
     }
 
     [[nodiscard]] inline bool stage_allows_powered_airtime(CourseStage stage) noexcept
@@ -77,7 +86,8 @@ namespace runner::sim
         return stage == CourseStage::ramps
             || stage == CourseStage::hurdles
             || stage == CourseStage::duck_bars
-            || stage == CourseStage::moving_hazards;
+            || stage == CourseStage::moving_hazards
+            || stage == CourseStage::combat_course;
     }
 
     [[nodiscard]] inline bool stage_allows_controlled_flips(CourseStage stage) noexcept
@@ -105,7 +115,8 @@ namespace runner::sim
             return 1.85f;
         if (stage == CourseStage::duck_bars)
             return 2.75f;
-        if (stage == CourseStage::moving_hazards)
+        if (stage == CourseStage::moving_hazards
+            || stage == CourseStage::combat_course)
             return 2.45f;
         return 0.72f;
     }
@@ -134,8 +145,12 @@ namespace runner::sim
         case CourseStage::duck_bars:
             return spin_landings >= 1u && maximum_spin_turns >= 0.75f;
         case CourseStage::moving_hazards:
+        case CourseStage::combat_course:
             return alternating_steps >= 2u && obstacles_passed >= 1u
                 && (duck_seconds >= 0.25f || landed_jumps >= 1u || spin_landings >= 1u);
+        case CourseStage::climb_descent:
+        case CourseStage::equipment_targets:
+            return true;
         }
         return false;
     }
@@ -152,6 +167,9 @@ namespace runner::sim
         case CourseStage::hurdles: return "6. MOVING LOW BAR / HURDLE";
         case CourseStage::duck_bars: return "7. CONTROLLED FLIPS";
         case CourseStage::moving_hazards: return "8. MIXED GOAL COURSE";
+        case CourseStage::climb_descent: return "9. CLIMB / BACKWARD DESCENT";
+        case CourseStage::equipment_targets: return "10. EQUIPMENT / TARGETS";
+        case CourseStage::combat_course: return "11. MOVE / AIM / FIRE";
         }
         return "UNKNOWN";
     }
@@ -161,6 +179,7 @@ namespace runner::sim
         hurdle,
         overhead_bar,
         duck_press,
+        ledge,
         moving_hazard,
         rock,
         projectile
@@ -173,6 +192,7 @@ namespace runner::sim
         case CourseFeatureKind::hurdle: return "HURDLE";
         case CourseFeatureKind::overhead_bar: return "LOW BAR";
         case CourseFeatureKind::duck_press: return "DUCK PRESS";
+        case CourseFeatureKind::ledge: return "CLIMB LEDGE";
         case CourseFeatureKind::moving_hazard: return "MOVING HAZARD";
         case CourseFeatureKind::rock: return "ROCK";
         case CourseFeatureKind::projectile: return "THROWN OBJECT";
@@ -201,6 +221,7 @@ namespace runner::sim
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
         case CourseFeatureKind::duck_press:
+        case CourseFeatureKind::ledge:
             return feature.half_extent.x;
         }
         return 0.0f;
@@ -217,6 +238,7 @@ namespace runner::sim
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
         case CourseFeatureKind::duck_press:
+        case CourseFeatureKind::ledge:
             return feature.center.y + feature.half_extent.y;
         }
         return feature.center.y;
@@ -308,7 +330,8 @@ namespace runner::sim
             || stage == CourseStage::ramps
             || stage == CourseStage::hurdles
             || stage == CourseStage::duck_bars
-            || stage == CourseStage::moving_hazards;
+            || stage == CourseStage::moving_hazards
+            || stage == CourseStage::combat_course;
         return recovery_stage && non_foot_grounded && head_faces_forward
             && uprightness <= 0.42f && forward_speed >= -0.15f;
     }
@@ -484,7 +507,8 @@ namespace runner::sim
     [[nodiscard]] inline bool obstacles_require_flat_zone(CourseStage stage,
         float difficulty) noexcept
     {
-        return stage != CourseStage::moving_hazards || difficulty < 0.70f;
+        return (stage != CourseStage::moving_hazards
+            && stage != CourseStage::combat_course) || difficulty < 0.70f;
     }
 
     [[nodiscard]] inline float course_feature_observation_size(
@@ -499,6 +523,7 @@ namespace runner::sim
         case CourseFeatureKind::hurdle:
         case CourseFeatureKind::overhead_bar:
         case CourseFeatureKind::duck_press:
+        case CourseFeatureKind::ledge:
             return std::max(feature.half_extent.x, feature.half_extent.y);
         }
         return 0.0f;
@@ -781,13 +806,13 @@ namespace runner::sim
             return clamp(manual_input, -1.0f, 1.0f);
         if (pattern == RigTestPattern::crouch)
         {
-            constexpr std::array<float, action_count> crouch{
+            constexpr std::array<float, anatomy_action_count> crouch{
                 -0.22f, 0.70f, 0.22f, -0.70f, 0.0f, 0.0f, 0.0f, 0.0f
             };
             return crouch[std::min(motor_index, crouch.size() - 1u)];
         }
         const float swing = std::sin(phase);
-        const std::array<float, action_count> gait{
+        const std::array<float, anatomy_action_count> gait{
             0.58f * swing,
             0.48f * std::max(0.0f, swing),
             -0.58f * swing,
@@ -856,6 +881,96 @@ namespace runner::sim
         float density{ 0.45f };
         bool active{ true };
     };
+
+    enum class EquipmentState : std::uint8_t
+    {
+        unarmed,
+        safe_carry,
+        ready,
+        disarmed,
+        dropped
+    };
+
+    [[nodiscard]] inline std::string_view equipment_state_name(
+        EquipmentState state) noexcept
+    {
+        switch (state)
+        {
+        case EquipmentState::unarmed: return "UNARMED";
+        case EquipmentState::safe_carry: return "SAFE CARRY";
+        case EquipmentState::ready: return "READY";
+        case EquipmentState::disarmed: return "DISARMED";
+        case EquipmentState::dropped: return "DROPPED";
+        }
+        return "UNKNOWN";
+    }
+
+    enum class WeaponClass : std::uint8_t
+    {
+        none,
+        sidearm,
+        carbine,
+        launcher
+    };
+
+    [[nodiscard]] inline std::string_view weapon_class_name(
+        WeaponClass weapon) noexcept
+    {
+        switch (weapon)
+        {
+        case WeaponClass::none: return "NONE";
+        case WeaponClass::sidearm: return "SIDEARM";
+        case WeaponClass::carbine: return "CARBINE";
+        case WeaponClass::launcher: return "LAUNCHER";
+        }
+        return "UNKNOWN";
+    }
+
+    struct WeaponProfile
+    {
+        float projectile_speed{};
+        float cooldown_seconds{};
+        float projectile_radius{};
+        float gravity{};
+        float recoil{};
+    };
+
+    [[nodiscard]] inline WeaponProfile weapon_profile(WeaponClass weapon) noexcept
+    {
+        switch (weapon)
+        {
+        case WeaponClass::sidearm: return { 12.0f, 0.42f, 0.065f, 0.0f, 0.12f };
+        case WeaponClass::carbine: return { 17.0f, 0.20f, 0.050f, 0.0f, 0.08f };
+        case WeaponClass::launcher: return { 8.5f, 0.90f, 0.110f, 4.5f, 0.20f };
+        case WeaponClass::none: break;
+        }
+        return {};
+    }
+
+    struct EquipmentProjectile
+    {
+        WeaponClass weapon{ WeaponClass::none };
+        Vec2 position{};
+        Vec2 velocity{};
+        float radius{ 0.05f };
+        std::uint32_t sequence{};
+        bool active{ true };
+    };
+
+    struct EquipmentTarget
+    {
+        Vec2 position{};
+        float radius{ 0.32f };
+        std::uint32_t sequence{};
+        bool active{};
+    };
+
+    inline constexpr std::size_t equipment_state_action =
+        anatomy_action_count;
+    inline constexpr std::size_t equipment_aim_action =
+        anatomy_action_count + 1u;
+    inline constexpr std::size_t equipment_trigger_action =
+        anatomy_action_count + 2u;
 
     struct DistanceConstraint
     {
@@ -946,7 +1061,7 @@ namespace runner::sim
         std::vector<Vec2> nodes{};
         std::vector<float> radii{};
         std::vector<DistanceConstraint> bones{};
-        std::array<MotorConstraint, action_count> motors{};
+        std::array<MotorConstraint, anatomy_action_count> motors{};
         std::size_t active_motor_count{ 4 };
 
         std::uint16_t root_node{};
@@ -1048,6 +1163,9 @@ namespace runner::sim
 
         void set_blueprint(const CreatureBlueprint& blueprint);
         void set_course(CourseStage stage, float difficulty = 0.25f);
+        void configure_equipment(WeaponClass weapon, float target_distance = 8.0f);
+        void clear_equipment() noexcept;
+        void disarm_equipment() noexcept;
         void reset(std::uint64_t seed = 0);
         [[nodiscard]] StepResult step(std::span<const float, action_count> actions, float dt = 1.0f / 60.0f);
         [[nodiscard]] std::array<float, observation_count> observation() const noexcept;
@@ -1058,6 +1176,44 @@ namespace runner::sim
         [[nodiscard]] std::span<const MaterialParticle> material_particles() const noexcept
         {
             return material_particles_;
+        }
+        [[nodiscard]] std::span<const EquipmentProjectile> equipment_projectiles() const noexcept
+        {
+            return equipment_projectiles_;
+        }
+        [[nodiscard]] const EquipmentTarget& equipment_target() const noexcept
+        {
+            return equipment_target_;
+        }
+        [[nodiscard]] EquipmentState equipment_state() const noexcept
+        {
+            return equipment_state_;
+        }
+        [[nodiscard]] WeaponClass weapon_class() const noexcept { return weapon_class_; }
+        [[nodiscard]] float equipment_aim_angle() const noexcept { return equipment_aim_angle_; }
+        [[nodiscard]] float equipment_cooldown() const noexcept
+        {
+            return equipment_cooldown_seconds_;
+        }
+        [[nodiscard]] std::uint32_t shots_fired() const noexcept { return shots_fired_; }
+        [[nodiscard]] std::uint32_t target_hits() const noexcept { return target_hits_; }
+        [[nodiscard]] std::uint32_t equipment_transitions() const noexcept
+        {
+            return equipment_transition_count_;
+        }
+        [[nodiscard]] Vec2 equipment_mount_position() const noexcept;
+        [[nodiscard]] std::uint32_t hand_ledge_contacts() const noexcept
+        {
+            return hand_ledge_contacts_;
+        }
+        [[nodiscard]] std::uint32_t climb_support_transfers() const noexcept
+        {
+            return climb_support_transfers_;
+        }
+        [[nodiscard]] std::uint32_t ledge_climbs() const noexcept { return ledge_climbs_; }
+        [[nodiscard]] std::uint32_t controlled_descents() const noexcept
+        {
+            return controlled_descents_;
         }
         [[nodiscard]] CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
@@ -1077,8 +1233,35 @@ namespace runner::sim
         [[nodiscard]] float ground_height_at(float x) const noexcept;
         [[nodiscard]] float terrain_firmness_at(float x) const noexcept;
         [[nodiscard]] float terrain_looseness_at(float x) const noexcept;
+        [[nodiscard]] TerrainRegion terrain_region_at(float x) const noexcept
+        {
+            return stage_uses_deformable_terrain(course_stage_)
+                ? terrain_.region_at(terrain_sample_x(x, course_progress()))
+                : TerrainRegion::firm;
+        }
+        [[nodiscard]] sandhybrid::Material terrain_surface_material_at(
+            float x) const noexcept
+        {
+            return stage_uses_deformable_terrain(course_stage_)
+                ? terrain_.surface_material_at(terrain_sample_x(x, course_progress()))
+                : sandhybrid::Material::dirt;
+        }
+        [[nodiscard]] float water_depth_at(float x) const noexcept
+        {
+            return stage_uses_deformable_terrain(course_stage_)
+                ? terrain_.water_depth_at(terrain_sample_x(x, course_progress()))
+                : 0.0f;
+        }
+        [[nodiscard]] float water_surface_at(float x) const noexcept
+        {
+            return stage_uses_deformable_terrain(course_stage_)
+                ? terrain_.water_surface_at(terrain_sample_x(x, course_progress()))
+                : ground_height_at(x);
+        }
         [[nodiscard]] const DeformableTerrain& terrain() const noexcept { return terrain_; }
         [[nodiscard]] float burial_depth() const noexcept { return burial_depth_; }
+        [[nodiscard]] float water_depth() const noexcept { return water_depth_; }
+        [[nodiscard]] float water_submersion() const noexcept { return water_submersion_; }
         [[nodiscard]] float free_space_direction() const noexcept { return free_space_direction_; }
         [[nodiscard]] Vec2 incoming_material_velocity() const noexcept { return incoming_material_velocity_; }
         [[nodiscard]] float incoming_time_to_impact() const noexcept { return incoming_time_to_impact_; }
@@ -1092,7 +1275,9 @@ namespace runner::sim
             if (course_stage_ == CourseStage::balance
                 || course_stage_ == CourseStage::duck_press
                 || course_stage_ == CourseStage::ramps
-                || course_stage_ == CourseStage::duck_bars)
+                || course_stage_ == CourseStage::duck_bars
+                || course_stage_ == CourseStage::climb_descent
+                || course_stage_ == CourseStage::equipment_targets)
                 return 0.0f;
             if (course_stage_ == CourseStage::crouch_walk)
                 return 0.58f + course_difficulty_ * 0.18f;
@@ -1212,17 +1397,22 @@ namespace runner::sim
         [[nodiscard]] bool articulated_toe_motor(bool left,
             MotorConstraint& motor) const noexcept;
         void update_articulated_toe_commands(
-            std::span<const float, action_count> actions, float dt) noexcept;
+            std::span<const float, anatomy_action_count> actions, float dt) noexcept;
         void solve_articulated_toes() noexcept;
         void limit_articulated_toe_rates(float dt) noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
         void solve_ground(float dt) noexcept;
-        void solve_course() noexcept;
+        void solve_course(float dt = 1.0f / 60.0f) noexcept;
+        void apply_water_forces(float dt) noexcept;
         void apply_support_pressure(float dt) noexcept;
         void update_materials(float dt) noexcept;
-        void append_material_features() noexcept;
         void update_material_metrics(float dt) noexcept;
         void rebuild_course_features() noexcept;
+        void reset_equipment() noexcept;
+        void update_equipment(std::span<const float, action_count> actions,
+            float dt) noexcept;
+        void update_climb_metrics(float dt) noexcept;
+        [[nodiscard]] std::uint16_t equipment_mount_node() const noexcept;
         void update_gait_metrics(float dt, float action_energy) noexcept;
         void invalidate(InvalidMotion reason) noexcept;
         [[nodiscard]] float joint_angle(const MotorConstraint& motor) const noexcept;
@@ -1254,14 +1444,44 @@ namespace runner::sim
         std::vector<CourseFeature> course_features_{};
         DeformableTerrain terrain_{};
         std::vector<MaterialParticle> material_particles_{};
+        std::vector<EquipmentProjectile> equipment_projectiles_{};
+        EquipmentTarget equipment_target_{};
+        EquipmentState equipment_state_{ EquipmentState::unarmed };
+        WeaponClass weapon_class_{ WeaponClass::none };
+        WeaponClass configured_weapon_class_{ WeaponClass::none };
+        bool equipment_override_{};
+        float configured_target_distance_{ 8.0f };
+        float equipment_aim_angle_{};
+        float equipment_cooldown_seconds_{};
+        Vec2 dropped_equipment_position_{};
+        Vec2 dropped_equipment_velocity_{};
+        std::uint32_t equipment_projectile_sequence_{};
+        std::uint32_t shots_fired_{};
+        std::uint32_t target_hits_{};
+        std::uint32_t equipment_transition_count_{};
+        bool target_hit_this_step_{};
+        std::array<std::uint16_t, 2> ledge_grasp_nodes_{
+            std::numeric_limits<std::uint16_t>::max(),
+            std::numeric_limits<std::uint16_t>::max() };
+        std::array<Vec2, 2> ledge_grasp_anchors_{};
+        std::uint32_t hand_ledge_contacts_{};
+        std::uint32_t climb_support_transfers_{};
+        std::uint32_t ledge_climbs_{};
+        std::uint32_t controlled_descents_{};
+        bool ledge_climbed_{};
+        bool ledge_descending_{};
+        float ledge_top_height_{};
+        float ledge_left_edge_{};
+        float previous_root_height_{};
         std::uint64_t random_state_{ 1 };
-        std::array<float, action_count> previous_angles_{};
-        std::array<float, action_count> angular_velocities_{};
-        std::array<float, action_count> previous_applied_actions_{};
+        std::array<float, anatomy_action_count> previous_angles_{};
+        std::array<float, anatomy_action_count> angular_velocities_{};
+        std::array<float, anatomy_action_count> previous_applied_actions_{};
         std::array<float, 2> articulated_toe_commands_{};
         std::array<float, 2> previous_articulated_toe_angles_{};
         Vec2 previous_pelvis_{};
         float elapsed_seconds_{};
+        float last_step_dt_{ 1.0f / 60.0f };
         float distance_travelled_{};
         float forward_speed_{};
         float last_reward_{};
@@ -1369,10 +1589,12 @@ namespace runner::sim
         float recovery_best_upright_{ 1.0f };
         std::uint32_t recovery_events_{};
         std::uint32_t recovery_successes_{};
-        float next_material_event_seconds_{ 1.50f };
+        float next_material_event_seconds_{ 9.0f };
         std::uint32_t material_event_sequence_{};
         float terrain_firmness_{ 1.0f };
         float terrain_looseness_{};
+        float water_depth_{};
+        float water_submersion_{};
         float burial_depth_{};
         float previous_burial_depth_{};
         float buried_no_escape_seconds_{};

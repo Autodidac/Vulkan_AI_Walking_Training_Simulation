@@ -17,6 +17,7 @@
 #include <format>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
@@ -286,6 +287,7 @@ namespace runner
         render::Canvas canvas{};
         sim::CreatureBlueprint blueprint{ sim::CreatureBlueprint::humanoid() };
         rl::AutonomousTrainer trainer{ blueprint, 64 };
+        std::optional<sim::Environment> course_eye_test_environment{};
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
@@ -340,6 +342,8 @@ namespace runner
         std::string rig_edit_reason{};
         float joint_test_input{};
         float joint_test_phase{};
+        sim::WeaponClass editor_weapon_class{ sim::WeaponClass::none };
+        float editor_target_distance{ 8.0f };
         float camera_x{};
         float live_pixels_per_meter{ view_camera::default_pixels_per_meter };
         float live_zoom_factor{ 1.0f };
@@ -356,9 +360,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0727-rig-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0727-rig-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0727-rig-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0728-course-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0728-course-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0728-course-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -474,7 +478,7 @@ namespace runner
             rig_edit_reason = reason;
         }
 
-        [[nodiscard]] std::array<std::string_view, sim::action_count> motor_names() const noexcept
+        [[nodiscard]] std::array<std::string_view, sim::anatomy_action_count> motor_names() const noexcept
         {
             switch (rig_preset)
             {
@@ -749,12 +753,7 @@ namespace runner
                         }
                     }
                     if (tile.macro_ready && !tile.active && !near_surface)
-                    {
-                        draw_world_cell(macro_x0, macro_y0,
-                            macro_x0 + sim::DeformableTerrain::macro_tile_size,
-                            macro_y1, tile.uniform_material);
                         continue;
-                    }
 
                     for (std::size_t local_y = 0;
                         local_y < sim::DeformableTerrain::macro_cell_side; ++local_y)
@@ -773,12 +772,65 @@ namespace runner
                             const float x0 = macro_x0 + static_cast<float>(local_x)
                                 * sim::DeformableTerrain::fine_cell_spacing;
                             const float y0 = sim::DeformableTerrain::row_world_bottom(fine_y);
+                            const float visible_surface = environment.ground_height_at(
+                                x0 + sim::DeformableTerrain::fine_cell_spacing * 0.5f);
+                            if (y0 + sim::DeformableTerrain::fine_cell_spacing
+                                < visible_surface - 0.95f)
+                                continue;
                             draw_world_cell(x0, y0,
                                 x0 + sim::DeformableTerrain::fine_cell_spacing,
                                 y0 + sim::DeformableTerrain::fine_cell_spacing * cell.fill,
                                 cell.material());
                         }
                     }
+                }
+            }
+
+            const float water_step = sim::DeformableTerrain::fine_cell_spacing;
+            for (float x = left; x <= right; x += water_step)
+            {
+                const float depth = environment.water_depth_at(x);
+                if (depth <= 0.002f)
+                    continue;
+                const float ground = environment.ground_height_at(x);
+                const float surface = environment.water_surface_at(x);
+                draw_world_color(x, ground, x + water_step, surface,
+                    rgb(0x2479a8, 0.62f));
+                const Vec2 a = world_to_screen({ x, surface }, viewport, camera, scale);
+                const Vec2 b = world_to_screen({ x + water_step, surface }, viewport, camera, scale);
+                canvas.line(a, b, 1.5f, rgb(0x66d4ef, 0.90f));
+            }
+
+            if (environment.course_stage() >= sim::CourseStage::uneven)
+            {
+                bool first_region = true;
+                sim::TerrainRegion previous_region = sim::TerrainRegion::firm;
+                int region_lane = 0;
+                for (float x = left; x <= right; x += 0.45f)
+                {
+                    const sim::TerrainRegion region = environment.terrain_region_at(x);
+                    if (!first_region && region == previous_region)
+                        continue;
+                    first_region = false;
+                    previous_region = region;
+                    const Vec2 anchor = world_to_screen(
+                        { x, environment.ground_height_at(x) + 0.42f
+                            + static_cast<float>(region_lane % 2) * 0.26f },
+                        viewport, camera, scale);
+                    const Rect label{ { anchor.x + 4.0f, anchor.y - 11.0f },
+                        { 174.0f, 21.0f } };
+                    if (label.position.x >= viewport.position.x + 2.0f
+                        && label.position.x + label.size.x
+                            <= viewport.position.x + viewport.size.x - 2.0f)
+                    {
+                        add_rounded_rect(canvas, label, 3.0f, rgb(0x101820, 0.86f),
+                            region == sim::TerrainRegion::shallow_water ? accent : yellow, 1.0f);
+                        add_text_fit(canvas, label.position + Vec2{ 5.0f, 4.0f },
+                            sim::terrain_region_name(region), 0.66f,
+                            region == sim::TerrainRegion::shallow_water ? accent : yellow,
+                            label.size.x - 10.0f, 0.56f);
+                    }
+                    ++region_lane;
                 }
             }
         }
@@ -821,6 +873,7 @@ namespace runner
         void draw_course_features(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
+            int label_lane = 0;
             for (const sim::CourseFeature& feature : environment.course_features())
             {
                 const Vec2 feature_screen = world_to_screen(feature.center, viewport, camera, scale);
@@ -833,10 +886,8 @@ namespace runner
                         : feature.kind == sim::CourseFeatureKind::projectile ? rgb(0xf06a3e) : danger;
                     canvas.circle(feature_screen, feature.radius * scale, fill, 24);
                     if (feature.kind == sim::CourseFeatureKind::projectile)
-                    {
-                        const Vec2 trail = feature_screen - feature.velocity * (scale * 0.20f);
-                        canvas.line(trail, feature_screen, 3.0f, yellow);
-                    }
+                        canvas.line(feature_screen - feature.velocity * (scale * 0.20f),
+                            feature_screen, 3.0f, yellow);
                 }
                 else
                 {
@@ -844,28 +895,75 @@ namespace runner
                         viewport, camera, scale);
                     const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
                         viewport, camera, scale);
-                    const Rect rect{
-                        { minimum.x, maximum.y },
-                        { maximum.x - minimum.x, minimum.y - maximum.y }
-                    };
-                    const Color feature_fill = feature.kind == sim::CourseFeatureKind::hurdle
-                        ? yellow : feature.kind == sim::CourseFeatureKind::duck_press
+                    const Rect rect{ { minimum.x, maximum.y },
+                        { maximum.x - minimum.x, minimum.y - maximum.y } };
+                    const bool ledge = feature.kind == sim::CourseFeatureKind::ledge;
+                    const Color fill = ledge ? rgb(0x596b75)
+                        : feature.kind == sim::CourseFeatureKind::hurdle ? yellow
+                        : feature.kind == sim::CourseFeatureKind::duck_press
                             ? rgb(0x315b70) : accent_dim;
-                    const Color feature_outline = feature.kind == sim::CourseFeatureKind::hurdle
-                        ? yellow : accent;
-                    add_rounded_rect(canvas, rect, 4.0f,
-                        feature_fill, feature_outline, 1.0f);
+                    add_rounded_rect(canvas, rect, ledge ? 1.0f : 4.0f,
+                        fill, ledge ? white : accent, 1.0f);
                 }
 
-                const std::string feature_label = feature.kind == sim::CourseFeatureKind::duck_press
-                    ? std::format("TRAINER: {}", sim::course_feature_name(feature.kind))
-                    : std::format("HAZARD: {}", sim::course_feature_name(feature.kind));
-                add_text(canvas, feature_screen + Vec2{ -58.0f, -42.0f },
-                    feature_label, 1.00f,
-                    feature.kind == sim::CourseFeatureKind::projectile ? yellow : danger);
+                if (feature_screen.x < viewport.position.x - 20.0f
+                    || feature_screen.x > viewport.position.x + viewport.size.x + 20.0f)
+                    continue;
+                const bool trainer_feature = feature.kind == sim::CourseFeatureKind::duck_press
+                    || feature.kind == sim::CourseFeatureKind::ledge;
+                const std::string label = std::format("{}: {}",
+                    trainer_feature ? "TRAINER" : "HAZARD",
+                    sim::course_feature_name(feature.kind));
+                const float x = clamp(feature_screen.x - 68.0f,
+                    viewport.position.x + 8.0f, viewport.position.x + viewport.size.x - 190.0f);
+                const float y = viewport.position.y + 144.0f
+                    + static_cast<float>(label_lane % 5) * 25.0f;
+                const Rect callout{ { x, y }, { 182.0f, 22.0f } };
+                add_rounded_rect(canvas, callout, 4.0f, rgb(0x101820, 0.90f),
+                    trainer_feature ? accent : yellow, 1.0f);
+                add_text_fit(canvas, callout.position + Vec2{ 5.0f, 4.0f },
+                    label, 0.72f, trainer_feature ? accent : yellow, 172.0f, 0.62f);
+                ++label_lane;
+            }
+
+            for (const sim::MaterialParticle& material : environment.material_particles())
+            {
+                if (!material.active)
+                    continue;
+                const Vec2 center = world_to_screen(material.position, viewport, camera, scale);
+                const Color color = material.kind == sim::MaterialKind::sand
+                    ? rgb(0xd8bd70) : material.kind == sim::MaterialKind::rock
+                        ? rgb(0x6c747d) : rgb(0x9a7854);
+                canvas.circle(center, material.radius * scale, color, 14);
+            }
+
+            const sim::EquipmentTarget& target = environment.equipment_target();
+            if (target.active)
+            {
+                const Vec2 center = world_to_screen(target.position, viewport, camera, scale);
+                canvas.circle(center, target.radius * scale, rgb(0x183746), 24);
+                canvas.circle(center, target.radius * scale * 0.62f, danger, 20);
+                canvas.circle(center, target.radius * scale * 0.24f, white, 16);
+            }
+            for (const sim::EquipmentProjectile& projectile : environment.equipment_projectiles())
+            {
+                if (projectile.active)
+                    canvas.circle(world_to_screen(projectile.position, viewport, camera, scale),
+                        projectile.radius * scale, yellow, 12);
+            }
+            if (environment.weapon_class() != sim::WeaponClass::none
+                && environment.equipment_state() != sim::EquipmentState::dropped
+                && environment.equipment_state() != sim::EquipmentState::disarmed)
+            {
+                const Vec2 mount = environment.equipment_mount_position();
+                const Vec2 direction{ std::cos(environment.equipment_aim_angle()),
+                    std::sin(environment.equipment_aim_angle()) };
+                canvas.line(world_to_screen(mount, viewport, camera, scale),
+                    world_to_screen(mount + direction * 0.55f, viewport, camera, scale),
+                    5.0f, environment.equipment_state() == sim::EquipmentState::ready
+                        ? accent : muted);
             }
         }
-
         void draw_creature(const sim::Environment& environment, Rect viewport, float camera,
             float scale, bool show_nodes = false)
         {
@@ -1115,10 +1213,12 @@ namespace runner
 
         void draw_training_pip(Rect rect)
         {
+            const bool course_eye_test = course_eye_test_environment.has_value();
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.99f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 12.0f, 9.0f },
-                "LIVE TRAINING ENVIRONMENT", 0.88f, accent);
-            if (!trainer.has_training_preview())
+                course_eye_test ? "COURSE EYE TEST - SAFE START" : "LIVE TRAINING ENVIRONMENT",
+                0.88f, accent);
+            if (!course_eye_test && !trainer.has_training_preview())
             {
                 add_text_fit(canvas, rect.position + Vec2{ 12.0f, 42.0f },
                     "WAITING FOR FIRST INTACT TRAINING FRAME", 0.90f, muted,
@@ -1126,7 +1226,8 @@ namespace runner
                 return;
             }
 
-            const sim::Environment& environment = trainer.training_preview();
+            const sim::Environment& environment = course_eye_test
+                ? *course_eye_test_environment : trainer.training_preview();
             const auto& particles = environment.particles();
             const auto& rig = environment.blueprint();
             if (particles.empty() || rig.root_node >= particles.size())
@@ -1141,10 +1242,10 @@ namespace runner
                 rl::stage_motion_qualification(environment.course_stage(), environment);
             const bool foot_only = !environment.non_foot_grounded();
             const bool intact = environment.body_integrity_valid();
-            const Color state_color = qualification.valid ? green
+            const Color state_color = course_eye_test ? green : qualification.valid ? green
                 : intact && foot_only ? yellow : danger;
-            const std::string_view state_text = qualification.valid
-                ? "STAGE VALID" : !intact ? "BROKEN RIG"
+            const std::string_view state_text = course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
+                : qualification.valid ? "STAGE VALID" : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY CONTACT"
                 : rl::primary_motion_rejection_name(qualification.rejection_mask);
             add_text_fit(canvas, rect.position + Vec2{ rect.size.x - 132.0f, 9.0f },
@@ -1214,10 +1315,12 @@ namespace runner
             draw_creature(environment, inner, camera, scale);
             canvas.pop_clip();
 
-            const std::string pip_metrics = std::format(
-                "TOTAL RIG UPDATES {}  POLICY UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
-                trainer.metrics().total_updates, trainer.metrics().update,
-                environment.distance_travelled(), environment.gait_cycles());
+            const std::string pip_metrics = course_eye_test
+                ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
+                : std::format(
+                    "TOTAL RIG UPDATES {}  POLICY UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
+                    trainer.metrics().total_updates, trainer.metrics().update,
+                    environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
                 pip_metrics, 0.70f, state_color, rect.size.x - 24.0f, 0.64f);
             add_rounded_rect(canvas, rect, 10.0f, ui_render::transparent_fill, accent_dim, 1.5f);
@@ -1230,7 +1333,13 @@ namespace runner
                 rect.position + rect.size - Vec2{ 1.0f, 1.0f });
             const float usable_width = rect.size.x - 36.0f;
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
-            const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
+            rl::AutonomyStatus autonomy = trainer.autonomy_status();
+            if (course_eye_test_environment.has_value())
+            {
+                autonomy.stage = course_eye_test_environment->course_stage();
+                autonomy.difficulty = course_eye_test_environment->course_difficulty();
+                autonomy.mastery_streak = 0;
+            }
             const rl::TrainingMetrics& metrics = trainer.metrics();
             const telemetry::LessonProgress progress = telemetry::lesson_progress(autonomy);
             const telemetry::StatusSummary human_status = telemetry::status_summary(
@@ -1446,6 +1555,24 @@ namespace runner
                         metrics.evaluation_stride_events,
                         metrics.evaluation_obstacles_passed);
                     break;
+                case sim::CourseStage::climb_descent:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: HANDS {:.0f}   TRANSFERS {:.0f}   CLIMBS {:.0f}   DESCENTS {:.0f}",
+                        metrics.evaluation_hand_contacts, metrics.evaluation_climb_transfers,
+                        metrics.evaluation_climbs, metrics.evaluation_descents);
+                    break;
+                case sim::CourseStage::equipment_targets:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: HITS {:.0f} / SHOTS {:.0f}   HANDLING TRANSITIONS {:.0f}",
+                        metrics.evaluation_target_hits, metrics.evaluation_shots,
+                        metrics.evaluation_equipment_transitions);
+                    break;
+                case sim::CourseStage::combat_course:
+                    evidence = std::format(
+                        "CURRENT EVIDENCE: DISTANCE {}   STRIDES {:.0f}   TARGET HITS {:.0f}",
+                        format_distance(std::max(0.0f, metrics.evaluation_distance)),
+                        metrics.evaluation_stride_events, metrics.evaluation_target_hits);
+                    break;
                 }
                 add_text_fit(canvas, cursor, evidence, 0.76f,
                     metrics.evaluation_valid ? green : muted, usable_width, 0.60f);
@@ -1565,7 +1692,7 @@ namespace runner
             else
             {
                 add_rounded_rect(canvas,
-                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 365.0f } },
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 405.0f } },
                     8.0f, panel_alt, border, 1.0f);
                 add_text(canvas, cursor, "ADVANCED DIAGNOSTICS", 1.08f, accent);
                 cursor.y += 27.0f;
@@ -1578,6 +1705,22 @@ namespace runner
                 const std::string quality = metrics.evaluation_quality_key == 0u
                     ? std::string("NOT AVAILABLE")
                     : std::format("{:016X}", metrics.evaluation_quality_key);
+                const sim::Environment& debug_environment = trainer.preview();
+                float debug_root_x = 0.0f;
+                if (!debug_environment.particles().empty())
+                    debug_root_x = debug_environment.particles()[
+                        debug_environment.blueprint().root_node].position.x;
+                const sim::CourseFeature* nearest_feature = nullptr;
+                float nearest_distance = std::numeric_limits<float>::max();
+                for (const sim::CourseFeature& feature : debug_environment.course_features())
+                {
+                    const float distance = feature.center.x - debug_root_x;
+                    if (distance >= 0.0f && distance < nearest_distance)
+                    {
+                        nearest_distance = distance;
+                        nearest_feature = &feature;
+                    }
+                }
                 add_text_fit(canvas, cursor,
                     std::format("RAW TEST SCORE {}   BEST RAW SCORE {}",
                         raw_number(metrics.evaluation_score),
@@ -1596,6 +1739,28 @@ namespace runner
                             metrics.evaluation_rejection_mask)),
                     0.70f, metrics.evaluation_valid ? green : yellow,
                     usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("FAILURES {}", rl::motion_rejection_summary(
+                        metrics.evaluation_rejection_mask)),
+                    0.68f, metrics.evaluation_valid ? green : yellow,
+                    usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("INVALID DETAIL {}   GROUND {}   WATER {:.2f} M",
+                        sim::invalid_motion_name(metrics.evaluation_invalid_reason),
+                        sim::terrain_region_name(debug_environment.terrain_region_at(debug_root_x)),
+                        debug_environment.water_depth()),
+                    0.68f, metrics.evaluation_invalid_reason == sim::InvalidMotion::none
+                        ? muted : danger, usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    nearest_feature == nullptr
+                        ? std::string("NEAREST FEATURE NONE - TERRAIN LESSON")
+                        : std::format("NEAREST {}   {:.1f} M",
+                            sim::course_feature_name(nearest_feature->kind), nearest_distance),
+                    0.68f, nearest_feature == nullptr ? muted : yellow,
+                    usable_width, 0.54f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
                     std::format("POLICY LOSS {}   VALUE LOSS {}",
@@ -1650,9 +1815,10 @@ namespace runner
 
         void draw_live_world(Rect viewport, float dt, const InputState& input)
         {
-            if (!run_paused)
+            if (!run_paused && !course_eye_test_environment.has_value())
                 trainer.step_preview(dt);
-            const sim::Environment& environment = trainer.preview();
+            const sim::Environment& environment = course_eye_test_environment.has_value()
+                ? *course_eye_test_environment : trainer.preview();
             const auto& particles = environment.particles();
             if (contains(viewport, input.mouse) && std::abs(input.wheel) >= 0.01f)
             {
@@ -1674,11 +1840,14 @@ namespace runner
                 if (std::isfinite(minimum_y) && std::isfinite(maximum_y))
                     rig_height = std::max(0.75f, maximum_y - minimum_y);
             }
-            const float target_pixels_per_meter = view_camera::fitted_pixels_per_meter(
-                viewport.size.y, rig_height, live_zoom_factor);
-            live_pixels_per_meter = view_camera::smooth_zoom(
-                live_pixels_per_meter, target_pixels_per_meter, dt);
-            if (!particles.empty())
+            if (!course_eye_test_environment.has_value())
+            {
+                const float target_pixels_per_meter = view_camera::fitted_pixels_per_meter(
+                    viewport.size.y, rig_height, live_zoom_factor);
+                live_pixels_per_meter = view_camera::smooth_zoom(
+                    live_pixels_per_meter, target_pixels_per_meter, dt);
+            }
+            if (!particles.empty() && !course_eye_test_environment.has_value())
             {
                 const std::size_t root = environment.blueprint().root_node;
                 if (root < particles.size())
@@ -1711,12 +1880,13 @@ namespace runner
                 { bottom_box.width, bottom_box.height } };
             add_rounded_rect(canvas, telemetry, 9.0f,
                 rgb(0x07111b, 0.95f), border, 1.0f);
-            const rl::AutonomyStatus& autonomy = trainer.autonomy_status();
+            const sim::CourseStage displayed_stage = environment.course_stage();
+            const float displayed_difficulty = environment.course_difficulty();
             const float text_width = telemetry.size.x - 24.0f;
             Vec2 line = telemetry.position + Vec2{ 12.0f, 11.0f };
             add_text_fit(canvas, line,
-                std::format("{}  /  {:.0f}%", sim::course_stage_name(autonomy.stage),
-                    autonomy.difficulty * 100.0f),
+                std::format("{}  /  {:.0f}%", sim::course_stage_name(displayed_stage),
+                    displayed_difficulty * 100.0f),
                 1.42f, white, text_width, 1.00f);
             line.y += 31.0f;
             add_text_fit(canvas, line,
@@ -1759,14 +1929,22 @@ namespace runner
             add_rounded_rect(canvas, bottom, 8.0f,
                 rgb(0x07111b, 0.96f), border, 1.0f);
             add_text_fit(canvas, bottom.position + Vec2{ 11.0f, 10.0f },
-                std::format("{}   v{}   VIEW {:.0f} PX/M {}   {}",
-                    trainer.has_best_policy()
-                        ? "RETAINED CHAMPION PREVIEW"
-                        : "CURRENT EXPLORATORY POLICY",
-                    RUNNER_VERSION, live_pixels_per_meter,
-                    live_zoom_auto ? "AUTO" : "MANUAL",
-                    trainer.background_enabled() ? "TRAINING" : "PAUSED"),
-                0.86f, trainer.has_best_policy() ? green : yellow,
+                std::format("{}   v{}   GROUND {}   WATER {:.2f} M   EQUIP {} / {}   HITS {}   {}",
+                    course_eye_test_environment.has_value()
+                        ? "PACKAGED COURSE EYE TEST"
+                        : trainer.has_best_policy()
+                            ? "RETAINED CHAMPION PREVIEW"
+                            : "CURRENT EXPLORATORY POLICY",
+                    RUNNER_VERSION,
+                    sim::terrain_region_name(environment.terrain_region_at(camera_x)),
+                    environment.water_depth(),
+                    sim::weapon_class_name(environment.weapon_class()),
+                    sim::equipment_state_name(environment.equipment_state()),
+                    environment.target_hits(),
+                    course_eye_test_environment.has_value() ? "FIXED START FRAME"
+                        : trainer.background_enabled() ? "TRAINING" : "PAUSED"),
+                0.86f, course_eye_test_environment.has_value() || trainer.has_best_policy()
+                    ? green : yellow,
                 bottom.size.x - 22.0f, 0.76f);
             canvas.pop_clip();
             add_rounded_rect(canvas, viewport, 11.0f, ui_render::transparent_fill, border, 1.0f);
@@ -1886,7 +2064,7 @@ namespace runner
                 return world_to_screen(blueprint.nodes[index], viewport, blueprint_camera, scale);
             };
             std::vector<Vec2> preview = blueprint.nodes;
-            for (int motor_index = 0; motor_index < static_cast<int>(sim::action_count); ++motor_index)
+            for (int motor_index = 0; motor_index < static_cast<int>(sim::anatomy_action_count); ++motor_index)
             {
                 if (!test_motor_active(motor_index))
                     continue;
@@ -2386,7 +2564,7 @@ namespace runner
                 add_text(canvas, cursor, "MOTOR CHAINS", 1.02f, accent);
                 cursor.y += 25.0f;
                 const float quarter = (usable - 18.0f) * 0.25f;
-                for (int index = 0; index < static_cast<int>(sim::action_count); ++index)
+                for (int index = 0; index < static_cast<int>(sim::anatomy_action_count); ++index)
                 {
                     const int column = index % 4;
                     const int row = index / 4;
@@ -2505,8 +2683,29 @@ namespace runner
                 const Rect test_card{ cursor, { usable, 205.0f } };
                 draw_joint_lab(test_card, input);
                 cursor.y += 220.0f;
+                add_text(canvas, cursor, "EQUIPMENT TEST AUTHORING", 0.92f, accent);
+                cursor.y += 25.0f;
+                const float weapon_width = (usable - 18.0f) * 0.25f;
+                const std::array weapon_choices{ sim::WeaponClass::none,
+                    sim::WeaponClass::sidearm, sim::WeaponClass::carbine,
+                    sim::WeaponClass::launcher };
+                for (std::size_t index = 0; index < weapon_choices.size(); ++index)
+                {
+                    const sim::WeaponClass weapon = weapon_choices[index];
+                    if (button({ cursor + Vec2{ static_cast<float>(index)
+                            * (weapon_width + 6.0f), 0.0f },
+                            { weapon_width, 32.0f } },
+                        sim::weapon_class_name(weapon), input,
+                        editor_weapon_class == weapon))
+                        editor_weapon_class = weapon;
+                }
+                cursor.y += 43.0f;
+                editor_target_distance = slider({ cursor, { usable, 36.0f } },
+                    "TARGET DISTANCE", editor_target_distance, 3.0f, 24.0f,
+                    input, " M");
+                cursor.y += 49.0f;
                 add_wrapped_text(canvas, cursor,
-                    "GAIT CYCLE is a side-view fore/aft check. A credited walking step must lift from behind, pass the stance support, and land ahead. Test controls never change the saved training policy.",
+                    "GAIT, handling class, and target distance are side-view authoring checks. Test controls never change the saved training policy.",
                     0.72f, muted, usable, 2.0f);
             }
             canvas.pop_clip();
@@ -2737,6 +2936,24 @@ namespace runner
         }
         error.clear();
         return true;
+    }
+
+    void Application::prepare_course_eye_test()
+    {
+        impl_->trainer.set_background_enabled(false);
+        impl_->trainer.synchronize();
+        impl_->course_eye_test_environment.emplace(
+            sim::CreatureBlueprint::humanoid(), 728314u);
+        impl_->course_eye_test_environment->set_course(
+            sim::CourseStage::uneven, 0.65f);
+        impl_->course_eye_test_environment->set_course_motion_enabled(false);
+        impl_->run_paused = true;
+        impl_->camera_x = 18.5f;
+        impl_->live_pixels_per_meter = view_camera::minimum_pixels_per_meter;
+        impl_->live_zoom_factor = view_camera::minimum_zoom_factor;
+        impl_->live_zoom_auto = false;
+        impl_->status = "PACKAGED COURSE EYE TEST - PRODUCTION TERRAIN, FIXED START FRAME";
+        impl_->status_time = 30.0f;
     }
 
     void Application::frame(const InputState& input, float dt, int width, int height)
