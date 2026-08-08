@@ -35,7 +35,15 @@ namespace runner
 
     namespace
     {
-        constexpr float ui_font_scale = 2.05f;
+        [[nodiscard]] constexpr font::FontSize font_size(
+            float style_scale) noexcept
+        {
+            return {
+                .logical_height = font::default_logical_height
+                    * (style_scale > 0.0f ? style_scale : 1.0f),
+                .dpi_scale = 1.0f
+            };
+        }
 
         struct Rect
         {
@@ -99,9 +107,11 @@ namespace runner
                 radius, fill, outline, border_width);
         }
 
-        void add_text(render::Canvas& canvas, Vec2 position, std::string_view text, float scale, Color color)
+        void add_text(render::Canvas& canvas, Vec2 position,
+            std::string_view text, float style_scale, Color color)
         {
-            scale *= ui_font_scale;
+            const font::BitmapFontMetrics metrics =
+                font::make_bitmap_font_metrics(font_size(style_scale));
             Vec2 cursor = position;
             const float start_x = position.x;
             for (const char character : text)
@@ -109,24 +119,29 @@ namespace runner
                 if (character == '\n')
                 {
                     cursor.x = start_x;
-                    cursor.y += static_cast<float>(font::line_advance) * scale;
+                    cursor.y += metrics.line_advance;
                     continue;
                 }
                 const font::BitmapGlyph glyph = font::default_glyph(character);
                 for (std::uint32_t row = 0; row < font::glyph_height; ++row)
                 {
-                    for (std::uint32_t column = 0; column < font::glyph_width; ++column)
+                    for (std::uint32_t column = 0;
+                        column < font::glyph_width; ++column)
                     {
                         if (!font::pixel_on(glyph, column, row))
                             continue;
                         const Vec2 minimum{
-                            cursor.x + static_cast<float>(column) * scale,
-                            cursor.y + static_cast<float>(row) * scale
+                            cursor.x + static_cast<float>(column)
+                                * metrics.cell_size,
+                            cursor.y + static_cast<float>(row)
+                                * metrics.cell_size
                         };
-                        canvas.quad(minimum, minimum + Vec2{ scale, scale }, color);
+                        canvas.quad(minimum,
+                            minimum + Vec2{ metrics.cell_size,
+                                metrics.cell_size }, color);
                     }
                 }
-                cursor.x += static_cast<float>(font::glyph_advance) * scale;
+                cursor.x += metrics.advance;
             }
         }
 
@@ -162,7 +177,7 @@ namespace runner
         {
             float scale = requested_scale;
             while (scale > minimum_scale
-                && font::measure_text(text, scale * ui_font_scale).x > maximum_width)
+                && font::measure_text(text, font_size(scale)).x > maximum_width)
                 scale -= 0.05f;
             return std::max(scale, minimum_scale);
         }
@@ -177,7 +192,8 @@ namespace runner
         float add_wrapped_text(render::Canvas& canvas, Vec2 position, std::string_view text,
             float scale, Color color, float maximum_width, float line_gap = 5.0f)
         {
-            const float advance = static_cast<float>(font::line_advance) * scale * ui_font_scale + line_gap;
+            const float advance = font::make_bitmap_font_metrics(
+                font_size(scale)).line_advance + line_gap;
             float y = position.y;
             std::string line{};
             std::size_t cursor = 0;
@@ -210,7 +226,7 @@ namespace runner
                     candidate.push_back(' ');
                 candidate.append(word);
                 if (!line.empty()
-                    && font::measure_text(candidate, scale * ui_font_scale).x > maximum_width)
+                    && font::measure_text(candidate, font_size(scale)).x > maximum_width)
                 {
                     flush();
                     line.assign(word);
@@ -223,6 +239,15 @@ namespace runner
             }
             flush();
             return y - position.y;
+        }
+
+        [[nodiscard]] std::string format_work_counter(
+            std::string_view label, std::uint64_t completed,
+            std::uint64_t required)
+        {
+            if (required == 0u || completed >= required)
+                return std::format("{} READY", label);
+            return std::format("{} {}/{}", label, completed, required);
         }
 
         [[nodiscard]] Vec2 world_to_screen(Vec2 world, Rect viewport, float camera_x,
@@ -331,9 +356,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0724-rig-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0724-rig-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0724-rig-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0725-rig-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0725-rig-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0725-rig-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -505,12 +530,12 @@ namespace runner
             add_rounded_rect(canvas, rect, 8.0f, fill, active ? accent : border, 1.0f);
 
             float scale = 1.28f;
-            Vec2 measured = font::measure_text(label, scale * ui_font_scale);
+            Vec2 measured = font::measure_text(label, font_size(scale));
             while (measured.x > rect.size.x - 14.0f
                 && scale > ui_layout::minimum_readable_text_scale)
             {
                 scale -= 0.06f;
-                measured = font::measure_text(label, scale * ui_font_scale);
+                measured = font::measure_text(label, font_size(scale));
             }
             add_text(canvas,
                 { rect.position.x + (rect.size.x - measured.x) * 0.5f,
@@ -952,20 +977,87 @@ namespace runner
             draw_bones(1);
             draw_nodes(1);
 
-            if (optional_art_enabled && optional_torso_art.loaded()
+            if (optional_art_enabled
                 && rig.root_node < particles.size()
                 && rig.torso_node < particles.size())
             {
+                // COMPACT SEGMENTED BODY ARMOR: keep the approved helmet and
+                // feet, but replace the oversized translucent bitmap sheet with
+                // node-attached geometry that follows the real body and arms.
                 const Vec2 root = point(rig.root_node);
                 const Vec2 torso = point(rig.torso_node);
-                const Vec2 center = (root + torso) * 0.5f;
-                const float height = std::max(42.0f, length(torso - root) * 1.18f);
-                const float width = height
-                    * static_cast<float>(optional_torso_art.width)
-                    / static_cast<float>(optional_torso_art.height);
-                draw_pixel_art(canvas, optional_torso_art,
-                    { center - Vec2{ width * 0.5f, height * 0.55f },
-                      { width, height } }, 0.86f);
+                const Vec2 body_axis = normalized(torso - root, { 0.0f, -1.0f });
+                const Vec2 body_right{ -body_axis.y, body_axis.x };
+                const float torso_length = std::max(24.0f, length(torso - root));
+
+                float shoulder_span = torso_length * 0.82f;
+                Vec2 left_shoulder = torso - body_right * shoulder_span * 0.5f;
+                Vec2 right_shoulder = torso + body_right * shoulder_span * 0.5f;
+                if (rig.active_motor_count >= 8u
+                    && rig.motors[4].pivot < particles.size()
+                    && rig.motors[6].pivot < particles.size())
+                {
+                    left_shoulder = point(rig.motors[4].pivot);
+                    right_shoulder = point(rig.motors[6].pivot);
+                    shoulder_span = std::max(24.0f,
+                        length(right_shoulder - left_shoulder));
+                }
+
+                const Vec2 chest_bottom = root + body_axis * (torso_length * 0.20f);
+                const Vec2 chest_top = torso - body_axis * (torso_length * 0.10f);
+                const float chest_radius = std::clamp(
+                    std::min(shoulder_span * 0.25f, torso_length * 0.28f),
+                    10.0f, 27.0f);
+                canvas.capsule(chest_bottom, chest_top, chest_radius + 2.0f,
+                    rgb(0x33414c, 0.96f), 20);
+                canvas.capsule(chest_bottom, chest_top, chest_radius,
+                    rgb(0x8c9aa5, 0.94f), 20);
+                canvas.capsule(chest_bottom + body_axis * 2.0f,
+                    chest_top - body_axis * 3.0f,
+                    std::max(7.0f, chest_radius * 0.62f),
+                    rgb(0xaeb9c1, 0.78f), 18);
+
+                const Vec2 indicator_center =
+                    chest_bottom + (chest_top - chest_bottom) * 0.55f;
+                const float indicator_half = std::clamp(
+                    chest_radius * 0.56f, 6.0f, 14.0f);
+                canvas.capsule(indicator_center - body_right * indicator_half,
+                    indicator_center + body_right * indicator_half,
+                    3.2f, rgb(0x0ed7e9), 12);
+
+                const float shoulder_cap_radius = std::clamp(
+                    shoulder_span * 0.15f, 7.0f, 14.0f);
+                auto shoulder_cap = [&](Vec2 center)
+                {
+                    canvas.circle(center, shoulder_cap_radius + 1.5f,
+                        rgb(0x34434f, 0.96f), 20);
+                    canvas.circle(center, shoulder_cap_radius,
+                        rgb(0x8b99a5, 0.92f), 20);
+                };
+                shoulder_cap(left_shoulder);
+                shoulder_cap(right_shoulder);
+
+                auto forearm_guard = [&](std::size_t motor_index)
+                {
+                    if (motor_index >= rig.active_motor_count)
+                        return;
+                    const sim::MotorConstraint& motor = rig.motors[motor_index];
+                    if (!motor.enabled || motor.pivot >= particles.size()
+                        || motor.c >= particles.size())
+                        return;
+                    const Vec2 elbow = point(motor.pivot);
+                    const Vec2 hand = point(motor.c);
+                    const Vec2 start = elbow + (hand - elbow) * 0.22f;
+                    const Vec2 finish = elbow + (hand - elbow) * 0.78f;
+                    const float guard_radius = std::clamp(
+                        length(hand - elbow) * 0.10f, 3.8f, 7.0f);
+                    canvas.capsule(start, finish, guard_radius + 1.0f,
+                        rgb(0x34434f, 0.94f), 14);
+                    canvas.capsule(start, finish, guard_radius,
+                        rgb(0x7f8e9a, 0.88f), 14);
+                };
+                forearm_guard(5u);
+                forearm_guard(7u);
             }
             if (optional_art_enabled && optional_helmet_art.loaded()
                 && rig.head_node < particles.size())
@@ -1162,18 +1254,28 @@ namespace runner
                 6.0f, human_color);
             add_rounded_rect(canvas, progress_track, 6.0f, ui_render::transparent_fill, border, 1.0f);
             cursor.y += 21.0f;
+            const std::string training_work_label = progress.sample_budget_complete
+                ? std::string("TRAINING SAMPLES READY")
+                : std::format("TRAINING WORK {}%",
+                    static_cast<int>(std::lround(
+                        progress.training_work * 100.0f)));
             add_text_fit(canvas, cursor,
-                std::format("TRAINING WORK {}%   MASTERY PASSES {} / {}",
-                    static_cast<int>(std::lround(progress.training_work * 100.0f)),
-                    autonomy.mastery_streak,
+                std::format("{}   MASTERY PASSES {} / {}",
+                    training_work_label, autonomy.mastery_streak,
                     rl::required_mastery_confirmations(autonomy.stage)),
                 0.78f, human_color, usable_width, 0.64f);
             cursor.y += 20.0f;
             add_text_fit(canvas, cursor,
-                std::format("UPDATES {}/{}   RUNS {}/{}   TESTS {}/{}",
-                    autonomy.stage_fresh_updates, autonomy.stage_required_updates,
-                    autonomy.stage_fresh_episodes, autonomy.stage_required_episodes,
-                    autonomy.stage_fresh_evaluations, autonomy.stage_required_evaluations),
+                std::format("{}   {}   {}",
+                    format_work_counter("UPDATES",
+                        autonomy.stage_fresh_updates,
+                        autonomy.stage_required_updates),
+                    format_work_counter("RUNS",
+                        autonomy.stage_fresh_episodes,
+                        autonomy.stage_required_episodes),
+                    format_work_counter("TESTS",
+                        autonomy.stage_fresh_evaluations,
+                        autonomy.stage_required_evaluations)),
                 0.74f, muted, usable_width, 0.60f);
             cursor.y += 28.0f;
 
@@ -2542,7 +2644,7 @@ namespace runner
 
             if (status_time > 0.0f)
             {
-                const float scale = 1.30f * ui_font_scale;
+                const float scale = 1.30f;
                 const Vec2 measured = font::measure_text(status, scale);
                 const Rect toast{ { 20.0f, static_cast<float>(height) - 58.0f },
                     { std::min(measured.x + 30.0f, static_cast<float>(width) - 40.0f), 38.0f } };

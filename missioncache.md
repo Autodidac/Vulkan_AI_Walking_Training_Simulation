@@ -548,6 +548,47 @@ Add deterministic tests for screenshot-source identity, generated icon formats, 
 
 Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complete deterministic/live/UI/rig/structural/telemetry tests, installed and independently extracted execution, screenshot-icon verification, ZIP/checksum/manifest creation, published-asset re-download byte verification, and cleanup leaving only `main`.
 
+# Runner v0.7.25 compact armor and stance-leg integrity
+
+**Release state:** CACHED BEFORE IMPLEMENTATION — RELEASE BLOCKING.
+
+Direct packaged v0.7.24 eye testing confirms that the approved helmet and foot assets are usable, but the translucent torso sheet, circular shoulder masses, and duplicate ghost arms obscure the actual gait. Fixed segment lengths also remain insufficient: a two-link leg can preserve both bone lengths while folding until the knee appears to telescope into the pelvis. The same screenshots expose stale font-cell scaling, a missing percent glyph, and sample counters such as RUNS 17465/8 that are internally true but useless in the compact noob-facing header.
+
+### WALK-COMPACT-ARMOR-307 — Replace the oversized torso overlay
+**Status:** OPEN — RELEASE BLOCKING
+
+Keep the approved helmet and foot presentation. Replace only the torso, shoulder, and forearm overlay with compact geometry attached to the real body nodes. No rectangular sprite sheet, giant shoulder circles, duplicate arms, or physics changes are allowed.
+
+### WALK-STANCE-EXTENSION-308 — Preserve supported leg extension
+**Status:** OPEN — RELEASE BLOCKING
+
+A supported walking leg must retain enough hip-to-foot extension to remain a usable stance chain. Fixed upper/lower lengths may not be satisfied by folding the knee into the pelvis.
+
+### WALK-CHAIN-IK-309 — Reconstruct paired legs from authored lengths
+**Status:** OPEN — RELEASE BLOCKING
+
+After stance reserve is restored, reconstruct each knee from exact two-link geometry, preserve its bend side, pin supported feet, and retain natural swing-leg flexion.
+
+### WALK-STARTUP-310 — Remove the visible startup compression window
+**Status:** OPEN — RELEASE BLOCKING
+
+Walking-chain projection and error measurement begin during startup rather than waiting 0.75 seconds while the visible preview collapses.
+
+### WALK-STATE-311 — Isolate v0.7.25 locomotion semantics
+**Status:** OPEN — RELEASE BLOCKING
+
+Bump training semantics and use v0.7.25 autosave paths so older controllers cannot silently resume against the corrected stance-chain behavior.
+
+### WALK-REGRESSION-312 — Lock art and stance-chain behavior
+**Status:** OPEN — RELEASE BLOCKING
+
+Add forced-compression recovery, exact segment-length, natural walking soak, compact-art source, approved helmet/foot retention, EpochGui logical font metrics, percent-glyph, READY-counter, complete Linux, complete Windows SDL3/Vulkan, installed/extracted package, and runtime diagnostic tests.
+
+### WALK-RELEASE-313 — Publish and clean Runner v0.7.25
+**Status:** OPEN — RELEASE BLOCKING
+
+Merge only validated source, publish `v0.7.25`, re-download and byte-verify every asset, record evidence, close temporary PRs, and delete temporary branches/workflows.
+
 # Carried open work
 
 ### WALK-CLIMB-134 — Reachable ledge climb and controlled backward descent
@@ -555,7 +596,7 @@ Require Linux GCC 14 warnings-as-errors, full Windows SDL3/Vulkan build, complet
 
 Add a hard-wall curriculum where a rig climbs without jumping when hands can reach a ledge and turns backward to lower itself when the remaining fall is no greater than standing height. Completion requires hand/ledge contact, support transfer, no powered takeoff, and controlled feet-first recovery.
 
-# Runner v0.7.25 equipment, carry, and target curriculum
+# Runner v0.7.26 equipment, carry, and target curriculum
 
 **Release state:** CACHED AND OPEN — intentionally separated from the v0.7.24 structural/telemetry release because equipment changes policy dimensions and checkpoint compatibility.
 

@@ -270,7 +270,7 @@ namespace runner::telemetry
         const LessonProgress& progress) noexcept
     {
         if (progress.sample_budget_complete)
-            return "Enough training samples exist; advancement now depends on repeat behavior tests.";
+            return "Training samples are ready. The remaining 20% comes from repeat mastery tests.";
         if (progress.updates <= progress.attempts && progress.updates <= progress.tests)
             return "More controller updates are needed before this lesson can be judged fairly.";
         if (progress.attempts <= progress.tests)
