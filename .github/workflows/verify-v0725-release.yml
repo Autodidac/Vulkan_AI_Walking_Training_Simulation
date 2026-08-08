@@ -1,0 +1,56 @@
+name: Verify published Runner v0.7.25
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+env:
+  RELEASE_TAG: v0.7.25
+  MERGED_SHA: 4d3b6b8a8f2b9bc78a05aaabccda6470c3268d75
+  SOURCE_RUN_ID: 31250177528
+  PACKAGE_NAME: Runner-v0.7.25-windows-x64
+
+jobs:
+  verify:
+    if: github.head_ref == 'agent/v0725-verify-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Verify release tag and assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin --tags
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$MERGED_SHA"
+          names=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          grep -Fx "$PACKAGE_NAME.zip" <<<"$names"
+          grep -Fx "$PACKAGE_NAME.zip.sha256" <<<"$names"
+          grep -Fx "$PACKAGE_NAME.manifest.sha256" <<<"$names"
+          rm -rf published validated
+          mkdir published validated
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir published
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$PACKAGE_NAME" --dir validated
+          (cd published && sha256sum -c "$PACKAGE_NAME.zip.sha256")
+          for file in "$PACKAGE_NAME.zip" "$PACKAGE_NAME.zip.sha256" "$PACKAGE_NAME.manifest.sha256"; do
+            cmp --silent "published/$file" "validated/$file"
+          done
+      - name: Report verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh pr comment "$GITHUB_EVENT_PULL_REQUEST_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body 'Runner v0.7.25 release verified: tag points to merged main, all three assets are present, published ZIP checksum passes, and every published asset is byte-identical to workflow 31250177528.'
+        env:
+          GITHUB_EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
