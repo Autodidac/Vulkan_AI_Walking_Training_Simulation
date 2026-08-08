@@ -1,0 +1,61 @@
+name: Transplant validated Runner v0.7.25 onto current main
+
+on:
+  push:
+    branches: [agent/v0725-current-main-final]
+    paths: [.github/workflows/transplant-v0725-final.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  transplant:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0725-current-main-final
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Copy validated product source and remove staging automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin agent/v0725-final-release:refs/remotes/origin/agent/v0725-final-release
+          source_ref=origin/agent/v0725-final-release
+          git checkout "$source_ref" -- \
+            .github/workflows/runner-v0725-release.yml \
+            CHANGELOG.md \
+            CMakeLists.txt \
+            README.md \
+            docs/RUNNER_V0725_ART_LEG_HOTFIX.md \
+            missioncache.md \
+            src/app.cpp \
+            src/ppo.hpp \
+            src/simulation.cpp \
+            src/training_explainer.hpp \
+            src/ui_font.hpp \
+            tests/v0725_art_leg_hotfix_tests.cpp \
+            tools/repository_audit.cmake
+
+          git rm -r --ignore-unmatch validated-artifact
+          git rm --ignore-unmatch \
+            .github/workflows/finalize-v0725-authoritative.yml \
+            .github/workflows/watch-v0725-completion.yml \
+            .github/workflows/runner-v0725-cleanup.yml \
+            tools/apply_v0725_art_leg_hotfix.py \
+            tools/apply_v0725_font_sync.py \
+            tools/finalize_v0725.py \
+            tools/finalize_v0725_audit.py \
+            tools/finalize_v0725_strict_geometry.py \
+            tools/v0725-prtrigger.txt \
+            tools/v0725-v2-kick.txt
+          git rm .github/workflows/transplant-v0725-final.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --check
+          git commit -m 'Prepare clean Runner v0.7.25 final release'
+          git push origin HEAD:agent/v0725-current-main-final
