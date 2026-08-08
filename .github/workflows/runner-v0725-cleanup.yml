@@ -1,0 +1,45 @@
+name: Runner v0.7.25 post-release cleanup
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: github.event.release.tag_name == 'v0.7.25'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Remove repository staging artifacts and one-shot workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -rf validated-artifact
+          rm -f .github/workflows/runner-v0725-release.yml
+          rm -f .github/workflows/runner-v0725-cleanup.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No tracked cleanup changes were required.'
+          else
+            git commit -m 'Clean Runner v0.7.25 release staging [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - name: Remove temporary implementation branch
+        shell: bash
+        run: |
+          encoded='agent%2Fv0725-art-leg-hotfix'
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded" 2>/dev/null || true
