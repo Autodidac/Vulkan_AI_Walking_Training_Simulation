@@ -1,219 +1,203 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import math
+import hashlib
 import struct
 import sys
 import zlib
 from pathlib import Path
 
-RGBA = tuple[int, int, int, int]
+SOURCE_PNG_SHA256 = "9c2d23f5e2518df45c3b98cba1492c83328bcbc088b5b9eab5b453beb2807439"
 
 
-def blend(pixels: bytearray, size: int, x: int, y: int, color: RGBA) -> None:
-    if x < 0 or y < 0 or x >= size or y >= size:
-        return
-    offset = (y * size + x) * 4
-    alpha = color[3] / 255.0
-    inverse = 1.0 - alpha
-    pixels[offset] = round(color[0] * alpha + pixels[offset] * inverse)
-    pixels[offset + 1] = round(color[1] * alpha + pixels[offset + 1] * inverse)
-    pixels[offset + 2] = round(color[2] * alpha + pixels[offset + 2] * inverse)
-    pixels[offset + 3] = min(255, round(color[3] + pixels[offset + 3] * inverse))
+def png_chunks(data: bytes):
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("Runner icon source is not a PNG")
+    offset = 8
+    while offset + 12 <= len(data):
+        length = struct.unpack_from(">I", data, offset)[0]
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + length]
+        crc_expected = struct.unpack_from(">I", data, offset + 8 + length)[0]
+        crc_actual = zlib.crc32(kind + payload) & 0xFFFFFFFF
+        if crc_actual != crc_expected:
+            raise ValueError(f"Runner icon PNG CRC mismatch in {kind!r}")
+        yield kind, payload
+        offset += 12 + length
+        if kind == b"IEND":
+            return
+    raise ValueError("Runner icon PNG is truncated")
 
 
-def circle(pixels: bytearray, size: int, cx: float, cy: float,
-           radius: float, color: RGBA) -> None:
-    minimum_x = max(0, math.floor(cx - radius - 1))
-    maximum_x = min(size - 1, math.ceil(cx + radius + 1))
-    minimum_y = max(0, math.floor(cy - radius - 1))
-    maximum_y = min(size - 1, math.ceil(cy + radius + 1))
-    radius_squared = radius * radius
-    for y in range(minimum_y, maximum_y + 1):
-        for x in range(minimum_x, maximum_x + 1):
-            dx = x + 0.5 - cx
-            dy = y + 0.5 - cy
-            if dx * dx + dy * dy <= radius_squared:
-                blend(pixels, size, x, y, color)
+def paeth(a: int, b: int, c: int) -> int:
+    prediction = a + b - c
+    pa = abs(prediction - a)
+    pb = abs(prediction - b)
+    pc = abs(prediction - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
 
 
-def line(pixels: bytearray, size: int, ax: float, ay: float,
-         bx: float, by: float, thickness: float, color: RGBA) -> None:
-    minimum_x = max(0, math.floor(min(ax, bx) - thickness - 1))
-    maximum_x = min(size - 1, math.ceil(max(ax, bx) + thickness + 1))
-    minimum_y = max(0, math.floor(min(ay, by) - thickness - 1))
-    maximum_y = min(size - 1, math.ceil(max(ay, by) + thickness + 1))
-    dx = bx - ax
-    dy = by - ay
-    length_squared = max(1.0e-6, dx * dx + dy * dy)
-    radius_squared = (thickness * 0.5) ** 2
-    for y in range(minimum_y, maximum_y + 1):
-        for x in range(minimum_x, maximum_x + 1):
-            px = x + 0.5
-            py = y + 0.5
-            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length_squared))
-            qx = ax + dx * t
-            qy = ay + dy * t
-            if (px - qx) ** 2 + (py - qy) ** 2 <= radius_squared:
-                blend(pixels, size, x, y, color)
+def decode_png_rgba(data: bytes) -> tuple[int, int, bytes]:
+    width = height = 0
+    bit_depth = color_type = interlace = -1
+    compressed = bytearray()
+    for kind, payload in png_chunks(data):
+        if kind == b"IHDR":
+            width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
+                ">IIBBBBB", payload
+            )
+            if compression != 0 or filtering != 0:
+                raise ValueError("Unsupported Runner icon PNG compression/filter method")
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+
+    if width <= 0 or height <= 0 or bit_depth != 8 or interlace != 0:
+        raise ValueError("Runner icon source must be a non-interlaced 8-bit PNG")
+    if color_type not in (2, 6):
+        raise ValueError("Runner icon source must be RGB or RGBA")
+
+    channels = 4 if color_type == 6 else 3
+    stride = width * channels
+    raw = zlib.decompress(bytes(compressed))
+    expected = height * (stride + 1)
+    if len(raw) != expected:
+        raise ValueError("Runner icon PNG decompressed size mismatch")
+
+    rows: list[bytearray] = []
+    offset = 0
+    previous = bytearray(stride)
+    for _ in range(height):
+        filter_type = raw[offset]
+        offset += 1
+        source = raw[offset:offset + stride]
+        offset += stride
+        row = bytearray(stride)
+        for index, value in enumerate(source):
+            left = row[index - channels] if index >= channels else 0
+            up = previous[index]
+            upper_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 0:
+                restored = value
+            elif filter_type == 1:
+                restored = (value + left) & 0xFF
+            elif filter_type == 2:
+                restored = (value + up) & 0xFF
+            elif filter_type == 3:
+                restored = (value + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                restored = (value + paeth(left, up, upper_left)) & 0xFF
+            else:
+                raise ValueError(f"Unsupported Runner icon PNG filter {filter_type}")
+            row[index] = restored
+        rows.append(row)
+        previous = row
+
+    rgba = bytearray(width * height * 4)
+    destination = 0
+    for row in rows:
+        for x in range(width):
+            source = x * channels
+            rgba[destination:destination + 3] = row[source:source + 3]
+            rgba[destination + 3] = row[source + 3] if channels == 4 else 255
+            destination += 4
+    return width, height, bytes(rgba)
 
 
-def polygon(pixels: bytearray, size: int,
-            points: list[tuple[float, float]], color: RGBA) -> None:
-    minimum_y = max(0, math.floor(min(point[1] for point in points)))
-    maximum_y = min(size - 1, math.ceil(max(point[1] for point in points)))
-    for y in range(minimum_y, maximum_y + 1):
-        scan_y = y + 0.5
-        intersections: list[float] = []
-        previous = points[-1]
-        for current in points:
-            if (current[1] > scan_y) != (previous[1] > scan_y):
-                t = (scan_y - previous[1]) / (current[1] - previous[1])
-                intersections.append(previous[0] + (current[0] - previous[0]) * t)
-            previous = current
-        intersections.sort()
-        for index in range(0, len(intersections) - 1, 2):
-            start = max(0, math.ceil(intersections[index]))
-            finish = min(size - 1, math.floor(intersections[index + 1]))
-            for x in range(start, finish + 1):
-                blend(pixels, size, x, y, color)
-
-
-def rounded_background(pixels: bytearray, size: int) -> None:
-    radius = size * 0.18
-    for y in range(size):
-        for x in range(size):
-            nearest_x = min(max(x + 0.5, radius), size - radius)
-            nearest_y = min(max(y + 0.5, radius), size - radius)
-            dx = x + 0.5 - nearest_x
-            dy = y + 0.5 - nearest_y
-            if dx * dx + dy * dy > radius * radius:
-                continue
-            fraction = y / max(1, size - 1)
-            blend(pixels, size, x, y,
-                  (7 + round(8 * fraction), 19 + round(15 * fraction),
-                   31 + round(22 * fraction), 255))
-
-
-def render(size: int) -> bytes:
-    scale = 4
-    high = size * scale
-    pixels = bytearray(high * high * 4)
-    rounded_background(pixels, high)
-    cyan = (40, 205, 255, 245)
-    cyan_dim = (14, 110, 148, 210)
-    gold = (255, 194, 61, 255)
-    gold_light = (255, 231, 154, 255)
-    amber = (244, 116, 31, 245)
-
-    border = high * 0.035
-    line(pixels, high, high * 0.15, high * 0.055,
-         high * 0.85, high * 0.055, border, cyan)
-    line(pixels, high, high * 0.055, high * 0.15,
-         high * 0.055, high * 0.85, border, cyan_dim)
-    line(pixels, high, high * 0.15, high * 0.945,
-         high * 0.85, high * 0.945, border, cyan_dim)
-    line(pixels, high, high * 0.945, high * 0.15,
-         high * 0.945, high * 0.85, border, cyan)
-
-    for index, length in enumerate((0.34, 0.46, 0.28, 0.40)):
-        y = high * (0.25 + index * 0.12)
-        line(pixels, high, high * 0.08, y,
-             high * (0.08 + length), y, high * 0.020, cyan_dim)
-    polygon(pixels, high, [
-        (high * 0.18, high * 0.71), (high * 0.42, high * 0.65),
-        (high * 0.36, high * 0.75), (high * 0.64, high * 0.69),
-        (high * 0.58, high * 0.80), (high * 0.82, high * 0.73),
-        (high * 0.75, high * 0.88), (high * 0.22, high * 0.88)
-    ], (26, 83, 104, 235))
-    line(pixels, high, high * 0.15, high * 0.88,
-         high * 0.86, high * 0.88, high * 0.028, amber)
-
-    head = (high * 0.61, high * 0.22)
-    neck = (high * 0.57, high * 0.31)
-    hip = (high * 0.49, high * 0.52)
-    left_hand = (high * 0.30, high * 0.43)
-    right_hand = (high * 0.76, high * 0.37)
-    left_knee = (high * 0.34, high * 0.65)
-    left_foot = (high * 0.20, high * 0.82)
-    right_knee = (high * 0.64, high * 0.63)
-    right_foot = (high * 0.82, high * 0.75)
-    limb = high * 0.052
-    line(pixels, high, *neck, *hip, limb * 1.15, gold)
-    line(pixels, high, neck[0], neck[1], high * 0.43, high * 0.37, limb, gold)
-    line(pixels, high, high * 0.43, high * 0.37, *left_hand, limb * 0.82, gold)
-    line(pixels, high, neck[0], neck[1], high * 0.68, high * 0.32, limb, gold_light)
-    line(pixels, high, high * 0.68, high * 0.32, *right_hand, limb * 0.82, gold_light)
-    line(pixels, high, *hip, *left_knee, limb * 1.05, gold)
-    line(pixels, high, *left_knee, *left_foot, limb * 0.92, gold)
-    line(pixels, high, *hip, *right_knee, limb * 1.05, gold_light)
-    line(pixels, high, *right_knee, *right_foot, limb * 0.92, gold_light)
-    line(pixels, high, left_foot[0] - high * 0.03, left_foot[1],
-         left_foot[0] + high * 0.10, left_foot[1], limb * 0.50, amber)
-    line(pixels, high, right_foot[0] - high * 0.03, right_foot[1],
-         right_foot[0] + high * 0.10, right_foot[1], limb * 0.50, amber)
-    circle(pixels, high, *head, high * 0.073, gold_light)
-    circle(pixels, high, hip[0], hip[1], high * 0.040, amber)
-    polygon(pixels, high, [
-        (high * 0.74, high * 0.18), (high * 0.86, high * 0.18),
-        (high * 0.80, high * 0.29), (high * 0.89, high * 0.29),
-        (high * 0.72, high * 0.49), (high * 0.77, high * 0.34),
-        (high * 0.68, high * 0.34)
-    ], cyan)
-
-    result = bytearray(size * size * 4)
-    sample_count = scale * scale
-    for y in range(size):
-        for x in range(size):
-            totals = [0, 0, 0, 0]
-            for sy in range(scale):
-                for sx in range(scale):
-                    source = ((y * scale + sy) * high + x * scale + sx) * 4
-                    for channel in range(4):
-                        totals[channel] += pixels[source + channel]
-            destination = (y * size + x) * 4
-            for channel in range(4):
-                result[destination + channel] = totals[channel] // sample_count
+def resize_nearest(
+    source_width: int,
+    source_height: int,
+    source_rgba: bytes,
+    target_width: int,
+    target_height: int,
+) -> bytes:
+    result = bytearray(target_width * target_height * 4)
+    for y in range(target_height):
+        source_y = min(source_height - 1, (y * source_height) // target_height)
+        for x in range(target_width):
+            source_x = min(source_width - 1, (x * source_width) // target_width)
+            source = (source_y * source_width + source_x) * 4
+            target = (y * target_width + x) * 4
+            result[target:target + 4] = source_rgba[source:source + 4]
     return bytes(result)
 
 
-def png_bytes(size: int, rgba: bytes) -> bytes:
-    raw = b"".join(b"\x00" + rgba[y * size * 4:(y + 1) * size * 4]
-                   for y in range(size))
-    signature = b"\x89PNG\r\n\x1a\n"
+def png_bytes(width: int, height: int, rgba: bytes) -> bytes:
+    raw = b"".join(
+        b"\x00" + rgba[y * width * 4:(y + 1) * width * 4]
+        for y in range(height)
+    )
 
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(
-            ">I", zlib.crc32(kind + data) & 0xffffffff)
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+        )
 
-    return signature + chunk(b"IHDR", struct.pack(
-        ">IIBBBBB", size, size, 8, 6, 0, 0, 0)) + chunk(
-            b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
 
 
-def bmp_bytes(size: int, rgba: bytes) -> bytes:
-    row_bytes = size * 4
+def bmp_bytes(width: int, height: int, rgba: bytes) -> bytes:
     pixels = bytearray()
-    for y in range(size - 1, -1, -1):
-        for x in range(size):
-            offset = (y * size + x) * 4
+    for y in range(height - 1, -1, -1):
+        for x in range(width):
+            offset = (y * width + x) * 4
             r, g, b, a = rgba[offset:offset + 4]
             pixels.extend((b, g, r, a))
     file_size = 14 + 40 + len(pixels)
-    return (b"BM" + struct.pack("<IHHI", file_size, 0, 0, 54)
-            + struct.pack("<IIIHHIIIIII", 40, size, size, 1, 32, 0,
-                          len(pixels), 3780, 3780, 0, 0) + pixels)
+    return (
+        b"BM"
+        + struct.pack("<IHHI", file_size, 0, 0, 54)
+        + struct.pack(
+            "<IIIHHIIIIII",
+            40,
+            width,
+            height,
+            1,
+            32,
+            0,
+            len(pixels),
+            3780,
+            3780,
+            0,
+            0,
+        )
+        + pixels
+    )
 
 
-def ico_bytes(sizes: tuple[int, ...]) -> bytes:
-    images = [png_bytes(size, render(size)) for size in sizes]
+def ico_bytes(
+    source_width: int,
+    source_height: int,
+    source_rgba: bytes,
+    sizes: tuple[int, ...],
+) -> bytes:
+    images = [
+        png_bytes(
+            size,
+            size,
+            resize_nearest(source_width, source_height, source_rgba, size, size),
+        )
+        for size in sizes
+    ]
     header = struct.pack("<HHH", 0, 1, len(images))
     offset = 6 + len(images) * 16
     entries = bytearray()
     for size, image in zip(sizes, images, strict=True):
         dimension = 0 if size == 256 else size
-        entries.extend(struct.pack("<BBBBHHII", dimension, dimension,
-                                   0, 0, 1, 32, len(image), offset))
+        entries.extend(
+            struct.pack("<BBBBHHII", dimension, dimension, 0, 0, 1, 32, len(image), offset)
+        )
         offset += len(image)
     return header + entries + b"".join(images)
 
@@ -222,14 +206,39 @@ def main() -> int:
     if len(sys.argv) != 2:
         print("usage: generate_runner_icon.py <output-directory>", file=sys.stderr)
         return 2
+
+    repository = Path(__file__).resolve().parents[1]
+    source_path = repository / "assets" / "ui" / "runner_icon_source.png"
+    source = source_path.read_bytes()
+    digest = hashlib.sha256(source).hexdigest()
+    if digest != SOURCE_PNG_SHA256:
+        raise ValueError(
+            f"Runner screenshot icon source hash mismatch: {digest} != {SOURCE_PNG_SHA256}"
+        )
+
+    width, height, rgba = decode_png_rgba(source)
+    if width != height:
+        raise ValueError("Runner screenshot icon source must be square")
+
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    rgba_256 = render(256)
-    (output / "runner_icon.png").write_bytes(png_bytes(256, rgba_256))
-    (output / "runner_icon_512.png").write_bytes(png_bytes(512, render(512)))
-    (output / "runner_icon.bmp").write_bytes(bmp_bytes(64, render(64)))
-    (output / "runner.ico").write_bytes(ico_bytes((16, 20, 24, 32, 40, 48, 64, 128, 256)))
-    print(f"Runner icon assets generated in {output}")
+    (output / "runner_icon_source.png").write_bytes(source)
+    (output / "runner_icon_source.sha256").write_text(
+        f"{digest}  runner_icon_source.png\n", encoding="ascii"
+    )
+    (output / "runner_icon.png").write_bytes(
+        png_bytes(256, 256, resize_nearest(width, height, rgba, 256, 256))
+    )
+    (output / "runner_icon_512.png").write_bytes(
+        png_bytes(512, 512, resize_nearest(width, height, rgba, 512, 512))
+    )
+    (output / "runner_icon.bmp").write_bytes(
+        bmp_bytes(64, 64, resize_nearest(width, height, rgba, 64, 64))
+    )
+    (output / "runner.ico").write_bytes(
+        ico_bytes(width, height, rgba, (16, 20, 24, 32, 40, 48, 64, 128, 256))
+    )
+    print(f"Runner screenshot icon assets generated from {source_path}")
     return 0
 
 
