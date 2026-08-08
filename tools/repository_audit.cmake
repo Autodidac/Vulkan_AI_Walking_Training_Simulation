@@ -11,7 +11,8 @@ foreach(required IN ITEMS
         docs/RUNNER_V0721_READABLE_TELEMETRY.md
         docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md
         docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md
-        assets/ui/runner_icon_concept.svg
+        docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md
+        assets/ui/runner_icon_source.png
         tools/generate_runner_icon.py
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
@@ -19,6 +20,7 @@ foreach(required IN ITEMS
         tests/v0721_readable_telemetry_tests.cpp
         tests/v0721_rig_gait_tests.cpp
         tests/v0723_gray_frame_tests.cpp
+        tests/v0724_structural_metrics_icon_tests.cpp
         src/locomotion_strategy.hpp
         src/preview_sync.hpp
         src/training_explainer.hpp
@@ -33,111 +35,110 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.23 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.24 LANGUAGES CXX)"
         "generate_runner_icon.py"
-        "src/autonomy_commands.cpp"
-        "src/main.cpp"
-        "RunnerV0720UiTests"
-        "RunnerV0721ReadableTelemetryTests"
-        "RunnerV0723GrayFrameTests"
-        "RUNNER_V0720_UI_PREVIEW_ICON.md"
-        "RUNNER_V0721_READABLE_TELEMETRY.md"
-        "RUNNER_V0722_BLACK_FRAME_HOTFIX.md"
-        "RUNNER_V0723_GRAY_FRAME_HOTFIX.md"
+        "runner_icon_source.png"
+        "runner_icon_source.sha256"
+        "RunnerV0724StructuralMetricsIconTests"
+        "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.23 contract missing: ${reference}")
-    endif()
-endforeach()
-foreach(stale IN ITEMS
-        "RUNNER_GENERATED_DIR"
-        "generate_v0719_sources.py"
-        "generated-v0719")
-    string(FIND "${cmake_text}" "${stale}" pos)
-    if(NOT pos EQUAL -1)
-        message(FATAL_ERROR "Stale generated-source contract remains: ${stale}")
+        message(FATAL_ERROR "CMake v0.7.24 contract missing: ${reference}")
     endif()
 endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/missioncache.md" mission_text)
 foreach(reference IN ITEMS
-        "WALK-DPI-253"
-        "WALK-CLIP-254"
-        "WALK-PREVIEW-CONTINUITY-257"
-        "WALK-ICON-260"
-        "WALK-RELEASE-262"
-        "WALK-HUMAN-STATUS-263"
-        "WALK-ADVANCED-269"
-        "WALK-TELEMETRY-TEST-272"
-        "WALK-AUTO-TUNING-275"
-        "WALK-SIDE-GAIT-276"
-        "WALK-RIG-LAB-279"
-        "WALK-RELEASE-283"
-        "WALK-BLACK-FRAME-284"
-        "WALK-FRAME-DIAGNOSTIC-287"
-        "WALK-RELEASE-289"
-        "WALK-TRUE-OUTLINE-290"
-        "WALK-COMPOSITE-292"
-        "WALK-ALL-VIEWS-293"
-        "WALK-RELEASE-295")
+        "WALK-SCREENSHOT-ICON-296"
+        "WALK-BONE-LENGTH-297"
+        "WALK-LOAD-BEARING-298"
+        "WALK-AUTO-STIFFNESS-299"
+        "WALK-DEBUG-TRUTH-300"
+        "WALK-PROGRESS-301"
+        "WALK-TOTALS-302"
+        "WALK-VISUAL-303"
+        "WALK-STATE-304"
+        "WALK-REGRESSION-305"
+        "WALK-RELEASE-306")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.23 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache v0.7.24 contract missing: ${reference}")
     endif()
 endforeach()
 
-file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_runtime.cpp" runtime_text)
+file(READ "${RUNNER_SOURCE_DIR}/src/simulation.cpp" simulation_text)
 foreach(reference IN ITEMS
-        "preview_sync::decide"
-        "if (decision.replace_course)"
-        "if (decision.reset_episode)")
-    string(FIND "${runtime_text}" "${reference}" pos)
+        "project_structure_rigid"
+        "maximum_bone_length_error_ratio"
+        "InvalidMotion::structural_compression"
+        "bone.stiffness = 1.0f")
+    string(FIND "${simulation_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Preview continuity contract missing: ${reference}")
+        message(FATAL_ERROR "Rigid skeleton contract missing: ${reference}")
     endif()
 endforeach()
 
-file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
+file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "--diagnose-ui"
-        "visible_application_frames"
-        "SDL_SetWindowIcon"
-        "application.frame(input, dt, logical_width, logical_height)"
-        "logical_width, logical_height")
-    string(FIND "${main_text}" "${reference}" pos)
+        "training_semantics_version = 0x0007'2401u"
+        "completed_episode_passes_stage_checks")
+    string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "DPI/icon runtime contract missing: ${reference}")
+        message(FATAL_ERROR "Training semantics contract missing: ${reference}")
     endif()
 endforeach()
 
-file(READ "${RUNNER_SOURCE_DIR}/src/renderer.hpp" renderer_text)
-foreach(reference IN ITEMS "push_clip" "canvas_width" "drawable_width")
-    string(FIND "${renderer_text}" "${reference}" pos)
+file(READ "${RUNNER_SOURCE_DIR}/src/ppo_trainer.cpp" trainer_text)
+string(FIND "${trainer_text}" "completed_episode_passes_stage_checks" stage_counter_pos)
+if(stage_counter_pos EQUAL -1)
+    message(FATAL_ERROR "Rollout totals do not use stage-qualified accounting")
+endif()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/training_explainer.hpp" explainer_text)
+foreach(reference IN ITEMS
+        "training_work"
+        "result.training_work * 0.80f + result.mastery * 0.20f"
+        "PASSED STAGE CHECKS")
+    string(FIND "${explainer_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Renderer clipping/DPI contract missing: ${reference}")
+        message(FATAL_ERROR "Truthful telemetry contract missing: ${reference}")
     endif()
 endforeach()
-
 
 file(READ "${RUNNER_SOURCE_DIR}/src/app.cpp" app_text)
+foreach(reference IN ITEMS
+        "LESSON COMPLETION"
+        "MASTERY PASSES"
+        "PASSED STAGE CHECKS"
+        "FAILED STAGE CHECKS"
+        "FEATURES CLEARED"
+        "runner-v0724-rig-autosave.eppo")
+    string(FIND "${app_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.24 application contract missing: ${reference}")
+    endif()
+endforeach()
 string(FIND "${app_text}" "Color{}" opaque_default_pos)
 if(NOT opaque_default_pos EQUAL -1)
     message(FATAL_ERROR "Opaque default Color remains in application border rendering")
 endif()
-string(FIND "${app_text}" "ui_render::transparent_fill" transparent_fill_pos)
-if(transparent_fill_pos EQUAL -1)
-    message(FATAL_ERROR "Explicit transparent border-fill contract is not used")
-endif()
-string(FIND "${app_text}" "ui_render::rounded_rect" rounded_rect_pos)
-if(rounded_rect_pos EQUAL -1)
-    message(FATAL_ERROR "Application is not using the true rounded-outline helper")
-endif()
-file(READ "${RUNNER_SOURCE_DIR}/src/ui_render_contract.hpp" render_contract_text)
-foreach(reference IN ITEMS "stroke_rounded_rect" "rounded_corner_stroke" "border_width")
-    string(FIND "${render_contract_text}" "${reference}" pos)
+
+file(READ "${RUNNER_SOURCE_DIR}/tools/generate_runner_icon.py" generator_text)
+foreach(reference IN ITEMS
+        "assets"
+        "runner_icon_source.png"
+        "SOURCE_PNG_SHA256"
+        "resize_nearest")
+    string(FIND "${generator_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "True rounded-outline contract missing: ${reference}")
+        message(FATAL_ERROR "Screenshot icon generator contract missing: ${reference}")
+    endif()
+endforeach()
+foreach(forbidden IN ITEMS "rounded_background" "polygon(" "gold =" "cyan =")
+    string(FIND "${generator_text}" "${forbidden}" pos)
+    if(NOT pos EQUAL -1)
+        message(FATAL_ERROR "Synthetic icon drawing remains: ${forbidden}")
     endif()
 endforeach()
 
@@ -147,34 +148,17 @@ if(release_notes)
 endif()
 
 foreach(stale IN ITEMS
-        tools/generate_v0719_sources.py
-        tools/apply_v0720_release.py
-        tools/fix_v0720_validation.py
-        .github/workflows/apply-v0720-release.yml
-        .github/workflows/fix-v0720-validation.yml
-        tools/apply_v0721_readable_telemetry.py
-        .github/workflows/apply-v0721-readable-telemetry.yml
-        tools/cache_v0721_rig_repair.py
-        tools/apply_v0721_rig_gait_repair.py
-        tools/run_v0721_rig_gait_repair.py
-        .github/workflows/cache-v0721-rig-repair.yml
-        .github/workflows/apply-v0721-rig-gait-repair.yml
-        tools/cache_v0722_black_frame.py
-        tools/apply_v0722_black_frame_hotfix.py
-        tools/add_v0722_frame_diagnostic.py
-        tools/fix_v0722_validation.py
-        tools/v0722.cache-trigger
-        tools/v0722.cache-trigger2
-        tools/v0722.cache-trigger3
-        .github/workflows/cache-v0722-black-frame.yml
-        .github/workflows/apply-v0722-black-frame.yml
-        tools/cache_v0723_gray_frame.py
-        tools/apply_v0723_gray_frame_hotfix.py
-        .github/workflows/cache-v0723-gray-frame.yml
-        .github/workflows/apply-v0723-gray-frame.yml)
+        tools/apply_v0724_structural_metrics_icon.py
+        tools/run_v0724_migration.py
+        tools/cache_v0724_structural_metrics_icon.py
+        tools/v0724-trigger.txt
+        tools/v0724-pr-target-trigger.txt
+        tools/v0724-prtarget-kick2.txt
+        tools/v0724-reopen-trigger.txt
+        tools/v0724-rescue-trigger.txt)
     if(EXISTS "${RUNNER_SOURCE_DIR}/${stale}")
-        message(FATAL_ERROR "Temporary or stale source generator remains: ${stale}")
+        message(FATAL_ERROR "Temporary v0.7.24 migration file remains: ${stale}")
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.23 repository hygiene passed")
+message(STATUS "Runner v0.7.24 repository hygiene passed")
