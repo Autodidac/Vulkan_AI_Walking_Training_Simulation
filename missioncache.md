@@ -589,42 +589,42 @@ Add forced-compression recovery, exact segment-length, natural walking soak, com
 
 Merge only validated source, publish `v0.7.25`, re-download and byte-verify every asset, record evidence, close temporary PRs, and delete temporary branches/workflows.
 
-# Carried open work
+# Carried work
 
 ### WALK-CLIMB-134 — Reachable ledge climb and controlled backward descent
-**Status:** OPEN — CARRIED TO A LATER RELEASE
+**Status:** VERIFIED — V0.7.28 CLIMB/DESCENT DIAGNOSTIC AND RELEASE GATES PASSED
 
 Add a hard-wall curriculum where a rig climbs without jumping when hands can reach a ledge and turns backward to lower itself when the remaining fall is no greater than standing height. Completion requires hand/ledge contact, support transfer, no powered takeoff, and controlled feet-first recovery.
 
-# Future equipment, carry, and target curriculum
+# Equipment, carry, and target curriculum
 
-**Release state:** CACHED AND OPEN — intentionally separated from the structural, telemetry, and rig-truth releases because equipment changes policy dimensions and checkpoint compatibility.
+**Release state:** PUBLISHED AND INDEPENDENTLY VERIFIED IN RUNNER V0.7.28 — policy dimensions and checkpoint compatibility are explicitly versioned and migrated.
 
 ### WALK-EQUIPMENT-148 — Unarmed, safe carry, ready, disarmed, and dropped states
-**Status:** OPEN
+**Status:** VERIFIED — V0.7.28 STATE AND ADVERSARIAL GATES PASSED
 
 ### WALK-WEAPONS-149 — Multiple abstract gameplay weapon classes
-**Status:** OPEN
+**Status:** VERIFIED — V0.7.28 CLASS AND RUNTIME GATES PASSED
 
 ### WALK-TARGET-150 — Aim and fire at deterministic targets across distances
-**Status:** OPEN
+**Status:** VERIFIED — V0.7.28 TARGET, AIM, FIRE, AND BALLISTICS GATES PASSED
 
 ### WALK-COMBAT-CURRICULUM-151 — Preserve locomotion while carrying and firing
-**Status:** OPEN
+**Status:** VERIFIED — V0.7.28 LOCOMOTION-PRESERVING COMBAT GATES PASSED
 
 ### WALK-EQUIPMENT-EDITOR-152 — Equipment and target editor controls
-**Status:** OPEN
+**Status:** VERIFIED — V0.7.28 EDITOR AND RUNTIME CONTRACTS PASSED
 
 ### WALK-POLICY-153 — Separate locomotion motors from equipment actions
-**Status:** OPEN — ARCHITECTURE DECISION REQUIRED BEFORE IMPLEMENTATION
+**Status:** VERIFIED — VERSIONED EQUIPMENT EXTENSION AND EPPO28 MIGRATION PASSED
 
 The existing anatomy motor slots remain anatomy controls. Equipment state, aim, and trigger require a separately versioned policy-action extension with explicit observation/checkpoint migration tests.
 
 ### WALK-EQUIPMENT-REGRESSION-154 — Optional-subsystem nonregression audit
-**Status:** OPEN
+**Status:** VERIFIED — EQUIPMENT-OFF IDENTITY AND MULTI-CADENCE GATES PASSED
 
 ### WALK-RELEASE-155 — Publish audited equipment release
-**Status:** OPEN
+**Status:** PUBLISHED — V0.7.28 TAG, ASSETS, RE-DOWNLOAD, AND CLEANUP VERIFIED
 
 # Recent immutable release evidence
 
@@ -816,13 +816,13 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all CTest suites
 
 # Runner post-v0.7.27 carried completion round
 
-**Release state:** IMPLEMENTED AND LOCALLY VERIFIED; WALK-RELEASE-155 PUBLICATION PENDING
+**Release state:** PUBLISHED AND INDEPENDENTLY VERIFIED IN V0.7.28; WALK-RELEASE-155 COMPLETE
 
-The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. Reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and local package/eye-test evidence are implemented. WALK-RELEASE-155 remains explicitly open only for audited publication and published-asset verification.
+The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. Reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and local package/eye-test evidence are implemented. WALK-RELEASE-155 is complete through audited publication, two independent asset downloads, byte comparison, extracted runtime diagnostics, and release-branch cleanup.
 
 # Runner v0.7.28 physical material course and carried-mission completion
 
-**Release state:** LOCAL IMPLEMENTATION, PACKAGE, FRAME-INDEPENDENCE, AND EYE TEST VERIFIED; PUBLICATION PENDING
+**Release state:** PUBLISHED AND INDEPENDENTLY VERIFIED — ALL V0.7.28 MISSIONS COMPLETE
 
 The v0.7.27 packaged screenshot at 3. Walk / Run and 30% difficulty is authoritative contradictory evidence. It shows thrown-object hazards at the launch area before basic gait mastery, three overlapping `HAZARD: THROWN OBJECT` labels, a layered beige/brown terrain presentation without visually or physically legible random sand, water, or holes, zero features cleared, six preview restarts ending in micro-motion, raw test score `-1600`, rejection mask `0x00000051`, invalid motion, best raw score unavailable, and mastery `0/8`. A course may not call this normal Walk / Run evidence while advanced hazards are already striking the rig.
 
@@ -862,7 +862,7 @@ Material deformation, water response, hole contacts, feature motion, labels, pre
 Implement the cached reachable ledge climb and controlled backward descent mission with hand/ledge contact, support transfer, no powered takeoff, controlled feet-first recovery, observations, curriculum, rendering, editor controls, diagnostics, persistence, and repeated-seed tests.
 
 ### WALK-CARRIED-341 — Complete WALK-EQUIPMENT-148 through WALK-RELEASE-155
-**Status:** IMPLEMENTED AND LOCALLY VERIFIED - WALK-EQUIPMENT-148 THROUGH WALK-RELEASE-155 PRESERVED; PUBLICATION PORTION OPEN
+**Status:** VERIFIED — WALK-EQUIPMENT-148 THROUGH WALK-RELEASE-155 PRESERVED, PUBLISHED, AND INDEPENDENTLY AUDITED
 
 Implement unarmed/safe-carry/ready/disarmed/dropped state; multiple abstract weapon classes; deterministic varied-distance targets; locomotion-preserving aim/fire curriculum; editor controls; a separately versioned equipment action/observation extension; checkpoint migration; optional-subsystem nonregression; diagnostics; packaging; and audited publication. Anatomy motor slots remain anatomy-only.
 
@@ -885,9 +885,20 @@ Bump application/package version, training and equipment semantics, autosave/che
 - The four-rig diagnostic retained fixed source evidence: biped evaluation `-1.5272`/`1.50` strides, quadruped `-0.1218`/`1.50`, crawler `-0.1690`/`1.00`, and hexapod `0.3530`/`3.67`; course motion is disabled for every rollout.
 - The independently extracted package contains 45 files; every file matched its SHA-256 manifest with no missing or extra paths.
 - Direct installed-package Vulkan eye testing via `Runner.exe --course-eye-test` shows a clear start rig and approximately 10 m firm runway followed by labeled dry deformable sand, waterlogged sand, shallow water, and a ground hole. It shows no early falling object and no duplicate or overlapping hazard callout. The 1900 x 1180 PNG SHA-256 is `28a039b7d1d9b3e64f9ae4c3b4ac30b90b310ee7d561e30baacb1b2896cefba6`.
-- WALK-CLIMB-134 and WALK-EQUIPMENT-148 through WALK-EQUIPMENT-154 are locally complete. WALK-RELEASE-155 and WALK-RELEASE-344 remain open only for merged/tagged publication, published-asset re-download, byte comparison, and repository cleanup.
+- WALK-CLIMB-134 and WALK-EQUIPMENT-148 through WALK-RELEASE-155 are complete. WALK-RELEASE-155 and WALK-RELEASE-344 passed merged/tagged publication, published-asset re-download, byte comparison, extracted-runtime diagnostics, and repository cleanup.
 
 ### WALK-RELEASE-344 — Publish and independently verify Runner v0.7.28
-**Status:** OPEN — RELEASE BLOCKING
+**Status:** PUBLISHED — TAG, WORKFLOW, ASSETS, TWO DOWNLOADS, MANIFEST, RUNTIME, AND CLEANUP VERIFIED
 
 Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, complete Windows SDL3/Vulkan build/tests, every build-tree/installed/extracted diagnostic from unrelated directories, ZIP checksum and full manifest audit, published-asset re-download byte comparison, direct packaged eye-test evidence, zero cleanup PRs, and main-only branch state.
+
+## Runner v0.7.28 publication and independent re-download evidence
+
+- Release implementation PR `#88` merged as `97e21e0755afb5060147995c79e3aabbad84f44a`; annotated tag object `e1362e80e0b49ce9f5d166b2c9db4b5b6cfb2d83` targets that exact commit.
+- Audited tagged release workflow `31275557378` passed Linux GCC 14, the complete Windows SDL3/Vulkan build/tests, every feature diagnostic, package creation, installed/extracted launcher audits, publication, and its own published-byte re-download comparison.
+- The public non-draft, non-prerelease release is `https://github.com/Autodidac/Vulkan_AI_Walking_Training_Simulation/releases/tag/v0.7.28`, published from the exact tag target.
+- Published ZIP SHA-256: `871d6ac56b0f48e67089a5a4f7535bb1cd0923cd8b9172ff0514cf36f9ed1a3d`.
+- Published checksum-asset SHA-256: `5a07809f64fad212fe46c4beddf103e819c50e5fdf7bb1ed160eacbd61201595`; its contents equal the published ZIP digest.
+- Published manifest SHA-256: `85d94257cb83b3ab3a7e8bfeaec3a492b27792b094f53ab592e73f54089d4d23`; all 45 independently extracted files match with no missing or extra paths.
+- Two subsequent fresh public downloads matched each other byte-for-byte for all three assets. The extracted public `run.bat`, launched from an unrelated directory, passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, four-rig training, and course diagnostics.
+- The merged implementation branch was deleted; the completed-release audit found zero open PRs and only `main`. This ledger-only closeout branch exists solely to persist that result and is deleted on merge.
