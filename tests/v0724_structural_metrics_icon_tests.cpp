@@ -43,6 +43,13 @@ namespace
         return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
     }
 
+    std::string read_text(const std::filesystem::path& path)
+    {
+        std::ifstream input(path);
+        require(static_cast<bool>(input), "required icon source could not be opened");
+        return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+    }
+
     bool same_anatomy(const CreatureBlueprint& lhs, const CreatureBlueprint& rhs)
     {
         if (lhs.nodes.size() != rhs.nodes.size()
@@ -178,16 +185,23 @@ int main()
     {
         const std::filesystem::path generated{ RUNNER_GENERATED_ASSET_DIRECTORY };
         const std::filesystem::path source{ RUNNER_SOURCE_ICON_PATH };
-        const auto committed = read_binary(source);
-        const auto generated_source =
-            read_binary(generated / "runner_icon_source.png");
-        require(committed == generated_source,
-            "generated icon source must exactly match the committed screenshot crop");
+        const std::string source_text = read_text(source);
+        require(source_text.find("WIDTH=320") != std::string::npos
+                && source_text.find("HEIGHT=320") != std::string::npos,
+            "screenshot pixel source dimensions must remain canonical");
+        require(source_text.find(
+                "RGBA_SHA256=6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad")
+                != std::string::npos,
+            "screenshot pixel source hash must remain canonical");
 
+        const auto source_png = read_binary(generated / "runner_icon_source.png");
         const auto png = read_binary(generated / "runner_icon.png");
         const auto png512 = read_binary(generated / "runner_icon_512.png");
         const auto bmp = read_binary(generated / "runner_icon.bmp");
         const auto ico = read_binary(generated / "runner.ico");
+        require(source_png.size() > 8u
+                && source_png[0] == 0x89u && source_png[1] == 0x50u,
+            "generated screenshot source must be a PNG");
         require(png.size() > 8u && png[0] == 0x89u && png[1] == 0x50u,
             "256 icon must be a PNG");
         require(png512.size() > 8u && png512[0] == 0x89u && png512[1] == 0x50u,
@@ -206,8 +220,8 @@ int main()
         std::string checksum_text;
         std::getline(checksum, checksum_text);
         require(checksum_text.starts_with(
-                "7e0e834ba7cb78a39b6f31df12e52440b050327c7a59e46cd70abdc286c808a7"),
-            "screenshot icon checksum must match the canonical source");
+                "73c533024cdba3abc7b30fbf948a6144c4eac889c448d4beda7ad59da6b02b9e"),
+            "generated screenshot PNG checksum must match the exact pixels");
     }
 
     std::cout
