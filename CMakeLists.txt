@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.28 LANGUAGES CXX)
+project(Runner VERSION 0.7.29 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -161,6 +161,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0726_TRAINING_TRUTH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0728_COURSE_COMPLETION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0728_COURSE_COMPLETION.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0729_MODULAR_ART_REMAKE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0729_MODULAR_ART_REMAKE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -187,6 +188,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0726_TRAINING_TRUTH.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0728_COURSE_COMPLETION.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0729_MODULAR_ART_REMAKE.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
@@ -358,6 +360,19 @@ if(RUNNER_BUILD_TESTS)
         COMMAND RunnerV0728CourseCompletionTests)
     set_tests_properties(Runner.V0728CourseCompletion PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerV0729ModularArtTests
+        tests/v0729_modular_art_tests.cpp)
+    target_link_libraries(RunnerV0729ModularArtTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0729ModularArtTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0729ModularArtTests PRIVATE cxx_std_23)
+    target_compile_definitions(RunnerV0729ModularArtTests PRIVATE
+        RUNNER_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+    runner_enable_warnings(RunnerV0729ModularArtTests)
+    add_test(NAME Runner.V0729ModularArt
+        COMMAND RunnerV0729ModularArtTests)
+    set_tests_properties(Runner.V0729ModularArt PROPERTIES TIMEOUT 180)
+
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)
     target_compile_features(RunnerLiveAcceptanceTests PRIVATE cxx_std_23)
@@ -390,6 +405,8 @@ if(RUNNER_BUILD_TESTS)
         set_tests_properties(Runner.CameraDiagnostic PROPERTIES TIMEOUT 30)
         add_test(NAME Runner.CourseDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-course)
         set_tests_properties(Runner.CourseDiagnostic PROPERTIES TIMEOUT 180)
+        add_test(NAME Runner.ArtDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-art)
+        set_tests_properties(Runner.ArtDiagnostic PROPERTIES TIMEOUT 30)
         add_test(NAME Runner.UiDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-ui)
         set_tests_properties(Runner.UiDiagnostic PROPERTIES TIMEOUT 30)
     endif()

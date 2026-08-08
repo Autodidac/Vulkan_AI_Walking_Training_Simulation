@@ -1,3 +1,15 @@
+## 0.7.29
+
+- Replaced legacy concept-sheet derivatives with a purpose-built strict lateral-orthographic helmet, torso, upper-arm, forearm, thigh, shin, boot, and energy-weapon runtime set.
+- Added a deterministic transparent-atlas crop/downsample pipeline and removed obsolete source-sheet/provenance package files.
+- Added explicit `#ff00ff` chroma-key handling so near-black outlines and graphite armor detail remain visible.
+- Bound limb sprites to authored biped motor segments with bounded thickness, rotation, mirroring, and existing near/far layering; topology-derived shoulder-frame bones stay behind the physically bounded torso plate.
+- Rendered the remade weapon from the live equipment mount and aim angle while retaining per-part procedural fallback.
+- Kept non-biped rigs free from humanoid art assumptions and preserved complete simulation/training identity with art enabled, disabled, absent, or malformed.
+- Downsampled only the runtime derivatives while retaining the high-resolution transparent source atlas; `--diagnose-art` now audits both the production course and close-up art frames against 25% headroom inside the 8 MiB Vulkan frame budget.
+- Added `--art-eye-test`, a frozen close-up Vulkan view labeled to expose any three-quarter projection, foreshortening, or perspective depth.
+- Added deterministic positive, negative, adversarial, repeated-load, package, topology, projection-contract, and isolation coverage.
+
 ## 0.7.28
 
 - Replaced launch-area Walk / Run hazards with a protected runway and seeded firm, dry-sand, waterlogged, shallow-water, and hole regions.

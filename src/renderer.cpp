@@ -24,7 +24,6 @@ namespace runner::render
 {
     namespace
     {
-        constexpr std::size_t maximum_vertex_bytes = 8u * 1024u * 1024u;
         constexpr std::size_t frames_in_flight = 2;
 
         struct QueueFamilies
@@ -450,7 +449,7 @@ namespace runner::render
             for (std::size_t frame = 0; frame < frames_in_flight; ++frame)
             {
                 VkBufferCreateInfo buffer_info{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-                buffer_info.size = maximum_vertex_bytes;
+                buffer_info.size = maximum_frame_vertex_bytes;
                 buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
                 buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
                 require(vkCreateBuffer(impl.device, &buffer_info, nullptr, &impl.vertex_buffers[frame]), "vkCreateBuffer");
@@ -462,7 +461,7 @@ namespace runner::render
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
                 require(vkAllocateMemory(impl.device, &memory_info, nullptr, &impl.vertex_memories[frame]), "vkAllocateMemory");
                 require(vkBindBufferMemory(impl.device, impl.vertex_buffers[frame], impl.vertex_memories[frame], 0), "vkBindBufferMemory");
-                require(vkMapMemory(impl.device, impl.vertex_memories[frame], 0, maximum_vertex_bytes, 0, &impl.mapped_vertices[frame]), "vkMapMemory");
+                require(vkMapMemory(impl.device, impl.vertex_memories[frame], 0, maximum_frame_vertex_bytes, 0, &impl.mapped_vertices[frame]), "vkMapMemory");
             }
 
             int width{};
@@ -531,7 +530,7 @@ namespace runner::render
         if (canvas_width <= 0 || canvas_height <= 0
             || drawable_width <= 0 || drawable_height <= 0)
             return true;
-        if (vertices.size_bytes() > maximum_vertex_bytes)
+        if (vertices.size_bytes() > maximum_frame_vertex_bytes)
         {
             error = "Frame exceeded the 8 MiB Vulkan vertex budget.";
             return false;

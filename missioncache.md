@@ -902,3 +902,62 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, compl
 - Published manifest SHA-256: `85d94257cb83b3ab3a7e8bfeaec3a492b27792b094f53ab592e73f54089d4d23`; all 45 independently extracted files match with no missing or extra paths.
 - Two subsequent fresh public downloads matched each other byte-for-byte for all three assets. The extracted public `run.bat`, launched from an unrelated directory, passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, four-rig training, and course diagnostics.
 - The merged implementation branch was deleted; the completed-release audit found zero open PRs and only `main`. This ledger-only closeout branch exists solely to persist that result and is deleted on merge.
+
+# Runner v0.7.29 modular armor art remake
+
+**Release state:** PUBLICATION AUTHORIZED — V0.7.29 RELEASE AUDIT IN PROGRESS
+
+The user-supplied modular alien armor sheet is visual direction for a clean runtime remake. Do not package the source sheet or create an attribution ledger for it. Runtime art must be purpose-built for Runner's side view, bounded to authored rig segments, optional, and physically inert.
+
+### WALK-ART-REMAKE-345 — Remake the modular side-view runtime asset set
+**Status:** VERIFIED — EXACT LATERAL-ORTHOGRAPHIC SOURCE AND RUNTIME SET REBUILT
+
+Create a clean side-view helmet, torso, upper-arm, forearm, thigh, shin, boot, and compact energy-weapon set with a consistent dark navy, warm ivory, and cyan-emissive material language. Use a deterministic atlas/crop pipeline; do not draw or package the supplied multi-view concept sheet directly.
+
+### WALK-ART-RIG-346 — Attach remade art to actual authored topology
+**Status:** VERIFIED
+
+Torso and helmet remain bounded to their physical nodes. Arm and leg plates rotate and scale with their corresponding authored segments, respect near/far layering, and never create duplicate limbs, hide contact truth, or assume non-biped rigs have humanoid anatomy.
+
+### WALK-ART-KEY-347 — Preserve silhouettes and dark material detail
+**Status:** VERIFIED
+
+Use an explicit removable chroma key rather than treating all black pixels as transparent. Preserve dark outlines and interior armor detail while keeping the background invisible and maintaining a safe procedural fallback when any optional part is absent or malformed.
+
+### WALK-ART-REGRESSION-348 — Prove optional-art isolation and packaging
+**Status:** VERIFIED
+
+Add deterministic positive, negative, adversarial, and repeated-load coverage for atlas dimensions, key removal, required part presence, bounded placement/orientation helpers, missing/malformed optional assets, physics/policy identity with art on or off, CMake install contents, and repository hygiene.
+
+## v0.7.29 validation evidence
+
+- The image-generation remake is retained as a transparent 1403x1121 exact side-orthographic source atlas with SHA-256 `b7e8d5a8cc7cc57af473161bd2e8a9feb0608301e7a4d8e629e8a289c8e71428`; the deterministic explicit-box generator reproduced all eight compact P3 runtime derivatives with the documented SHA-256 hashes. The source concept sheet, its old derivatives, and attribution/provenance files are absent.
+- Windows Visual Studio 2022 Release built the complete SDL3/Vulkan application and all test targets. CTest passed 27/27, including repository hygiene, keyed pixel art, the v0.7.29 modular-art contract, package layout, camera, course, UI, and the new art-budget diagnostic.
+- `Runner.exe --diagnose-art` rendered both the fixed course and orthographic close-up frames; the peak is 204,315 vertices / 4,903,560 bytes, 58.5% of the shared 8 MiB hard limit and below the 75% acceptance ceiling. The final 2575x1407 DPI-correct Vulkan `--art-eye-test` capture is `validation/v0729_modular_art_eye_test.png`, SHA-256 `c00844efd75e85e736ab740a46fe567a0ca2829890de6c67f246b55cb4f87738`.
+- Direct build-tree execution from `C:\Windows\Temp` passed version 0.7.29, Vulkan, package, 24/24 acceptance, camera, UI, art, rig-training, and course diagnostics. The course diagnostic retained exact 20/60/240 Hz frame-independence evidence.
+- WSL GCC 14.3 compiled the CPU/core build with `-Werror`; all 22 Linux CTest suites passed. `git diff --check`, deterministic regeneration, and the v0.7.29 repository audit passed.
+- Art remains presentation-only and absent from simulation, observations, rewards, curriculum, policy dimensions, checkpoint state, persistence, and non-biped topology. No tag, release, push, or publication was performed in this pass.
+
+## v0.7.29 user-eye-test reopening
+
+The user rejected the generated armor because its individual parts retain a three-quarter/perspective presentation while Runner is a strict 2D side-view simulation. The earlier green automated pass and vertex-budget fix do not close the visual mission. Replace the atlas with genuine orthographic profile silhouettes and re-run the exact Vulkan eye test.
+
+### WALK-ART-ORTHO-349 — Enforce true side-profile armor projection
+**Status:** VERIFIED — SOURCE, RUNTIME, DUAL-FRAME DIAGNOSTIC, AND VULKAN CLOSE-UP PASSED
+
+Every helmet, torso, arm plate, leg plate, boot, and weapon must be drawn in exact lateral orthographic elevation: one visible side face, no visible front/chest plane, no three-quarter rotation, no foreshortening, no converging edges, and no perspective depth. Add deterministic source/runtime checks and a close-up production eye-test frame that makes projection errors obvious.
+
+### WALK-RELEASE-350 — Publish and independently verify Runner v0.7.29
+**Status:** IN PROGRESS — USER AUTHORIZED PUBLICATION
+
+Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the complete Windows SDL3/Vulkan build and tests, every feature diagnostic, installed and independently extracted launch from an unrelated directory, ZIP checksum and per-file manifest audit, published-asset re-download and byte comparison, direct packaged orthographic eye-test evidence, zero open cleanup PRs, and final main-only remote branch state.
+
+## v0.7.29 orthographic correction evidence
+
+- Regenerated helmet, torso, upper-arm, forearm, thigh, shin, boot, and weapon as single-face lateral elevations with no front/chest plane, three-quarter turn, converging edge, perspective depth, or foreshortened counterpart.
+- Replaced equal-grid assumptions with eight explicit non-overlapping source boxes, then reproduced the documented runtime hashes from the retained transparent atlas.
+- Enlarged plates within their authored segment bounds and classified the topology-derived shoulder frame behind the torso plate; non-biped rigs remain excluded from humanoid art mapping.
+- Added `Runner.exe --art-eye-test` and expanded `--diagnose-art` to render both the production course and frozen close-up. The final direct Vulkan capture/hash are recorded above.
+- Windows Visual Studio 2022 Release rebuilt the full SDL3/Vulkan product and passed 27/27 tests. Linux GCC 14.3 compiled with warnings-as-errors and passed 22/22 tests.
+- From `C:\Windows\Temp`, the final build passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, dual-frame art, four-rig training, and ten-field course diagnostics. Frame independence remains exact at 20/60/240 Hz.
+- Art remains presentation-only and absent from physics, contacts, terrain, observations, rewards, curriculum, policy dimensions, checkpoint state, persistence, and training timing. No tag, push, release, or publication was performed.

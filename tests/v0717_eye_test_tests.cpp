@@ -97,7 +97,7 @@ int main(int argc, char** argv)
                     / "foot_side.ppm",
                 foot, error),
             "runtime foot atlas does not load");
-        require(foot.width == 64 && foot.height == 40,
+        require(foot.width == 32 && foot.height == 28,
             "runtime foot atlas dimensions changed");
     }
 

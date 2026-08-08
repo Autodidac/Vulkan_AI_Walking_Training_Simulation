@@ -16,18 +16,26 @@ foreach(required IN ITEMS
         docs/RUNNER_V0726_TRAINING_TRUTH.md
         docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md
         docs/RUNNER_V0728_COURSE_COMPLETION.md
+        docs/RUNNER_V0729_MODULAR_ART_REMAKE.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0727_rig_training_tests.cpp
         tests/v0728_course_completion_tests.cpp
+        tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
         src/course_completion_diagnostic.hpp
         assets/optional/runner_armor_concepts/runtime/foot_side.ppm
+        assets/optional/runner_armor_concepts/runtime/forearm_side.ppm
         assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
+        assets/optional/runner_armor_concepts/runtime/shin_side.ppm
+        assets/optional/runner_armor_concepts/runtime/thigh_side.ppm
         assets/optional/runner_armor_concepts/runtime/torso_side.ppm
+        assets/optional/runner_armor_concepts/runtime/upper_arm_side.ppm
         assets/optional/runner_armor_concepts/runtime/weapon_side.ppm
         assets/ui/runner_icon_source.rgba.zlib.b64
         tools/generate_runner_icon.py
+        tools/generate_runner_armor_assets.py
+        tools/art_sources/runner_v0729_modular_atlas.png
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
         tests/v0720_ui_tests.cpp
@@ -53,7 +61,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.28 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.29 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -62,10 +70,13 @@ foreach(reference IN ITEMS
         "RunnerV0726TrainingTruthTests"
         "RunnerV0727RigTrainingTests"
         "RunnerV0728CourseCompletionTests"
+        "RunnerV0729ModularArtTests"
+        "Runner.ArtDiagnostic"
         "RUNNER_V0725_ART_LEG_HOTFIX.md"
         "RUNNER_V0726_TRAINING_TRUTH.md"
         "RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
         "RUNNER_V0728_COURSE_COMPLETION.md"
+        "RUNNER_V0729_MODULAR_ART_REMAKE.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -123,7 +134,13 @@ foreach(reference IN ITEMS
         "WALK-CARRIED-341"
         "WALK-COURSE-DIAGNOSTIC-342"
         "WALK-STATE-DOC-343"
-        "WALK-RELEASE-344")
+        "WALK-RELEASE-344"
+        "WALK-ART-REMAKE-345"
+        "WALK-ART-RIG-346"
+        "WALK-ART-KEY-347"
+        "WALK-ART-REGRESSION-348"
+        "WALK-ART-ORTHO-349"
+        "WALK-RELEASE-350")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache v0.7.28 contract missing: ${reference}")
@@ -186,14 +203,76 @@ foreach(reference IN ITEMS
         "FEATURES CLEARED"
         "runner-v0728-course-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
+        "ORTHOGRAPHIC ART CHECK"
+        "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
         "COMPACT SEGMENTED BODY ARMOR"
-        "shoulder_cap_radius")
+        "shoulder_cap_radius"
+        "draw_oriented_pixel_art"
+        "draw_segment_art"
+        "optional_upper_arm_art"
+        "optional_forearm_art"
+        "optional_thigh_art"
+        "optional_shin_art")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "v0.7.28 application contract missing: ${reference}")
     endif()
 endforeach()
+file(READ "${RUNNER_SOURCE_DIR}/src/renderer.hpp" renderer_header_text)
+string(FIND "${renderer_header_text}" "maximum_frame_vertex_bytes" art_budget_pos)
+if(art_budget_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.29 shared renderer vertex-budget contract missing")
+endif()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/pixel_art.hpp" pixel_art_header_text)
+file(READ "${RUNNER_SOURCE_DIR}/src/pixel_art.cpp" pixel_art_source_text)
+foreach(reference IN ITEMS
+        "transparent_key"
+        "chroma_keyed"
+        "transparent(Color color)")
+    string(FIND "${pixel_art_header_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.29 keyed pixel-art contract missing: ${reference}")
+    endif()
+endforeach()
+foreach(reference IN ITEMS "magenta_key" "corner_indices" "loaded.transparent_key")
+    string(FIND "${pixel_art_source_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.29 chroma-key detection missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/tools/generate_runner_armor_assets.py" armor_generator_text)
+foreach(reference IN ITEMS
+        "EXPECTED_SOURCE_SIZE = (1403, 1121)"
+        "upper_arm_side.ppm"
+        "forearm_side.ppm"
+        "thigh_side.ppm"
+        "shin_side.ppm"
+        "KEY = (255, 0, 255)")
+    string(FIND "${armor_generator_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.29 deterministic armor generator missing: ${reference}")
+    endif()
+endforeach()
+
+foreach(obsolete_art IN ITEMS
+        assets/optional/runner_armor_concepts/PROVENANCE.md
+        assets/optional/runner_armor_concepts/runner_armor_concepts.webp
+        assets/optional/runner_armor_concepts/source)
+    if(EXISTS "${RUNNER_SOURCE_DIR}/${obsolete_art}")
+        message(FATAL_ERROR "Obsolete concept-sheet package remains: ${obsolete_art}")
+    endif()
+endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
+string(FIND "${main_text}" "--diagnose-art" art_diagnostic_pos)
+if(art_diagnostic_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.29 packaged art-budget diagnostic launch contract missing")
+endif()
+string(FIND "${main_text}" "--art-eye-test" art_eye_test_pos)
+if(art_eye_test_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.29 packaged orthographic art eye-test launch contract missing")
+endif()
 string(FIND "${main_text}" "--course-eye-test" course_eye_test_pos)
 if(course_eye_test_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.28 packaged course eye-test launch contract missing")
@@ -262,7 +341,7 @@ endforeach()
 
 foreach(reference IN ITEMS
         "draw_pixel_art(canvas, optional_torso_art"
-        "User-supplied modular armor, bounded to the physical torso"
+        "Remade modular armor, bounded to the physical torso"
         "optional_art_enabled = impl_->optional_foot_art.loaded()")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -340,6 +419,10 @@ if(NOT legacy_material_adapter_pos EQUAL -1)
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/.github/workflows/release.yml" release_workflow_text)
+string(FIND "${release_workflow_text}" "--diagnose-art" art_workflow_pos)
+if(art_workflow_pos EQUAL -1)
+    message(FATAL_ERROR "Release workflow does not run the v0.7.29 art diagnostic")
+endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.28 course diagnostic")
@@ -374,4 +457,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.28 repository hygiene passed")
+message(STATUS "Runner v0.7.29 repository hygiene passed")

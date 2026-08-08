@@ -1,4 +1,15 @@
 # Runner
+
+## v0.7.29 modular armor art remake
+
+- Replaces the old concept-sheet derivatives with eight purpose-built exact lateral-orthographic sprites: helmet, torso, upper arm, forearm, thigh, shin, boot, and compact energy weapon.
+- Rotates and scales arm/leg plates with their authored biped motor segments while preserving existing near/far limb layers and debug contacts.
+- Uses an explicit magenta key so dark graphite outlines remain visible; missing or malformed pieces fall back independently to procedural rendering.
+- Keeps quadruped, crawler, hexapod, monoped, and unrelated custom topology free from humanoid art assumptions.
+- Keeps the art toggle presentation-only: no physics, observations, rewards, policy, curriculum, checkpoint, or persistence changes.
+- Adds `Runner.exe --diagnose-art`, which renders both the fixed production course and strict side-profile close-up frames and enforces 25% headroom inside the shared 8 MiB Vulkan vertex budget.
+- Adds `Runner.exe --art-eye-test`, a deterministic frozen close-up that makes perspective, foreshortening, or a visible front/chest plane immediately obvious.
+
 ## v0.7.28 physical material course completion
 
 - Replaces Walk / Run launch hazards with a protected physical runway and seeded contiguous firm ground, dry sand, waterlogged ground, shallow water, and recoverable holes.
@@ -21,7 +32,7 @@
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.28 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.29 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -63,7 +74,7 @@ ctest --test-dir build/linux --output-on-failure
 - `1`, `2`, `3`: Normal, Faster, and Max CPU modes
 - `T`: cycle Summary / Totals / Advanced Diagnostics
 - `U`: toggle Metric / Imperial reference labels
-- `A`: toggle compact body armor and the approved helmet/foot presentation; weapon preview remains Rig-Lab-only
+- `A`: toggle the complete modular helmet, torso, arm, leg, boot, and weapon presentation
 - `S`: save the current rig
 - `L`: load a rig
 - `Escape`: quit
@@ -91,12 +102,14 @@ Runner.exe --diagnose-package
 Runner.exe --diagnose-acceptance
 Runner.exe --diagnose-camera
 Runner.exe --diagnose-ui
+Runner.exe --diagnose-art
 Runner.exe --diagnose-rig-training
 Runner.exe --diagnose-course
 Runner.exe --course-eye-test
+Runner.exe --art-eye-test
 ```
 
-`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection.
+`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course and orthographic close-up frames with the packaged modular set and fails if either exceeds 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection. `--art-eye-test` opens the same production renderer at a frozen close-up humanoid frame and explicitly labels the required strict side elevation.
 
 ## Repository records
 
@@ -117,6 +130,7 @@ Runner.exe --course-eye-test
 - [`docs/RUNNER_V0726_TRAINING_TRUTH.md`](docs/RUNNER_V0726_TRAINING_TRUTH.md) documents rig-scoped training truth, static preview motion, and reset telemetry.
 - [`docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md`](docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md) documents authored-contact gait evidence and the fixed four-rig comparison.
 - [`docs/RUNNER_V0728_COURSE_COMPLETION.md`](docs/RUNNER_V0728_COURSE_COMPLETION.md) documents the physical material course, climb/equipment completion, checkpoint migration, and diagnostic contract.
+- [`docs/RUNNER_V0729_MODULAR_ART_REMAKE.md`](docs/RUNNER_V0729_MODULAR_ART_REMAKE.md) documents the remade atlas, keyed runtime sprites, node-bound rendering, fallbacks, and isolation gates.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 
@@ -211,4 +225,4 @@ A release is incomplete until Linux and Windows tests, build-tree and installed 
 - Quadrupeds must survive, hold, retract, and stably recover from the press.
 - Stage advancement requires fresh updates, episodes, and evaluations.
 
-The optional package contains derived visual references and runtime sprites under `assets/optional/runner_armor_concepts/`. Removing the optional directory preserves procedural rendering and all training behavior.
+The optional package contains only the eight remade runtime sprites under `assets/optional/runner_armor_concepts/runtime/`. The transparent remake atlas and deterministic generator remain developer-side under `tools/`; removing the optional runtime directory preserves procedural rendering and all training behavior.

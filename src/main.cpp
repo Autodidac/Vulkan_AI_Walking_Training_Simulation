@@ -87,12 +87,28 @@ namespace
             && std::string_view(argv[1]) == "--diagnose-course";
     }
 
+    [[nodiscard]] bool wants_art_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-art";
+    }
+
     [[nodiscard]] bool wants_course_eye_test(int argc, char** argv) noexcept
     {
         return argc > 1
             && argv != nullptr
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--course-eye-test";
+    }
+
+    [[nodiscard]] bool wants_art_eye_test(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--art-eye-test";
     }
 
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
@@ -128,6 +144,7 @@ namespace
             std::filesystem::path{ "docs" } / "SANDHYBRID_INTEGRATION_BRIDGE.md",
             std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0728_COURSE_COMPLETION.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0729_MODULAR_ART_REMAKE.md",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"
@@ -172,11 +189,7 @@ namespace
         if (std::filesystem::is_directory(optional_root, filesystem_error))
         {
             const std::array optional_metadata{
-                std::filesystem::path{ "PROVENANCE.md" },
-                std::filesystem::path{ "source" } / "concept_modular_pair.ppm",
-                std::filesystem::path{ "source" } / "concept_humanoid_parts.ppm",
-                std::filesystem::path{ "source" } / "concept_helmeted_parts.ppm",
-                std::filesystem::path{ "source" } / "concept_pixel_parts.ppm"
+                std::filesystem::path{ "README.md" }
             };
             for (const std::filesystem::path& relative : optional_metadata)
             {
@@ -192,8 +205,12 @@ namespace
 
             const std::array optional_runtime{
                 std::filesystem::path{ "runtime" } / "foot_side.ppm",
+                std::filesystem::path{ "runtime" } / "forearm_side.ppm",
                 std::filesystem::path{ "runtime" } / "helmet_side.ppm",
+                std::filesystem::path{ "runtime" } / "shin_side.ppm",
+                std::filesystem::path{ "runtime" } / "thigh_side.ppm",
                 std::filesystem::path{ "runtime" } / "torso_side.ppm",
+                std::filesystem::path{ "runtime" } / "upper_arm_side.ppm",
                 std::filesystem::path{ "runtime" } / "weapon_side.ppm"
             };
             for (const std::filesystem::path& relative : optional_runtime)
@@ -277,6 +294,57 @@ namespace
         return true;
     }
 
+    [[nodiscard]] std::filesystem::path invocation_directory(
+        int argc, char** argv)
+    {
+        if (argc > 0 && argv != nullptr && argv[0] != nullptr)
+        {
+            std::error_code error{};
+            const std::filesystem::path absolute =
+                std::filesystem::absolute(argv[0], error);
+            if (!error && absolute.has_parent_path())
+                return absolute.parent_path();
+        }
+        return std::filesystem::current_path();
+    }
+
+    [[nodiscard]] int run_art_diagnostic(
+        const std::filesystem::path& base_directory)
+    {
+        runner::Application application{};
+        std::string error{};
+        if (!application.initialize(
+                base_directory / RUNNER_ASSET_DIRECTORY, error))
+        {
+            std::fprintf(stderr,
+                "Runner %s art diagnostic initialization failed: %s\n",
+                RUNNER_VERSION, error.c_str());
+            return 1;
+        }
+        application.prepare_course_eye_test();
+        application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
+        const std::size_t course_vertices = application.vertices().size();
+        const std::size_t course_bytes = application.vertices().size_bytes();
+        application.prepare_art_eye_test();
+        application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
+        const std::size_t closeup_vertices = application.vertices().size();
+        const std::size_t closeup_bytes = application.vertices().size_bytes();
+        const std::size_t vertex_count = std::max(course_vertices, closeup_vertices);
+        const std::size_t vertex_bytes = std::max(course_bytes, closeup_bytes);
+        const std::size_t headroom_limit =
+            runner::render::maximum_frame_vertex_bytes * 3u / 4u;
+        const bool valid = course_vertices > 0u && closeup_vertices > 0u
+            && vertex_bytes <= headroom_limit;
+        std::printf(
+            "Runner %s art diagnostic: %s; vertices=%zu bytes=%zu "
+            "course_vertices=%zu closeup_vertices=%zu "
+            "headroom_limit=%zu hard_limit=%zu\n",
+            RUNNER_VERSION, valid ? "passed" : "failed", vertex_count,
+            vertex_bytes, course_vertices, closeup_vertices, headroom_limit,
+            runner::render::maximum_frame_vertex_bytes);
+        return valid ? 0 : 1;
+    }
+
 }
 
 int main(int argc, char** argv)
@@ -286,6 +354,9 @@ int main(int argc, char** argv)
         std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
     }
+
+    if (wants_art_diagnostic(argc, argv))
+        return run_art_diagnostic(invocation_directory(argc, argv));
 
     if (wants_course_completion_diagnostic(argc, argv))
     {
@@ -510,7 +581,9 @@ if (wants_camera_diagnostic(argc, argv))
         SDL_Quit();
         return 1;
     }
-    if (wants_course_eye_test(argc, argv))
+    if (wants_art_eye_test(argc, argv))
+        application.prepare_art_eye_test();
+    else if (wants_course_eye_test(argc, argv))
         application.prepare_course_eye_test();
 
     bool running = true;

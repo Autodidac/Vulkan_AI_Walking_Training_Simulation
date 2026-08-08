@@ -220,9 +220,9 @@ int main()
         const std::string app = read_text(source_root / "src/app.cpp");
         require(app.find("draw_pixel_art(canvas, optional_torso_art")
                 != std::string::npos
-                && app.find("User-supplied modular armor, bounded to the physical torso")
+                && app.find("Remade modular armor, bounded to the physical torso")
                     != std::string::npos
-                && app.find("std::clamp(body_span * 0.72f, 42.0f, 76.0f)")
+                && app.find("std::clamp(body_span * 0.88f, 72.0f, 118.0f)")
                     != std::string::npos,
             "bounded v0.7.26 torso component is missing or unbounded");
         require(app.find("COMPACT SEGMENTED BODY ARMOR") != std::string::npos,
