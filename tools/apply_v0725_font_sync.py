@@ -129,9 +129,6 @@ def patch_application() -> None:
 ''',
         "logical line advance")
 
-    # Catch every remaining measurement expression, including calls whose first
-    # argument is not named text/candidate/label. The old multiplier described
-    # bitmap cell size; the new style scale describes logical glyph height.
     text = re.sub(r"\s*\*\s*ui_font_scale\b", "", text)
     text = re.sub(r"\bui_font_scale\s*\*\s*", "", text)
 
@@ -311,13 +308,15 @@ endforeach()
 '''
     text = replace_once(text, marker, checks,
         "repository font/progress audit")
-    text = replace_once(text,
-        '''        tools/apply_v0725_art_leg_hotfix.py)
+
+    if "tools/apply_v0725_font_sync.py" not in text:
+        text = replace_once(text,
+            '''        tools/apply_v0725_art_leg_hotfix.py
 ''',
-        '''        tools/apply_v0725_art_leg_hotfix.py
-        tools/apply_v0725_font_sync.py)
+            '''        tools/apply_v0725_art_leg_hotfix.py
+        tools/apply_v0725_font_sync.py
 ''',
-        "stale font migration audit")
+            "stale font migration audit")
     write(path, text)
 
 
