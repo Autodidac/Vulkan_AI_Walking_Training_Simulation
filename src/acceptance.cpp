@@ -449,7 +449,7 @@ namespace runner::acceptance
                 ? "monoped uses its dedicated single-leg gait path"
                 : "monoped is still forced through alternating biped semantics");
 
-        const bool curriculum_order = sim::course_stage_count == 8u
+        const bool curriculum_order = sim::course_stage_count == 11u
             && sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
             && sim::course_stage_name(sim::CourseStage::duck_press)
                 == "2. STATIC CROUCH / HOLD / RECOVER"
@@ -463,6 +463,12 @@ namespace runner::acceptance
                 == "7. CONTROLLED FLIPS"
             && sim::course_stage_name(sim::CourseStage::moving_hazards)
                 == "8. MIXED GOAL COURSE"
+            && sim::course_stage_name(sim::CourseStage::climb_descent)
+                == "9. CLIMB / BACKWARD DESCENT"
+            && sim::course_stage_name(sim::CourseStage::equipment_targets)
+                == "10. EQUIPMENT / TARGETS"
+            && sim::course_stage_name(sim::CourseStage::combat_course)
+                == "11. MOVE / AIM / FIRE"
             && sim::stage_skill_evidence(sim::CourseStage::balance,
                 0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && !sim::stage_skill_evidence(sim::CourseStage::uneven,

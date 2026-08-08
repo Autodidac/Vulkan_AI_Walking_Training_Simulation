@@ -75,8 +75,19 @@ int main()
         "SandHybrid sparse-section scheduler received no live terrain");
     require(terrain.macro_ready_count() > 0u,
         "no full 8x8 region promoted to macro metadata");
-    require(terrain.hard_ledge_count() > 0u,
-        "deterministic map contains no structural 90-degree ledge");
+    require(terrain.hard_ledge_count() == 0u,
+        "Walk / Run material terrain unexpectedly contains an impassable structural ledge");
+    runner::sim::Environment climb(runner::sim::CreatureBlueprint::humanoid(), 0x7145A11Du);
+    climb.set_course(runner::sim::CourseStage::climb_descent, 0.72f);
+    const bool authored_climb_ledge = std::ranges::any_of(climb.course_features(),
+        [](const runner::sim::CourseFeature& feature)
+        {
+            return feature.kind == runner::sim::CourseFeatureKind::ledge
+                && feature.half_extent.x >= 2.0f
+                && feature.half_extent.y >= 0.5f;
+        });
+    require(authored_climb_ledge,
+        "dedicated climb lesson contains no physical 90-degree ledge");
     require(terrain.irregular_boundary_count() > 0u,
         "terrain surface snapped entirely to macro-tile stair steps");
 

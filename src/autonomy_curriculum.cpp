@@ -56,6 +56,21 @@ namespace runner::rl
                 && metrics.evaluation_stride_events >= 8.0f
                 && metrics.evaluation_obstacles_passed >= 4.0f
                 && metrics.evaluation_collisions <= 3.0f;
+        case sim::CourseStage::climb_descent:
+            return metrics.evaluation_hand_contacts >= 1.0f
+                && metrics.evaluation_climb_transfers >= 2.0f
+                && metrics.evaluation_climbs >= 1.0f
+                && metrics.evaluation_descents >= 1.0f;
+        case sim::CourseStage::equipment_targets:
+            return metrics.evaluation_target_hits >= 3.0f
+                && metrics.evaluation_shots >= metrics.evaluation_target_hits
+                && metrics.evaluation_equipment_transitions >= 1.0f
+                && metrics.evaluation_longest_stance >= 4.0f;
+        case sim::CourseStage::combat_course:
+            return metrics.evaluation_target_hits >= 2.0f
+                && metrics.evaluation_distance >= 6.0f
+                && metrics.evaluation_stride_events >= 6.0f
+                && metrics.evaluation_collisions <= 3.0f;
         }
         return false;
     }
@@ -181,7 +196,7 @@ namespace runner::rl
             (void)worker_.restore_best_policy();
         mastery_streak_ = 0;
         degradation_streak_ = 0;
-        if (stage_ != sim::CourseStage::moving_hazards)
+        if (stage_ != sim::CourseStage::combat_course)
         {
             stage_ = static_cast<sim::CourseStage>(static_cast<std::uint8_t>(stage_) + 1u);
             difficulty_ = 0.30f;
@@ -234,9 +249,9 @@ namespace runner::rl
         }
 
         void recalibrate_after_geometry(sim::CreatureBlueprint& rig,
-            const std::array<float, sim::action_count>& negative,
-            const std::array<float, sim::action_count>& positive,
-            const std::array<float, sim::action_count>& power) noexcept
+            const std::array<float, sim::anatomy_action_count>& negative,
+            const std::array<float, sim::anatomy_action_count>& positive,
+            const std::array<float, sim::anatomy_action_count>& power) noexcept
         {
             rig.rebuild_rest_lengths();
             for (std::size_t index = 0; index < rig.active_motor_count; ++index)
@@ -316,9 +331,9 @@ namespace runner::rl
         const std::uint64_t original_signature = source.signature();
         const float direction = ((generation / 11u) & 1u) == 0u ? 1.0f : -1.0f;
 
-        std::array<float, sim::action_count> negative{};
-        std::array<float, sim::action_count> positive{};
-        std::array<float, sim::action_count> power{};
+        std::array<float, sim::anatomy_action_count> negative{};
+        std::array<float, sim::anatomy_action_count> positive{};
+        std::array<float, sim::anatomy_action_count> power{};
         for (std::size_t index = 0; index < candidate.active_motor_count; ++index)
         {
             negative[index] = std::max(2.0f * pi / 180.0f,
@@ -425,7 +440,7 @@ namespace runner::rl
                     if (same_edge(motor.pivot, motor.c, original.a, original.b))
                         motor.c = inserted;
                 }
-                if (candidate.active_motor_count < sim::action_count)
+                if (candidate.active_motor_count < sim::anatomy_action_count)
                 {
                     const std::size_t slot = candidate.active_motor_count;
                     candidate.motors[slot] = sim::MotorConstraint{
@@ -700,7 +715,7 @@ namespace runner::rl
                 rig_generation_);
             return;
         }
-        for (std::size_t slot = 0; slot < sim::action_count; ++slot)
+        for (std::size_t slot = 0; slot < sim::anatomy_action_count; ++slot)
         {
             if ((mutation.activated_motor_mask & (1u << slot)) != 0u)
                 nursery.neutralize_action_slot(slot);

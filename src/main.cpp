@@ -1,4 +1,5 @@
 #include "acceptance.hpp"
+#include "course_completion_diagnostic.hpp"
 #include "app.hpp"
 #include "pixel_art.hpp"
 #include "renderer.hpp"
@@ -78,6 +79,22 @@ namespace
             && std::string_view(argv[1]) == "--diagnose-camera";
     }
 
+    [[nodiscard]] bool wants_course_completion_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-course";
+    }
+
+    [[nodiscard]] bool wants_course_eye_test(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--course-eye-test";
+    }
+
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
     {
         return argc > 1
@@ -110,6 +127,7 @@ namespace
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv",
             std::filesystem::path{ "docs" } / "SANDHYBRID_INTEGRATION_BRIDGE.md",
             std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0728_COURSE_COMPLETION.md",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"
@@ -267,6 +285,29 @@ int main(int argc, char** argv)
     {
         std::printf("Runner %s\n", RUNNER_VERSION);
         return 0;
+    }
+
+    if (wants_course_completion_diagnostic(argc, argv))
+    {
+        const runner::diagnostics::CourseCompletionReport report =
+            runner::diagnostics::run_course_completion_diagnostic();
+        std::printf(
+            "safe_runway=%s materials=%s seed_variation=%s water_holes=%s "
+            "observations=%s delayed_pressure=%s climb=%s equipment=%s "
+            "equipment_off=%s frame_independent=%s\n",
+            report.safe_runway ? "passed" : "failed",
+            report.material_regions ? "passed" : "failed",
+            report.seed_variation ? "passed" : "failed",
+            report.water_and_holes ? "passed" : "failed",
+            report.observation_truth ? "passed" : "failed",
+            report.delayed_material_pressure ? "passed" : "failed",
+            report.climb_contract ? "passed" : "failed",
+            report.equipment_contract ? "passed" : "failed",
+            report.equipment_off_identity ? "passed" : "failed",
+            report.frame_independent ? "passed" : "failed");
+        std::printf("Runner %s course diagnostic: %s\n", RUNNER_VERSION,
+            report.passed() ? "passed" : "failed");
+        return report.passed() ? 0 : 1;
     }
 
     if (wants_rig_training_diagnostic(argc, argv))
@@ -469,6 +510,8 @@ if (wants_camera_diagnostic(argc, argv))
         SDL_Quit();
         return 1;
     }
+    if (wants_course_eye_test(argc, argv))
+        application.prepare_course_eye_test();
 
     bool running = true;
     std::uint64_t previous_ticks = SDL_GetTicksNS();

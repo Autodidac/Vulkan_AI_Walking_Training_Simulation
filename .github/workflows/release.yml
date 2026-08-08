@@ -63,7 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $runner = "build/windows-release/Release/Runner.exe"
-          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training")) {
+          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training", "--diagnose-course")) {
             & $runner $argument
             if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
           }
@@ -96,7 +96,7 @@ jobs:
           $auditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-independent"
           New-Item -ItemType Directory -Force $auditRoot | Out-Null
           function Invoke-RunnerAudit([string] $launcher) {
-            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training")) {
+            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-rig-training", "--diagnose-course")) {
               & $launcher $argument
               if ($LASTEXITCODE -ne 0) { throw "$launcher $argument failed with exit code $LASTEXITCODE" }
             }

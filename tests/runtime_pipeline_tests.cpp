@@ -42,7 +42,7 @@ int main()
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
     require(humanoid.valid(), "articulated humanoid is invalid");
-    require(humanoid.active_motor_count == sim::action_count,
+    require(humanoid.active_motor_count == sim::anatomy_action_count,
         "humanoid does not expose all eight leg and arm motors");
     require(humanoid.nodes.size() >= 13 && humanoid.bones.size() >= 13,
         "humanoid arm nodes or bones are missing");

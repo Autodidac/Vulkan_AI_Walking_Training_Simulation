@@ -36,13 +36,23 @@ namespace runner::rl
     PolicyNetwork::PolicyNetwork(std::uint64_t seed)
         : parameters_(layout_.total, 0.0f), gradients_(layout_.total, 0.0f), random_state_(seed == 0 ? 1 : seed)
     {
-        const float scale1 = std::sqrt(2.0f / static_cast<float>(input_size));
+        // Preserve the complete v0.7.27 locomotion initialization stream. New
+        // material/equipment inputs start disconnected and equipment outputs
+        // start neutral, so disabling the optional subsystem is behaviorally
+        // identical instead of silently rerolling every anatomy controller.
+        constexpr std::size_t legacy_input_size = 50u;
+        constexpr std::size_t legacy_output_size = sim::anatomy_action_count;
+        const float scale1 = std::sqrt(2.0f / static_cast<float>(legacy_input_size));
         const float scale2 = std::sqrt(2.0f / static_cast<float>(hidden_size));
-        for (std::size_t index = 0; index < hidden_size * input_size; ++index)
-            parameters_[layout_.w1 + index] = random_normal() * scale1;
+        for (std::size_t row = 0; row < hidden_size; ++row)
+        {
+            const std::size_t base = layout_.w1 + row * input_size;
+            for (std::size_t column = 0; column < legacy_input_size; ++column)
+                parameters_[base + column] = random_normal() * scale1;
+        }
         for (std::size_t index = 0; index < hidden_size * hidden_size; ++index)
             parameters_[layout_.w2 + index] = random_normal() * scale2;
-        for (std::size_t index = 0; index < output_size * hidden_size; ++index)
+        for (std::size_t index = 0; index < legacy_output_size * hidden_size; ++index)
             parameters_[layout_.actor_w + index] = random_normal() * 0.0035f;
         for (std::size_t index = 0; index < hidden_size; ++index)
             parameters_[layout_.value_w + index] = random_normal() * 0.01f;
@@ -142,9 +152,9 @@ namespace runner::rl
     {
         const auto values = standard_deviation();
         float total = 0.0f;
-        for (const float value : values)
-            total += value;
-        return total / static_cast<float>(values.size());
+        for (std::size_t index = 0; index < active_output_count_; ++index)
+            total += values[index];
+        return total / static_cast<float>(active_output_count_);
     }
 
     float PolicyNetwork::log_probability(
@@ -152,7 +162,7 @@ namespace runner::rl
         const Evaluation& evaluation) const noexcept
     {
         float result = 0.0f;
-        for (std::size_t index = 0; index < output_size; ++index)
+        for (std::size_t index = 0; index < active_output_count_; ++index)
         {
             const float log_std = std::clamp(parameters_[layout_.log_std + index],
                 minimum_log_standard_deviation, maximum_log_standard_deviation);
@@ -231,7 +241,7 @@ namespace runner::rl
         value_loss += value_error * value_error;
 
         std::array<float, output_size> d_actor_pre{};
-        for (std::size_t output = 0; output < output_size; ++output)
+        for (std::size_t output = 0; output < active_output_count_; ++output)
         {
             const float log_std = std::clamp(parameters_[layout_.log_std + output],
                 minimum_log_standard_deviation, maximum_log_standard_deviation);
@@ -246,7 +256,7 @@ namespace runner::rl
         }
 
         std::array<float, hidden_size> d_h2{};
-        for (std::size_t output = 0; output < output_size; ++output)
+        for (std::size_t output = 0; output < active_output_count_; ++output)
         {
             const std::size_t base = layout_.actor_w + output * hidden_size;
             for (std::size_t column = 0; column < hidden_size; ++column)

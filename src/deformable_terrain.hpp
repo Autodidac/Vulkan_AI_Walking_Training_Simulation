@@ -12,10 +12,35 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 namespace runner::sim
 {
+    // Runner material-course state is derived from the pinned SandHybrid contracts.
+    enum class TerrainRegion : std::uint8_t
+    {
+        firm,
+        dry_sand,
+        waterlogged,
+        shallow_water,
+        hole
+    };
+
+    [[nodiscard]] inline std::string_view terrain_region_name(
+        TerrainRegion region) noexcept
+    {
+        switch (region)
+        {
+        case TerrainRegion::firm: return "FIRM GROUND";
+        case TerrainRegion::dry_sand: return "DRY DEFORMABLE SAND";
+        case TerrainRegion::waterlogged: return "WATERLOGGED SAND";
+        case TerrainRegion::shallow_water: return "SHALLOW WATER";
+        case TerrainRegion::hole: return "GROUND HOLE";
+        }
+        return "UNKNOWN TERRAIN";
+    }
+
     class DeformableTerrain
     {
     public:
@@ -25,6 +50,10 @@ namespace runner::sim
             float rest_height{};
             float firmness{ 0.35f };
             float loose_fraction{ 0.65f };
+            float water_surface{};
+            float water_depth{};
+            sandhybrid::Material surface_material{ sandhybrid::Material::sand };
+            TerrainRegion region{ TerrainRegion::dry_sand };
         };
 
         struct FineCell
@@ -102,12 +131,31 @@ namespace runner::sim
                 refresh_column(column);
                 cells_[column].rest_height = cells_[column].height;
                 const FineCell* top = top_cell(column);
-                const float random_firmness = 0.26f
-                    + unit_hash(seed_ ^ (static_cast<std::uint64_t>(column)
-                        * 0xbf58476d1ce4e5b9ULL)) * 0.30f;
-                cells_[column].firmness = top != nullptr && top->structural()
-                    ? 0.82f : std::clamp(random_firmness, 0.18f, 0.72f);
-                cells_[column].loose_fraction = 1.0f - cells_[column].firmness;
+                const float variation = unit_hash(seed_ ^ (static_cast<std::uint64_t>(column)
+                    * 0xbf58476d1ce4e5b9ULL));
+                Cell& cell = cells_[column];
+                switch (cell.region)
+                {
+                case TerrainRegion::firm:
+                    cell.firmness = top != nullptr && top->structural()
+                        ? 0.96f : 0.88f + variation * 0.08f;
+                    break;
+                case TerrainRegion::dry_sand:
+                    cell.firmness = 0.20f + variation * 0.24f;
+                    break;
+                case TerrainRegion::waterlogged:
+                    cell.firmness = 0.12f + variation * 0.12f;
+                    break;
+                case TerrainRegion::shallow_water:
+                    cell.firmness = 0.28f + variation * 0.14f;
+                    break;
+                case TerrainRegion::hole:
+                    cell.firmness = 0.58f + variation * 0.20f;
+                    break;
+                }
+                cell.loose_fraction = std::clamp(1.0f - cell.firmness
+                    + (cell.region == TerrainRegion::waterlogged ? 0.10f : 0.0f),
+                    0.0f, 1.0f);
             }
             refresh_all_macro_tiles();
             macro_promotions_ = 0u;
@@ -137,6 +185,31 @@ namespace runner::sim
             const Sample sample = sample_coordinates(course_x);
             return std::clamp(std::lerp(cells_[sample.first].loose_fraction,
                 cells_[sample.second].loose_fraction, sample.fraction), 0.0f, 1.0f);
+        }
+
+        [[nodiscard]] TerrainRegion region_at(float course_x) const noexcept
+        {
+            return cells_[nearest_index(course_x)].region;
+        }
+
+        [[nodiscard]] sandhybrid::Material surface_material_at(
+            float course_x) const noexcept
+        {
+            return cells_[nearest_index(course_x)].surface_material;
+        }
+
+        [[nodiscard]] float water_depth_at(float course_x) const noexcept
+        {
+            const Sample sample = sample_coordinates(course_x);
+            return std::max(0.0f, std::lerp(cells_[sample.first].water_depth,
+                cells_[sample.second].water_depth, sample.fraction));
+        }
+
+        [[nodiscard]] float water_surface_at(float course_x) const noexcept
+        {
+            const Sample sample = sample_coordinates(course_x);
+            return std::lerp(cells_[sample.first].water_surface,
+                cells_[sample.second].water_surface, sample.fraction);
         }
 
         [[nodiscard]] float slope_at(float course_x) const noexcept
@@ -259,8 +332,12 @@ namespace runner::sim
         [[nodiscard]] float total_height_volume() const noexcept
         {
             double result = 0.0;
-            for (const Cell& column : cells_)
-                result += static_cast<double>(column.height);
+            for (const FineCell& cell : fine_cells_)
+            {
+                if (cell.occupied())
+                    result += static_cast<double>(cell.fill)
+                        * static_cast<double>(fine_cell_spacing);
+            }
             return static_cast<float>(result);
         }
 
@@ -415,6 +492,9 @@ namespace runner::sim
         {
             float height{};
             bool structural_ledge{};
+            sandhybrid::Material material{ sandhybrid::Material::sand };
+            TerrainRegion region{ TerrainRegion::dry_sand };
+            float water_surface{};
         };
 
         [[nodiscard]] static std::uint64_t mix(std::uint64_t value) noexcept
@@ -439,59 +519,95 @@ namespace runner::sim
             float local = std::fmod(course_x, period);
             if (local < 0.0f)
                 local += period;
-            const float amplitude = 0.72f + difficulty_ * 1.10f;
-            float height = 0.0f;
-            if (local >= 27.0f && local < 33.0f)
+
+            const float first_boundary = 10.0f + unit_hash(seed_ ^ 0x10a2u) * 1.8f;
+            const float second_boundary = first_boundary + 8.0f
+                + unit_hash(seed_ ^ 0x20b3u) * 3.0f;
+            const float third_boundary = second_boundary + 6.0f
+                + unit_hash(seed_ ^ 0x30c4u) * 2.5f;
+            const float fourth_boundary = third_boundary + 6.0f
+                + unit_hash(seed_ ^ 0x40d5u) * 2.5f;
+            const float fifth_boundary = fourth_boundary + 7.0f
+                + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
+            const bool safe_runway = local < first_boundary || local > period - 5.0f;
+
+            TerrainRegion region = TerrainRegion::firm;
+            sandhybrid::Material material = sandhybrid::Material::dirt;
+            if (!safe_runway && local < second_boundary)
             {
-                const float t = (local - 27.0f) / 6.0f;
-                const float smooth = t * t * (3.0f - 2.0f * t);
-                height = amplitude * smooth;
+                region = TerrainRegion::dry_sand;
+                material = sandhybrid::Material::sand;
             }
-            else if (local >= 33.0f && local < 38.0f)
+            else if (!safe_runway && local < third_boundary)
             {
-                height = amplitude;
+                region = TerrainRegion::waterlogged;
+                material = sandhybrid::Material::mud;
             }
-            else if (local >= 38.0f && local < 44.0f)
+            else if (!safe_runway && local < fourth_boundary)
             {
-                const float t = (local - 38.0f) / 6.0f;
-                const float smooth = t * t * (3.0f - 2.0f * t);
-                height = amplitude * (1.0f - smooth);
+                region = TerrainRegion::shallow_water;
+                material = sandhybrid::Material::mud;
+            }
+            else if (!safe_runway && local < fifth_boundary)
+            {
+                region = TerrainRegion::hole;
+                material = sandhybrid::Material::dirt;
+            }
+            else if (!safe_runway)
+            {
+                region = ((static_cast<std::uint64_t>(std::floor(local / 4.0f))
+                    + seed_) & 1u) == 0u
+                    ? TerrainRegion::dry_sand : TerrainRegion::firm;
+                material = region == TerrainRegion::dry_sand
+                    ? sandhybrid::Material::sand : sandhybrid::Material::dirt;
             }
 
-            const float roughness = 0.09f + difficulty_ * 0.12f;
+            float height = 0.0f;
+            const float roughness = region == TerrainRegion::firm ? 0.025f
+                : region == TerrainRegion::hole ? 0.04f
+                : 0.055f + difficulty_ * 0.085f;
             height += std::sin(course_x * 0.61f) * roughness;
             height += std::sin(course_x * 1.73f + 0.7f) * roughness * 0.44f;
             height += (unit_hash(seed_ ^ static_cast<std::uint64_t>(
                 std::floor(local / fine_cell_spacing))) - 0.5f)
-                * fine_cell_spacing * 1.30f;
+                * fine_cell_spacing * (region == TerrainRegion::firm ? 0.18f : 0.72f);
 
-            const std::size_t macro_x = static_cast<std::size_t>(
-                std::floor(local / macro_tile_size));
-            const std::size_t first_ledge = 10u
-                + static_cast<std::size_t>(seed_ % 3u);
-            const std::size_t second_ledge = 46u
-                + static_cast<std::size_t>((seed_ >> 8u) % 3u);
-            const bool first_plateau = macro_x >= first_ledge
-                && macro_x <= first_ledge + 2u;
-            const bool second_plateau = macro_x >= second_ledge
-                && macro_x <= second_ledge + 2u;
-            bool ledge = first_plateau || second_plateau;
-            if (ledge)
+            if (region == TerrainRegion::hole)
             {
-                const float variation = unit_hash(seed_
-                    ^ (static_cast<std::uint64_t>(macro_x) * 0x9e3779b97f4a7c15ULL));
-                const float ledge_height = first_plateau
-                    ? 0.42f + difficulty_ * 0.38f + variation * 0.14f
-                    : 0.68f + difficulty_ * 0.45f + variation * 0.20f;
-                height += ledge_height;
+                const float center = 0.5f * (fourth_boundary + fifth_boundary);
+                const float half_width = std::max(1.0f,
+                    0.5f * (fifth_boundary - fourth_boundary));
+                const float normalized = std::clamp(
+                    std::abs(local - center) / half_width, 0.0f, 1.0f);
+                const float bowl = 1.0f - normalized * normalized
+                    * (3.0f - 2.0f * normalized);
+                height -= bowl * (0.36f + difficulty_ * 0.54f);
             }
-            return { std::clamp(height, -1.25f, 3.50f), ledge };
+            else if (region == TerrainRegion::waterlogged)
+            {
+                height -= 0.08f + difficulty_ * 0.08f;
+            }
+            else if (region == TerrainRegion::shallow_water)
+            {
+                height -= 0.18f + difficulty_ * 0.20f;
+            }
+
+            const float water_surface = region == TerrainRegion::shallow_water
+                ? 0.06f + std::sin(course_x * 0.19f) * 0.012f
+                : region == TerrainRegion::waterlogged ? height + 0.025f : height;
+            return { std::clamp(height, -1.25f, 3.50f), false,
+                material, region, water_surface };
         }
 
         void initialize_column(std::size_t column) noexcept
         {
             const float course_x = static_cast<float>(column) * fine_cell_spacing;
             const SurfaceProfile surface = authored_surface(course_x);
+            cells_[column].surface_material = surface.material;
+            cells_[column].region = surface.region;
+            cells_[column].water_surface = surface.water_surface;
+            cells_[column].water_depth = std::max(0.0f,
+                surface.water_surface - surface.height);
             const float scaled = std::clamp(
                 (surface.height - world_bottom) / fine_cell_spacing,
                 1.0f, static_cast<float>(vertical_cell_count) - 1.0f);
@@ -503,7 +619,7 @@ namespace runner::sim
                 const std::uint32_t depth = static_cast<std::uint32_t>(
                     complete_rows - 1u - row);
                 sandhybrid::Material base = depth < 8u
-                    ? sandhybrid::Material::sand
+                    ? surface.material
                     : depth < 18u ? sandhybrid::Material::dirt
                     : sandhybrid::Material::stone;
                 if (surface.structural_ledge && depth < 18u)
@@ -520,7 +636,7 @@ namespace runner::sim
             if (top_fraction > 1.0e-5f && complete_rows < vertical_cell_count)
             {
                 const sandhybrid::Material material = surface.structural_ledge
-                    ? sandhybrid::Material::stone : sandhybrid::Material::sand;
+                    ? sandhybrid::Material::stone : surface.material;
                 set_cell(fine_cells_[fine_index(column, complete_rows)], material,
                     surface.structural_ledge, top_fraction);
             }

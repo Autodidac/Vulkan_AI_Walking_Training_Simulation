@@ -9,10 +9,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 
 namespace runner::sim
 {
@@ -33,7 +35,7 @@ namespace runner::sim
                 return false;
             const float left_before = environment.joint_angle(left);
             const float right_before = environment.joint_angle(right);
-            std::array<float, action_count> crouch{};
+            std::array<float, anatomy_action_count> crouch{};
             crouch[0] = -0.45f;
             crouch[1] = 0.65f;
             crouch[2] = 0.45f;
@@ -55,7 +57,7 @@ namespace runner::sim
             MotorConstraint left{};
             if (!environment.articulated_toe_motor(true, left))
                 return false;
-            std::array<float, action_count> action{};
+            std::array<float, anatomy_action_count> action{};
             float previous = environment.joint_angle(left);
             constexpr float dt = 1.0f / 60.0f;
             for (int frame = 0; frame < 180; ++frame)
@@ -508,6 +510,108 @@ namespace runner::sim
 
 namespace
 {
+    template <typename T>
+    bool write_v0727_value(std::ofstream& output, const T& value)
+    {
+        static_assert(std::is_trivially_copyable_v<T>);
+        output.write(reinterpret_cast<const char*>(&value), sizeof(T));
+        return static_cast<bool>(output);
+    }
+
+    bool write_v0727_vector(std::ofstream& output, const std::vector<float>& values)
+    {
+        const std::uint64_t count = values.size();
+        if (!write_v0727_value(output, count))
+            return false;
+        if (values.empty())
+            return true;
+        output.write(reinterpret_cast<const char*>(values.data()),
+            static_cast<std::streamsize>(values.size() * sizeof(float)));
+        return static_cast<bool>(output);
+    }
+
+    bool write_v0727_metrics(std::ofstream& output,
+        const runner::rl::TrainingMetrics& value)
+    {
+        return write_v0727_value(output, value.update)
+            && write_v0727_value(output, value.environment_steps)
+            && write_v0727_value(output, value.total_updates)
+            && write_v0727_value(output, value.total_environment_steps)
+            && write_v0727_value(output, value.total_episodes)
+            && write_v0727_value(output, value.total_valid_episodes)
+            && write_v0727_value(output, value.total_invalid_episodes)
+            && write_v0727_value(output, value.total_resets)
+            && write_v0727_value(output, value.total_alternating_steps)
+            && write_v0727_value(output, value.total_falls)
+            && write_v0727_value(output, value.total_collisions)
+            && write_v0727_value(output, value.total_powered_jumps)
+            && write_v0727_value(output, value.total_landed_jumps)
+            && write_v0727_value(output, value.total_landed_flips)
+            && write_v0727_value(output, value.total_obstacles_passed)
+            && write_v0727_value(output, value.total_distance)
+            && write_v0727_value(output, value.total_training_seconds)
+            && write_v0727_value(output, value.mean_reward)
+            && write_v0727_value(output, value.mean_episode_distance)
+            && write_v0727_value(output, value.mean_speed)
+            && write_v0727_value(output, value.policy_loss)
+            && write_v0727_value(output, value.value_loss)
+            && write_v0727_value(output, value.entropy)
+            && write_v0727_value(output, value.learning_rate)
+            && write_v0727_value(output, value.evaluation_reward)
+            && write_v0727_value(output, value.evaluation_distance)
+            && write_v0727_value(output, value.evaluation_speed)
+            && write_v0727_value(output, value.evaluation_score)
+            && write_v0727_value(output, value.evaluation_survival)
+            && write_v0727_value(output, value.evaluation_collisions)
+            && write_v0727_value(output, value.evaluation_airborne_ratio)
+            && write_v0727_value(output, value.evaluation_stride_events)
+            && write_v0727_value(output, value.evaluation_duck_seconds)
+            && write_v0727_value(output, value.evaluation_powered_jumps)
+            && write_v0727_value(output, value.evaluation_jump_landings)
+            && write_v0727_value(output, value.evaluation_spin_turns)
+            && write_v0727_value(output, value.evaluation_spin_landings)
+            && write_v0727_value(output, value.evaluation_obstacles_passed)
+            && write_v0727_value(output, value.evaluation_stable_stance)
+            && write_v0727_value(output, value.evaluation_longest_stance)
+            && write_v0727_value(output, value.evaluation_duck_recoveries)
+            && write_v0727_value(output, value.evaluation_max_joint_speed)
+            && write_v0727_value(output, value.evaluation_quality_key)
+            && write_v0727_value(output, value.evaluation_rejection_mask)
+            && write_v0727_value(output, value.evaluation_invalid_runs)
+            && write_v0727_value(output, value.evaluation_valid)
+            && write_v0727_value(output, value.best_evaluation_distance)
+            && write_v0727_value(output, value.best_evaluation_score)
+            && write_v0727_value(output, value.best_quality_key)
+            && write_v0727_value(output, value.best_update)
+            && write_v0727_value(output, value.evaluation_count)
+            && write_v0727_value(output, value.imitation_samples)
+            && write_v0727_value(output, value.imitation_weight)
+            && write_v0727_value(output, value.imitation_source_score);
+    }
+    bool write_v0727_checkpoint(const std::filesystem::path& path,
+        const runner::rl::PpoTrainer::CheckpointData& data)
+    {
+        constexpr std::array<char, 8> magic{
+            'E', 'P', 'P', 'O', '2', '8', '\0', '\1'
+        };
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        const auto stage = static_cast<std::uint8_t>(data.stage);
+        output.write(magic.data(), static_cast<std::streamsize>(magic.size()));
+        return output
+            && write_v0727_value(output, data.training_semantics)
+            && write_v0727_value(output, data.rig_signature)
+            && write_v0727_value(output, data.optimizer_step)
+            && write_v0727_value(output, data.random_state)
+            && write_v0727_value(output, stage)
+            && write_v0727_value(output, data.difficulty)
+            && write_v0727_metrics(output, data.metrics)
+            && write_v0727_vector(output, data.parameters)
+            && write_v0727_vector(output, data.first_moment)
+            && write_v0727_vector(output, data.second_moment)
+            && write_v0727_vector(output, data.best_parameters)
+            && write_v0727_vector(output, data.reward_history)
+            && write_v0727_vector(output, data.speed_history);
+    }
     void require(bool condition, std::string_view message)
     {
         if (condition)
@@ -1321,7 +1425,7 @@ int main()
         "uploaded humanoid pelvis calibration not applied");
     require(humanoid.bones.size() == 15u,
         "humanoid legs or articulated arms are not structurally connected");
-    require(humanoid.active_motor_count == sim::action_count,
+    require(humanoid.active_motor_count == sim::anatomy_action_count,
         "humanoid does not expose independent shoulder and elbow motors");
     require(humanoid.left_contact_node == humanoid.motors[1].c
             && humanoid.right_contact_node == humanoid.motors[3].c,
@@ -1469,9 +1573,9 @@ int main()
     {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
-        static_assert(sim::observation_count == 50);
-        require(observation.size() == 50u,
-            "eight-motor and material observation layout is not fifty floats");
+        static_assert(sim::observation_count == 60);
+        require(observation.size() == 60u,
+            "anatomy, material, water, and equipment observation layout is not sixty floats");
         require(observation[20] == 0.0f && observation[21] == 0.0f,
             "contact channels overlap motor channels at reset");
         require(std::isfinite(observation[18]) && std::isfinite(observation[19]),
@@ -1795,7 +1899,8 @@ int main()
         require(std::abs(procedural.ground_height_at(29.0f) - initial_height) > 0.001f,
             "procedural inclines and hills do not move through the training lane");
 
-        std::array<bool, 6> found{};
+        std::array<bool, static_cast<std::size_t>(
+            sim::CourseFeatureKind::projectile) + 1u> found{};
         for (const sim::CourseFeature& feature : procedural.course_features())
             found[static_cast<std::size_t>(feature.kind)] = true;
         require(found[static_cast<std::size_t>(sim::CourseFeatureKind::hurdle)],
@@ -1929,6 +2034,104 @@ int main()
             && loaded_legacy.load_checkpoint(legacy_path, error, true),
         "file-based legacy checkpoint is not resume-blocked and transfer-enabled");
     std::filesystem::remove(legacy_path);
+    constexpr std::size_t v0727_parameter_count = 8'017u;
+    rl::PpoTrainer::CheckpointData v0727 = trainer.checkpoint_data();
+    v0727.training_semantics = rl::training_semantics_version - 1u;
+    v0727.parameters.resize(v0727_parameter_count);
+    for (std::size_t index = 0; index < v0727.parameters.size(); ++index)
+    {
+        const int centered = static_cast<int>(index % 257u) - 128;
+        v0727.parameters[index] = static_cast<float>(centered) * 0.001f;
+    }
+    v0727.first_moment.clear();
+    v0727.second_moment.clear();
+    v0727.best_parameters.clear();
+    v0727.reward_history.clear();
+    v0727.speed_history.clear();
+
+    rl::PpoTrainer migrated_v0727{ humanoid, 16 };
+    require(migrated_v0727.apply_checkpoint_data(v0727, error, true),
+        "v0.7.27 dimension migration failed: " + error);
+    const auto& migrated_parameters = migrated_v0727.policy().parameters();
+    constexpr std::size_t hidden = rl::PolicyNetwork::hidden_size;
+    constexpr std::size_t old_input = 50u;
+    constexpr std::size_t old_output = 8u;
+    constexpr std::size_t old_b1 = hidden * old_input;
+    constexpr std::size_t old_w2 = old_b1 + hidden;
+    constexpr std::size_t old_b2 = old_w2 + hidden * hidden;
+    constexpr std::size_t old_actor_w = old_b2 + hidden;
+    constexpr std::size_t old_actor_b = old_actor_w + old_output * hidden;
+    constexpr std::size_t old_value_w = old_actor_b + old_output;
+    constexpr std::size_t old_value_b = old_value_w + hidden;
+    constexpr std::size_t old_log_std = old_value_b + 1u;
+    constexpr std::size_t new_input = rl::PolicyNetwork::input_size;
+    constexpr std::size_t new_output = rl::PolicyNetwork::output_size;
+    constexpr std::size_t new_b1 = hidden * new_input;
+    constexpr std::size_t new_w2 = new_b1 + hidden;
+    constexpr std::size_t new_b2 = new_w2 + hidden * hidden;
+    constexpr std::size_t new_actor_w = new_b2 + hidden;
+    constexpr std::size_t new_actor_b = new_actor_w + new_output * hidden;
+    constexpr std::size_t new_value_w = new_actor_b + new_output;
+    constexpr std::size_t new_value_b = new_value_w + hidden;
+    constexpr std::size_t new_log_std = new_value_b + 1u;
+    for (std::size_t row = 0; row < hidden; ++row)
+    {
+        for (std::size_t column = 0; column < old_input; ++column)
+        {
+            require(migrated_parameters[row * new_input + column]
+                    == v0727.parameters[row * old_input + column],
+                "v0.7.27 first-layer anatomy weight changed during migration");
+        }
+        for (std::size_t column = old_input; column < new_input; ++column)
+        {
+            require(migrated_parameters[row * new_input + column] == 0.0f,
+                "new material/equipment observation channel is not neutral after migration");
+        }
+    }
+    require(std::equal(v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_b1),
+            v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_actor_b),
+            migrated_parameters.begin() + static_cast<std::ptrdiff_t>(new_b1)),
+        "v0.7.27 hidden or anatomy actor weights changed during migration");
+    require(std::equal(v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_actor_b),
+            v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_actor_b + old_output),
+            migrated_parameters.begin() + static_cast<std::ptrdiff_t>(new_actor_b)),
+        "v0.7.27 anatomy actor bias changed during migration");
+    require(std::equal(v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_value_w),
+            v0727.parameters.begin() + static_cast<std::ptrdiff_t>(old_log_std + old_output),
+            migrated_parameters.begin() + static_cast<std::ptrdiff_t>(new_value_w)),
+        "v0.7.27 value or exploration weights changed during migration");
+    for (std::size_t output = old_output; output < new_output; ++output)
+    {
+        const std::size_t actor_row = new_actor_w + output * hidden;
+        require(std::all_of(migrated_parameters.begin() + static_cast<std::ptrdiff_t>(actor_row),
+                migrated_parameters.begin() + static_cast<std::ptrdiff_t>(actor_row + hidden),
+                [](float value) { return value == 0.0f; })
+                && migrated_parameters[new_actor_b + output] == 0.0f
+                && migrated_parameters[new_log_std + output] == std::log(0.08f),
+            "new equipment actor output is not neutral after migration");
+    }
+    require(migrated_v0727.metrics().update == 0u
+            && migrated_v0727.optimizer_step() == 0u,
+        "v0.7.27 migration retained incompatible optimizer or mastery state");
+
+    rl::PpoTrainer::CheckpointData truncated_v0727 = v0727;
+    truncated_v0727.parameters.pop_back();
+    rl::PpoTrainer rejected_v0727{ humanoid, 16 };
+    require(!rejected_v0727.apply_checkpoint_data(truncated_v0727, error, true),
+        "truncated v0.7.27 network migrated silently");
+
+    const std::filesystem::path v0727_path =
+        std::filesystem::temp_directory_path() / "runner-v0727-migration-test.eppo";
+    require(write_v0727_checkpoint(v0727_path, v0727),
+        "failed to create authentic EPPO28 migration fixture");
+    rl::PpoTrainer file_v0727{ humanoid, 16 };
+    require(!file_v0727.load_checkpoint(v0727_path, error, false),
+        "v0.7.27 checkpoint resumed optimizer/mastery instead of requiring transfer");
+    require(file_v0727.load_checkpoint(v0727_path, error, true),
+        "authentic EPPO28 file did not migrate: " + error);
+    require(file_v0727.policy().parameters() == migrated_parameters,
+        "EPPO28 file migration differs from in-memory deterministic migration");
+    std::filesystem::remove(v0727_path);
 
     rl::PpoTrainer wrong_rig{ sim::CreatureBlueprint::quadruped(), 16 };
     require(!wrong_rig.load_checkpoint(temporary, error, false), "mismatched rig checkpoint resumed silently");

@@ -816,6 +816,78 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all CTest suites
 
 # Runner post-v0.7.27 carried completion round
 
-**Release state:** CACHED AND OPEN — RELEASE AUDIT COMPLETE; USER EYE TEST AND IMPLEMENTATION PENDING
+**Release state:** IMPLEMENTED AND LOCALLY VERIFIED; WALK-RELEASE-155 PUBLICATION PENDING
 
-The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. It must implement reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and a fully audited release. These missions remain open until their physical, policy, editor, persistence, diagnostic, package, and eye-test evidence exists.
+The second completion round retains, without hiding or renaming, WALK-CLIMB-134 and equipment missions WALK-EQUIPMENT-148 through WALK-RELEASE-155. Reachable ledge climb and controlled backward descent; unarmed/safe-carry/ready/disarmed/dropped states; multiple abstract weapon classes; deterministic aiming/firing at varied distances; locomotion-preserving combat curriculum; editor controls; a separately versioned equipment action extension; equipment-off nonregression; and local package/eye-test evidence are implemented. WALK-RELEASE-155 remains explicitly open only for audited publication and published-asset verification.
+
+# Runner v0.7.28 physical material course and carried-mission completion
+
+**Release state:** LOCAL IMPLEMENTATION, PACKAGE, FRAME-INDEPENDENCE, AND EYE TEST VERIFIED; PUBLICATION PENDING
+
+The v0.7.27 packaged screenshot at 3. Walk / Run and 30% difficulty is authoritative contradictory evidence. It shows thrown-object hazards at the launch area before basic gait mastery, three overlapping `HAZARD: THROWN OBJECT` labels, a layered beige/brown terrain presentation without visually or physically legible random sand, water, or holes, zero features cleared, six preview restarts ending in micro-motion, raw test score `-1600`, rejection mask `0x00000051`, invalid motion, best raw score unavailable, and mastery `0/8`. A course may not call this normal Walk / Run evidence while advanced hazards are already striking the rig.
+
+### WALK-COURSE-334 — Gate challenge timing behind a real safe runway and curriculum evidence
+**Status:** VERIFIED - SAFE RUNWAY, STAGE GATE, AND UNIQUE CALLOUT TESTS PASSED
+
+No moving, thrown, overhead, hurdle, climb, or combat object may spawn in the launch/safe-runway region. Walk / Run begins with terrain-only gait evidence. Feature distance and time-to-contact scale with difficulty and measured locomotion ability, and advanced hazards appear only in their authored stages after prerequisite mastery. Rebuilding a frame may not duplicate features or labels.
+
+### WALK-MATERIAL-335 — Make sand, water, holes, and mixed ground real simulation materials
+**Status:** VERIFIED - PHYSICAL SAND, WATERLOGGED GROUND, WATER, AND HOLE TESTS PASSED
+
+Generate deterministic but seed-varied contiguous terrain regions with firm ground, deformable dry sand, saturated/waterlogged sand or shallow water, and physically traversable holes/depressions. Material identity must change contact support, pressure response, traction, drag/buoyancy where applicable, observations, rewards, diagnostics, and rendering from the same source data. Visual-only stripes or random decoration do not satisfy this mission.
+
+### WALK-TERRAIN-RENDER-336 — Render readable physical surfaces without hiding the rig
+**Status:** VERIFIED - DIRECT PACKAGED VULKAN EYE TEST PASSED
+
+Render ground profiles, displaced sand, water surface/depth, and holes from collision/material state at useful side-view scale. Keep the start area, rig, feet, contacts, and hazards readable. Hazard callouts are unique, clipped, distance-aware, and non-overlapping.
+
+### WALK-MATERIAL-TRUTH-337 — Align contacts, observations, rewards, curriculum, and persistence
+**Status:** VERIFIED - CONTACT, OBSERVATION, REWARD, WORKER, AND CHECKPOINT CONTRACTS ALIGNED
+
+Support classification, burial, slip, pressure, water depth/drag, hole recovery, obstacle approach, feature completion, policy observations, qualification, checkpoint semantics, preview, workers, and evaluation must describe the same seeded course. No conveyor or renderer-only progress may leak into evidence.
+
+### WALK-DEBUG-338 — Turn rejection data into actionable course evidence
+**Status:** VERIFIED - NAMED REJECTION, INVALID-MOTION, MATERIAL, WATER, AND FEATURE EVIDENCE SHIPPED
+
+Decode rejection mask bits and invalid-motion cause into readable named reasons, show nearest feature/material plus distance/time-to-contact, and separate gait, terrain, hazard, climb, and equipment evidence. The normal dashboard must not make `-1600` plus a hex mask the only explanation for failure.
+
+### WALK-FRAME-339 — Preserve frame independence for all new course systems
+**Status:** VERIFIED - 20/60/240 HZ COURSE, EQUIPMENT, AND PREVIEW EQUIVALENCE PASSED
+
+Material deformation, water response, hole contacts, feature motion, labels, preview reset behavior, climb interactions, equipment projectiles, and target timing remain fixed-step or elapsed-time correct. Add cadence-equivalence coverage at 20, 60, and 240 render Hz.
+
+### WALK-CARRIED-340 — Complete WALK-CLIMB-134
+**Status:** VERIFIED - WALK-CLIMB-134 ORIGINAL MISSION ID AND ACCEPTANCE CONTRACT PRESERVED
+
+Implement the cached reachable ledge climb and controlled backward descent mission with hand/ledge contact, support transfer, no powered takeoff, controlled feet-first recovery, observations, curriculum, rendering, editor controls, diagnostics, persistence, and repeated-seed tests.
+
+### WALK-CARRIED-341 — Complete WALK-EQUIPMENT-148 through WALK-RELEASE-155
+**Status:** IMPLEMENTED AND LOCALLY VERIFIED - WALK-EQUIPMENT-148 THROUGH WALK-RELEASE-155 PRESERVED; PUBLICATION PORTION OPEN
+
+Implement unarmed/safe-carry/ready/disarmed/dropped state; multiple abstract weapon classes; deterministic varied-distance targets; locomotion-preserving aim/fire curriculum; editor controls; a separately versioned equipment action/observation extension; checkpoint migration; optional-subsystem nonregression; diagnostics; packaging; and audited publication. Anatomy motor slots remain anatomy-only.
+
+### WALK-COURSE-DIAGNOSTIC-342 — Add deterministic positive, negative, adversarial, and repeated-seed course gates
+**Status:** VERIFIED - POSITIVE, NEGATIVE, ADVERSARIAL, REPEATED-SEED, MIGRATION, AND CADENCE GATES PASSED
+
+Add a permanent headless diagnostic covering safe-runway exclusion, bounded feature density, no duplicate sequence/label identity, material diversity, sand deformation, water response, hole geometry/recovery, observation truth, fixed-step equivalence, climb/descent, equipment states/targets, and equipment-off locomotion nonregression.
+
+### WALK-STATE-DOC-343 — Isolate v0.7.28 state and reconcile every contract surface
+**Status:** VERIFIED - V0.7.28 SOURCE, STATE, DOCS, PACKAGE, AUDIT, AND WORKFLOW CONTRACTS ISOLATED
+
+Bump application/package version, training and equipment semantics, autosave/checkpoint state, cache, changelog, README, focused documentation, CMake install/test lists, diagnostics, repository audit, and release workflow without creating another release-notes file or mission ledger.
+
+## Runner v0.7.28 pre-publication evidence
+
+- Linux GCC 14.3 warnings-as-errors rebuild and the complete 21/21 CTest matrix passed on final source.
+- The complete Windows SDL3/Vulkan Release application rebuilt and the final 25/25 CTest matrix passed.
+- Build-tree, installed, and independently extracted launch paths each passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, four-rig training, and ten-field course diagnostics from unrelated working directories.
+- The course diagnostic passed safe runway, seeded materials, seed variation, water/hole geometry, observation truth, delayed pressure, climb/descent, equipment/targets, equipment-off identity, and exact full-state 20/60/240 Hz equivalence across material, mixed-hazard, climb, equipment-target, and combat stages.
+- The four-rig diagnostic retained fixed source evidence: biped evaluation `-1.5272`/`1.50` strides, quadruped `-0.1218`/`1.50`, crawler `-0.1690`/`1.00`, and hexapod `0.3530`/`3.67`; course motion is disabled for every rollout.
+- The independently extracted package contains 45 files; every file matched its SHA-256 manifest with no missing or extra paths.
+- Direct installed-package Vulkan eye testing via `Runner.exe --course-eye-test` shows a clear start rig and approximately 10 m firm runway followed by labeled dry deformable sand, waterlogged sand, shallow water, and a ground hole. It shows no early falling object and no duplicate or overlapping hazard callout. The 1900 x 1180 PNG SHA-256 is `28a039b7d1d9b3e64f9ae4c3b4ac30b90b310ee7d561e30baacb1b2896cefba6`.
+- WALK-CLIMB-134 and WALK-EQUIPMENT-148 through WALK-EQUIPMENT-154 are locally complete. WALK-RELEASE-155 and WALK-RELEASE-344 remain open only for merged/tagged publication, published-asset re-download, byte comparison, and repository cleanup.
+
+### WALK-RELEASE-344 — Publish and independently verify Runner v0.7.28
+**Status:** OPEN — RELEASE BLOCKING
+
+Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, complete Windows SDL3/Vulkan build/tests, every build-tree/installed/extracted diagnostic from unrelated directories, ZIP checksum and full manifest audit, published-asset re-download byte comparison, direct packaged eye-test evidence, zero cleanup PRs, and main-only branch state.

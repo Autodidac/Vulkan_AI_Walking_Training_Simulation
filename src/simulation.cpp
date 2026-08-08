@@ -60,6 +60,15 @@ namespace runner::sim
                 && !motor_references_node(rig, node);
         }
 
+        [[nodiscard]] bool manipulator_endpoint(const CreatureBlueprint& rig,
+            std::size_t node) noexcept
+        {
+            return node < rig.nodes.size()
+                && node != rig.root_node && node != rig.torso_node
+                && node != rig.head_node && !rig.is_support_seed(node)
+                && node_degree(rig, node) == 1u;
+        }
+
         void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
             float toe_reach = 0.34f) noexcept
         {
@@ -649,7 +658,7 @@ namespace runner::sim
         if (!input || magic != "RUNRIG"
             || (version != 1 && version != 2 && version != 3 && version != 4)
             || node_count < 3 || node_count > 128 || bone_count > 256
-            || motor_count == 0u || motor_count > action_count)
+            || motor_count == 0u || motor_count > anatomy_action_count)
         {
             error = "Invalid or unsupported Runner rig file.";
             return humanoid();
@@ -804,6 +813,208 @@ namespace runner::sim
         reset(random_state_);
     }
 
+    void Environment::configure_equipment(WeaponClass weapon,
+        float target_distance)
+    {
+        equipment_override_ = true;
+        configured_weapon_class_ = weapon;
+        configured_target_distance_ = clamp(target_distance, 3.0f, 24.0f);
+        reset(random_state_);
+    }
+
+    void Environment::clear_equipment() noexcept
+    {
+        equipment_override_ = true;
+        configured_weapon_class_ = WeaponClass::none;
+        reset_equipment();
+    }
+
+    void Environment::disarm_equipment() noexcept
+    {
+        if (equipment_state_ != EquipmentState::ready
+            && equipment_state_ != EquipmentState::safe_carry)
+            return;
+        equipment_state_ = EquipmentState::disarmed;
+        dropped_equipment_position_ = equipment_mount_position();
+        dropped_equipment_velocity_ = { -0.5f, 1.0f };
+        ++equipment_transition_count_;
+    }
+
+    std::uint16_t Environment::equipment_mount_node() const noexcept
+    {
+        std::uint16_t best = blueprint_.torso_node;
+        float best_reach = -std::numeric_limits<float>::infinity();
+        for (std::size_t index = 0; index < blueprint_.nodes.size(); ++index)
+        {
+            if (index == blueprint_.head_node || index == blueprint_.root_node
+                || index == blueprint_.torso_node
+                || blueprint_.is_support_seed(index)
+                || !manipulator_endpoint(blueprint_, index))
+                continue;
+            const float reach = blueprint_.nodes[index].x
+                - blueprint_.nodes[blueprint_.torso_node].x;
+            if (reach > best_reach)
+            {
+                best_reach = reach;
+                best = static_cast<std::uint16_t>(index);
+            }
+        }
+        return best;
+    }
+
+    Vec2 Environment::equipment_mount_position() const noexcept
+    {
+        const std::uint16_t node = equipment_mount_node();
+        return valid_node(node) ? particles_[node].position : Vec2{};
+    }
+
+    void Environment::reset_equipment() noexcept
+    {
+        equipment_projectiles_.clear();
+        equipment_projectile_sequence_ = 0u;
+        shots_fired_ = 0u;
+        target_hits_ = 0u;
+        equipment_transition_count_ = 0u;
+        target_hit_this_step_ = false;
+        equipment_aim_angle_ = 0.0f;
+        equipment_cooldown_seconds_ = 0.0f;
+        dropped_equipment_position_ = {};
+        dropped_equipment_velocity_ = {};
+
+        const bool equipment_lesson = course_stage_ == CourseStage::equipment_targets
+            || course_stage_ == CourseStage::combat_course;
+        weapon_class_ = equipment_override_ ? configured_weapon_class_
+            : equipment_lesson
+                ? static_cast<WeaponClass>(1u + static_cast<std::uint8_t>(
+                    random_state_ % 3u))
+                : WeaponClass::none;
+        equipment_state_ = weapon_class_ == WeaponClass::none
+            ? EquipmentState::unarmed : EquipmentState::safe_carry;
+
+        equipment_target_ = {};
+        if (weapon_class_ == WeaponClass::none)
+            return;
+        const float target_distance = equipment_override_
+            ? configured_target_distance_
+            : 6.0f + static_cast<float>((random_state_ >> 8u) % 3u) * 4.0f;
+        const float root_x = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.x : 0.0f;
+        equipment_target_.position.x = root_x + target_distance;
+        equipment_target_.position.y = ground_height_at(equipment_target_.position.x)
+            + 0.85f + static_cast<float>((random_state_ >> 16u) % 4u) * 0.42f;
+        equipment_target_.radius = 0.28f + course_difficulty_ * 0.08f;
+        equipment_target_.active = true;
+    }
+
+    void Environment::update_equipment(
+        std::span<const float, action_count> actions, float dt) noexcept
+    {
+        target_hit_this_step_ = false;
+        equipment_cooldown_seconds_ = std::max(0.0f,
+            equipment_cooldown_seconds_ - dt);
+        auto transition = [&](EquipmentState next)
+        {
+            if (equipment_state_ == next)
+                return;
+            equipment_state_ = next;
+            ++equipment_transition_count_;
+        };
+
+        const float state_action = clamp(actions[equipment_state_action], -1.0f, 1.0f);
+        if (weapon_class_ != WeaponClass::none)
+        {
+            if (equipment_state_ == EquipmentState::disarmed
+                || equipment_state_ == EquipmentState::dropped)
+            {
+                const float pickup_distance = length(
+                    equipment_mount_position() - dropped_equipment_position_);
+                if (state_action > 0.72f && pickup_distance <= 1.15f)
+                    transition(EquipmentState::safe_carry);
+            }
+            else if (state_action < -0.72f)
+            {
+                transition(EquipmentState::dropped);
+                dropped_equipment_position_ = equipment_mount_position();
+                dropped_equipment_velocity_ = { -0.25f, 0.65f };
+            }
+            else if (state_action > 0.28f)
+                transition(EquipmentState::ready);
+            else if (state_action < -0.18f)
+                transition(EquipmentState::safe_carry);
+        }
+
+        equipment_aim_angle_ = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
+            * (pi * 0.42f);
+        if ((equipment_state_ == EquipmentState::dropped
+                || equipment_state_ == EquipmentState::disarmed)
+            && weapon_class_ != WeaponClass::none)
+        {
+            dropped_equipment_velocity_.y -= 12.0f * dt;
+            dropped_equipment_position_ += dropped_equipment_velocity_ * dt;
+            const float ground = ground_height_at(dropped_equipment_position_.x);
+            if (dropped_equipment_position_.y < ground + 0.08f)
+            {
+                dropped_equipment_position_.y = ground + 0.08f;
+                dropped_equipment_velocity_.y = 0.0f;
+                dropped_equipment_velocity_.x *= std::exp(-4.0f * dt);
+            }
+        }
+
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        if (equipment_state_ == EquipmentState::ready
+            && actions[equipment_trigger_action] > 0.45f
+            && equipment_cooldown_seconds_ <= 0.0f)
+        {
+            const Vec2 muzzle = equipment_mount_position();
+            const Vec2 direction{
+                std::cos(equipment_aim_angle_), std::sin(equipment_aim_angle_) };
+            equipment_projectiles_.push_back({
+                weapon_class_, muzzle + direction * 0.24f,
+                direction * profile.projectile_speed, profile.projectile_radius,
+                ++equipment_projectile_sequence_, true });
+            equipment_cooldown_seconds_ = profile.cooldown_seconds;
+            ++shots_fired_;
+            const std::uint16_t mount = equipment_mount_node();
+            if (valid_node(mount))
+                particles_[mount].previous += direction * (profile.recoil * dt);
+        }
+
+        for (EquipmentProjectile& projectile : equipment_projectiles_)
+        {
+            if (!projectile.active)
+                continue;
+            const WeaponProfile projectile_profile = weapon_profile(projectile.weapon);
+            projectile.velocity.y -= projectile_profile.gravity * dt;
+            projectile.position += projectile.velocity * dt;
+            if (equipment_target_.active
+                && length(projectile.position - equipment_target_.position)
+                    <= projectile.radius + equipment_target_.radius)
+            {
+                projectile.active = false;
+                ++target_hits_;
+                target_hit_this_step_ = true;
+                ++equipment_target_.sequence;
+                const float root_x = valid_node(blueprint_.root_node)
+                    ? particles_[blueprint_.root_node].position.x : 0.0f;
+                const float distance = 6.0f
+                    + static_cast<float>((equipment_target_.sequence
+                        + static_cast<std::uint32_t>(random_state_)) % 4u) * 3.0f;
+                equipment_target_.position.x = root_x + distance;
+                equipment_target_.position.y =
+                    ground_height_at(equipment_target_.position.x)
+                    + 0.75f + static_cast<float>(
+                        equipment_target_.sequence % 5u) * 0.35f;
+                continue;
+            }
+            const float ground = ground_height_at(projectile.position.x);
+            if (projectile.position.y < ground
+                || std::abs(projectile.position.x - equipment_mount_position().x) > 30.0f)
+                projectile.active = false;
+        }
+        std::erase_if(equipment_projectiles_,
+            [](const EquipmentProjectile& item) { return !item.active; });
+    }
+
     float Environment::random_unit() noexcept
     {
         random_state_ ^= random_state_ >> 12;
@@ -832,21 +1043,56 @@ namespace runner::sim
             ? terrain_.looseness_at(terrain_sample_x(x, course_progress())) : 0.0f;
     }
 
+    void Environment::apply_water_forces(float dt) noexcept
+    {
+        water_submersion_ = 0.0f;
+        if (!stage_uses_deformable_terrain(course_stage_))
+            return;
+
+        const float safe_dt = std::max(dt, 1.0e-5f);
+        for (Particle& particle : particles_)
+        {
+            const float source_x = terrain_sample_x(
+                particle.position.x, course_progress());
+            const float depth = terrain_.water_depth_at(source_x);
+            if (depth <= 0.001f)
+                continue;
+            const float surface = terrain_.water_surface_at(source_x);
+            const float diameter = std::max(0.02f, particle.radius * 2.0f);
+            const float submerged = clamp(
+                (surface - (particle.position.y - particle.radius)) / diameter,
+                0.0f, 1.0f);
+            if (submerged <= 0.0f)
+                continue;
+
+            water_submersion_ = std::max(water_submersion_, submerged);
+            const Vec2 velocity = (particle.position - particle.previous) / safe_dt;
+            const float drag_rate = 2.4f + submerged * 5.2f;
+            const float retained = std::exp(-drag_rate * safe_dt);
+            particle.previous = particle.position - velocity * (retained * safe_dt);
+            const float displaced_mass = 1.0f / std::max(0.15f, particle.inverse_mass);
+            particle.position.y += 15.0f * submerged
+                * std::min(1.35f, displaced_mass) * safe_dt * safe_dt;
+        }
+    }
+
     void Environment::update_materials(float dt) noexcept
     {
-        const bool mixed_hazards = course_stage_ == CourseStage::moving_hazards;
-        const bool falling_sand_lesson = course_stage_ == CourseStage::uneven
-            || course_stage_ == CourseStage::hurdles || mixed_hazards;
-        if (!falling_sand_lesson)
+        const bool mixed_hazards = course_stage_ == CourseStage::moving_hazards
+            || course_stage_ == CourseStage::combat_course;
+        if (!mixed_hazards)
         {
             material_particles_.clear();
             return;
         }
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
-        const float interval = mixed_hazards
-            ? std::lerp(4.20f, 2.20f, course_difficulty_)
-            : std::lerp(8.00f, 5.20f, course_difficulty_);
+        const float interval = std::lerp(4.20f, 2.60f, course_difficulty_);
+        const float required_travel = 8.0f + course_difficulty_ * 4.0f;
+        // Terrain-relative progress includes treadmill travel. Require a real gait
+        // cycle as well so an idle or fallen rig never unlocks falling material.
+        if (std::abs(distance_travelled_) < required_travel || gait_cycles() < 2u)
+            return;
         while (elapsed_seconds_ >= next_material_event_seconds_)
         {
             ++material_event_sequence_;
@@ -887,6 +1133,24 @@ namespace runner::sim
             item.velocity.y -= 13.0f * dt;
             item.position += item.velocity * dt;
             item.position.x -= treadmill * dt;
+            if (item.kind != MaterialKind::sand)
+            {
+                for (Particle& particle : particles_)
+                {
+                    const Vec2 delta = particle.position - item.position;
+                    const float distance = length(delta);
+                    const float minimum = particle.radius + item.radius;
+                    if (distance >= minimum)
+                        continue;
+                    const Vec2 normal = distance > 1.0e-5f
+                        ? delta / distance : Vec2{ -1.0f, 0.0f };
+                    particle.position += normal * (minimum - distance);
+                    particle.previous -= item.velocity * dt
+                        * (item.kind == MaterialKind::rock ? 0.30f : 0.18f);
+                    item.velocity -= normal * dot(item.velocity, normal) * 0.42f;
+                    collided_this_step_ = true;
+                }
+            }
             const float ground = ground_height_at(item.position.x);
             if (item.position.y - item.radius > ground)
                 continue;
@@ -916,19 +1180,6 @@ namespace runner::sim
         });
     }
 
-    void Environment::append_material_features() noexcept
-    {
-        int marker = -1000;
-        for (const MaterialParticle& item : material_particles_)
-        {
-            if (!item.active)
-                continue;
-            course_features_.push_back({ item.kind == MaterialKind::sand
-                    ? CourseFeatureKind::projectile : CourseFeatureKind::moving_hazard,
-                item.position, {}, item.radius, item.velocity, marker-- });
-        }
-    }
-
     void Environment::apply_support_pressure(float dt) noexcept
     {
         if (!stage_uses_deformable_terrain(course_stage_))
@@ -953,6 +1204,7 @@ namespace runner::sim
         const Particle& root = particles_[blueprint_.root_node];
         terrain_firmness_ = terrain_firmness_at(root.position.x);
         terrain_looseness_ = terrain_looseness_at(root.position.x);
+        water_depth_ = water_depth_at(root.position.x);
         const float prior_burial = burial_depth_;
         burial_depth_ = 0.0f;
         obstruction_mask_ = 0u;
@@ -1039,11 +1291,17 @@ namespace runner::sim
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
+        // Walk / Run teaches gait over the physical material course. Authored
+        // rocks, bars, and projectiles begin only in prerequisite-gated lessons.
+        if (course_stage_ == CourseStage::uneven)
+            return;
         if (course_stage_ != CourseStage::duck_press
-            && course_stage_ != CourseStage::uneven
             && course_stage_ != CourseStage::crouch_walk
             && course_stage_ != CourseStage::hurdles
-            && course_stage_ != CourseStage::moving_hazards)
+            && course_stage_ != CourseStage::moving_hazards
+            && course_stage_ != CourseStage::climb_descent
+            && course_stage_ != CourseStage::equipment_targets
+            && course_stage_ != CourseStage::combat_course)
             return;
 
         const float root_x = valid_node(blueprint_.root_node)
@@ -1083,6 +1341,33 @@ namespace runner::sim
                     { 0.0f, profile.vertical_velocity }, -2
                 });
             }
+            return;
+        }
+        if (course_stage_ == CourseStage::equipment_targets)
+            return;
+        if (course_stage_ == CourseStage::climb_descent)
+        {
+            float reachable_hand_height = 1.45f;
+            for (std::size_t index = 0; index < blueprint_.nodes.size(); ++index)
+            {
+                if (index == blueprint_.head_node || blueprint_.is_support_seed(index)
+                    || !manipulator_endpoint(blueprint_, index))
+                    continue;
+                reachable_hand_height = std::max(reachable_hand_height,
+                    blueprint_.nodes[index].y + particles_[index].radius * 0.5f);
+            }
+            const float top = clamp(reachable_hand_height - 0.10f,
+                1.15f, 2.75f);
+            const float left = 10.0f + course_difficulty_ * 2.0f;
+            const float right = left + 6.0f;
+            ledge_top_height_ = top;
+            ledge_left_edge_ = left;
+            course_features_.push_back({
+                CourseFeatureKind::ledge,
+                { 0.5f * (left + right), top * 0.5f },
+                { 0.5f * (right - left), top * 0.5f }, 0.0f,
+                {}, 9000
+            });
             return;
         }
         if (course_stage_ == CourseStage::crouch_walk)
@@ -1177,6 +1462,7 @@ namespace runner::sim
                 break;
             }
             case CourseFeatureKind::duck_press:
+            case CourseFeatureKind::ledge:
                 break;
             case CourseFeatureKind::overhead_bar:
             {
@@ -1221,7 +1507,6 @@ namespace runner::sim
             }
             }
         }
-        append_material_features();
     }
 
     void Environment::reset(std::uint64_t seed)
@@ -1384,10 +1669,12 @@ namespace runner::sim
         recovery_successes_ = 0;
         terrain_.reset(random_state_ ^ 0xa5a5a5a5a5a5a5a5ULL, course_difficulty_);
         material_particles_.clear();
-        next_material_event_seconds_ = 1.50f;
+        next_material_event_seconds_ = std::lerp(9.0f, 6.0f, course_difficulty_);
         material_event_sequence_ = 0u;
         terrain_firmness_ = 1.0f;
         terrain_looseness_ = 0.0f;
+        water_depth_ = 0.0f;
+        water_submersion_ = 0.0f;
         burial_depth_ = 0.0f;
         previous_burial_depth_ = 0.0f;
         buried_no_escape_seconds_ = 0.0f;
@@ -1396,7 +1683,20 @@ namespace runner::sim
         incoming_time_to_impact_ = 10.0f;
         incoming_material_density_ = 0.0f;
         obstruction_mask_ = 0u;
+        ledge_grasp_nodes_.fill(std::numeric_limits<std::uint16_t>::max());
+        ledge_grasp_anchors_.fill({});
+        hand_ledge_contacts_ = 0u;
+        climb_support_transfers_ = 0u;
+        ledge_climbs_ = 0u;
+        controlled_descents_ = 0u;
+        ledge_climbed_ = false;
+        ledge_descending_ = false;
+        ledge_top_height_ = 0.0f;
+        ledge_left_edge_ = 0.0f;
+        previous_root_height_ = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.y : 0.0f;
         invalid_reason_ = InvalidMotion::none;
+        reset_equipment();
         rebuild_course_features();
     }
 
@@ -2064,7 +2364,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
     }
 
     void Environment::update_articulated_toe_commands(
-        std::span<const float, action_count> actions, float dt) noexcept
+        std::span<const float, anatomy_action_count> actions, float dt) noexcept
     {
         auto update_side = [&](bool left, std::size_t side,
             std::size_t hip_index, std::size_t knee_index)
@@ -2623,7 +2923,14 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     : std::min(particle.radius * 0.78f,
                         (1.0f - firmness + looseness * 0.45f) * 0.18f))
                 : 0.0f;
-            const float minimum_y = ground_height_at(particle.position.x)
+            float contact_ground = ground_height_at(particle.position.x);
+            if (course_stage_ == CourseStage::climb_descent
+                && particle.position.x >= ledge_left_edge_
+                && particle.position.x <= ledge_left_edge_ + 6.0f
+                && particle.position.y - particle.radius
+                    >= ledge_top_height_ - 0.35f)
+                contact_ground = std::max(contact_ground, ledge_top_height_);
+            const float minimum_y = contact_ground
                 + ground_contact_offset(traction_contact, particle.radius) - burial_allowance;
             const float separation = particle.position.y - minimum_y;
             const bool release_requested = semantic_support && powered_release
@@ -2687,12 +2994,67 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         }
     }
 
-    void Environment::solve_course() noexcept
+    void Environment::solve_course(float dt) noexcept
     {
-        for (Particle& particle : particles_)
+        for (std::size_t particle_index = 0;
+            particle_index < particles_.size(); ++particle_index)
         {
+            Particle& particle = particles_[particle_index];
             for (const CourseFeature& feature : course_features_)
             {
+                if (feature.kind == CourseFeatureKind::ledge)
+                {
+                    const float left = feature.center.x - feature.half_extent.x;
+                    const float top = feature.center.y + feature.half_extent.y;
+                    const bool grasp_candidate = particle_index != blueprint_.head_node
+                        && particle_index != blueprint_.root_node
+                        && particle_index != blueprint_.torso_node
+                        && !blueprint_.is_support_seed(particle_index)
+                        && manipulator_endpoint(blueprint_, particle_index);
+                    const bool near_edge = std::abs(particle.position.x - left)
+                            <= particle.radius + 0.18f
+                        && std::abs(particle.position.y - top)
+                            <= particle.radius + 0.22f;
+                    if (grasp_candidate && near_edge)
+                    {
+                        std::size_t slot = ledge_grasp_nodes_.size();
+                        for (std::size_t index = 0;
+                            index < ledge_grasp_nodes_.size(); ++index)
+                        {
+                            if (ledge_grasp_nodes_[index] == particle_index)
+                            {
+                                slot = index;
+                                break;
+                            }
+                            if (slot == ledge_grasp_nodes_.size()
+                                && ledge_grasp_nodes_[index]
+                                    == std::numeric_limits<std::uint16_t>::max())
+                                slot = index;
+                        }
+                        if (slot < ledge_grasp_nodes_.size())
+                        {
+                            if (ledge_grasp_nodes_[slot] != particle_index)
+                            {
+                                ledge_grasp_nodes_[slot] =
+                                    static_cast<std::uint16_t>(particle_index);
+                                ledge_grasp_anchors_[slot] = {
+                                    left - particle.radius * 0.20f,
+                                    top + particle.radius * 0.18f };
+                                ++hand_ledge_contacts_;
+                            }
+                        }
+                    }
+                    for (std::size_t slot = 0;
+                        slot < ledge_grasp_nodes_.size(); ++slot)
+                    {
+                        if (ledge_grasp_nodes_[slot] != particle_index)
+                            continue;
+                        const Vec2 correction =
+                            (ledge_grasp_anchors_[slot] - particle.position) * 0.62f;
+                        particle.position += correction;
+                        particle.previous += correction;
+                    }
+                }
                 if (feature.kind == CourseFeatureKind::duck_press)
                 {
                     const float left = feature.center.x - feature.half_extent.x;
@@ -2734,9 +3096,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     particle.position += correction;
                     particle.previous += correction * 0.06f;
                     if (feature.kind == CourseFeatureKind::projectile)
-                        particle.previous -= feature.velocity * (1.0f / 60.0f) * 0.34f;
+                        particle.previous -= feature.velocity * dt * 0.34f;
                     else if (feature.kind == CourseFeatureKind::moving_hazard)
-                        particle.previous -= feature.velocity * (1.0f / 60.0f) * 0.12f;
+                        particle.previous -= feature.velocity * dt * 0.12f;
                     collided_this_step_ = true;
                     continue;
                 }
@@ -2768,6 +3130,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 const Vec2 correction = normal * (particle.radius - distance);
                 particle.position += correction;
                 particle.previous += correction * 0.05f;
+                if (feature.kind == CourseFeatureKind::ledge
+                    && blueprint_.is_support_seed(particle_index)
+                    && normal.y > 0.60f)
+                    particle.grounded = true;
                 collided_this_step_ = true;
             }
         }
@@ -2852,6 +3218,64 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         return elapsed_seconds_ > 1.0e-5f ? clamp(cumulative_airborne_ / elapsed_seconds_, 0.0f, 1.0f) : 0.0f;
     }
 
+    void Environment::update_climb_metrics(float dt) noexcept
+    {
+        if (!valid_node(blueprint_.root_node))
+            return;
+        const Particle& root = particles_[blueprint_.root_node];
+        const float vertical_speed = (root.position.y - previous_root_height_)
+            / std::max(dt, 1.0e-5f);
+        previous_root_height_ = root.position.y;
+        if (course_stage_ != CourseStage::climb_descent)
+            return;
+
+        const std::size_t grasp_count = static_cast<std::size_t>(
+            std::count_if(ledge_grasp_nodes_.begin(), ledge_grasp_nodes_.end(),
+                [](std::uint16_t node)
+                {
+                    return node != std::numeric_limits<std::uint16_t>::max();
+                }));
+        bool support_on_top = false;
+        bool support_on_lower_ground = false;
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (!blueprint_.is_support_seed(index) || !particles_[index].grounded)
+                continue;
+            support_on_top = support_on_top
+                || (particles_[index].position.x >= ledge_left_edge_
+                    && particles_[index].position.y
+                        >= ledge_top_height_ - particles_[index].radius - 0.10f);
+            support_on_lower_ground = support_on_lower_ground
+                || (particles_[index].position.x < ledge_left_edge_ - 0.05f
+                    && particles_[index].position.y
+                        < ledge_top_height_ - 0.30f);
+        }
+
+        if (!ledge_climbed_ && grasp_count > 0u && support_on_top
+            && powered_jump_count_ == 0u
+            && root.position.y >= ledge_top_height_ + 0.22f)
+        {
+            ledge_climbed_ = true;
+            ++ledge_climbs_;
+            ++climb_support_transfers_;
+            ledge_grasp_nodes_.fill(std::numeric_limits<std::uint16_t>::max());
+        }
+        else if (ledge_climbed_ && !ledge_descending_ && grasp_count > 0u
+            && root.position.x <= ledge_left_edge_ + 0.75f
+            && vertical_speed <= 0.10f)
+        {
+            ledge_descending_ = true;
+            ++climb_support_transfers_;
+        }
+        if (ledge_descending_ && support_on_lower_ground
+            && root.position.y < ledge_top_height_ + 0.55f
+            && vertical_speed >= -2.20f && powered_jump_count_ == 0u)
+        {
+            ++controlled_descents_;
+            ledge_descending_ = false;
+            ledge_grasp_nodes_.fill(std::numeric_limits<std::uint16_t>::max());
+        }
+    }
     void Environment::update_gait_metrics(float dt, float action_energy) noexcept
     {
         const std::size_t left_seed_count = 1u
@@ -3516,11 +3940,12 @@ step_not_qualified:
             return { -5.0f, 0.0f, true, false, InvalidMotion::out_of_bounds };
 
         dt = clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
+        last_step_dt_ = dt;
         // Let every body settle onto its feet before the policy can apply a
         // meaningful impulse, then ease control in rather than launching it.
         const float ramp_t = clamp((elapsed_seconds_ - 0.35f) / 1.25f, 0.0f, 1.0f);
         const float control_ramp = ramp_t * ramp_t * (3.0f - 2.0f * ramp_t);
-        std::array<float, action_count> applied_actions{};
+        std::array<float, anatomy_action_count> applied_actions{};
         action_change_energy_ = 0.0f;
         for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
         {
@@ -3530,11 +3955,11 @@ step_not_qualified:
             previous_applied_actions_[index] = applied_actions[index];
         }
         constexpr Vec2 gravity{ 0.0f, -22.0f };
-        constexpr float damping = 0.996f;
+        constexpr float damping_at_60_hz = 0.996f;
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
             Particle& particle = particles_[index];
-            float local_damping = damping;
+            float local_damping = damping_at_60_hz;
             if (index == blueprint_.head_node)
                 local_damping = 0.92f;
             else if (passive_endpoint(blueprint_, index))
@@ -3543,11 +3968,13 @@ step_not_qualified:
                 local_damping = 0.985f;
             else if (node_degree(blueprint_, index) == 1u)
                 local_damping = 0.975f;
+            local_damping = std::pow(local_damping, dt * 60.0f);
             const Vec2 velocity = (particle.position - particle.previous) * local_damping;
             particle.previous = particle.position;
             particle.position += velocity + gravity * (dt * dt);
         }
 
+        apply_water_forces(dt);
         collided_this_step_ = false;
         duck_press_contact_this_step_ = false;
         duck_press_max_penetration_ = 0.0f;
@@ -3565,13 +3992,13 @@ step_not_qualified:
             stabilize_duck_posture();
             stabilize_passive_appendages();
             solve_ground(dt);
-            solve_course();
+            solve_course(dt);
             // Re-apply the authored crouch after collision resolution so the
             // final solver state cannot leave an intermediate knee/body link
             // under the floor or inside the platen.
             stabilize_duck_posture();
             solve_ground(dt);
-            solve_course();
+            solve_course(dt);
             // End each iteration in a floor-valid authored crouch. The target
             // is already clamped beneath the platen, so a final course shove is
             // unnecessary and would reintroduce solver-frame penetration.
@@ -3599,6 +4026,8 @@ step_not_qualified:
         if (stage_uses_deformable_terrain(course_stage_))
             terrain_.step(dt);
         update_material_metrics(dt);
+        update_equipment(actions, dt);
+        update_climb_metrics(dt);
         if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())
             invalidate(InvalidMotion::collapsed_posture);
         // duck_press_max_penetration_ is diagnostic transient overlap
@@ -3902,7 +4331,7 @@ step_not_qualified:
         case CourseStage::duck_press:
             if (!duck_press_completed_)
             {
-                last_reward_ = std::max(0.0f, upright) * 0.016f
+                last_reward_ = std::max(0.0f, upright) * (0.96f * dt)
                     + contact * 0.0015f + duck_reward + obstacle_duck_reward
                     + press_contact_reward + pass_reward
                     - std::abs(forward_speed_) * 0.0030f
@@ -3915,7 +4344,7 @@ step_not_qualified:
                 const float recovered_pose = !duck_active_ && !non_foot_grounded_
                     && stable_stance_seconds_ >= 0.40f ? 0.065f : 0.0f;
                 last_reward_ = recovered_pose
-                    + std::max(0.0f, upright) * 0.016f
+                    + std::max(0.0f, upright) * (0.96f * dt)
                     + contact * 0.0015f + pass_reward
                     - std::abs(forward_speed_) * 0.0080f
                     - std::abs(distance_travelled_) * 0.0040f
@@ -3985,6 +4414,59 @@ step_not_qualified:
                 - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
                 - controlled_overspeed_penalty - body_contact_penalty;
             break;
+        case CourseStage::climb_descent:
+        {
+            const float ledge_distance = std::abs(ledge_left_edge_ - pelvis_position.x);
+            const float approach = clamp(1.0f - ledge_distance / 8.0f, 0.0f, 1.0f);
+            last_reward_ = std::max(0.0f, upright) * 0.010f
+                + approach * 0.012f
+                + static_cast<float>(hand_ledge_contacts_ > 0u) * 0.035f
+                + static_cast<float>(ledge_climbs_ > 0u) * 0.080f
+                + static_cast<float>(controlled_descents_ > 0u) * 0.120f
+                + contact * 0.0010f
+                - static_cast<float>(powered_jump_count_ > 0u) * 0.25f
+                - collision_penalty - body_contact_penalty;
+            break;
+        }
+        case CourseStage::equipment_targets:
+        {
+            const Vec2 target_delta = equipment_target_.position - equipment_mount_position();
+            const float desired = std::atan2(target_delta.y, target_delta.x);
+            const float aim_quality = clamp(1.0f
+                - std::abs(wrap_angle(desired - equipment_aim_angle_)) / 0.55f,
+                0.0f, 1.0f);
+            last_reward_ = std::max(0.0f, upright) * 0.012f
+                + static_cast<float>(equipment_state_ == EquipmentState::safe_carry) * 0.006f
+                + static_cast<float>(equipment_state_ == EquipmentState::ready) * 0.010f
+                + aim_quality * 0.026f
+                + static_cast<float>(target_hit_this_step_) * 0.55f
+                - std::abs(forward_speed_) * 0.004f
+                - body_contact_penalty;
+            break;
+        }
+        case CourseStage::combat_course:
+        {
+            const Vec2 target_delta = equipment_target_.position - equipment_mount_position();
+            const float desired = std::atan2(target_delta.y, target_delta.x);
+            const float aim_quality = clamp(1.0f
+                - std::abs(wrap_angle(desired - equipment_aim_angle_)) / 0.70f,
+                0.0f, 1.0f);
+            last_reward_ = forward_gait_reward
+                + std::max(0.0f, upright) * 0.010f
+                + swing_reward + run_reward + real_step_reward
+                + balance_reward + brake_reward + crawl_escape_reward
+                + obstacle_lift_reward + pass_reward + escape_reward
+                + static_cast<float>(equipment_state_ == EquipmentState::safe_carry) * 0.004f
+                + static_cast<float>(equipment_state_ == EquipmentState::ready) * 0.006f
+                + aim_quality * 0.015f
+                + static_cast<float>(target_hit_this_step_) * 0.40f
+                - backward_penalty - unearned_progress_penalty - burial_penalty
+                - double_support_shuffle_penalty - action_energy * 0.0010f
+                - action_change_penalty - collision_penalty - knee_first_penalty
+                - stance_slip_penalty - wheel_penalty - hazard_stall_penalty
+                - controlled_overspeed_penalty - body_contact_penalty;
+            break;
+        }
         }
 
         last_reward_ += recovery_reward - uncontrolled_spin_penalty;
@@ -4008,7 +4490,10 @@ step_not_qualified:
         const float timeout = course_stage_ == CourseStage::balance ? 12.0f
             : course_stage_ == CourseStage::duck_press ? 36.0f
             : course_stage_ == CourseStage::ramps || course_stage_ == CourseStage::duck_bars ? 20.0f
-            : course_stage_ == CourseStage::moving_hazards ? 48.0f : 36.0f;
+            : course_stage_ == CourseStage::moving_hazards
+                || course_stage_ == CourseStage::combat_course ? 48.0f
+            : course_stage_ == CourseStage::climb_descent ? 44.0f
+            : course_stage_ == CourseStage::equipment_targets ? 32.0f : 36.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
         return { last_reward_, forward_speed_, terminated,
             invalid_reason_ == InvalidMotion::none, invalid_reason_ };
@@ -4022,10 +4507,10 @@ step_not_qualified:
             return result;
 
         constexpr std::size_t joint_angle_begin = 4;
-        constexpr std::size_t joint_velocity_begin = joint_angle_begin + action_count;
-        constexpr std::size_t contact_begin = joint_velocity_begin + action_count;
+        constexpr std::size_t joint_velocity_begin = joint_angle_begin + anatomy_action_count;
+        constexpr std::size_t contact_begin = joint_velocity_begin + anatomy_action_count;
         static_assert(contact_begin == 20);
-        static_assert(observation_count == 50);
+        static_assert(observation_count == 60);
 
         const Vec2 root = particles_[blueprint_.root_node].position;
         const Vec2 torso = normalized(
@@ -4034,9 +4519,9 @@ step_not_qualified:
             - particles_[blueprint_.root_node].previous;
         result[0] = torso.x;
         result[1] = torso.y;
-        result[2] = clamp(pelvis_velocity.x * 60.0f / 6.0f, -3.0f, 3.0f);
-        result[3] = clamp(pelvis_velocity.y * 60.0f / 6.0f, -3.0f, 3.0f);
-        for (std::size_t index = 0; index < action_count; ++index)
+        result[2] = clamp(pelvis_velocity.x / last_step_dt_ / 6.0f, -3.0f, 3.0f);
+        result[3] = clamp(pelvis_velocity.y / last_step_dt_ / 6.0f, -3.0f, 3.0f);
+        for (std::size_t index = 0; index < anatomy_action_count; ++index)
         {
             const MotorConstraint& motor = blueprint_.motors[index];
             if (!motor.enabled)
@@ -4085,6 +4570,7 @@ step_not_qualified:
             case CourseFeatureKind::rock: result[30] = -0.5f; break;
             case CourseFeatureKind::overhead_bar: result[30] = 0.0f; break;
             case CourseFeatureKind::duck_press: result[30] = 0.0f; break;
+            case CourseFeatureKind::ledge: result[30] = 0.25f; break;
             case CourseFeatureKind::moving_hazard: result[30] = 0.5f; break;
             case CourseFeatureKind::projectile: result[30] = 1.0f; break;
             }
@@ -4110,6 +4596,29 @@ step_not_qualified:
         result[47] = clamp(incoming_material_density_, 0.0f, 1.0f);
         result[48] = static_cast<float>(obstruction_mask_) / 7.0f;
         result[49] = clamp(terrain_.slope_at(root.x + course_progress()), -2.0f, 2.0f);
+        result[50] = clamp(water_depth_ / 0.80f, 0.0f, 2.0f);
+        result[51] = clamp(water_submersion_, 0.0f, 1.0f);
+        result[52] = static_cast<float>(terrain_region_at(root.x))
+            / static_cast<float>(TerrainRegion::hole);
+        result[53] = static_cast<float>(equipment_state_)
+            / static_cast<float>(EquipmentState::dropped);
+        result[54] = static_cast<float>(weapon_class_)
+            / static_cast<float>(WeaponClass::launcher);
+        if (equipment_target_.active)
+        {
+            const Vec2 target_delta = equipment_target_.position - root;
+            result[55] = clamp(target_delta.x / 16.0f, -2.0f, 2.0f);
+            result[56] = clamp(target_delta.y / 8.0f, -2.0f, 2.0f);
+            const float desired = std::atan2(target_delta.y, target_delta.x);
+            result[57] = clamp(wrap_angle(desired - equipment_aim_angle_) / pi,
+                -1.0f, 1.0f);
+        }
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        result[58] = profile.cooldown_seconds > 0.0f
+            ? clamp(equipment_cooldown_seconds_ / profile.cooldown_seconds,
+                0.0f, 1.0f) : 0.0f;
+        result[59] = clamp(static_cast<float>(target_hits_) / 5.0f,
+            0.0f, 2.0f);
         return result;
     }
 }

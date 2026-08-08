@@ -73,6 +73,9 @@ int main()
     const float slope=first.maximum_neighbor_delta();
     for(int i=0;i<240;++i) first.step(1.0f/60.0f);
     require(first.maximum_neighbor_delta()<=slope+1.0e-5f,"collapse increased maximum slope");
+    if (std::abs(first.total_height_volume()-(deposited+0.12f))>=8.0e-4f)
+        std::cerr << "volume expected=" << (deposited+0.12f)
+            << " actual=" << first.total_height_volume() << std::endl;
     require(std::abs(first.total_height_volume()-(deposited+0.12f))<8.0e-4f,"collapse leaked volume");
     sim::Environment environment(sim::CreatureBlueprint::quadruped(),0x5a17u);
     environment.set_course(sim::CourseStage::moving_hazards,0.80f);
@@ -84,8 +87,8 @@ int main()
         - environment.terrain().height_at(sync_source_x))<1.0e-6f,
         "render/world terrain transform disagrees with collision sampling");
     for(int frame=0;frame<240;++frame) static_cast<void>(environment.step(idle));
-    require(environment.material_event_count()>0u,"moving hazards spawned no persistent material");
-    const auto observation=environment.observation(); static_assert(observation.size()==50u);
+    require(environment.material_event_count()==0u,"material pressure spawned before real safe-runway progress");
+    const auto observation=environment.observation(); static_assert(observation.size()==60u);
     for(std::size_t i=40;i<observation.size();++i) require(std::isfinite(observation[i]),"non-finite material observation");
     require(environment.terrain_firmness_at(0.0f)>=0.0f && environment.terrain_firmness_at(0.0f)<=1.0f,"firmness out of range");
     require(environment.burial_depth()>=0.0f,"negative burial depth");

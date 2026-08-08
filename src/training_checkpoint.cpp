@@ -1,5 +1,7 @@
 #include "ppo.hpp"
 
+#include <algorithm>
+
 #include <array>
 #include <fstream>
 #include <format>
@@ -9,7 +11,11 @@ namespace runner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '8', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '9', '\0', '\1' };
+        constexpr std::array<char, 8> v0727_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '8', '\0', '\1' };
+        constexpr std::size_t v0727_input_size = 50u;
+        constexpr std::size_t v0727_output_size = 8u;
+        constexpr std::size_t v0727_parameter_count = 8'017u;
 
         template <typename T>
         bool write_value(std::ofstream& output, const T& value)
@@ -96,9 +102,17 @@ namespace runner::rl
                 && write_value(output, value.evaluation_longest_stance)
                 && write_value(output, value.evaluation_duck_recoveries)
                 && write_value(output, value.evaluation_max_joint_speed)
+                && write_value(output, value.evaluation_hand_contacts)
+                && write_value(output, value.evaluation_climb_transfers)
+                && write_value(output, value.evaluation_climbs)
+                && write_value(output, value.evaluation_descents)
+                && write_value(output, value.evaluation_shots)
+                && write_value(output, value.evaluation_target_hits)
+                && write_value(output, value.evaluation_equipment_transitions)
                 && write_value(output, value.evaluation_quality_key)
                 && write_value(output, value.evaluation_rejection_mask)
                 && write_value(output, value.evaluation_invalid_runs)
+                && write_value(output, value.evaluation_invalid_reason)
                 && write_value(output, value.evaluation_valid)
                 && write_value(output, value.best_evaluation_distance)
                 && write_value(output, value.best_evaluation_score)
@@ -154,6 +168,72 @@ namespace runner::rl
                 && read_value(input, value.evaluation_longest_stance)
                 && read_value(input, value.evaluation_duck_recoveries)
                 && read_value(input, value.evaluation_max_joint_speed)
+                && read_value(input, value.evaluation_hand_contacts)
+                && read_value(input, value.evaluation_climb_transfers)
+                && read_value(input, value.evaluation_climbs)
+                && read_value(input, value.evaluation_descents)
+                && read_value(input, value.evaluation_shots)
+                && read_value(input, value.evaluation_target_hits)
+                && read_value(input, value.evaluation_equipment_transitions)
+                && read_value(input, value.evaluation_quality_key)
+                && read_value(input, value.evaluation_rejection_mask)
+                && read_value(input, value.evaluation_invalid_runs)
+                && read_value(input, value.evaluation_invalid_reason)
+                && read_value(input, value.evaluation_valid)
+                && read_value(input, value.best_evaluation_distance)
+                && read_value(input, value.best_evaluation_score)
+                && read_value(input, value.best_quality_key)
+                && read_value(input, value.best_update)
+                && read_value(input, value.evaluation_count)
+                && read_value(input, value.imitation_samples)
+                && read_value(input, value.imitation_weight)
+                && read_value(input, value.imitation_source_score);
+        }
+
+        bool read_v0727_metrics(std::ifstream& input, TrainingMetrics& value)
+        {
+            return read_value(input, value.update)
+                && read_value(input, value.environment_steps)
+                && read_value(input, value.total_updates)
+                && read_value(input, value.total_environment_steps)
+                && read_value(input, value.total_episodes)
+                && read_value(input, value.total_valid_episodes)
+                && read_value(input, value.total_invalid_episodes)
+                && read_value(input, value.total_resets)
+                && read_value(input, value.total_alternating_steps)
+                && read_value(input, value.total_falls)
+                && read_value(input, value.total_collisions)
+                && read_value(input, value.total_powered_jumps)
+                && read_value(input, value.total_landed_jumps)
+                && read_value(input, value.total_landed_flips)
+                && read_value(input, value.total_obstacles_passed)
+                && read_value(input, value.total_distance)
+                && read_value(input, value.total_training_seconds)
+                && read_value(input, value.mean_reward)
+                && read_value(input, value.mean_episode_distance)
+                && read_value(input, value.mean_speed)
+                && read_value(input, value.policy_loss)
+                && read_value(input, value.value_loss)
+                && read_value(input, value.entropy)
+                && read_value(input, value.learning_rate)
+                && read_value(input, value.evaluation_reward)
+                && read_value(input, value.evaluation_distance)
+                && read_value(input, value.evaluation_speed)
+                && read_value(input, value.evaluation_score)
+                && read_value(input, value.evaluation_survival)
+                && read_value(input, value.evaluation_collisions)
+                && read_value(input, value.evaluation_airborne_ratio)
+                && read_value(input, value.evaluation_stride_events)
+                && read_value(input, value.evaluation_duck_seconds)
+                && read_value(input, value.evaluation_powered_jumps)
+                && read_value(input, value.evaluation_jump_landings)
+                && read_value(input, value.evaluation_spin_turns)
+                && read_value(input, value.evaluation_spin_landings)
+                && read_value(input, value.evaluation_obstacles_passed)
+                && read_value(input, value.evaluation_stable_stance)
+                && read_value(input, value.evaluation_longest_stance)
+                && read_value(input, value.evaluation_duck_recoveries)
+                && read_value(input, value.evaluation_max_joint_speed)
                 && read_value(input, value.evaluation_quality_key)
                 && read_value(input, value.evaluation_rejection_mask)
                 && read_value(input, value.evaluation_invalid_runs)
@@ -166,6 +246,64 @@ namespace runner::rl
                 && read_value(input, value.imitation_samples)
                 && read_value(input, value.imitation_weight)
                 && read_value(input, value.imitation_source_score);
+        }
+        bool migrate_v0727_parameters(std::span<const float> source,
+            std::vector<float>& destination)
+        {
+            constexpr std::size_t hidden = PolicyNetwork::hidden_size;
+            constexpr std::size_t legacy_w1 = 0u;
+            constexpr std::size_t legacy_b1 = legacy_w1 + hidden * v0727_input_size;
+            constexpr std::size_t legacy_w2 = legacy_b1 + hidden;
+            constexpr std::size_t legacy_b2 = legacy_w2 + hidden * hidden;
+            constexpr std::size_t legacy_actor_w = legacy_b2 + hidden;
+            constexpr std::size_t legacy_actor_b = legacy_actor_w + v0727_output_size * hidden;
+            constexpr std::size_t legacy_value_w = legacy_actor_b + v0727_output_size;
+            constexpr std::size_t legacy_value_b = legacy_value_w + hidden;
+            constexpr std::size_t legacy_log_std = legacy_value_b + 1u;
+
+            constexpr std::size_t current_w1 = 0u;
+            constexpr std::size_t current_b1 = current_w1 + hidden * PolicyNetwork::input_size;
+            constexpr std::size_t current_w2 = current_b1 + hidden;
+            constexpr std::size_t current_b2 = current_w2 + hidden * hidden;
+            constexpr std::size_t current_actor_w = current_b2 + hidden;
+            constexpr std::size_t current_actor_b = current_actor_w
+                + PolicyNetwork::output_size * hidden;
+            constexpr std::size_t current_value_w = current_actor_b + PolicyNetwork::output_size;
+            constexpr std::size_t current_value_b = current_value_w + hidden;
+            constexpr std::size_t current_log_std = current_value_b + 1u;
+            constexpr std::size_t current_total = current_log_std + PolicyNetwork::output_size;
+            static_assert(legacy_log_std + v0727_output_size == v0727_parameter_count);
+
+            if (source.size() != v0727_parameter_count
+                || destination.size() != current_total)
+                return false;
+            for (std::size_t row = 0; row < hidden; ++row)
+            {
+                std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(
+                        legacy_w1 + row * v0727_input_size),
+                    v0727_input_size,
+                    destination.begin() + static_cast<std::ptrdiff_t>(
+                        current_w1 + row * PolicyNetwork::input_size));
+            }
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_b1), hidden,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_b1));
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_w2), hidden * hidden,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_w2));
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_b2), hidden,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_b2));
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_actor_w),
+                v0727_output_size * hidden,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_actor_w));
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_actor_b),
+                v0727_output_size,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_actor_b));
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_value_w), hidden,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_value_w));
+            destination[current_value_b] = source[legacy_value_b];
+            std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(legacy_log_std),
+                v0727_output_size,
+                destination.begin() + static_cast<std::ptrdiff_t>(current_log_std));
+            return true;
         }
     }
 
@@ -244,21 +382,23 @@ namespace runner::rl
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
-        if (!input || magic != checkpoint_magic
+        const bool v0727 = magic == v0727_checkpoint_magic;
+        if (!input || (magic != checkpoint_magic && !v0727)
             || !read_value(input, data.training_semantics)
             || !read_value(input, data.rig_signature)
             || !read_value(input, data.optimizer_step)
             || !read_value(input, data.random_state)
             || !read_value(input, stage)
             || !read_value(input, data.difficulty)
-            || !read_metrics(input, data.metrics)
+            || !(v0727 ? read_v0727_metrics(input, data.metrics)
+                       : read_metrics(input, data.metrics))
             || !read_vector(input, data.parameters, 2'000'000)
             || !read_vector(input, data.first_moment, 2'000'000)
             || !read_vector(input, data.second_moment, 2'000'000)
             || !read_vector(input, data.best_parameters, 2'000'000)
             || !read_vector(input, data.reward_history, 10'000)
             || !read_vector(input, data.speed_history, 10'000)
-            || stage >= sim::course_stage_count
+            || stage >= (v0727 ? 8u : sim::course_stage_count)
             || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
             error = "Invalid or truncated Runner checkpoint.";
@@ -276,6 +416,18 @@ namespace runner::rl
         {
             error = "INCOMPATIBLE TRAINING SEMANTICS - RESUME BLOCKED; USE EXPLICIT WEIGHT TRANSFER";
             return false;
+        }
+        bool migrated_v0727 = false;
+        if (transfer_only && data.parameters.size() == v0727_parameter_count)
+        {
+            std::vector<float> migrated = policy_.parameters();
+            if (!migrate_v0727_parameters(data.parameters, migrated))
+            {
+                error = "Invalid v0.7.27 checkpoint dimensions.";
+                return false;
+            }
+            data.parameters = std::move(migrated);
+            migrated_v0727 = true;
         }
         const std::size_t expected = policy_.parameter_count();
         const bool optimizer_dimensions_valid = data.first_moment.size() == expected
@@ -299,9 +451,12 @@ namespace runner::rl
         {
             reset_training_state();
             controller_state_ = ControllerState::transferred;
-            error = data.training_semantics == training_semantics_version
-                ? "WEIGHTS TRANSFERRED - OPTIMIZER AND BEST STATE RESET"
-                : "LEGACY WEIGHTS TRANSFERRED - SEMANTICS, OPTIMIZER, BEST, AND MASTERY RESET";
+            if (migrated_v0727)
+                error = "V0.7.27 ANATOMY WEIGHTS TRANSFERRED - NEW MATERIAL/EQUIPMENT CHANNELS NEUTRAL; OPTIMIZER, BEST, AND MASTERY RESET";
+            else
+                error = data.training_semantics == training_semantics_version
+                    ? "WEIGHTS TRANSFERRED - OPTIMIZER AND BEST STATE RESET"
+                    : "LEGACY WEIGHTS TRANSFERRED - SEMANTICS, OPTIMIZER, BEST, AND MASTERY RESET";
             return true;
         }
         adam_.first_moment = std::move(data.first_moment);
