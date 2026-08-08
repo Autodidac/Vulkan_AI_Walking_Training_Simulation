@@ -1,0 +1,54 @@
+name: Merge Runner v0.7.25 after finalizer
+
+on:
+  workflow_run:
+    workflows: ["Finalize Runner v0.7.25 PR"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify finalized PR source
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=$(gh pr view 80 --repo "$GITHUB_REPOSITORY" --json state --jq .state)
+          if [ "$state" != OPEN ]; then
+            echo "PR #80 is already $state"
+            exit 0
+          fi
+          rm -rf source
+          gh repo clone "$GITHUB_REPOSITORY" source -- --branch agent/v0725-art-leg-hotfix --single-branch
+          cd source
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.25 LANGUAGES CXX)' CMakeLists.txt
+          grep -F "training_semantics_version = 0x0007'2501u" src/ppo.hpp
+          grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
+          grep -F 'shared_pelvis_passes' src/simulation.cpp
+          grep -F 'TRAINING SAMPLES READY' src/app.cpp
+          grep -F "case '%'" src/ui_font.hpp
+          test -f .github/workflows/runner-v0725-release.yml
+          test ! -e tools/apply_v0725_art_leg_hotfix.py
+          test ! -e tools/apply_v0725_font_sync.py
+          test ! -e tools/finalize_v0725.py
+          test ! -e tools/finalize_v0725_audit.py
+          test ! -e tools/v0725-prtrigger.txt
+      - name: Squash merge validated PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          state=$(gh pr view 80 --repo "$GITHUB_REPOSITORY" --json state --jq .state)
+          if [ "$state" = OPEN ]; then
+            gh pr merge 80 --repo "$GITHUB_REPOSITORY" --squash --admin \
+              --subject 'Runner v0.7.25 art, stance, font, and readable progress' \
+              --body 'Keeps approved helmet/feet, replaces oversized torso art, fixes shared-pelvis stance collapse, synchronizes EpochGui logical font metrics, restores percent rendering, and replaces misleading compact sample counters with READY states. Linux finalizer passed; Windows/package/re-download validation remains release-blocking.'
+          fi
