@@ -67,9 +67,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if ! git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             git tag -a "$RELEASE_TAG" "$MERGED_SHA" -m "Runner 0.7.25"
             git push origin "$RELEASE_TAG"
+          else
+            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG" --force
           fi
           tag_sha=$(git rev-list -n 1 "$RELEASE_TAG")
           test "$tag_sha" = "$MERGED_SHA"
