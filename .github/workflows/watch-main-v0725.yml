@@ -6,7 +6,7 @@ on:
     paths: [.github/workflows/watch-main-v0725.yml]
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   pull-requests: write
 
@@ -14,13 +14,16 @@ jobs:
   watch:
     runs-on: ubuntu-24.04
     steps:
-      - name: Report main v0.7.25 release run
+      - name: Cancel obsolete runs and report main v0.7.25 release
         env:
           GH_TOKEN: ${{ github.token }}
           MERGED_SHA: 4d3b6b8a8f2b9bc78a05aaabccda6470c3268d75
         shell: bash
         run: |
           set -euo pipefail
+          for stale in 31249578242 31249967313; do
+            gh run cancel "$stale" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          done
           runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=push&per_page=100")
           run_id=$(jq -r --arg sha "$MERGED_SHA" '[.workflow_runs[] | select(.name == "Runner v0.7.25 validation and release" and .head_sha == $sha)][0].id // empty' <<<"$runs")
           if [ -z "$run_id" ]; then
@@ -35,4 +38,4 @@ jobs:
               "$(jq -r '.head_sha' <<<"$run")" \
               "$(jq -r '.jobs[] | "- \(.name): \(.status) / \(.conclusion // "pending") [job \(.id)]"' <<<"$jobs")")
           fi
-          gh pr comment 81 --repo "$GITHUB_REPOSITORY" --body "$body"
+          gh pr comment 82 --repo "$GITHUB_REPOSITORY" --body "$body"
