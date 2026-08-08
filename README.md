@@ -1,6 +1,6 @@
 # Runner
 
-Runner 0.7.24 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.25 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -42,7 +42,7 @@ ctest --test-dir build/linux --output-on-failure
 - `1`, `2`, `3`: Normal, Faster, and Max CPU modes
 - `T`: cycle Summary / Totals / Advanced Diagnostics
 - `U`: toggle Metric / Imperial reference labels
-- `A`: toggle optional torso/helmet/weapon overlays; foot sprites remain independent
+- `A`: toggle compact body armor and the approved helmet/foot presentation; weapon preview remains Rig-Lab-only
 - `S`: save the current rig
 - `L`: load a rig
 - `Escape`: quit
@@ -88,8 +88,21 @@ Runner.exe --diagnose-camera
 - [`docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md`](docs/RUNNER_V0722_BLACK_FRAME_HOTFIX.md) documents the opaque border-fill regression and visible-frame tests.
 - [`docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md`](docs/RUNNER_V0723_GRAY_FRAME_HOTFIX.md) documents the true rounded-outline and center-preservation contract.
 - [`docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md`](docs/RUNNER_V0724_STRUCTURAL_METRICS_ICON.md) documents rigid bones, stage-qualified totals, mastery-aware completion, and the exact screenshot icon source.
+- [`docs/RUNNER_V0725_ART_LEG_HOTFIX.md`](docs/RUNNER_V0725_ART_LEG_HOTFIX.md) documents compact node-attached armor and supported stance-leg extension.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
+
+## v0.7.25 compact armor and stance-leg hotfix
+
+- Keeps the approved helmet and foot artwork while removing the oversized translucent torso bitmap.
+- Builds a compact chest plate, shoulder caps, forearm guards, and cyan indicator from the real body joints.
+- Prevents supported walking legs from folding until the knee appears to telescope into the pelvis.
+- Reconstructs each paired leg with exact two-link geometry after restoring supported stance extension.
+- Applies walking-chain integrity from startup instead of waiting through the visible first interval.
+- Preserves swing-leg bend, static crouch, crouch-walk, monoped, quadruped, crawler, and hexapod motion paths.
+- Isolates corrected v0.7.25 controller state and autosaves.
+- Synchronizes the EpochGui logical-pixel font sizing contract at commit `130f33fe31d73564a35a622f3bb5ddcc2b5105d5`.
+- Renders `%` correctly and replaces overflowing work fractions with `UPDATES/RUNS/TESTS READY` labels once each sample budget is met.
 
 ## v0.7.24 structural integrity and truthful telemetry
 
