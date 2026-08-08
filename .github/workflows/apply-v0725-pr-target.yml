@@ -45,20 +45,37 @@ jobs:
           from pathlib import Path
           path = Path('tools/apply_v0725_art_leg_hotfix.py')
           text = path.read_text(encoding='utf-8')
-          old = """'''        if (elapsed_seconds_ >= 0.75f
+          structural_old = """'''        if (elapsed_seconds_ >= 0.75f
                       && (!std::isfinite(structural_error) || structural_error > 0.040f))
                       invalidate(InvalidMotion::structural_compression);
           '''"""
-          new = """'''        if (elapsed_seconds_ >= 0.75f
+          structural_new = """'''        if (elapsed_seconds_ >= 0.75f
                       && stage_requires_forward_gait(course_stage_)
                       && blueprint_.paired_leg_chains()
                       && !blueprint_.horizontal_multi_support_plan()
                       && (!std::isfinite(structural_error) || structural_error > 0.040f))
                       invalidate(InvalidMotion::structural_compression);
           '''"""
-          if old not in text:
+          if structural_old not in text:
               raise SystemExit('migration structural-gate source pattern was not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          text = text.replace(structural_old, structural_new, 1)
+
+          stale_old = '        "        tools/v0724-rescue-trigger.txt)\\n",'
+          stale_new = (
+              '        "        tools/v0724-rescue-trigger.txt\\n"\n'
+              '        "        .github/workflows/fix-v0724-scoped-rigidity.yml)\\n",')
+          if stale_old not in text:
+              raise SystemExit('migration stale-list source pattern was not found')
+          text = text.replace(stale_old, stale_new, 1)
+
+          stale_result_old = '        "        tools/apply_v0725_art_leg_hotfix.py)\\n",'
+          stale_result_new = (
+              '        "        tools/apply_v0725_art_leg_hotfix.py\\n"\n'
+              '        "        .github/workflows/fix-v0724-scoped-rigidity.yml)\\n",')
+          if stale_result_old not in text:
+              raise SystemExit('migration stale-list result pattern was not found')
+          text = text.replace(stale_result_old, stale_result_new, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
           PY
             python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
             python3 tools/apply_v0725_art_leg_hotfix.py
