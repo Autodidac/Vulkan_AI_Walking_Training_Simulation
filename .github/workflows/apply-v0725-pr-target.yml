@@ -95,6 +95,10 @@ jobs:
               -DRUNNER_BUILD_TESTS=ON \
               -DCMAKE_BUILD_TYPE=Release
             cmake --build build/v0725-migration --parallel
+            echo '=== FOCUSED V0.7.25 TEST ==='
+            ctest --test-dir build/v0725-migration --output-on-failure -V \
+              -R '^Runner\.V0725ArtLegHotfix$' --timeout 1800
+            echo '=== COMPLETE TEST MATRIX ==='
             ctest --test-dir build/v0725-migration --output-on-failure -V --timeout 1800
           } 2>&1 | tee /tmp/v0725-migration.log
       - name: Commit validated source to PR branch
@@ -115,10 +119,15 @@ jobs:
         run: |
           {
             echo "v0.7.25 source migration result: ${{ steps.execute.outcome }}"
+            echo "workflow run: $GITHUB_RUN_ID"
             if [ -f /tmp/v0725-migration.log ]; then
               echo
               echo '```text'
-              tail -n 120 /tmp/v0725-migration.log
+              if grep -q 'FAILED:' /tmp/v0725-migration.log; then
+                grep -E 'FAILED:|Test +#[0-9]+:|tests passed|tests failed|The following tests FAILED|[0-9]+% tests passed' /tmp/v0725-migration.log | tail -n 80
+              else
+                tail -n 80 /tmp/v0725-migration.log
+              fi
               echo '```'
             fi
           } > /tmp/v0725-report.md
