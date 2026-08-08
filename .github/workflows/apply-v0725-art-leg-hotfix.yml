@@ -1,0 +1,76 @@
+name: Apply Runner v0.7.25 art and leg hotfix
+
+on:
+  push:
+    branches: [agent/v0725-art-leg-hotfix]
+    paths:
+      - tools/apply_v0725_art_leg_hotfix.py
+      - .github/workflows/apply-v0725-art-leg-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v0725-art-leg-hotfix
+          fetch-depth: 0
+      - id: gate
+        name: Check whether migration remains
+        shell: bash
+        run: |
+          if [ -f tools/apply_v0725_art_leg_hotfix.py ]; then
+            echo 'apply=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'apply=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Apply cached hotfix
+        if: steps.gate.outputs.apply == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/apply_v0725_art_leg_hotfix.py
+          python3 tools/apply_v0725_art_leg_hotfix.py
+          rm -f tools/apply_v0725_art_leg_hotfix.py
+          rm -rf tools/__pycache__
+          git diff --check
+          grep -F 'project(Runner VERSION 0.7.25 LANGUAGES CXX)' CMakeLists.txt
+          grep -F "training_semantics_version = 0x0007'2501u" src/ppo.hpp
+          grep -F 'COMPACT SEGMENTED BODY ARMOR' src/app.cpp
+          grep -F 'minimum_stance_ratio' src/simulation.cpp
+          grep -F 'solve_chain_ik' src/simulation.cpp
+          ! grep -Fq 'draw_pixel_art(canvas, optional_torso_art' src/app.cpp
+      - name: Install deterministic build tools
+        if: steps.gate.outputs.apply == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14 ninja-build python3
+      - name: Configure Linux validation
+        if: steps.gate.outputs.apply == 'true'
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: >-
+          cmake -S . -B build/v0725-apply -G Ninja
+          -DRUNNER_BUILD_APP=OFF
+          -DRUNNER_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build and test Linux
+        if: steps.gate.outputs.apply == 'true'
+        run: |
+          cmake --build build/v0725-apply --parallel
+          ctest --test-dir build/v0725-apply --output-on-failure -V --timeout 1800
+      - name: Commit validated source
+        if: steps.gate.outputs.apply == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Implement Runner v0.7.25 compact armor and stance-leg integrity'
+          git push origin HEAD:agent/v0725-art-leg-hotfix
