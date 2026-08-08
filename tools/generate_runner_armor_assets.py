@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build bounded P3 runtime sprites from the remade v0.7.29 armor atlas."""
+"""Build strict side-orthographic P3 sprites from the remade v0.7.29 atlas."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "tools" / "art_sources" / "runner_v0729_modular_atlas.png"
 OUTPUT = ROOT / "assets" / "optional" / "runner_armor_concepts" / "runtime"
-EXPECTED_SOURCE_SIZE = (1536, 1024)
+EXPECTED_SOURCE_SIZE = (1403, 1121)
 KEY = (255, 0, 255)
 ALPHA_THRESHOLD = 32
 SOURCE_PADDING = 12
@@ -22,30 +22,26 @@ TARGET_PADDING = 3
 @dataclass(frozen=True)
 class SpriteSpec:
     name: str
-    column: int
-    row: int
+    source_box: tuple[int, int, int, int]
     size: tuple[int, int]
     rotate_counterclockwise: bool = False
 
 
 SPECS = (
-    SpriteSpec("helmet_side.ppm", 0, 0, (32, 32)),
-    SpriteSpec("torso_side.ppm", 1, 0, (32, 40)),
-    SpriteSpec("upper_arm_side.ppm", 2, 0, (36, 20), True),
-    SpriteSpec("forearm_side.ppm", 3, 0, (40, 20), True),
-    SpriteSpec("thigh_side.ppm", 0, 1, (36, 20), True),
-    SpriteSpec("shin_side.ppm", 1, 1, (38, 20), True),
-    SpriteSpec("foot_side.ppm", 2, 1, (32, 28)),
-    SpriteSpec("weapon_side.ppm", 3, 1, (44, 24)),
+    SpriteSpec("helmet_side.ppm", (0, 0, 350, 560), (32, 32)),
+    SpriteSpec("torso_side.ppm", (350, 0, 700, 560), (32, 40)),
+    SpriteSpec("upper_arm_side.ppm", (700, 0, 1050, 560), (36, 20), True),
+    SpriteSpec("forearm_side.ppm", (1050, 0, 1403, 560), (40, 20), True),
+    SpriteSpec("thigh_side.ppm", (0, 560, 350, 1121), (36, 20), True),
+    SpriteSpec("shin_side.ppm", (350, 560, 700, 1121), (38, 20), True),
+    SpriteSpec("foot_side.ppm", (700, 560, 980, 1121), (32, 28)),
+    SpriteSpec("weapon_side.ppm", (980, 560, 1403, 1121), (44, 24)),
 )
 
 
 def crop_cell(atlas: Image.Image, spec: SpriteSpec) -> Image.Image:
-    cell_width = atlas.width // 4
-    cell_height = atlas.height // 2
-    left = spec.column * cell_width
-    top = spec.row * cell_height
-    cell = atlas.crop((left, top, left + cell_width, top + cell_height))
+    cell = atlas.crop(spec.source_box)
+    cell_width, cell_height = cell.size
     bounds = cell.getchannel("A").getbbox()
     if bounds is None:
         raise RuntimeError(f"{spec.name} atlas cell is empty")

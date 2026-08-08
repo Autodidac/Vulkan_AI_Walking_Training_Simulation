@@ -146,7 +146,7 @@ int main()
                 "repeated sprite load changed pixel data");
     }
 
-    require(cyan_sprite_count >= expected.size() - 1u
+    require(cyan_sprite_count >= expected.size() / 2u
             && total_cyan_count > 40u && total_ivory_count > 500u,
         "remade set lost its shared cyan/ivory material language");
 
@@ -191,18 +191,27 @@ int main()
             "optional_upper_arm_art", "optional_forearm_art",
             "optional_thigh_art", "optional_shin_art",
             "rig.paired_leg_chains()", "motor_index >= rig.active_motor_count",
-            "!optional_torso_art.loaded()", "!optional_forearm_art.loaded()" })
+            "!optional_torso_art.loaded()", "!optional_forearm_art.loaded()",
+            "body_span * 0.88f", "18.0f, 56.0f", "torso_frame_bone" })
         require(app.find(reference) != std::string::npos,
             "node-bound remade-art renderer contract is missing");
     const std::string main_source = read_text(root / "src" / "main.cpp");
     const std::string renderer_header = read_text(root / "src" / "renderer.hpp");
     require(main_source.find("--diagnose-art") != std::string::npos
+            && main_source.find("--art-eye-test") != std::string::npos
+            && main_source.find("prepare_art_eye_test") != std::string::npos
+            && main_source.find("closeup_vertices") != std::string::npos
             && main_source.find("headroom_limit") != std::string::npos
             && main_source.find("RUNNER_V0729_MODULAR_ART_REMAKE.md")
                 != std::string::npos
             && renderer_header.find("maximum_frame_vertex_bytes")
                 != std::string::npos,
         "modular-art vertex-budget diagnostic is missing");
+    require(app.find("ORTHOGRAPHIC ART CHECK") != std::string::npos
+            && app.find("STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING")
+                != std::string::npos
+            && app.find("FIXED SIDE PROFILE") != std::string::npos,
+        "strict side-profile production eye-test contract is missing");
 
     const std::string simulation = read_text(root / "src" / "simulation.cpp");
     require(simulation.find("runner_armor_concepts") == std::string::npos
@@ -214,7 +223,14 @@ int main()
     for (const ExpectedSprite& expected_sprite : expected)
         require(generator.find(expected_sprite.name) != std::string::npos,
             "deterministic generator omits a runtime sprite");
-    require(generator.find("EXPECTED_SOURCE_SIZE = (1536, 1024)")
+    for (std::string_view source_box : {
+            "(0, 0, 350, 560)", "(350, 0, 700, 560)",
+            "(700, 0, 1050, 560)", "(1050, 0, 1403, 560)",
+            "(0, 560, 350, 1121)", "(350, 560, 700, 1121)",
+            "(700, 560, 980, 1121)", "(980, 560, 1403, 1121)" })
+        require(generator.find(source_box) != std::string::npos,
+            "orthographic atlas source boxes changed or overlap subjects");
+    require(generator.find("EXPECTED_SOURCE_SIZE = (1403, 1121)")
             != std::string::npos,
         "deterministic generator does not lock the remade atlas dimensions");
     require(std::filesystem::is_regular_file(

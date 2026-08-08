@@ -46,6 +46,7 @@ namespace runner
 
         [[nodiscard]] bool initialize(const std::filesystem::path& asset_directory, std::string& error);
         void prepare_course_eye_test();
+        void prepare_art_eye_test();
         void frame(const InputState& input, float dt, int width, int height);
         [[nodiscard]] std::span<const render::Vertex> vertices() const noexcept;
         [[nodiscard]] bool wants_quit() const noexcept;

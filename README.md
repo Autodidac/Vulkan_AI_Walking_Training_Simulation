@@ -2,12 +2,13 @@
 
 ## v0.7.29 modular armor art remake
 
-- Replaces the old concept-sheet derivatives with eight purpose-built side-view sprites: helmet, torso, upper arm, forearm, thigh, shin, boot, and compact energy weapon.
+- Replaces the old concept-sheet derivatives with eight purpose-built exact lateral-orthographic sprites: helmet, torso, upper arm, forearm, thigh, shin, boot, and compact energy weapon.
 - Rotates and scales arm/leg plates with their authored biped motor segments while preserving existing near/far limb layers and debug contacts.
 - Uses an explicit magenta key so dark graphite outlines remain visible; missing or malformed pieces fall back independently to procedural rendering.
 - Keeps quadruped, crawler, hexapod, monoped, and unrelated custom topology free from humanoid art assumptions.
 - Keeps the art toggle presentation-only: no physics, observations, rewards, policy, curriculum, checkpoint, or persistence changes.
-- Adds `Runner.exe --diagnose-art`, which renders the fixed production course frame and enforces 25% headroom inside the shared 8 MiB Vulkan vertex budget.
+- Adds `Runner.exe --diagnose-art`, which renders both the fixed production course and strict side-profile close-up frames and enforces 25% headroom inside the shared 8 MiB Vulkan vertex budget.
+- Adds `Runner.exe --art-eye-test`, a deterministic frozen close-up that makes perspective, foreshortening, or a visible front/chest plane immediately obvious.
 
 ## v0.7.28 physical material course completion
 
@@ -105,9 +106,10 @@ Runner.exe --diagnose-art
 Runner.exe --diagnose-rig-training
 Runner.exe --diagnose-course
 Runner.exe --course-eye-test
+Runner.exe --art-eye-test
 ```
 
-`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course frame with the packaged modular set and fails above 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection.
+`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course and orthographic close-up frames with the packaged modular set and fails if either exceeds 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection. `--art-eye-test` opens the same production renderer at a frozen close-up humanoid frame and explicitly labels the required strict side elevation.
 
 ## Repository records
 

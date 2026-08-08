@@ -138,7 +138,8 @@ foreach(reference IN ITEMS
         "WALK-ART-REMAKE-345"
         "WALK-ART-RIG-346"
         "WALK-ART-KEY-347"
-        "WALK-ART-REGRESSION-348")
+        "WALK-ART-REGRESSION-348"
+        "WALK-ART-ORTHO-349")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache v0.7.28 contract missing: ${reference}")
@@ -201,6 +202,8 @@ foreach(reference IN ITEMS
         "FEATURES CLEARED"
         "runner-v0728-course-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
+        "ORTHOGRAPHIC ART CHECK"
+        "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
         "COMPACT SEGMENTED BODY ARMOR"
         "shoulder_cap_radius"
         "draw_oriented_pixel_art"
@@ -240,7 +243,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/tools/generate_runner_armor_assets.py" armor_generator_text)
 foreach(reference IN ITEMS
-        "EXPECTED_SOURCE_SIZE = (1536, 1024)"
+        "EXPECTED_SOURCE_SIZE = (1403, 1121)"
         "upper_arm_side.ppm"
         "forearm_side.ppm"
         "thigh_side.ppm"
@@ -264,6 +267,10 @@ file(READ "${RUNNER_SOURCE_DIR}/src/main.cpp" main_text)
 string(FIND "${main_text}" "--diagnose-art" art_diagnostic_pos)
 if(art_diagnostic_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.29 packaged art-budget diagnostic launch contract missing")
+endif()
+string(FIND "${main_text}" "--art-eye-test" art_eye_test_pos)
+if(art_eye_test_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.29 packaged orthographic art eye-test launch contract missing")
 endif()
 string(FIND "${main_text}" "--course-eye-test" course_eye_test_pos)
 if(course_eye_test_pos EQUAL -1)

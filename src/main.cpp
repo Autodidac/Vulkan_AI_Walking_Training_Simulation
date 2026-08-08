@@ -103,6 +103,14 @@ namespace
             && std::string_view(argv[1]) == "--course-eye-test";
     }
 
+    [[nodiscard]] bool wants_art_eye_test(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--art-eye-test";
+    }
+
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
     {
         return argc > 1
@@ -315,16 +323,24 @@ namespace
         }
         application.prepare_course_eye_test();
         application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
-        const std::size_t vertex_count = application.vertices().size();
-        const std::size_t vertex_bytes = application.vertices().size_bytes();
+        const std::size_t course_vertices = application.vertices().size();
+        const std::size_t course_bytes = application.vertices().size_bytes();
+        application.prepare_art_eye_test();
+        application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
+        const std::size_t closeup_vertices = application.vertices().size();
+        const std::size_t closeup_bytes = application.vertices().size_bytes();
+        const std::size_t vertex_count = std::max(course_vertices, closeup_vertices);
+        const std::size_t vertex_bytes = std::max(course_bytes, closeup_bytes);
         const std::size_t headroom_limit =
             runner::render::maximum_frame_vertex_bytes * 3u / 4u;
-        const bool valid = vertex_count > 0u && vertex_bytes <= headroom_limit;
+        const bool valid = course_vertices > 0u && closeup_vertices > 0u
+            && vertex_bytes <= headroom_limit;
         std::printf(
             "Runner %s art diagnostic: %s; vertices=%zu bytes=%zu "
+            "course_vertices=%zu closeup_vertices=%zu "
             "headroom_limit=%zu hard_limit=%zu\n",
             RUNNER_VERSION, valid ? "passed" : "failed", vertex_count,
-            vertex_bytes, headroom_limit,
+            vertex_bytes, course_vertices, closeup_vertices, headroom_limit,
             runner::render::maximum_frame_vertex_bytes);
         return valid ? 0 : 1;
     }
@@ -565,7 +581,9 @@ if (wants_camera_diagnostic(argc, argv))
         SDL_Quit();
         return 1;
     }
-    if (wants_course_eye_test(argc, argv))
+    if (wants_art_eye_test(argc, argv))
+        application.prepare_art_eye_test();
+    else if (wants_course_eye_test(argc, argv))
         application.prepare_course_eye_test();
 
     bool running = true;

@@ -330,6 +330,7 @@ namespace runner
         sim::CreatureBlueprint blueprint{ sim::CreatureBlueprint::humanoid() };
         rl::AutonomousTrainer trainer{ blueprint, 64 };
         std::optional<sim::Environment> course_eye_test_environment{};
+        bool art_eye_test{};
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
@@ -1062,6 +1063,22 @@ namespace runner
                 }
                 return 0;
             };
+
+            auto torso_frame_bone = [&](const sim::DistanceConstraint& bone) noexcept
+            {
+                if (!rig.paired_leg_chains() || rig.active_motor_count < 8u)
+                    return false;
+                const std::size_t left_shoulder = rig.motors[4].pivot;
+                const std::size_t right_shoulder = rig.motors[6].pivot;
+                auto connects = [&](std::size_t first, std::size_t second) noexcept
+                {
+                    return (bone.a == first && bone.b == second)
+                        || (bone.a == second && bone.b == first);
+                };
+                return connects(rig.head_node, left_shoulder)
+                    || connects(rig.head_node, right_shoulder)
+                    || connects(left_shoulder, right_shoulder);
+            };
             auto draw_bones = [&](int pass)
             {
                 for (const sim::DistanceConstraint& bone : rig.bones)
@@ -1070,7 +1087,8 @@ namespace runner
                         continue;
                     const int side_a = leg_side(bone.a);
                     const int side_b = leg_side(bone.b);
-                    const int side = side_a != 0 ? side_a : side_b;
+                    const int side = torso_frame_bone(bone)
+                        ? 0 : side_a != 0 ? side_a : side_b;
                     const bool near = side != 0 && ((side > 0) == right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
@@ -1168,21 +1186,21 @@ namespace runner
                     beginning = beginning - axis * (span * 0.08f);
                     ending = ending + axis * (span * 0.08f);
                     const float thickness = std::clamp(span * thickness_ratio,
-                        16.0f, 42.0f);
+                        18.0f, 56.0f);
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
                         thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
                 };
 
-                draw_motor_art(0u, optional_thigh_art, 0.46f);
-                draw_motor_art(1u, optional_shin_art, 0.40f);
-                draw_motor_art(2u, optional_thigh_art, 0.46f);
-                draw_motor_art(3u, optional_shin_art, 0.40f);
+                draw_motor_art(0u, optional_thigh_art, 0.52f);
+                draw_motor_art(1u, optional_shin_art, 0.48f);
+                draw_motor_art(2u, optional_thigh_art, 0.52f);
+                draw_motor_art(3u, optional_shin_art, 0.48f);
                 if (rig.active_motor_count >= 8u)
                 {
-                    draw_motor_art(4u, optional_upper_arm_art, 0.54f);
-                    draw_motor_art(5u, optional_forearm_art, 0.48f);
-                    draw_motor_art(6u, optional_upper_arm_art, 0.54f);
-                    draw_motor_art(7u, optional_forearm_art, 0.48f);
+                    draw_motor_art(4u, optional_upper_arm_art, 0.72f);
+                    draw_motor_art(5u, optional_forearm_art, 0.62f);
+                    draw_motor_art(6u, optional_upper_arm_art, 0.72f);
+                    draw_motor_art(7u, optional_forearm_art, 0.62f);
                 }
             };
 
@@ -1295,7 +1313,7 @@ namespace runner
                 const Vec2 torso = point(rig.torso_node);
                 const Vec2 center = (root + torso) * 0.5f;
                 const float body_span = length(torso - root);
-                const float height = std::clamp(body_span * 0.72f, 42.0f, 76.0f);
+                const float height = std::clamp(body_span * 0.88f, 72.0f, 118.0f);
                 const float width = height
                     * static_cast<float>(optional_torso_art.width)
                     / static_cast<float>(optional_torso_art.height);
@@ -1344,7 +1362,9 @@ namespace runner
             const bool course_eye_test = course_eye_test_environment.has_value();
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.99f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 12.0f, 9.0f },
-                course_eye_test ? "COURSE EYE TEST - SAFE START" : "LIVE TRAINING ENVIRONMENT",
+                art_eye_test ? "ORTHOGRAPHIC ART CHECK"
+                    : course_eye_test ? "COURSE EYE TEST - SAFE START"
+                    : "LIVE TRAINING ENVIRONMENT",
                 0.88f, accent);
             if (!course_eye_test && !trainer.has_training_preview())
             {
@@ -1372,7 +1392,8 @@ namespace runner
             const bool intact = environment.body_integrity_valid();
             const Color state_color = course_eye_test ? green : qualification.valid ? green
                 : intact && foot_only ? yellow : danger;
-            const std::string_view state_text = course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
+            const std::string_view state_text = art_eye_test ? std::string_view{ "SIDE PROFILE" }
+                : course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
                 : qualification.valid ? "STAGE VALID" : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY CONTACT"
                 : rl::primary_motion_rejection_name(qualification.rejection_mask);
@@ -1443,9 +1464,11 @@ namespace runner
             draw_creature(environment, inner, camera, scale);
             canvas.pop_clip();
 
-            const std::string pip_metrics = course_eye_test
-                ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
-                : std::format(
+            const std::string pip_metrics = art_eye_test
+                ? std::string("STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING")
+                : course_eye_test
+                    ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
+                    : std::format(
                     "TOTAL RIG UPDATES {}  POLICY UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
                     trainer.metrics().total_updates, trainer.metrics().update,
                     environment.distance_travelled(), environment.gait_cycles());
@@ -2058,9 +2081,10 @@ namespace runner
                 rgb(0x07111b, 0.96f), border, 1.0f);
             add_text_fit(canvas, bottom.position + Vec2{ 11.0f, 10.0f },
                 std::format("{}   v{}   GROUND {}   WATER {:.2f} M   EQUIP {} / {}   HITS {}   {}",
-                    course_eye_test_environment.has_value()
-                        ? "PACKAGED COURSE EYE TEST"
-                        : trainer.has_best_policy()
+                    art_eye_test ? "PACKAGED ORTHOGRAPHIC ART TEST"
+                        : course_eye_test_environment.has_value()
+                            ? "PACKAGED COURSE EYE TEST"
+                            : trainer.has_best_policy()
                             ? "RETAINED CHAMPION PREVIEW"
                             : "CURRENT EXPLORATORY POLICY",
                     RUNNER_VERSION,
@@ -2069,7 +2093,8 @@ namespace runner
                     sim::weapon_class_name(environment.weapon_class()),
                     sim::equipment_state_name(environment.equipment_state()),
                     environment.target_hits(),
-                    course_eye_test_environment.has_value() ? "FIXED START FRAME"
+                    art_eye_test ? "FIXED SIDE PROFILE"
+                        : course_eye_test_environment.has_value() ? "FIXED START FRAME"
                         : trainer.background_enabled() ? "TRAINING" : "PAUSED"),
                 0.86f, course_eye_test_environment.has_value() || trainer.has_best_policy()
                     ? green : yellow,
@@ -3078,6 +3103,7 @@ namespace runner
     {
         impl_->trainer.set_background_enabled(false);
         impl_->trainer.synchronize();
+        impl_->art_eye_test = false;
         impl_->course_eye_test_environment.emplace(
             sim::CreatureBlueprint::humanoid(), 728314u);
         impl_->course_eye_test_environment->set_course(
@@ -3089,6 +3115,31 @@ namespace runner
         impl_->live_zoom_factor = view_camera::minimum_zoom_factor;
         impl_->live_zoom_auto = false;
         impl_->status = "PACKAGED COURSE EYE TEST - PRODUCTION TERRAIN, FIXED START FRAME";
+        impl_->status_time = 30.0f;
+    }
+
+    void Application::prepare_art_eye_test()
+    {
+        impl_->trainer.set_background_enabled(false);
+        impl_->trainer.synchronize();
+        impl_->art_eye_test = true;
+        impl_->course_eye_test_environment.emplace(
+            sim::CreatureBlueprint::humanoid(), 729349u);
+        impl_->course_eye_test_environment->set_course(
+            sim::CourseStage::balance, 0.10f);
+        impl_->course_eye_test_environment->configure_equipment(
+            sim::WeaponClass::carbine, 8.0f);
+        impl_->course_eye_test_environment->set_course_motion_enabled(false);
+        impl_->run_paused = true;
+        const auto& particles = impl_->course_eye_test_environment->particles();
+        const std::size_t root = impl_->course_eye_test_environment->blueprint().root_node;
+        impl_->camera_x = root < particles.size()
+            ? particles[root].position.x + 0.25f : 0.25f;
+        impl_->live_pixels_per_meter = 118.0f;
+        impl_->live_zoom_factor = 1.0f;
+        impl_->live_zoom_auto = false;
+        impl_->debug_skeleton_overlay = false;
+        impl_->status = "PACKAGED ORTHOGRAPHIC ART TEST - EXACT SIDE ELEVATION";
         impl_->status_time = 30.0f;
     }
 
