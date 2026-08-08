@@ -58,16 +58,31 @@ def patch_source() -> None:
 ''',
         '''    void CreatureBlueprint::rebuild_rest_lengths() noexcept
     {
+        auto driven_segment = [&](const DistanceConstraint& bone) noexcept
+        {
+            for (std::size_t index = 0; index < active_motor_count; ++index)
+            {
+                const MotorConstraint& motor = motors[index];
+                if (!motor.enabled)
+                    continue;
+                if ((bone.a == motor.pivot && bone.b == motor.c)
+                    || (bone.b == motor.pivot && bone.a == motor.c))
+                    return true;
+            }
+            return false;
+        };
+
         for (DistanceConstraint& bone : bones)
         {
             if (bone.a < nodes.size() && bone.b < nodes.size())
                 bone.rest_length = std::max(0.05f,
                     length(nodes[bone.b] - nodes[bone.a]));
-            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
+            bone.stiffness = driven_segment(bone)
+                ? 1.0f : clamp(bone.stiffness, 0.05f, 1.0f);
         }
     }
 ''',
-        "preserve authored brace stiffness",
+        "preserve braces and harden driven segments",
     )
 
     text = replace_once(
@@ -77,12 +92,69 @@ def patch_source() -> None:
             bone.stiffness = 1.0f;
             result.bones.push_back(bone);
 ''',
-        '''            // Preserve authored compliant braces while constraining
-            // fully-rigid load-bearing segments exactly.
+        '''            // Preserve authored compliant braces. Motor-driven segments
+            // are normalized to rigid structure after motors are loaded.
             bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
             result.bones.push_back(bone);
 ''',
         "preserve loaded brace stiffness",
+    )
+
+    text = replace_once(
+        text,
+        '''        if (!result.valid())
+        {
+            error = "Rig is structurally invalid or has invalid semantic nodes.";
+            return humanoid();
+        }
+        error.clear();
+        return result;
+''',
+        '''        result.rebuild_rest_lengths();
+        if (!result.valid())
+        {
+            error = "Rig is structurally invalid or has invalid semantic nodes.";
+            return humanoid();
+        }
+        error.clear();
+        return result;
+''',
+        "normalize loaded motor segments",
+    )
+
+    text = replace_once(
+        text,
+        '''    Environment::Environment(const CreatureBlueprint& blueprint, std::uint64_t seed)
+        : blueprint_(blueprint), random_state_(seed == 0 ? 1 : seed)
+    {
+        for (DistanceConstraint& bone : blueprint_.bones)
+            bone.stiffness = 1.0f;
+        reset(seed);
+    }
+
+    void Environment::set_blueprint(const CreatureBlueprint& blueprint)
+    {
+        blueprint_ = blueprint;
+        for (DistanceConstraint& bone : blueprint_.bones)
+            bone.stiffness = 1.0f;
+        reset(random_state_);
+    }
+''',
+        '''    Environment::Environment(const CreatureBlueprint& blueprint, std::uint64_t seed)
+        : blueprint_(blueprint), random_state_(seed == 0 ? 1 : seed)
+    {
+        blueprint_.rebuild_rest_lengths();
+        reset(seed);
+    }
+
+    void Environment::set_blueprint(const CreatureBlueprint& blueprint)
+    {
+        blueprint_ = blueprint;
+        blueprint_.rebuild_rest_lengths();
+        reset(random_state_);
+    }
+''',
+        "preserve runtime compliant braces",
     )
 
     text = replace_once(
@@ -136,9 +208,10 @@ def patch_source() -> None:
 
             float lhs_weight = lhs.inverse_mass;
             float rhs_weight = rhs.inverse_mass;
-            if (lhs.grounded && blueprint_.is_support_seed(bone.a))
+            const bool pin_supports = course_stage_ != CourseStage::duck_press;
+            if (pin_supports && lhs.grounded && blueprint_.is_support_seed(bone.a))
                 lhs_weight = 0.0f;
-            if (rhs.grounded && blueprint_.is_support_seed(bone.b))
+            if (pin_supports && rhs.grounded && blueprint_.is_support_seed(bone.b))
                 rhs_weight = 0.0f;
             float weight = lhs_weight + rhs_weight;
             if (weight <= 1.0e-6f)
@@ -156,16 +229,21 @@ def patch_source() -> None:
             rhs.position -= correction * (rhs_weight / weight);
         };
 
-        // Iterate only authored rigid structure. Soft triangulation and visual
-        // appendage braces retain compliance so crouching and multi-leg bodies
-        // are not over-constrained, while every 1.0 leg segment stays fixed.
-        constexpr int projection_passes = 14;
-        for (int pass = 0; pass < projection_passes; ++pass)
+        // Solve contacts and rigid structure together, then finish on pure
+        // structure so the displayed pose cannot retain telescoped segments.
+        constexpr int coupled_passes = 12;
+        for (int pass = 0; pass < coupled_passes; ++pass)
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
                 project(bone);
             solve_ground(dt);
             solve_course();
+        }
+        constexpr int final_structure_passes = 6;
+        for (int pass = 0; pass < final_structure_passes; ++pass)
+        {
+            for (const DistanceConstraint& bone : blueprint_.bones)
+                project(bone);
         }
     }
 '''
@@ -228,6 +306,14 @@ def patch_source() -> None:
         }
 ''',
         "rigid versus compliant integrity ranges",
+    )
+
+    text = replace_once(
+        text,
+        "        if (blueprint_.paired_leg_chains())\n",
+        "        if (blueprint_.paired_leg_chains()\n"
+        "            && !blueprint_.horizontal_multi_support_plan())\n",
+        "route multi-support bodies through whole-body crouch guide",
     )
 
     text = replace_once(
