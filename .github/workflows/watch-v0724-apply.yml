@@ -1,0 +1,44 @@
+name: Watch Runner v0.7.24 migration
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  watch:
+    if: github.head_ref == 'agent/v0724-structural-metrics-icon'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report migration state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=agent/v0724-structural-metrics-icon&per_page=30")
+          apply=$(jq -r '[.workflow_runs[] | select(.name == "Apply Runner v0.7.24 structural metrics icon")][0].id // empty' <<<"$runs")
+          {
+            printf 'Runner v0.7.24 migration report\n'
+            printf 'Head: %s\n' "${{ github.event.pull_request.head.sha }}"
+            printf 'Screenshot source: %s\n' "$(test -s assets/ui/runner_icon_source.png && echo present || echo MISSING)"
+            printf 'Version: %s\n' "$(grep -o 'project(Runner VERSION [0-9.]*' CMakeLists.txt | head -1 || true)"
+            printf 'Structural test: %s\n' "$(test -f tests/v0724_structural_metrics_icon_tests.cpp && echo present || echo pending)"
+            if [ -n "$apply" ]; then
+              run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$apply")
+              printf 'Apply run: %s — %s / %s\n' "$apply" \
+                "$(jq -r '.status' <<<"$run")" "$(jq -r '.conclusion // "pending"' <<<"$run")"
+              jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$apply/jobs?per_page=100")
+              jq -r '.jobs[] | "- \(.name): \(.status) / \(.conclusion // "pending") (job \(.id))"' <<<"$jobs"
+            else
+              printf 'Apply run: not visible\n'
+            fi
+          } > /tmp/report.txt
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/report.txt
