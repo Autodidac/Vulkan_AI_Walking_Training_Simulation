@@ -905,7 +905,7 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, compl
 
 # Runner v0.7.29 modular armor art remake
 
-**Release state:** PUBLICATION AUTHORIZED — V0.7.29 RELEASE AUDIT IN PROGRESS
+**Release state:** PUBLISHED AND INDEPENDENTLY VERIFIED — ALL V0.7.29 MISSIONS COMPLETE
 
 The user-supplied modular alien armor sheet is visual direction for a clean runtime remake. Do not package the source sheet or create an attribution ledger for it. Runtime art must be purpose-built for Runner's side view, bounded to authored rig segments, optional, and physically inert.
 
@@ -948,7 +948,7 @@ The user rejected the generated armor because its individual parts retain a thre
 Every helmet, torso, arm plate, leg plate, boot, and weapon must be drawn in exact lateral orthographic elevation: one visible side face, no visible front/chest plane, no three-quarter rotation, no foreshortening, no converging edges, and no perspective depth. Add deterministic source/runtime checks and a close-up production eye-test frame that makes projection errors obvious.
 
 ### WALK-RELEASE-350 — Publish and independently verify Runner v0.7.29
-**Status:** IN PROGRESS — USER AUTHORIZED PUBLICATION
+**Status:** PUBLISHED — TAG, WORKFLOW, ASSETS, RE-DOWNLOAD, RUNTIME, AND CLEANUP VERIFIED
 
 Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the complete Windows SDL3/Vulkan build and tests, every feature diagnostic, installed and independently extracted launch from an unrelated directory, ZIP checksum and per-file manifest audit, published-asset re-download and byte comparison, direct packaged orthographic eye-test evidence, zero open cleanup PRs, and final main-only remote branch state.
 
@@ -961,3 +961,14 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the c
 - Windows Visual Studio 2022 Release rebuilt the full SDL3/Vulkan product and passed 27/27 tests. Linux GCC 14.3 compiled with warnings-as-errors and passed 22/22 tests.
 - From `C:\Windows\Temp`, the final build passed version, Vulkan, package, 24/24 acceptance, camera, visible UI, dual-frame art, four-rig training, and ten-field course diagnostics. Frame independence remains exact at 20/60/240 Hz.
 - Art remains presentation-only and absent from physics, contacts, terrain, observations, rewards, curriculum, policy dimensions, checkpoint state, persistence, and training timing. No tag, push, release, or publication was performed.
+
+## v0.7.29 publication and independent verification evidence
+
+- Implementation PR `#90` passed the hosted pull-request validation and merged commit `ced6d5ea595db3118551944a486717094be71769` into `main` as `2c9f0782ac0f1bae40e111130cd9ad191f7dab0f`.
+- New annotated tag object `3024dccb59b8f4023b0578d7607380d5c508af6a` resolves to audited merge commit `2c9f0782ac0f1bae40e111130cd9ad191f7dab0f`; no existing tag was overwritten.
+- Tagged release workflow `31283011390` completed successfully. Its Linux GCC 14 warnings-as-errors job passed all 22 tests, and its full Windows job passed configuration, build, all 27 tests, every feature diagnostic, package creation, installed/extracted launcher audits, publication, and the workflow's own release-asset re-download comparison.
+- Public non-draft, non-prerelease release `v0.7.29` targets `2c9f0782ac0f1bae40e111130cd9ad191f7dab0f`: `https://github.com/Autodidac/Vulkan_AI_Walking_Training_Simulation/releases/tag/v0.7.29`.
+- Published ZIP SHA-256 is `4fb64b5e1f939c02f880b68d7c0dea8533cea05762196ba06e9fde5a954c46ed`. Published checksum-asset SHA-256 is `1362ef3d2056c36cdcd03e02276966fc420f99b78d9eba3ff6b9b405a96caccc`, and its bare digest equals the ZIP digest. Published manifest SHA-256 is `936b8dfe101acc7040cb571fb46ff301430ea68f9168fc893ac955abf8f2551d`.
+- Two additional fresh public downloads matched byte-for-byte for the ZIP, checksum, and manifest. All 44 independently extracted files matched the manifest with no missing or extra paths.
+- The independently downloaded and extracted public `run.bat`, launched from `C:\Windows\Temp`, passed version 0.7.29, Vulkan, package, 24/24 acceptance, camera, visible UI, dual-frame orthographic art, four-rig training, and ten-field course diagnostics. The art diagnostic retained the accepted 204,315-vertex peak, and the course diagnostic retained exact 20/60/240 Hz frame independence.
+- The merged implementation branch was deleted. The completed-release audit found zero open PRs and only `main`; this ledger-only closeout branch exists solely to persist that result and is deleted on merge.
