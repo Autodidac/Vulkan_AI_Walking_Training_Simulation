@@ -1,1 +1,1 @@
-Runner v0.7.25 compact armor and stance-leg migration trigger 5.
+Runner v0.7.25 art, stance, font, and progress migration trigger 6.
