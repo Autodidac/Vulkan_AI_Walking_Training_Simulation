@@ -30,9 +30,9 @@ def patch_header() -> None:
         // constraints are rigid and normalize this value to 1.0.
         float stiffness{ 1.0f };
 ''',
-        '''        // A value of 1.0 marks a rigid structural segment. Values below
-        // 1.0 remain authored compliant braces/appendages and are deliberately
-        // excluded from the final load-bearing projection.
+        '''        // Authored stiffness remains part of the physical rig. v0.7.24
+        // applies a separate exact projection only to the primary walking-leg
+        // chains, preventing telescoping without freezing compliant braces.
         float stiffness{ 1.0f };
 ''',
         "distance-constraint documentation",
@@ -58,31 +58,16 @@ def patch_source() -> None:
 ''',
         '''    void CreatureBlueprint::rebuild_rest_lengths() noexcept
     {
-        auto driven_segment = [&](const DistanceConstraint& bone) noexcept
-        {
-            for (std::size_t index = 0; index < active_motor_count; ++index)
-            {
-                const MotorConstraint& motor = motors[index];
-                if (!motor.enabled)
-                    continue;
-                if ((bone.a == motor.pivot && bone.b == motor.c)
-                    || (bone.b == motor.pivot && bone.a == motor.c))
-                    return true;
-            }
-            return false;
-        };
-
         for (DistanceConstraint& bone : bones)
         {
             if (bone.a < nodes.size() && bone.b < nodes.size())
                 bone.rest_length = std::max(0.05f,
                     length(nodes[bone.b] - nodes[bone.a]));
-            bone.stiffness = driven_segment(bone)
-                ? 1.0f : clamp(bone.stiffness, 0.05f, 1.0f);
+            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
         }
     }
 ''',
-        "preserve braces and harden driven segments",
+        "preserve authored stiffness",
     )
 
     text = replace_once(
@@ -92,34 +77,10 @@ def patch_source() -> None:
             bone.stiffness = 1.0f;
             result.bones.push_back(bone);
 ''',
-        '''            // Preserve authored compliant braces. Motor-driven segments
-            // are normalized to rigid structure after motors are loaded.
-            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
+        '''            bone.stiffness = clamp(bone.stiffness, 0.05f, 1.0f);
             result.bones.push_back(bone);
 ''',
-        "preserve loaded brace stiffness",
-    )
-
-    text = replace_once(
-        text,
-        '''        if (!result.valid())
-        {
-            error = "Rig is structurally invalid or has invalid semantic nodes.";
-            return humanoid();
-        }
-        error.clear();
-        return result;
-''',
-        '''        result.rebuild_rest_lengths();
-        if (!result.valid())
-        {
-            error = "Rig is structurally invalid or has invalid semantic nodes.";
-            return humanoid();
-        }
-        error.clear();
-        return result;
-''',
-        "normalize loaded motor segments",
+        "preserve loaded stiffness",
     )
 
     text = replace_once(
@@ -154,7 +115,7 @@ def patch_source() -> None:
         reset(random_state_);
     }
 ''',
-        "preserve runtime compliant braces",
+        "preserve runtime stiffness",
     )
 
     text = replace_once(
@@ -169,7 +130,7 @@ def patch_source() -> None:
             * ((distance - constraint.rest_length) / distance
                 * clamp(constraint.stiffness, 0.05f, 1.0f));
 ''',
-        "restore compliant-brace solver",
+        "restore authored constraint behavior",
     )
 
     old_projection = '''    void Environment::project_structure_rigid(float dt) noexcept
@@ -194,9 +155,32 @@ def patch_source() -> None:
 '''
     new_projection = '''    void Environment::project_structure_rigid(float dt) noexcept
     {
+        static_cast<void>(dt);
+        if (elapsed_seconds_ < 0.75f
+            || !stage_requires_forward_gait(course_stage_)
+            || !blueprint_.paired_leg_chains()
+            || blueprint_.horizontal_multi_support_plan())
+            return;
+
+        auto primary_leg_segment = [&](const DistanceConstraint& bone) noexcept
+        {
+            const std::size_t leg_motors = std::min<std::size_t>(
+                4u, blueprint_.active_motor_count);
+            for (std::size_t index = 0; index < leg_motors; ++index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                if (!motor.enabled)
+                    continue;
+                if ((bone.a == motor.pivot && bone.b == motor.c)
+                    || (bone.b == motor.pivot && bone.a == motor.c))
+                    return true;
+            }
+            return false;
+        };
+
         auto project = [&](const DistanceConstraint& bone)
         {
-            if (bone.stiffness < 0.999f
+            if (!primary_leg_segment(bone)
                 || bone.a >= particles_.size() || bone.b >= particles_.size())
                 return;
             Particle& lhs = particles_[bone.a];
@@ -208,18 +192,11 @@ def patch_source() -> None:
 
             float lhs_weight = lhs.inverse_mass;
             float rhs_weight = rhs.inverse_mass;
-            const bool pin_supports = course_stage_ != CourseStage::duck_press;
-            if (pin_supports && lhs.grounded && blueprint_.is_support_seed(bone.a))
+            if (lhs.grounded && blueprint_.is_support_seed(bone.a))
                 lhs_weight = 0.0f;
-            if (pin_supports && rhs.grounded && blueprint_.is_support_seed(bone.b))
+            if (rhs.grounded && blueprint_.is_support_seed(bone.b))
                 rhs_weight = 0.0f;
-            float weight = lhs_weight + rhs_weight;
-            if (weight <= 1.0e-6f)
-            {
-                lhs_weight = lhs.inverse_mass;
-                rhs_weight = rhs.inverse_mass;
-                weight = lhs_weight + rhs_weight;
-            }
+            const float weight = lhs_weight + rhs_weight;
             if (weight <= 1.0e-6f)
                 return;
 
@@ -229,18 +206,11 @@ def patch_source() -> None:
             rhs.position -= correction * (rhs_weight / weight);
         };
 
-        // Solve contacts and rigid structure together, then finish on pure
-        // structure so the displayed pose cannot retain telescoped segments.
-        constexpr int coupled_passes = 12;
-        for (int pass = 0; pass < coupled_passes; ++pass)
-        {
-            for (const DistanceConstraint& bone : blueprint_.bones)
-                project(bone);
-            solve_ground(dt);
-            solve_course();
-        }
-        constexpr int final_structure_passes = 6;
-        for (int pass = 0; pass < final_structure_passes; ++pass)
+        // Only the four authored humanoid/biped walking segments are projected.
+        // Static crouch, multi-support rigs, and the treadmill bootstrap retain
+        // the already-validated v0.7.23 dynamics.
+        constexpr int projection_passes = 10;
+        for (int pass = 0; pass < projection_passes; ++pass)
         {
             for (const DistanceConstraint& bone : blueprint_.bones)
                 project(bone);
@@ -248,7 +218,7 @@ def patch_source() -> None:
     }
 '''
     text = replace_once(text, old_projection, new_projection,
-        "scoped final rigid projection")
+        "walking-leg final projection")
 
     text = replace_once(
         text,
@@ -262,9 +232,24 @@ def patch_source() -> None:
                 bone.rest_length));
         }
 ''',
-        '''        for (const DistanceConstraint& bone : blueprint_.bones)
+        '''        if (elapsed_seconds_ < 0.75f
+            || !stage_requires_forward_gait(course_stage_)
+            || !blueprint_.paired_leg_chains()
+            || blueprint_.horizontal_multi_support_plan())
+            return 0.0f;
+        const std::size_t leg_motors = std::min<std::size_t>(
+            4u, blueprint_.active_motor_count);
+        for (const DistanceConstraint& bone : blueprint_.bones)
         {
-            if (bone.stiffness < 0.999f)
+            bool primary_leg_segment = false;
+            for (std::size_t index = 0; index < leg_motors; ++index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                primary_leg_segment = primary_leg_segment
+                    || ((bone.a == motor.pivot && bone.b == motor.c)
+                        || (bone.b == motor.pivot && bone.a == motor.c));
+            }
+            if (!primary_leg_segment)
                 continue;
             if (bone.a >= particles_.size() || bone.b >= particles_.size()
                 || bone.rest_length <= 1.0e-6f)
@@ -274,7 +259,7 @@ def patch_source() -> None:
                 bone.rest_length));
         }
 ''',
-        "measure only rigid structural bones",
+        "measure primary walking segments",
     )
 
     text = replace_once(
@@ -297,23 +282,11 @@ def patch_source() -> None:
                 return false;
             const float ratio = length(particles_[bone.b].position
                 - particles_[bone.a].position) / bone.rest_length;
-            const bool rigid = bone.stiffness >= 0.999f;
-            const float minimum_ratio = rigid ? 0.94f : 0.20f;
-            const float maximum_ratio = rigid ? 1.06f : 2.50f;
-            if (!std::isfinite(ratio)
-                || ratio < minimum_ratio || ratio > maximum_ratio)
+            if (!std::isfinite(ratio) || ratio < 0.20f || ratio > 2.50f)
                 return false;
         }
 ''',
-        "rigid versus compliant integrity ranges",
-    )
-
-    text = replace_once(
-        text,
-        "        if (blueprint_.paired_leg_chains())\n",
-        "        if (blueprint_.paired_leg_chains()\n"
-        "            && !blueprint_.horizontal_multi_support_plan())\n",
-        "route multi-support bodies through whole-body crouch guide",
+        "restore broad body-integrity range",
     )
 
     text = replace_once(
@@ -334,7 +307,7 @@ def patch_source() -> None:
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
             solve_articulated_toes();
 ''',
-        "restore motor authority after compliant structure",
+        "restore validated solver order",
     )
 
     text = replace_once(
@@ -344,10 +317,13 @@ def patch_source() -> None:
             invalidate(InvalidMotion::structural_compression);
 ''',
         '''        if (elapsed_seconds_ >= 0.75f
+            && stage_requires_forward_gait(course_stage_)
+            && blueprint_.paired_leg_chains()
+            && !blueprint_.horizontal_multi_support_plan()
             && (!std::isfinite(structural_error) || structural_error > 0.040f))
             invalidate(InvalidMotion::structural_compression);
 ''',
-        "practical rigid error gate",
+        "walking-only structural gate",
     )
 
     write(path, text)
@@ -356,7 +332,7 @@ def patch_source() -> None:
 def main() -> int:
     patch_header()
     patch_source()
-    print("Runner v0.7.24 scoped structural rigidity applied")
+    print("Runner v0.7.24 walking-leg rigidity applied")
     return 0
 
 
