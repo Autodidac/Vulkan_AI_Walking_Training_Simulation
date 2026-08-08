@@ -1,1 +1,1 @@
-Runner v0.7.25 final audit, art, stance, font, and progress migration trigger 12.
+Runner v0.7.25 corrected audit, art, stance, font, and progress migration trigger 13.
