@@ -1,0 +1,38 @@
+name: Watch merged Runner v0.7.25 release
+
+on:
+  push:
+    branches: [agent/v0725-final-release-copy]
+    paths: [.github/workflows/watch-main-v0725.yml]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report main v0.7.25 release run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGED_SHA: 4d3b6b8a8f2b9bc78a05aaabccda6470c3268d75
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?event=push&per_page=100")
+          run_id=$(jq -r --arg sha "$MERGED_SHA" '[.workflow_runs[] | select(.name == "Runner v0.7.25 validation and release" and .head_sha == $sha)][0].id // empty' <<<"$runs")
+          if [ -z "$run_id" ]; then
+            body="No main v0.7.25 push run found yet for $MERGED_SHA"
+          else
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+            jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100")
+            body=$(printf 'Main v0.7.25 run: %s\nStatus: %s / %s\nHead: %s\nJobs:\n%s\n' \
+              "$run_id" \
+              "$(jq -r '.status' <<<"$run")" \
+              "$(jq -r '.conclusion // "pending"' <<<"$run")" \
+              "$(jq -r '.head_sha' <<<"$run")" \
+              "$(jq -r '.jobs[] | "- \(.name): \(.status) / \(.conclusion // "pending") [job \(.id)]"' <<<"$jobs")")
+          fi
+          gh pr comment 81 --repo "$GITHUB_REPOSITORY" --body "$body"
