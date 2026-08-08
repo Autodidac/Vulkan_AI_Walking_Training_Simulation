@@ -1,110 +1,56 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import hashlib
 import struct
 import sys
 import zlib
 from pathlib import Path
 
-SOURCE_PNG_SHA256 = "7e0e834ba7cb78a39b6f31df12e52440b050327c7a59e46cd70abdc286c808a7"
+SOURCE_RGBA_SHA256 = "6b623661307a430c6ec8cf5689531324dc30249137a7005155fa047592dcb1ad"
+SOURCE_PNG_SHA256 = "73c533024cdba3abc7b30fbf948a6144c4eac889c448d4beda7ad59da6b02b9e"
 
 
-def png_chunks(data: bytes):
-    if data[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError("Runner icon source is not a PNG")
-    offset = 8
-    while offset + 12 <= len(data):
-        length = struct.unpack_from(">I", data, offset)[0]
-        kind = data[offset + 4:offset + 8]
-        payload = data[offset + 8:offset + 8 + length]
-        crc_expected = struct.unpack_from(">I", data, offset + 8 + length)[0]
-        crc_actual = zlib.crc32(kind + payload) & 0xFFFFFFFF
-        if crc_actual != crc_expected:
-            raise ValueError(f"Runner icon PNG CRC mismatch in {kind!r}")
-        yield kind, payload
-        offset += 12 + length
-        if kind == b"IEND":
-            return
-    raise ValueError("Runner icon PNG is truncated")
+def load_source(path: Path) -> tuple[int, int, bytes]:
+    lines = path.read_text(encoding="ascii").splitlines()
+    values: dict[str, str] = {}
+    encoded: list[str] = []
+    inside_payload = False
+    for line in lines:
+        if line == "ZLIB_BASE64_BEGIN":
+            inside_payload = True
+            continue
+        if line == "ZLIB_BASE64_END":
+            inside_payload = False
+            continue
+        if inside_payload:
+            encoded.append(line.strip())
+        elif "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value
 
+    width = int(values["WIDTH"])
+    height = int(values["HEIGHT"])
+    declared_hash = values["RGBA_SHA256"]
+    if width <= 0 or height <= 0:
+        raise ValueError("Runner screenshot icon dimensions are invalid")
+    if declared_hash != SOURCE_RGBA_SHA256:
+        raise ValueError("Runner screenshot source metadata hash changed")
 
-def paeth(a: int, b: int, c: int) -> int:
-    prediction = a + b - c
-    pa = abs(prediction - a)
-    pb = abs(prediction - b)
-    pc = abs(prediction - c)
-    if pa <= pb and pa <= pc:
-        return a
-    if pb <= pc:
-        return b
-    return c
-
-
-def decode_png_rgba(data: bytes) -> tuple[int, int, bytes]:
-    width = height = 0
-    bit_depth = color_type = interlace = -1
-    compressed = bytearray()
-    for kind, payload in png_chunks(data):
-        if kind == b"IHDR":
-            width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
-                ">IIBBBBB", payload
-            )
-            if compression != 0 or filtering != 0:
-                raise ValueError("Unsupported Runner icon PNG compression/filter method")
-        elif kind == b"IDAT":
-            compressed.extend(payload)
-
-    if width <= 0 or height <= 0 or bit_depth != 8 or interlace != 0:
-        raise ValueError("Runner icon source must be a non-interlaced 8-bit PNG")
-    if color_type not in (2, 6):
-        raise ValueError("Runner icon source must be RGB or RGBA")
-
-    channels = 4 if color_type == 6 else 3
-    stride = width * channels
-    raw = zlib.decompress(bytes(compressed))
-    expected = height * (stride + 1)
-    if len(raw) != expected:
-        raise ValueError("Runner icon PNG decompressed size mismatch")
-
-    rows: list[bytearray] = []
-    offset = 0
-    previous = bytearray(stride)
-    for _ in range(height):
-        filter_type = raw[offset]
-        offset += 1
-        source = raw[offset:offset + stride]
-        offset += stride
-        row = bytearray(stride)
-        for index, value in enumerate(source):
-            left = row[index - channels] if index >= channels else 0
-            up = previous[index]
-            upper_left = previous[index - channels] if index >= channels else 0
-            if filter_type == 0:
-                restored = value
-            elif filter_type == 1:
-                restored = (value + left) & 0xFF
-            elif filter_type == 2:
-                restored = (value + up) & 0xFF
-            elif filter_type == 3:
-                restored = (value + ((left + up) // 2)) & 0xFF
-            elif filter_type == 4:
-                restored = (value + paeth(left, up, upper_left)) & 0xFF
-            else:
-                raise ValueError(f"Unsupported Runner icon PNG filter {filter_type}")
-            row[index] = restored
-        rows.append(row)
-        previous = row
-
-    rgba = bytearray(width * height * 4)
-    destination = 0
-    for row in rows:
-        for x in range(width):
-            source = x * channels
-            rgba[destination:destination + 3] = row[source:source + 3]
-            rgba[destination + 3] = row[source + 3] if channels == 4 else 255
-            destination += 4
-    return width, height, bytes(rgba)
+    compressed = base64.b64decode("".join(encoded), validate=True)
+    rgba = zlib.decompress(compressed)
+    expected_size = width * height * 4
+    if len(rgba) != expected_size:
+        raise ValueError(
+            f"Runner screenshot source size mismatch: {len(rgba)} != {expected_size}"
+        )
+    actual_hash = hashlib.sha256(rgba).hexdigest()
+    if actual_hash != SOURCE_RGBA_SHA256:
+        raise ValueError(
+            f"Runner screenshot pixel hash mismatch: {actual_hash} != {SOURCE_RGBA_SHA256}"
+        )
+    return width, height, rgba
 
 
 def resize_nearest(
@@ -208,23 +154,28 @@ def main() -> int:
         return 2
 
     repository = Path(__file__).resolve().parents[1]
-    source_path = repository / "assets" / "ui" / "runner_icon_source.png"
-    source = source_path.read_bytes()
-    digest = hashlib.sha256(source).hexdigest()
-    if digest != SOURCE_PNG_SHA256:
-        raise ValueError(
-            f"Runner screenshot icon source hash mismatch: {digest} != {SOURCE_PNG_SHA256}"
-        )
-
-    width, height, rgba = decode_png_rgba(source)
+    source_path = (
+        repository / "assets" / "ui" / "runner_icon_source.rgba.zlib.b64"
+    )
+    width, height, rgba = load_source(source_path)
     if width != height:
         raise ValueError("Runner screenshot icon source must be square")
 
+    source_png = png_bytes(width, height, rgba)
+    source_png_hash = hashlib.sha256(source_png).hexdigest()
+    if source_png_hash != SOURCE_PNG_SHA256:
+        raise ValueError(
+            f"Generated screenshot PNG hash mismatch: {source_png_hash} != {SOURCE_PNG_SHA256}"
+        )
+
     output = Path(sys.argv[1]).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    (output / "runner_icon_source.png").write_bytes(source)
+    (output / "runner_icon_source.png").write_bytes(source_png)
     (output / "runner_icon_source.sha256").write_text(
-        f"{digest}  runner_icon_source.png\n", encoding="ascii"
+        f"{source_png_hash}  runner_icon_source.png\n", encoding="ascii"
+    )
+    (output / "runner_icon_source.rgba.zlib.b64").write_text(
+        source_path.read_text(encoding="ascii"), encoding="ascii", newline="\n"
     )
     (output / "runner_icon.png").write_bytes(
         png_bytes(256, 256, resize_nearest(width, height, rgba, 256, 256))
