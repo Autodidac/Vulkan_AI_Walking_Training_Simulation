@@ -70,6 +70,7 @@ foreach(reference IN ITEMS
         "RunnerV0725ArtLegHotfixTests"
         "RunnerV0726TrainingTruthTests"
         "RunnerV0730ColdStartTests"
+        "set_tests_properties(Runner.V0730ColdStart PROPERTIES TIMEOUT 1200)"
         "RunnerV0728CourseCompletionTests"
         "RunnerV0729ModularArtTests"
         "Runner.ArtDiagnostic"

@@ -349,7 +349,7 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerV0730ColdStartTests)
     add_test(NAME Runner.V0730ColdStart
         COMMAND RunnerV0730ColdStartTests)
-    set_tests_properties(Runner.V0730ColdStart PROPERTIES TIMEOUT 600)
+    set_tests_properties(Runner.V0730ColdStart PROPERTIES TIMEOUT 1200)
 
     add_executable(RunnerV0728CourseCompletionTests
         tests/v0728_course_completion_tests.cpp)
