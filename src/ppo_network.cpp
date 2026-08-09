@@ -297,6 +297,83 @@ namespace runner::rl
         }
     }
 
+    void PolicyNetwork::accumulate_imitation_gradient(
+        std::span<const float, input_size> observation,
+        std::span<const float, output_size> target_action,
+        float weight,
+        float& imitation_loss) noexcept
+    {
+        if (!(weight > 0.0f) || active_output_count_ == 0u)
+            return;
+
+        std::array<float, hidden_size> h1{};
+        std::array<float, hidden_size> h2{};
+        for (std::size_t row = 0; row < hidden_size; ++row)
+        {
+            float value = parameters_[layout_.b1 + row];
+            const std::size_t base = layout_.w1 + row * input_size;
+            for (std::size_t column = 0; column < input_size; ++column)
+                value += parameters_[base + column] * observation[column];
+            h1[row] = std::tanh(value);
+        }
+        for (std::size_t row = 0; row < hidden_size; ++row)
+        {
+            float value = parameters_[layout_.b2 + row];
+            const std::size_t base = layout_.w2 + row * hidden_size;
+            for (std::size_t column = 0; column < hidden_size; ++column)
+                value += parameters_[base + column] * h1[column];
+            h2[row] = std::tanh(value);
+        }
+
+        const float output_scale = weight
+            / static_cast<float>(active_output_count_);
+        std::array<float, output_size> d_actor_pre{};
+        for (std::size_t output = 0; output < active_output_count_; ++output)
+        {
+            float pre_activation = parameters_[layout_.actor_b + output];
+            const std::size_t base = layout_.actor_w + output * hidden_size;
+            for (std::size_t column = 0; column < hidden_size; ++column)
+                pre_activation += parameters_[base + column] * h2[column];
+            const float mean = std::tanh(pre_activation);
+            const float error = mean - target_action[output];
+            imitation_loss += 0.5f * output_scale * error * error;
+            d_actor_pre[output] = output_scale * error
+                * tanh_derivative_from_output(mean);
+        }
+
+        std::array<float, hidden_size> d_h2{};
+        for (std::size_t output = 0; output < active_output_count_; ++output)
+        {
+            const std::size_t base = layout_.actor_w + output * hidden_size;
+            for (std::size_t column = 0; column < hidden_size; ++column)
+            {
+                gradients_[base + column] += d_actor_pre[output] * h2[column];
+                d_h2[column] += parameters_[base + column] * d_actor_pre[output];
+            }
+            gradients_[layout_.actor_b + output] += d_actor_pre[output];
+        }
+
+        std::array<float, hidden_size> d_h1{};
+        for (std::size_t row = 0; row < hidden_size; ++row)
+        {
+            const float d_pre = d_h2[row] * tanh_derivative_from_output(h2[row]);
+            gradients_[layout_.b2 + row] += d_pre;
+            const std::size_t base = layout_.w2 + row * hidden_size;
+            for (std::size_t column = 0; column < hidden_size; ++column)
+            {
+                gradients_[base + column] += d_pre * h1[column];
+                d_h1[column] += parameters_[base + column] * d_pre;
+            }
+        }
+        for (std::size_t row = 0; row < hidden_size; ++row)
+        {
+            const float d_pre = d_h1[row] * tanh_derivative_from_output(h1[row]);
+            gradients_[layout_.b1 + row] += d_pre;
+            const std::size_t base = layout_.w1 + row * input_size;
+            for (std::size_t column = 0; column < input_size; ++column)
+                gradients_[base + column] += d_pre * observation[column];
+        }
+    }
     bool PolicyNetwork::save(const std::filesystem::path& path, std::string& error) const
     {
         std::ofstream output(path, std::ios::binary | std::ios::trunc);

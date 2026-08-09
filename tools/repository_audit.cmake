@@ -17,9 +17,10 @@ foreach(required IN ITEMS
         docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md
         docs/RUNNER_V0728_COURSE_COMPLETION.md
         docs/RUNNER_V0729_MODULAR_ART_REMAKE.md
+        docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
-        tests/v0727_rig_training_tests.cpp
+        tests/v0730_cold_start_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
@@ -61,14 +62,14 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.29 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.30 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
         "RunnerV0724StructuralMetricsIconTests"
         "RunnerV0725ArtLegHotfixTests"
         "RunnerV0726TrainingTruthTests"
-        "RunnerV0727RigTrainingTests"
+        "RunnerV0730ColdStartTests"
         "RunnerV0728CourseCompletionTests"
         "RunnerV0729ModularArtTests"
         "Runner.ArtDiagnostic"
@@ -77,11 +78,12 @@ foreach(reference IN ITEMS
         "RUNNER_V0727_RIG_TRAINING_EVIDENCE.md"
         "RUNNER_V0728_COURSE_COMPLETION.md"
         "RUNNER_V0729_MODULAR_ART_REMAKE.md"
+        "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "CMake v0.7.28 contract missing: ${reference}")
+        message(FATAL_ERROR "CMake/versioned package contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -140,10 +142,19 @@ foreach(reference IN ITEMS
         "WALK-ART-KEY-347"
         "WALK-ART-REGRESSION-348"
         "WALK-ART-ORTHO-349"
-        "WALK-RELEASE-350")
+        "WALK-RELEASE-350"
+        "WALK-UPDATE-FLOW-351"
+        "WALK-LEARNABLE-GAIT-352"
+        "WALK-INCREMENTAL-RETENTION-353"
+        "WALK-RESET-CONVERGENCE-354"
+        "WALK-CURRICULUM-355"
+        "WALK-COLD-START-356"
+        "WALK-RELEASE-357"
+        "WALK-MULTI-HANDOFF-358"
+        "WALK-HUMANOID-COLD-359")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "Mission cache v0.7.28 contract missing: ${reference}")
+        message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -169,8 +180,12 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'2801u"
-        "completed_episode_passes_stage_checks")
+        "training_semantics_version = 0x0007'3001u"
+        "completed_episode_passes_stage_checks"
+        "foundational_walk_teacher_handoff_update"
+        "guided_rollout_imitation_weight"
+        "strict_evaluation_quality_bit"
+        "incremental_locomotion_candidate")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Training semantics contract missing: ${reference}")
@@ -178,10 +193,16 @@ foreach(reference IN ITEMS
 endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo_trainer.cpp" trainer_text)
-string(FIND "${trainer_text}" "completed_episode_passes_stage_checks" stage_counter_pos)
-if(stage_counter_pos EQUAL -1)
-    message(FATAL_ERROR "Rollout totals do not use stage-qualified accounting")
-endif()
+foreach(reference IN ITEMS
+        "completed_episode_passes_stage_checks"
+        "transition.guided_action = guided"
+        "accumulate_imitation_gradient"
+        "foundational_walk_teacher_handoff_update")
+    string(FIND "${trainer_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.30 learner contract missing: ${reference}")
+    endif()
+endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_explainer.hpp" explainer_text)
 foreach(reference IN ITEMS
@@ -201,10 +222,12 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0728-course-autosave.eppo"
+        "runner-v0730-walk-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
+        "RETAINED WALK PROOF - ZERO AUTHORITY"
+        "run_walk_eye_test_proof"
         "COMPACT SEGMENTED BODY ARMOR"
         "shoulder_cap_radius"
         "draw_oriented_pixel_art"
@@ -276,6 +299,10 @@ endif()
 string(FIND "${main_text}" "--course-eye-test" course_eye_test_pos)
 if(course_eye_test_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.28 packaged course eye-test launch contract missing")
+endif()
+string(FIND "${main_text}" "--walk-eye-test" walk_eye_test_pos)
+if(walk_eye_test_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.30 packaged retained-walk eye-test launch contract missing")
 endif()
 string(FIND "${app_text}" "Color{}" opaque_default_pos)
 if(NOT opaque_default_pos EQUAL -1)
@@ -367,10 +394,27 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" simulation_header_text)
 foreach(reference IN ITEMS
         "course_motion_enabled_"
-        "set_course_motion_enabled")
+        "set_course_motion_enabled"
+        "authored_foundational_gait_cadence_hz"
+        "micro_motion_window")
     string(FIND "${simulation_header_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "v0.7.27 static-preview contract missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/rig_training_diagnostic.cpp" rig_training_diagnostic_text)
+foreach(reference IN ITEMS
+        "updates >= 1200u"
+        "retained_probe_invalid_runs == 0u"
+        "result.teacher_authority == 0.0f"
+        "trainer.best_policy_parameters()"
+        "RigCase{ \"humanoid\", sim::CreatureBlueprint::humanoid() }"
+        "WalkEyeTestProof run_walk_eye_test_proof"
+        "left_air != right_air")
+    string(FIND "${rig_training_diagnostic_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.30 cold-start acceptance contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -404,7 +448,8 @@ endforeach()
 
 foreach(reference IN ITEMS
         "TerrainRegion::hole"
-        "gait_cycles() < 2u"
+        "advanced_material_pressure_ready"
+        "limb_crossings_"
         "manipulator_endpoint"
         "update_equipment"
         "apply_water_forces")
@@ -422,6 +467,10 @@ file(READ "${RUNNER_SOURCE_DIR}/.github/workflows/release.yml" release_workflow_
 string(FIND "${release_workflow_text}" "--diagnose-art" art_workflow_pos)
 if(art_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.29 art diagnostic")
+endif()
+string(FIND "${release_workflow_text}" "--diagnose-rig-training" cold_start_workflow_pos)
+if(cold_start_workflow_pos EQUAL -1)
+    message(FATAL_ERROR "Release workflow does not run the v0.7.30 cold-start diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
@@ -457,4 +506,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.29 repository hygiene passed")
+message(STATUS "Runner v0.7.30 repository hygiene passed")

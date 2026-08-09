@@ -56,6 +56,10 @@ namespace runner::rl
             sim::InvalidMotion invalid_reason{ sim::InvalidMotion::none };
             std::size_t speed_samples{};
             std::uint32_t invalid_runs{};
+            std::uint32_t candidate_runs{};
+            float candidate_strides{};
+            float candidate_distance{};
+            float candidate_survival{};
         };
 
         explicit ParallelState(PpoTrainer& trainer, std::size_t count)
@@ -189,7 +193,10 @@ namespace runner::rl
                                 const auto raw_action = local.deterministic_action(
                                     environment.observation());
                                 const auto action = effective_policy_action(
-                                    environment, raw_action, current_stage);
+                                    environment, raw_action, current_stage,
+                                    foundational_walk_teacher_authority(
+                                        owner.metrics_.update,
+                                        environment.blueprint()));
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;
@@ -220,6 +227,15 @@ namespace runner::rl
                             {
                                 totals.minimum_quality = std::min(
                                     totals.minimum_quality, qualification.quality_key);
+                            }
+                            if (incremental_locomotion_candidate(current_stage, environment))
+                            {
+                                ++totals.candidate_runs;
+                                totals.candidate_strides += static_cast<float>(
+                                    environment.gait_cycles());
+                                totals.candidate_distance += std::max(
+                                    0.0f, environment.distance_travelled());
+                                totals.candidate_survival += environment.elapsed_seconds();
                             }
                             totals.reward += episode_reward;
                             totals.distance += environment.distance_travelled();
@@ -442,6 +458,10 @@ namespace runner::rl
                 totals.invalid_reason = local.invalid_reason;
             totals.speed_samples += local.speed_samples;
             totals.invalid_runs += local.invalid_runs;
+            totals.candidate_runs += local.candidate_runs;
+            totals.candidate_strides += local.candidate_strides;
+            totals.candidate_distance += local.candidate_distance;
+            totals.candidate_survival += local.candidate_survival;
         }
 
         const float inverse_agents = 1.0f / static_cast<float>(evaluation_agents);
@@ -481,13 +501,35 @@ namespace runner::rl
             ? 0u : totals.rejection_mask;
         metrics_.evaluation_invalid_reason = metrics_.evaluation_valid
             ? sim::InvalidMotion::none : totals.invalid_reason;
-        metrics_.evaluation_quality_key = metrics_.evaluation_valid
-            ? totals.minimum_quality : 0u;
+
+        std::uint64_t incremental_quality = 0u;
+        if (sim::stage_requires_forward_gait(course_stage_)
+            && totals.candidate_runs > 0u && totals.candidate_strides >= 1.0f)
+        {
+            incremental_quality = pack_quality(
+                static_cast<std::uint16_t>(std::min<float>(
+                    totals.candidate_strides, 65535.0f)),
+                static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                    totals.candidate_runs, 65535u)),
+                quality_bucket(totals.candidate_distance),
+                quality_bucket(totals.candidate_survival));
+        }
+        metrics_.evaluation_quality_key = sim::stage_requires_forward_gait(course_stage_)
+            ? (incremental_quality & ~strict_evaluation_quality_bit)
+                | (metrics_.evaluation_valid ? strict_evaluation_quality_bit : 0u)
+            : (metrics_.evaluation_valid ? totals.minimum_quality : 0u);
 
         if (!metrics_.evaluation_valid)
         {
-            metrics_.evaluation_score = -1000.0f
-                - static_cast<float>(totals.invalid_runs) * 100.0f;
+            // Keep strict test failure visible, but preserve a continuous
+            // learning signal instead of assigning every partial walker the
+            // same -1600 score.
+            metrics_.evaluation_score = -100.0f * static_cast<float>(
+                    totals.invalid_runs)
+                + metrics_.evaluation_reward
+                + totals.candidate_distance * 0.70f
+                + totals.candidate_strides * 0.12f
+                + totals.candidate_survival * 0.02f;
         }
         else
         {
@@ -578,27 +620,11 @@ namespace runner::rl
         ++metrics_.evaluation_count;
 
         const bool has_best = !best_parameters_.empty();
-        const bool quality_regressed = has_best
-            && (!metrics_.evaluation_valid
-                || metrics_.evaluation_quality_key < metrics_.best_quality_key);
-        const bool score_regressed = has_best && metrics_.evaluation_valid
-            && metrics_.evaluation_quality_key == metrics_.best_quality_key
-            && policy_regression_guard(metrics_.best_evaluation_score,
-                metrics_.evaluation_score, true);
-        if (quality_regressed || score_regressed)
-        {
-            policy_.parameters() = best_parameters_;
-            preview_policy_.parameters() = best_parameters_;
-            adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
-            adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
-            adam_.step = 0;
-            metrics_.learning_rate = std::max(4.0e-5f, metrics_.learning_rate * 0.72f);
-            policy_.set_exploration(std::max(0.035f, policy_.mean_exploration() * 0.82f));
-            preview_.reset(0xDEADBEEFu + metrics_.update);
-            controller_state_ = ControllerState::resumed;
-        }
-        else if (metrics_.evaluation_valid
-            && policy_candidate_better(metrics_.evaluation_quality_key,
+        // Strict mastery failure is not a policy regression. Preserve the
+        // immutable best snapshot for preview/autosave, but let PPO continue
+        // accumulating from partial walkers between bounded curriculum
+        // rollback decisions.
+        if (policy_candidate_better(metrics_.evaluation_quality_key,
                 metrics_.evaluation_score, metrics_.best_quality_key,
                 metrics_.best_evaluation_score, has_best))
         {

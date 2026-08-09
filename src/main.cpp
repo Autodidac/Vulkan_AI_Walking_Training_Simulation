@@ -111,6 +111,13 @@ namespace
             && std::string_view(argv[1]) == "--art-eye-test";
     }
 
+    [[nodiscard]] bool wants_walk_eye_test(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--walk-eye-test";
+    }
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
     {
         return argc > 1
@@ -145,6 +152,7 @@ namespace
             std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0728_COURSE_COMPLETION.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0729_MODULAR_ART_REMAKE.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"
@@ -389,10 +397,16 @@ int main(int argc, char** argv)
         {
             std::printf(
                 "%.*s mean=%.4f evaluation=%.4f strides=%.2f invalid=%u "
+                "authority=%.3f best_update=%llu retained=%.4f/%.2f/%u "
                 "preview_resets=%llu reason=%.*s conveyor=%s\n",
                 static_cast<int>(rig.name.size()), rig.name.data(),
                 rig.mean_episode_distance, rig.evaluation_distance,
                 rig.evaluation_stride_events, rig.evaluation_invalid_runs,
+                rig.teacher_authority,
+                static_cast<unsigned long long>(rig.retained_update),
+                rig.retained_probe_distance,
+                rig.retained_probe_stride_events,
+                rig.retained_probe_invalid_runs,
                 static_cast<unsigned long long>(rig.preview_resets),
                 static_cast<int>(runner::sim::invalid_motion_name(
                     rig.preview_reset_reason).size()),
@@ -585,6 +599,16 @@ if (wants_camera_diagnostic(argc, argv))
         application.prepare_art_eye_test();
     else if (wants_course_eye_test(argc, argv))
         application.prepare_course_eye_test();
+    else if (wants_walk_eye_test(argc, argv)
+        && !application.prepare_walk_eye_test(error))
+    {
+        std::fprintf(stderr, "Walk eye test failed: %s\n", error.c_str());
+        renderer.shutdown();
+        SDL_DestroyWindow(window);
+        SDL_Vulkan_UnloadLibrary();
+        SDL_Quit();
+        return 1;
+    }
 
     bool running = true;
     std::uint64_t previous_ticks = SDL_GetTicksNS();

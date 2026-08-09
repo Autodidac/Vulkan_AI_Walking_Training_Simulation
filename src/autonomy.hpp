@@ -72,6 +72,11 @@ namespace runner::rl
         sim::CourseStage stage, std::uint64_t fresh_updates,
         std::uint64_t fresh_evaluations) noexcept
     {
+        // A locomotion policy must accumulate and retain partial gait skill.
+        // Periodically replacing it with random weights recreates the exact
+        // one/two-step plateau the nursery was meant to solve.
+        if (sim::stage_requires_forward_gait(stage))
+            return false;
         const std::uint64_t minimum_budget = stage_minimum_fresh_updates(stage) + 120u;
         return fresh_updates >= minimum_budget
             && fresh_evaluations >= 12u
