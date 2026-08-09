@@ -101,6 +101,8 @@ namespace runner::sim
         static constexpr std::size_t macro_rows = vertical_cell_count / macro_cell_side;
         static constexpr std::size_t macro_tile_count = macro_columns * macro_rows;
         static constexpr float period = static_cast<float>(cell_count) * fine_cell_spacing;
+        static constexpr float launch_pad_half_width = 0.70f;
+        static constexpr float launch_transition_width = 0.55f;
         static constexpr float world_bottom = -4.5f;
         static constexpr float world_top = world_bottom
             + static_cast<float>(vertical_cell_count) * fine_cell_spacing;
@@ -141,7 +143,8 @@ namespace runner::sim
                         ? 0.96f : 0.88f + variation * 0.08f;
                     break;
                 case TerrainRegion::dry_sand:
-                    cell.firmness = 0.20f + variation * 0.24f;
+                    cell.firmness = 0.42f - difficulty_ * 0.14f
+                        + variation * 0.20f;
                     break;
                 case TerrainRegion::waterlogged:
                     cell.firmness = 0.12f + variation * 0.12f;
@@ -153,9 +156,17 @@ namespace runner::sim
                     cell.firmness = 0.58f + variation * 0.20f;
                     break;
                 }
-                cell.loose_fraction = std::clamp(1.0f - cell.firmness
-                    + (cell.region == TerrainRegion::waterlogged ? 0.10f : 0.0f),
-                    0.0f, 1.0f);
+                if (launch_pad_at(static_cast<float>(column) * fine_cell_spacing))
+                {
+                    cell.firmness = 1.0f;
+                    cell.loose_fraction = 0.0f;
+                }
+                else
+                {
+                    cell.loose_fraction = std::clamp(1.0f - cell.firmness
+                        + (cell.region == TerrainRegion::waterlogged ? 0.10f : 0.0f),
+                        0.0f, 1.0f);
+                }
             }
             refresh_all_macro_tiles();
             macro_promotions_ = 0u;
@@ -171,6 +182,14 @@ namespace runner::sim
             const Sample sample = sample_coordinates(course_x);
             return std::lerp(cells_[sample.first].height,
                 cells_[sample.second].height, sample.fraction);
+        }
+
+        [[nodiscard]] static bool launch_pad_at(float course_x) noexcept
+        {
+            float local = std::fmod(course_x, period);
+            if (local < 0.0f)
+                local += period;
+            return std::min(local, period - local) <= launch_pad_half_width;
         }
 
         [[nodiscard]] float firmness_at(float course_x) const noexcept
@@ -223,13 +242,17 @@ namespace runner::sim
             float dt) noexcept
         {
             const std::size_t center = nearest_index(course_x);
+            if (launch_pad_at(static_cast<float>(center) * fine_cell_spacing))
+                return;
             Cell& column = cells_[center];
             const float load = std::clamp(normalized_load, 0.0f, 4.0f);
             const float slip = std::clamp(std::abs(slip_speed), 0.0f, 5.0f);
             const float softness = std::clamp(1.0f - column.firmness, 0.0f, 1.0f);
+            const float deformation_scale = 0.06f
+                + difficulty_ * difficulty_ * 0.94f;
             const float requested = std::min(0.018f,
                 (load * 0.065f + slip * 0.015f) * softness
-                    * std::clamp(dt, 0.0f, 0.05f));
+                    * std::clamp(dt, 0.0f, 0.05f) * deformation_scale);
             if (requested <= 0.0f)
                 return;
 
@@ -238,10 +261,14 @@ namespace runner::sim
                 return;
             const std::size_t left = wrap_column(static_cast<std::ptrdiff_t>(center) - 1);
             const std::size_t right = wrap_column(static_cast<std::ptrdiff_t>(center) + 1);
-            const float left_added = add_volume(left, removed * 0.5f,
-                sandhybrid::Material::sand, false);
-            const float right_added = add_volume(right, removed - left_added,
-                sandhybrid::Material::sand, false);
+            const float left_added = launch_pad_at(
+                static_cast<float>(left) * fine_cell_spacing) ? 0.0f
+                : add_volume(left, removed * 0.5f,
+                    sandhybrid::Material::sand, false);
+            const float right_added = launch_pad_at(
+                static_cast<float>(right) * fine_cell_spacing) ? 0.0f
+                : add_volume(right, removed - left_added,
+                    sandhybrid::Material::sand, false);
             const float returned = removed - left_added - right_added;
             if (returned > 0.0f)
                 static_cast<void>(add_volume(center, returned,
@@ -260,6 +287,8 @@ namespace runner::sim
         void deposit(float course_x, float height_volume, float material_firmness) noexcept
         {
             const std::size_t center = nearest_index(course_x);
+            if (launch_pad_at(static_cast<float>(center) * fine_cell_spacing))
+                return;
             const float amount = std::max(0.0f, height_volume);
             constexpr std::array<float, 5> weights{ 0.10f, 0.22f, 0.36f, 0.22f, 0.10f };
             float remaining = amount;
@@ -268,6 +297,8 @@ namespace runner::sim
                 const auto signed_offset = static_cast<std::ptrdiff_t>(offset) - 2;
                 const std::size_t column_index = wrap_column(
                     static_cast<std::ptrdiff_t>(center) + signed_offset);
+                if (launch_pad_at(static_cast<float>(column_index) * fine_cell_spacing))
+                    continue;
                 const float requested = offset + 1u == weights.size()
                     ? remaining : amount * weights[offset];
                 const float added = add_volume(column_index, requested,
@@ -295,6 +326,10 @@ namespace runner::sim
                 const std::size_t index = reverse
                     ? cell_count - 1u - offset : offset;
                 const std::size_t right = (index + 1u) % cell_count;
+                const float index_x = static_cast<float>(index) * fine_cell_spacing;
+                const float right_x = static_cast<float>(right) * fine_cell_spacing;
+                if (launch_pad_at(index_x) || launch_pad_at(right_x))
+                    continue;
                 const float difference = cells_[index].height - cells_[right].height;
                 const float average_firmness = 0.5f
                     * (cells_[index].firmness + cells_[right].firmness);
@@ -321,8 +356,15 @@ namespace runner::sim
                     cells_[low].loose_fraction + moved * 2.0f, 0.0f, 1.0f);
             }
 
-            for (Cell& column : cells_)
+            for (std::size_t index = 0; index < cells_.size(); ++index)
             {
+                Cell& column = cells_[index];
+                if (launch_pad_at(static_cast<float>(index) * fine_cell_spacing))
+                {
+                    column.firmness = 1.0f;
+                    column.loose_fraction = 0.0f;
+                    continue;
+                }
                 column.firmness = std::clamp(column.firmness
                     + bounded_dt * (0.006f - column.loose_fraction * 0.004f),
                     0.0f, 1.0f);
@@ -520,40 +562,64 @@ namespace runner::sim
             if (local < 0.0f)
                 local += period;
 
-            const float first_boundary = 10.0f + unit_hash(seed_ ^ 0x10a2u) * 1.8f;
-            const float second_boundary = first_boundary + 8.0f
-                + unit_hash(seed_ ^ 0x20b3u) * 3.0f;
+            const float first_boundary = launch_pad_half_width
+                + launch_transition_width + 0.15f
+                + unit_hash(seed_ ^ 0x10a2u) * 0.65f;
+            const float second_boundary = first_boundary + 7.0f
+                + unit_hash(seed_ ^ 0x20b3u) * 2.5f;
             const float third_boundary = second_boundary + 6.0f
                 + unit_hash(seed_ ^ 0x30c4u) * 2.5f;
             const float fourth_boundary = third_boundary + 6.0f
                 + unit_hash(seed_ ^ 0x40d5u) * 2.5f;
             const float fifth_boundary = fourth_boundary + 7.0f
                 + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
-            const bool safe_runway = local < first_boundary || local > period - 5.0f;
+            const float sixth_boundary = fifth_boundary + 5.0f
+                + unit_hash(seed_ ^ 0x60f7u) * 2.0f;
+            const bool return_pad = local > period - 5.0f;
+            const float distance_from_launch = std::min(local, period - local);
+            const bool launch_pad = distance_from_launch <= launch_pad_half_width;
 
             TerrainRegion region = TerrainRegion::firm;
             sandhybrid::Material material = sandhybrid::Material::dirt;
-            if (!safe_runway && local < second_boundary)
+            float region_begin = 0.0f;
+            float region_end = first_boundary;
+            std::array<TerrainRegion, 3> middle_regions{
+                TerrainRegion::firm, TerrainRegion::waterlogged,
+                TerrainRegion::shallow_water };
+            if ((mix(seed_ ^ 0x7315a9d3u) & 1u) != 0u)
+                std::swap(middle_regions[1], middle_regions[2]);
+            if (!return_pad && local >= first_boundary && local < second_boundary)
             {
                 region = TerrainRegion::dry_sand;
                 material = sandhybrid::Material::sand;
+                region_begin = first_boundary;
+                region_end = second_boundary;
             }
-            else if (!safe_runway && local < third_boundary)
+            else if (!return_pad && local >= second_boundary && local < third_boundary)
             {
-                region = TerrainRegion::waterlogged;
-                material = sandhybrid::Material::mud;
+                region = middle_regions[0];
+                region_begin = second_boundary;
+                region_end = third_boundary;
             }
-            else if (!safe_runway && local < fourth_boundary)
+            else if (!return_pad && local >= third_boundary && local < fourth_boundary)
             {
-                region = TerrainRegion::shallow_water;
-                material = sandhybrid::Material::mud;
+                region = middle_regions[1];
+                region_begin = third_boundary;
+                region_end = fourth_boundary;
             }
-            else if (!safe_runway && local < fifth_boundary)
+            else if (!return_pad && local >= fourth_boundary && local < fifth_boundary)
+            {
+                region = middle_regions[2];
+                region_begin = fourth_boundary;
+                region_end = fifth_boundary;
+            }
+            else if (!return_pad && local >= fifth_boundary && local < sixth_boundary)
             {
                 region = TerrainRegion::hole;
-                material = sandhybrid::Material::dirt;
+                region_begin = fifth_boundary;
+                region_end = sixth_boundary;
             }
-            else if (!safe_runway)
+            else if (!return_pad && local >= sixth_boundary)
             {
                 region = ((static_cast<std::uint64_t>(std::floor(local / 4.0f))
                     + seed_) & 1u) == 0u
@@ -561,22 +627,39 @@ namespace runner::sim
                 material = region == TerrainRegion::dry_sand
                     ? sandhybrid::Material::sand : sandhybrid::Material::dirt;
             }
+            if (region == TerrainRegion::waterlogged
+                || region == TerrainRegion::shallow_water)
+                material = sandhybrid::Material::mud;
 
             float height = 0.0f;
-            const float roughness = region == TerrainRegion::firm ? 0.025f
-                : region == TerrainRegion::hole ? 0.04f
-                : 0.055f + difficulty_ * 0.085f;
+            const float edge_distance = std::max(0.0f,
+                std::min(local - region_begin, region_end - local));
+            const float edge_fraction = std::clamp(
+                edge_distance / 0.80f, 0.0f, 1.0f);
+            const float region_fade = edge_fraction * edge_fraction
+                * (3.0f - 2.0f * edge_fraction);
+            const float transition = std::clamp((distance_from_launch
+                - launch_pad_half_width) / launch_transition_width, 0.0f, 1.0f);
+            const float smooth_transition = transition * transition
+                * (3.0f - 2.0f * transition);
+            const float roughness = (region == TerrainRegion::firm ? 0.018f
+                : region == TerrainRegion::hole ? 0.025f
+                : 0.028f + difficulty_ * 0.040f) * smooth_transition
+                * region_fade;
             height += std::sin(course_x * 0.61f) * roughness;
             height += std::sin(course_x * 1.73f + 0.7f) * roughness * 0.44f;
             height += (unit_hash(seed_ ^ static_cast<std::uint64_t>(
                 std::floor(local / fine_cell_spacing))) - 0.5f)
-                * fine_cell_spacing * (region == TerrainRegion::firm ? 0.18f : 0.72f);
+                * fine_cell_spacing * (region == TerrainRegion::firm ? 0.12f
+                    : region == TerrainRegion::hole ? 0.16f
+                    : 0.18f + difficulty_ * 0.20f)
+                * smooth_transition;
 
             if (region == TerrainRegion::hole)
             {
-                const float center = 0.5f * (fourth_boundary + fifth_boundary);
+                const float center = 0.5f * (region_begin + region_end);
                 const float half_width = std::max(1.0f,
-                    0.5f * (fifth_boundary - fourth_boundary));
+                    0.5f * (region_end - region_begin));
                 const float normalized = std::clamp(
                     std::abs(local - center) / half_width, 0.0f, 1.0f);
                 const float bowl = 1.0f - normalized * normalized
@@ -585,17 +668,19 @@ namespace runner::sim
             }
             else if (region == TerrainRegion::waterlogged)
             {
-                height -= 0.08f + difficulty_ * 0.08f;
+                height -= (0.08f + difficulty_ * 0.08f) * region_fade;
             }
             else if (region == TerrainRegion::shallow_water)
             {
-                height -= 0.18f + difficulty_ * 0.20f;
+                height -= (0.18f + difficulty_ * 0.20f) * region_fade;
             }
 
             const float water_surface = region == TerrainRegion::shallow_water
-                ? 0.06f + std::sin(course_x * 0.19f) * 0.012f
-                : region == TerrainRegion::waterlogged ? height + 0.025f : height;
-            return { std::clamp(height, -1.25f, 3.50f), false,
+                ? std::lerp(height,
+                    0.06f + std::sin(course_x * 0.19f) * 0.012f, region_fade)
+                : region == TerrainRegion::waterlogged
+                    ? height + 0.025f * region_fade : height;
+            return { std::clamp(height, -1.25f, 3.50f), launch_pad,
                 material, region, water_surface };
         }
 

@@ -8,6 +8,8 @@ namespace runner::diagnostics
 {
     struct CourseCompletionReport
     {
+        bool launch_contact{};
+        bool active_terrain{};
         bool safe_runway{};
         bool material_regions{};
         bool seed_variation{};
@@ -29,7 +31,8 @@ namespace runner::diagnostics
 
         [[nodiscard]] bool passed() const noexcept
         {
-            return safe_runway && material_regions && seed_variation
+            return launch_contact && active_terrain && safe_runway
+                && material_regions && seed_variation
                 && water_and_holes && observation_truth
                 && delayed_material_pressure && climb_contract
                 && equipment_contract && equipment_off_identity
@@ -38,9 +41,10 @@ namespace runner::diagnostics
     };
 
     [[nodiscard]] CourseCompletionReport run_course_completion_diagnostic();
-    [[nodiscard]] constexpr std::array<std::string_view, 10> course_completion_case_names() noexcept
+    [[nodiscard]] constexpr std::array<std::string_view, 12> course_completion_case_names() noexcept
     {
-        return { "safe-runway", "material-regions", "seed-variation",
+        return { "launch-contact", "active-terrain", "delayed-objects",
+            "material-regions", "seed-variation",
             "water-and-holes", "observation-truth", "delayed-material-pressure",
             "climb-contract", "equipment-contract", "equipment-off-identity",
             "frame-independent" };

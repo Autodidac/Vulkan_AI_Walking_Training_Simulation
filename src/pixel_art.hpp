@@ -38,6 +38,35 @@ namespace runner::art
         }
     };
 
+    struct OrientedArtTransform
+    {
+        Vec2 beginning{};
+        Vec2 ending{};
+        float thickness{};
+    };
+
+    [[nodiscard]] inline OrientedArtTransform oriented_box_transform(
+        Vec2 center, Vec2 width_axis, float width, float height) noexcept
+    {
+        const Vec2 axis = normalized(width_axis, { 1.0f, 0.0f });
+        const float bounded_width = std::max(0.0f, width);
+        return { center - axis * (bounded_width * 0.5f),
+            center + axis * (bounded_width * 0.5f), std::max(0.0f, height) };
+    }
+
+    [[nodiscard]] inline OrientedArtTransform support_boot_transform(
+        Vec2 proximal, Vec2 support, float width, float height) noexcept
+    {
+        const Vec2 terminal = normalized(support - proximal, { 0.0f, 1.0f });
+        const Vec2 forward{ terminal.y, -terminal.x };
+        const Vec2 normal{ -forward.y, forward.x };
+        const float bounded_width = std::max(0.0f, width);
+        const float bounded_height = std::max(0.0f, height);
+        const Vec2 center = support - normal * (bounded_height * 0.24f)
+            + forward * (bounded_width * 0.26f);
+        return oriented_box_transform(center, forward, bounded_width, bounded_height);
+    }
+
     [[nodiscard]] bool load_p3_pixel_art(const std::filesystem::path& path,
         PixelArt& art, std::string& error);
 }

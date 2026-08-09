@@ -170,6 +170,40 @@ namespace runner::diagnostics
         report.seed_variation = varied;
         report.water_and_holes = water_seen && hole_seen;
 
+        sim::DeformableTerrain beginner_sand{};
+        sim::DeformableTerrain full_hazard_sand{};
+        beginner_sand.reset(0x73130u, 0.30f);
+        full_hazard_sand.reset(0x73130u, 1.0f);
+        constexpr float active_sample_x = 3.5f;
+        const float beginner_height = beginner_sand.height_at(active_sample_x);
+        const float full_hazard_height = full_hazard_sand.height_at(active_sample_x);
+        beginner_sand.apply_pressure(active_sample_x, 2.4f, 0.65f, 1.0f / 60.0f);
+        full_hazard_sand.apply_pressure(active_sample_x, 2.4f, 0.65f,
+            1.0f / 60.0f);
+        const float beginner_deformation = beginner_height
+            - beginner_sand.height_at(active_sample_x);
+        const float full_hazard_deformation = full_hazard_height
+            - full_hazard_sand.height_at(active_sample_x);
+        report.active_terrain = beginner_deformation > 0.0f
+            && full_hazard_deformation > beginner_deformation;
+
+        sim::DeformableTerrain launch{};
+        launch.reset(0x73131u, 1.0f);
+        const float launch_height = launch.height_at(0.0f);
+        const float launch_firmness = launch.firmness_at(0.0f);
+        for (int iteration = 0; iteration < 120; ++iteration)
+        {
+            launch.apply_pressure(0.0f, 4.0f, 5.0f, 1.0f / 20.0f);
+            launch.deposit(0.0f, 0.25f, 0.0f);
+            launch.step(1.0f / 20.0f);
+        }
+        report.launch_contact = launch.height_at(0.0f) == launch_height
+            && launch.firmness_at(0.0f) == launch_firmness
+            && sim::DeformableTerrain::launch_pad_at(0.0f)
+            && !sim::DeformableTerrain::launch_pad_at(
+                sim::DeformableTerrain::launch_pad_half_width
+                    + sim::DeformableTerrain::launch_transition_width);
+
         sim::Environment runway{ sim::CreatureBlueprint::humanoid(), 0x728200u };
         runway.set_course(sim::CourseStage::moving_hazards, 0.70f);
         std::set<int> markers{};

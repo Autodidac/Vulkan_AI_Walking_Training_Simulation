@@ -1,3 +1,14 @@
+## 0.7.31
+
+- Added a persisted lesson-local update clock so Stand, Crouch, and Walk each receive their own measured teacher/imitation handoff without erasing rig-scoped policy, optimizer, or lifetime work.
+- Added a real cold raw-policy Crouch gate: the humanoid reaches zero authority after update 420, retains a strict controller across repeated seeds, recovers upright, and enters Walk without rig-selection fiddling.
+- Aligned every authored rig to the exact generated launch surface and protected only the short calibration pad from pressure/deposit drift; active deformation remains enabled immediately beyond the smooth transition.
+- Rebuilt seeded course generation around early dry sand, variable wet/water order, real late holes, material microstructure, and difficulty-scaled deformation that is positive at 30% and full-strength at 100%.
+- Made the rendered substrate and collision-surface line sample the same evolving terrain state used by physics, eliminating the misleading changing lower edge and invisible launch curb.
+- Moved Walk teacher/bootstrap ownership to lesson age, extended topology-derived multi-support handoff to update 900, and retained learned parameters plus Adam state while purging assisted-era champions.
+- Rotated, translated, pivoted, and mirrored boot, limb, torso, and helmet art from authored graph geometry; all seven distinct visible rigs now share the orthographic art family and the duplicate scaffold is internal-only.
+- Expanded `--diagnose-art` to render every exposed rig plus a horizontal fallen pose inside the shared vertex budget.
+- Bumped training/checkpoint semantics to `0x0007'3101`, isolated `runner-v0731-active-*` state, and added deterministic terrain/contact, crouch ownership, rig identity, art-transform, cold-learning, and 20/60/240 Hz gates.
 ## 0.7.30
 
 - Prevented forward-gait nursery resets from repeatedly randomizing partial walkers and separated all-time rig updates from resettable policy age/discard telemetry.

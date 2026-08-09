@@ -1010,7 +1010,7 @@ Use a firm hazard-free learning runway and staged evidence gates that first esta
 From deleted v0.7.30 state and fixed seeds, run real workers, PPO optimization, immutable policy publication, evaluation, and preview. By the bounded gate, retain at least one controller that satisfies the 18 m / 14 real-step six-seed Walk aggregate and includes an 18 m / 16-step replay seed and demonstrate sustained multi-seed progress without course motion. Add positive, negative, adversarial, and repeated-seed coverage plus exact full-state equivalence at 20, 60, and 240 render Hz.
 
 ### WALK-RELEASE-357 — Publish and independently verify Runner v0.7.30
-**Status:** OPEN — HOSTED MONOLITHIC-GATE SPLIT AND CLEAN RETRY PENDING
+**Status:** COMPLETED — TAGGED CI, PUBLICATION, RE-DOWNLOAD, AND REMOTE CLEANUP AUDITED
 
 Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the complete Windows SDL3/Vulkan build and tests, every feature diagnostic including the new cold-start learner, installed and independently extracted launch from an unrelated directory, ZIP checksum and per-file manifest audit, published-asset re-download and byte comparison, direct packaged eye-test evidence of sustained gait, zero open cleanup PRs, and final main-only remote branch state.
 
@@ -1056,4 +1056,64 @@ Required packaged proof: add a `--walk-eye-test` that performs a fresh humanoid 
 - Implementation PR `#92` cleanly configured and built under hosted GCC 14, and every completed suite passed, but `Runner.V0730ColdStart` hit its exact 600.10-second CTest ceiling before the slower shared runner completed the unchanged workload. The log showed valid deterministic teacher probes and no behavioral assertion; CTest reported `Timeout`, not a locomotion failure. Preserve all 1,200 updates, five rig subjects, seeds, handoff boundaries, and acceptance thresholds; raise only this real learner test's host budget from 600 to 1,200 seconds and require a clean retry before merge.
 - PR `#92` retry `31300259305` passed clean configure/build and all other 21 suites, then the unchanged monolithic gate hit the new exact 1,200.10-second ceiling. Do not keep inflating a combined deadline. Preserve all ten-seed teacher probes for all five topologies, full frame-independence checks, and the complete 1,200-update learner, but expose teacher/frame truth and cold learning as separate CTest cases with independent 1,800-second ceilings and explicit command modes. A clean hosted rerun must pass both before merge.
 - The split gate is locally proven without coverage loss. `Runner.V0730ReferenceFrame --references` passed all 50 topology/seed probes plus exact frame-state checks in 3.24 seconds under GCC 14 and 3.29 seconds under MSVC. Independent `Runner.V0730ColdStart --learner` passed the unchanged 1,200-update five-rig gate under GCC 14 in 316.72 seconds with the same retained results. CTest JSON exposes both exact command modes and independent 1,800-second ceilings; both compilers rebuild warning-clean and repository audit enforces the split contract.
-- All local implementation, platform, package, installed, extracted, manifest, and direct eye-test obligations now pass. WALK-RELEASE-357 remains open only for exact tagged CI, published-asset re-download/byte comparison, and final remote branch/PR cleanup.
+- Before v0.7.30 publication, all local implementation, platform, package, installed, extracted, manifest, and direct eye-test obligations passed; only exact tagged CI, published-asset re-download/byte comparison, and final remote branch/PR cleanup remained.
+- Exact annotated tag v0.7.30 resolves to audited source 5d7e3bc4f5a7507213dce828ce3b07f2a5991b41. Tagged workflow 31302383586 passed Linux GCC 14 warnings-as-errors and every test, the full MSVC SDL3/Vulkan build and every Windows test, every feature diagnostic, exact packaging/manifests, installed and independently extracted run.bat audits, publication, and public-asset re-download byte comparison. The non-draft, non-prerelease release was published at 2026-08-09T10:32:32Z; its ZIP is 2,015,651 bytes with SHA-256 9f657540fd096dd6de89fc691fa5cf71ba6dfa3aea686c4f237d7f0f82a94768. Final remote audit found zero open PRs and only main at the tagged source.
+
+# Runner v0.7.31 active-terrain, curriculum, rig-art, and contact-truth recovery
+
+**Release state:** IMPLEMENTED AND TARGETED-VERIFIED — FULL PLATFORM, PACKAGE, PUBLICATION, AND EYE GATES PENDING
+
+The user's v0.7.29 packaged screenshots remain authoritative. At Walk / Run 30%, the UI shows 31,124 rig updates but only 14 policy updates, 1,707 preview restarts, no retained controller, six feet of evidence, zero real strides, and rejection because the body touched the ground before gait formation. A second screenshot shows the rig apparently tripping over collision that is not visibly represented at the start. The user explicitly requires a hazardous active sand simulation: the correction may stabilize the short launch/calibration pad and make its collision visible, but it must not freeze the course. Beyond that pad, sand must deform under load, water and waterlogged material must behave as authored hazards, holes must be real collision geometry, and all evolving collision must be rendered from the same state.
+
+### WALK-LESSON-CLOCK-360 — Make learning schedules local to the current lesson
+**Status:** IMPLEMENTED — LESSON RESET/PRESERVE/CHECKPOINT AND HANDOFF TESTS PASS LOCALLY
+
+Persist an explicit lesson update clock inside PpoTrainer. Reset it on a real course-stage boundary without resetting rig-scoped lifetime work, optimizer state, or compatible policy progress. Teacher authority, skill bootstrap, guided imitation, assisted-best clearing, evaluation eligibility, preview authority, and lesson telemetry must use the lesson clock where their meaning is stage-local. Preserve it in compatible checkpoints, migrate older state explicitly, and prove Stand → Crouch → Walk on one rig without switching presets or depending on lifetime update age.
+
+### WALK-CROUCH-OWNERSHIP-361 — Prove a cold raw policy learns and retains crouch
+**Status:** IMPLEMENTED — COLD RAW ZERO-AUTHORITY CROUCH GATE PASSES SIX SEEDS LOCALLY
+
+Replace indefinite/fixed crouch assistance with a finite, measured handoff. Train the actual policy, clear assisted-era champion state at the boundary without discarding the learned network or Adam moments, and require a post-handoff zero-authority controller to pass valid crouch depth, hold, balance, forbidden-body-contact, recovery, and repeated-seed gates. The default rig must learn Crouch from normal curriculum entry without rig-selection fiddling.
+
+### WALK-LAUNCH-CONTACT-362 — Align every authored rig to visible launch collision
+**Status:** IMPLEMENTED — ALL-RIG REPEATED-SEED LAUNCH CONTACT TESTS PASS LOCALLY
+
+After deterministic terrain creation, rigidly place every rig so authored support nodes begin on the exact sampled launch surface, with no penetration, hidden drop, anatomy distortion, or initialization-order drift. Use a short, explicit launch/calibration pad whose rendered surface, collision height, material, and stability contract are identical. Pressure or relaxation must not create a subpixel invisible lip beneath an unmoving initial stance; transition continuously into the active terrain rather than extending a long sterile runway.
+
+### WALK-ACTIVE-TERRAIN-363 — Preserve and improve hazardous sand, water, and holes
+**Status:** IMPLEMENTED — ACTIVE DEFORMATION/BOUNDARY/WATER/HOLE/SEED TESTS PASS LOCALLY
+
+Keep pressure-driven deformation and relaxation active beyond the launch pad. Render a continuous substrate and an exact collision-surface line from the same interpolated terrain samples used by physics, then layer sand, mud, water, and hole materials without exposing a changing cosmetic lower edge. Delay large course objects until a locomotion foundation exists, while seeded terrain regions vary in location and microstructure. Add positive deformation and volume checks; negative launch-pad mutation checks; adversarial boundary, deposit, wrap, water, and hole checks; repeated-seed determinism; and visible packaged evidence that active hazards move only where collision moves.
+
+### WALK-ART-TRANSFORM-364 — Make boots and body art follow full physical transforms
+**Status:** IMPLEMENTED — PURE ROTATION/TRANSLATION/FALLEN TRANSFORMS AND DIAGNOSTIC PASS LOCALLY
+
+Boot art must translate, rotate, pivot, and mirror from the terminal authored support segment instead of remaining axis-aligned at a support node. Torso, helmet, limb plates, and compact equipment must follow the relevant physical orientation for vertical, fallen, horizontal, and reversed rigs while remaining presentation-only. Add pure transform tests for arbitrary rotations, reflections, degenerate segments, and repeated poses plus a real Vulkan diagnostic that makes a horizontal fallen pose obvious.
+
+### WALK-ART-ALL-RIGS-365 — Apply the shared armor language to every rig topology
+**Status:** IMPLEMENTED — GRAPH-DERIVED ART RENDERS ALL SEVEN EXPOSED RIGS LOCALLY
+
+Replace paired-biped and hard-coded motor-slot gates with graph-derived support, manipulator, torso, and head roles. Every user-visible rig receives the same current art family, fitted to its actual topology; individual art sets are deferred. Render rigs sequentially in diagnostics so the existing shared vertex budget remains bounded. Art must not alter physics, contacts, observations, rewards, policy dimensions, persistence, or frame timing.
+
+### WALK-RIG-IDENTITY-366 — Remove or distinguish duplicate user-facing presets
+**Status:** IMPLEMENTED — SCAFFOLD INTERNALIZED AND SEVEN EXPOSED SIGNATURES PROVEN DISTINCT
+
+Audit normalized graph, silhouette, motor, support, and role identity across Humanoid, Biped, Scaffold, Chicken, Quadruped, Four-leg Crawler, Hexapod, and Monoped. Calibration-only blueprints may remain internal, but every exposed canonical preset must have a meaningfully distinct topology or silhouette and its own rig-scoped training identity. Add deterministic structural and rendered distinctness checks; switching aliases may not masquerade as a new rig or destroy compatible progress.
+
+### WALK-FRAME-TRUTH-367 — Prove the new systems are render-cadence independent
+**Status:** IMPLEMENTED — EXACT REFERENCE/PREVIEW/TERRAIN/LESSON STATE CADENCE GATES PASS LOCALLY
+
+Preserve fixed-step simulation and show exact full-state equivalence at 20, 60, and 240 render Hz for launch placement, active terrain evolution, lesson updates, teacher handoff, raw-policy evaluation, preview resets, gait/contact evidence, and art transforms. Invalid or partial render deltas may not advance physics, terrain, curriculum, or policy clocks.
+
+### WALK-RELEASE-368 — Publish and independently verify Runner v0.7.31
+**Status:** IMPLEMENTED — LOCAL PLATFORM/PACKAGE GATES PASSED; TAGGED CI, PUBLICATION, RE-DOWNLOAD, AND REMOTE CLEANUP PENDING
+
+Update versioned source, documentation, focused design notes, package/install lists, diagnostics, release workflow contracts, and cleanup. Require repository hygiene and git diff --check; Linux GCC 14 warnings-as-errors and all CTests; the complete Windows SDL3/Vulkan build and all tests; package, acceptance, camera, UI, art, rig-training, course, crouch-learning, terrain/contact, and cadence diagnostics; installed and independently extracted run.bat from an unrelated directory; ZIP checksum and per-file manifest audit; packaged Vulkan eye evidence; public-asset re-download and byte comparison; zero cleanup PRs; main-only remote state; mission-cache closeout; and removal of generated release garbage.
+
+## v0.7.31 local implementation and release-gate evidence
+
+- Windows Visual Studio 2022 Release rebuilt the complete SDL3/Vulkan application and every test target. The final uninterrupted suite passed 29/29 in 489.25 seconds; the real five-rig cold learner passed in 380.88 seconds and cold raw Crouch passed in 80.08 seconds. After the packaged course diagnostic gained explicit `launch_contact`, `active_terrain`, and `delayed_objects` fields, its affected repository/course tests passed 3/3.
+- A fresh WSL build compiled every CPU/core target with GCC 14.3 and `-Werror`. All 24 Linux CTests passed in 403.92 seconds; the cold learner passed in 302.31 seconds and Crouch in 74.28 seconds. The final active-terrain diagnostic update rebuilt warning-clean and its affected tests passed 2/2.
+- Direct build-tree, installed `run.bat`, and independently extracted `run.bat` executions from `C:\Windows\Temp` passed version, SDL3/Vulkan, package, 24/24 acceptance, camera, visible UI, seven-rig plus fallen-pose art, five-rig zero-authority learning, and course diagnostics. The finalized course output explicitly reports `launch_contact=passed active_terrain=passed delayed_objects=passed` alongside material, water/hole, observation, delayed-pressure, climb, equipment, and frame-independence results.
+- The cold diagnostic retained strict-valid zero-authority controllers with course motion disabled: biped 21.0267 m / 38.33 steps / 0 invalid seeds, humanoid 33.2620 m / 33.17 steps / 0 invalid, quadruped 8.6960 m / 54.50 support cycles / 0 invalid, crawler 15.4991 m / 54.67 / 0 invalid, and hexapod 26.4784 m / 51.67 / 0 invalid. Later exploratory regressions did not replace these retained controllers.
+- `--diagnose-art` rendered the production course, all seven exposed rigs, and a horizontal fallen humanoid with a 218,415-vertex / 5,241,960-byte peak, below the 6,291,456-byte acceptance ceiling and 8 MiB hard limit.

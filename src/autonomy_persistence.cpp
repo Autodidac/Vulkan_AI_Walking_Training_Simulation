@@ -132,8 +132,7 @@ namespace runner::rl
         snapshot.status.environment_count = worker_.environment_count();
         snapshot.status.pending_commands = pending_command_count();
         const TrainingMetrics& stage_metrics = worker_.metrics();
-        snapshot.status.stage_fresh_updates = stage_metrics.total_updates >= stage_entry_total_updates_
-            ? stage_metrics.total_updates - stage_entry_total_updates_ : 0u;
+        snapshot.status.stage_fresh_updates = worker_.lesson_update();
         snapshot.status.stage_required_updates = stage_minimum_fresh_updates(stage_);
         snapshot.status.stage_fresh_episodes = stage_metrics.total_episodes >= stage_entry_total_episodes_
             ? stage_metrics.total_episodes - stage_entry_total_episodes_ : 0u;

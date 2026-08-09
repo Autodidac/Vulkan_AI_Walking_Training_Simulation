@@ -1119,6 +1119,58 @@ namespace runner::sim
             return 2u + additional_left_contact_nodes.size()
                 + additional_right_contact_nodes.size();
         }
+        [[nodiscard]] std::uint8_t support_branch_mask(
+            const MotorConstraint& motor) const noexcept
+        {
+            if (!motor.enabled || motor.pivot >= nodes.size()
+                || motor.c >= nodes.size() || nodes.size() > 128u)
+                return 0u;
+            std::array<bool, 128> visited{};
+            std::array<std::uint16_t, 128> stack{};
+            std::size_t stack_size = 0u;
+            visited[motor.pivot] = true;
+            visited[motor.c] = true;
+            stack[stack_size++] = motor.c;
+            std::uint8_t mask = 0u;
+            while (stack_size > 0u)
+            {
+                const std::uint16_t current = stack[--stack_size];
+                if (is_left_support_seed(current))
+                    mask = static_cast<std::uint8_t>(mask | 0x1u);
+                if (is_right_support_seed(current))
+                    mask = static_cast<std::uint8_t>(mask | 0x2u);
+                for (const DistanceConstraint& bone : bones)
+                {
+                    if (bone.stiffness < 0.20f)
+                        continue;
+                    std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                    if (bone.a == current)
+                        next = bone.b;
+                    else if (bone.b == current)
+                        next = bone.a;
+                    if (next < nodes.size() && !visited[next])
+                    {
+                        visited[next] = true;
+                        stack[stack_size++] = next;
+                    }
+                }
+            }
+            return mask;
+        }
+        [[nodiscard]] std::uint8_t node_support_mask(std::size_t node) const noexcept
+        {
+            std::uint8_t mask = is_left_support_seed(node) ? 0x1u : 0u;
+            if (is_right_support_seed(node))
+                mask = static_cast<std::uint8_t>(mask | 0x2u);
+            for (std::size_t index = 0; index < active_motor_count; ++index)
+            {
+                const MotorConstraint& motor = motors[index];
+                if (node == motor.pivot || node == motor.c)
+                    mask = static_cast<std::uint8_t>(mask | support_branch_mask(motor));
+            }
+            return mask;
+        }
+
         [[nodiscard]] bool monopedal_gait() const noexcept
         {
             return support_seed_count() == 2u
@@ -1210,6 +1262,7 @@ namespace runner::sim
         void configure_equipment(WeaponClass weapon, float target_distance = 8.0f);
         void clear_equipment() noexcept;
         void disarm_equipment() noexcept;
+        void set_diagnostic_rigid_rotation(float radians) noexcept;
         void reset(std::uint64_t seed = 0);
         [[nodiscard]] StepResult step(std::span<const float, action_count> actions, float dt = 1.0f / 60.0f);
         [[nodiscard]] std::array<float, observation_count> observation() const noexcept;

@@ -30,7 +30,8 @@ namespace runner::rl
         }
 
         [[nodiscard]] float skill_bootstrap_weight(std::uint64_t update,
-            sim::CourseStage stage) noexcept
+            sim::CourseStage stage,
+            const sim::CreatureBlueprint& blueprint) noexcept
         {
             if (stage == sim::CourseStage::balance)
             {
@@ -44,8 +45,18 @@ namespace runner::rl
                         static_cast<float>(update - 1600u) / 2900.0f);
                 return 0.0f;
             }
-            if (stage == sim::CourseStage::duck_press
-                || stage == sim::CourseStage::crouch_walk)
+            if (stage == sim::CourseStage::duck_press)
+            {
+                if (update < crouch_teacher_fade_begin_update)
+                    return 0.70f;
+                if (update < crouch_teacher_handoff_update)
+                    return lerp(0.70f, 0.0f,
+                        static_cast<float>(update - crouch_teacher_fade_begin_update)
+                            / static_cast<float>(crouch_teacher_handoff_update
+                                - crouch_teacher_fade_begin_update));
+                return 0.0f;
+            }
+            if (stage == sim::CourseStage::crouch_walk)
             {
                 if (update < 300u)
                     return 0.70f;
@@ -62,6 +73,9 @@ namespace runner::rl
                 return update < 1200u ? 0.36f : 0.10f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
+            if (stage == sim::CourseStage::uneven)
+                return 0.62f * foundational_walk_teacher_authority(
+                    update, blueprint);
             if (update < 1200u)
                 return 0.62f;
             if (update < 4000u)
@@ -156,7 +170,8 @@ namespace runner::rl
                 transition.value = evaluation.value;
                 transition.action = sample_action(evaluation, local_random, transition.log_probability);
 
-                const float bootstrap = skill_bootstrap_weight(metrics_.update, course_stage_);
+                const float bootstrap = skill_bootstrap_weight(
+                    lesson_update_, course_stage_, blueprint_);
                 const auto guided = skill_bootstrap_action(environment, course_stage_);
                 transition.guided_action = guided;
                 std::array<float, sim::action_count>& previous_action
@@ -170,15 +185,15 @@ namespace runner::rl
                     previous_action[action_index] = transition.action[action_index];
                 }
                 const MotorDiscoveryProbe probe = course_stage_ == sim::CourseStage::balance
-                    ? motor_discovery_probe(environment, environment_index, metrics_.update, step)
+                    ? motor_discovery_probe(environment, environment_index, lesson_update_, step)
                     : MotorDiscoveryProbe{};
                 for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
                     transition.action[action_index] = lerp(transition.action[action_index],
                         probe.action[action_index], probe.weight);
                 transition.action = effective_policy_action(
                     environment, transition.action, course_stage_,
-                    foundational_walk_teacher_authority(
-                        metrics_.update, environment.blueprint()));
+                    lesson_teacher_authority(
+                        lesson_update_, course_stage_, environment.blueprint()));
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
                 const sim::StepResult result = environment.step(transition.action);
                 transition.reward = result.reward;
@@ -289,7 +304,10 @@ namespace runner::rl
         preview_policy_.set_equipment_enabled(equipment_enabled);
         if (stage == course_stage_ && std::abs(difficulty - course_difficulty_) < 1.0e-5f)
             return;
+        const bool stage_changed = stage != course_stage_;
         course_stage_ = stage;
+        if (stage_changed)
+            lesson_update_ = 0u;
         course_difficulty_ = difficulty;
         for (sim::Environment& environment : environments_)
         {
@@ -352,6 +370,7 @@ namespace runner::rl
         adam_.step = 0;
         const TrainingMetrics previous_metrics = metrics_;
         metrics_ = {};
+        lesson_update_ = 0u;
         if (!clear_totals)
         {
             metrics_.total_updates = previous_metrics.total_updates;
@@ -565,13 +584,18 @@ namespace runner::rl
         if (!staged_update_active_ || !staged_advantages_ready_ || !staged_optimized_)
             return;
         ++metrics_.update;
-        if (course_stage_ == sim::CourseStage::uneven
-            && metrics_.update
-                == foundational_walk_teacher_handoff_update(blueprint_))
+        ++lesson_update_;
+        const bool lesson_handoff =
+            (course_stage_ == sim::CourseStage::duck_press
+                && lesson_update_ == crouch_teacher_handoff_update)
+            || (course_stage_ == sim::CourseStage::uneven
+                && lesson_update_
+                    == foundational_walk_teacher_handoff_update(blueprint_));
+        if (lesson_handoff)
         {
             // Assisted and unassisted scores are not comparable. Keep the
             // learned network and optimizer, but make every retained champion
-            // after this boundary prove itself with zero teacher authority.
+            // after this lesson-local boundary prove itself with zero authority.
             best_parameters_.clear();
             clear_self_imitation_prior();
             metrics_.best_evaluation_distance =
@@ -715,7 +739,7 @@ namespace runner::rl
             }
         }
         const float guided_weight = guided_rollout_imitation_weight(
-            metrics_.update, course_stage_);
+            lesson_update_, course_stage_, &blueprint_);
         if (guided_weight > 0.0f && !rollout_.empty())
         {
             constexpr std::size_t guided_passes = 4u;
@@ -767,8 +791,8 @@ namespace runner::rl
             : 0.0f;
         if (best_parameters_.size() == policy_.parameter_count()
             && (!sim::stage_requires_forward_gait(course_stage_)
-                || foundational_walk_teacher_authority(
-                    metrics_.update, blueprint_) >= 0.999f))
+                || lesson_teacher_authority(
+                    lesson_update_, course_stage_, blueprint_) >= 0.999f))
         {
             const float anchor = metrics_.update < 1500u ? 0.004f : 0.010f;
             std::vector<float>& current = policy_.parameters();
@@ -816,8 +840,8 @@ namespace runner::rl
                 preview_.observation());
             const auto action = effective_policy_action(
                 preview_, raw_action, course_stage_,
-                foundational_walk_teacher_authority(
-                    metrics_.update, preview_.blueprint()));
+                lesson_teacher_authority(
+                    lesson_update_, course_stage_, preview_.blueprint()));
             const sim::StepResult result = preview_.step(action,
                 static_cast<float>(fixed_step));
             preview_accumulator_seconds_ -= fixed_step;

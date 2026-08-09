@@ -69,53 +69,13 @@ namespace runner::sim
                 && node_degree(rig, node) == 1u;
         }
 
-        [[nodiscard]] std::uint8_t motor_support_mask(
-            const CreatureBlueprint& rig, const MotorConstraint& motor) noexcept
-        {
-            if (!motor.enabled || motor.pivot >= rig.nodes.size()
-                || motor.c >= rig.nodes.size() || rig.nodes.size() > 128u)
-                return 0u;
-
-            std::array<bool, 128> visited{};
-            std::array<std::uint16_t, 128> stack{};
-            std::size_t stack_size = 0u;
-            visited[motor.pivot] = true;
-            visited[motor.c] = true;
-            stack[stack_size++] = motor.c;
-            std::uint8_t mask = 0u;
-            while (stack_size > 0u)
-            {
-                const std::uint16_t node = stack[--stack_size];
-                if (rig.is_left_support_seed(node))
-                    mask = static_cast<std::uint8_t>(mask | 0x1u);
-                if (rig.is_right_support_seed(node))
-                    mask = static_cast<std::uint8_t>(mask | 0x2u);
-                for (const DistanceConstraint& bone : rig.bones)
-                {
-                    if (bone.stiffness < 0.20f)
-                        continue;
-                    std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
-                    if (bone.a == node)
-                        next = bone.b;
-                    else if (bone.b == node)
-                        next = bone.a;
-                    if (next < rig.nodes.size() && !visited[next])
-                    {
-                        visited[next] = true;
-                        stack[stack_size++] = next;
-                    }
-                }
-            }
-            return mask;
-        }
-
         [[nodiscard]] bool manipulator_branch_node(const CreatureBlueprint& rig,
             std::size_t node) noexcept
         {
             for (std::size_t index = 0; index < rig.active_motor_count; ++index)
             {
                 const MotorConstraint& motor = rig.motors[index];
-                if (motor_support_mask(rig, motor) == 0u
+                if (rig.support_branch_mask(motor) == 0u
                     && (node == motor.pivot || node == motor.c))
                     return true;
             }
@@ -893,6 +853,24 @@ namespace runner::sim
         ++equipment_transition_count_;
     }
 
+    void Environment::set_diagnostic_rigid_rotation(float radians) noexcept
+    {
+        if (!std::isfinite(radians) || !valid_node(blueprint_.root_node))
+            return;
+        const Vec2 pivot = particles_[blueprint_.root_node].position;
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        for (Particle& particle : particles_)
+        {
+            const Vec2 offset = particle.position - pivot;
+            particle.position = pivot + Vec2{
+                offset.x * cosine - offset.y * sine,
+                offset.x * sine + offset.y * cosine };
+            particle.previous = particle.position;
+            particle.grounded = false;
+        }
+    }
+
     std::uint16_t Environment::equipment_mount_node() const noexcept
     {
         std::uint16_t best = blueprint_.torso_node;
@@ -1576,10 +1554,11 @@ namespace runner::sim
         for (std::size_t index = 0; index < blueprint_.nodes.size(); ++index)
         {
             Vec2 position = blueprint_.nodes[index];
-            position.x += (random_unit() - 0.5f) * 0.008f + phase;
-            position.y += (random_unit() - 0.5f) * 0.006f;
-            const float radius = index < blueprint_.radii.size() ? blueprint_.radii[index] : 0.15f;
             const bool contact_semantic = blueprint_.is_support_seed(index);
+            position.x += (random_unit() - 0.5f) * 0.008f + phase;
+            const float vertical_jitter = (random_unit() - 0.5f) * 0.006f;
+            position.y += contact_semantic ? 0.0f : vertical_jitter;
+            const float radius = index < blueprint_.radii.size() ? blueprint_.radii[index] : 0.15f;
             const std::size_t degree = static_cast<std::size_t>(std::ranges::count_if(
                 blueprint_.bones, [index](const DistanceConstraint& bone)
                 {
@@ -1598,6 +1577,27 @@ namespace runner::sim
                 && index != blueprint_.torso_node)
                 inverse_mass = 0.92f;
             particles_.push_back({ position, position, inverse_mass, radius, false });
+        }
+
+        terrain_.reset(random_state_ ^ 0xa5a5a5a5a5a5a5a5ULL, course_difficulty_);
+        float vertical_shift = -std::numeric_limits<float>::infinity();
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+        {
+            if (!blueprint_.is_support_seed(index))
+                continue;
+            const Particle& support = particles_[index];
+            const float ground = stage_uses_deformable_terrain(course_stage_)
+                ? terrain_.height_at(support.position.x) : 0.0f;
+            const float target = ground + ground_contact_offset(true, support.radius);
+            vertical_shift = std::max(vertical_shift, target - support.position.y);
+        }
+        if (std::isfinite(vertical_shift))
+        {
+            for (Particle& particle : particles_)
+            {
+                particle.position.y += vertical_shift;
+                particle.previous.y += vertical_shift;
+            }
         }
 
         support_contact_latch_.assign(particles_.size(), 0u);
@@ -1723,7 +1723,6 @@ namespace runner::sim
         recovery_best_upright_ = 1.0f;
         recovery_events_ = 0;
         recovery_successes_ = 0;
-        terrain_.reset(random_state_ ^ 0xa5a5a5a5a5a5a5a5ULL, course_difficulty_);
         material_particles_.clear();
         next_material_event_seconds_ = std::lerp(9.0f, 6.0f, course_difficulty_);
         material_event_sequence_ = 0u;
@@ -2190,7 +2189,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     index < blueprint_.active_motor_count; ++index)
                 {
                     appendaged_biped = appendaged_biped
-                        || motor_support_mask(blueprint_,
+                        || blueprint_.support_branch_mask(
                             blueprint_.motors[index]) == 0u;
                 }
                 const float correction_gain = appendaged_biped ? 0.040f : 0.025f;

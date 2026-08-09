@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string_view>
 namespace runner::sim
 {
@@ -32,10 +33,31 @@ namespace runner::sim
             environment.update_material_metrics(dt);
         }
 
+        static void set_terrain_progress(Environment& environment, float progress) noexcept
+        {
+            environment.elapsed_seconds_ = progress / environment.course_speed();
+        }
+
         static void add_material(Environment& environment, MaterialParticle item)
         {
             environment.material_particles_.push_back(item);
             environment.rebuild_course_features();
+        }
+
+        static std::vector<float> launch_support_clearances(
+            const Environment& environment)
+        {
+            std::vector<float> result{};
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (!environment.blueprint_.is_support_seed(index))
+                    continue;
+                const Particle& support = environment.particles_[index];
+                const float contact_height = environment.ground_height_at(support.position.x)
+                    + ground_contact_offset(true, support.radius);
+                result.push_back(support.position.y - contact_height);
+            }
+            return result;
         }
     };
 }
@@ -62,7 +84,128 @@ int main()
         require(std::abs(first.cells()[i].height-second.cells()[i].height)<1.0e-7f, "same seed changed height");
         require(std::abs(first.cells()[i].firmness-second.cells()[i].firmness)<1.0e-7f, "same seed changed firmness");
     }
-    constexpr float x=20.5f;
+    std::array<sim::TerrainRegion, 3> previous_middle{};
+    bool saw_distinct_middle_order = false;
+    for (std::uint64_t seed = 1u; seed <= 16u; ++seed)
+    {
+        sim::DeformableTerrain varied{};
+        varied.reset(seed, 0.72f);
+        require(varied.region_at(2.25f) == sim::TerrainRegion::dry_sand,
+            "active sand does not begin shortly after the launch transition");
+        std::array<bool, 5> regions{};
+        std::array<sim::TerrainRegion, 3> middle{};
+        std::size_t middle_count{};
+        float maximum_shallow_depth{};
+        float minimum_hole_height{ std::numeric_limits<float>::infinity() };
+        sim::TerrainRegion last = sim::TerrainRegion::dry_sand;
+        for (float sample = 2.25f; sample < sim::DeformableTerrain::period - 5.0f;
+            sample += 0.25f)
+        {
+            const sim::TerrainRegion region = varied.region_at(sample);
+            regions[static_cast<std::size_t>(region)] = true;
+            if (region == sim::TerrainRegion::shallow_water)
+                maximum_shallow_depth = std::max(
+                    maximum_shallow_depth, varied.water_depth_at(sample));
+            if (region == sim::TerrainRegion::hole)
+                minimum_hole_height = std::min(
+                    minimum_hole_height, varied.height_at(sample));
+            if (middle_count < middle.size() && region != last
+                && region != sim::TerrainRegion::dry_sand
+                && region != sim::TerrainRegion::hole)
+                middle[middle_count++] = region;
+            last = region;
+        }
+        require(std::ranges::all_of(regions, [](bool present) { return present; }),
+            "seeded terrain omitted a firm, sand, mud, water, or hole region");
+        require(middle_count == middle.size(),
+            "seeded terrain middle-band order could not be observed");
+        require(maximum_shallow_depth > 0.05f,
+            "shallow-water band has no physical interior water depth");
+        require(minimum_hole_height < -0.20f,
+            "authored hole region has no physical collision depression");
+        for (std::size_t column = 0;
+            static_cast<float>(column) * sim::DeformableTerrain::fine_cell_spacing
+                <= 8.0f; ++column)
+        {
+            const std::size_t next = (column + 1u)
+                % sim::DeformableTerrain::cell_count;
+            if (varied.cells()[column].region == sim::TerrainRegion::hole
+                || varied.cells()[next].region == sim::TerrainRegion::hole)
+                continue;
+            const float boundary_delta = std::abs(varied.cells()[column].height
+                - varied.cells()[next].height);
+            require(boundary_delta < 0.11f,
+                "foundation terrain contains an invisible curb-sized ledge");
+        }
+        if (seed > 1u && middle != previous_middle)
+            saw_distinct_middle_order = true;
+        previous_middle = middle;
+    }
+    require(saw_distinct_middle_order,
+        "terrain material-band order is fixed across seeds");
+
+    sim::DeformableTerrain beginner_sand{}, full_hazard_sand{};
+    beginner_sand.reset(0x73130u, 0.30f);
+    full_hazard_sand.reset(0x73130u, 1.0f);
+    const float beginner_height = beginner_sand.height_at(3.5f);
+    const float full_hazard_height = full_hazard_sand.height_at(3.5f);
+    beginner_sand.apply_pressure(3.5f, 2.4f, 0.65f, 1.0f / 60.0f);
+    full_hazard_sand.apply_pressure(3.5f, 2.4f, 0.65f, 1.0f / 60.0f);
+    const float beginner_deformation = beginner_height
+        - beginner_sand.height_at(3.5f);
+    const float full_hazard_deformation = full_hazard_height
+        - full_hazard_sand.height_at(3.5f);
+    require(beginner_deformation > 0.0f,
+        "30-percent curriculum sand is cosmetic instead of active");
+    require(full_hazard_deformation > beginner_deformation,
+        "full-difficulty active sand is not more hazardous than its foundation");
+
+    sim::DeformableTerrain protected_launch{};
+    protected_launch.reset(0xA731u, 0.95f);
+    const auto launch_cells = protected_launch.cells();
+    const auto launch_fine_cells = protected_launch.fine_cells();
+    constexpr std::array<float, 7> launch_pressure_points{
+        -0.01f, 0.0f, 0.50f, 0.699f, 0.701f,
+        sim::DeformableTerrain::period - 0.01f,
+        sim::DeformableTerrain::period - 0.699f };
+    for (int step = 0; step < 600; ++step)
+    {
+        for (const float sample : launch_pressure_points)
+        {
+            protected_launch.apply_pressure(sample, 4.0f, 5.0f, 1.0f / 20.0f);
+            protected_launch.deposit(sample, 0.25f, 0.0f);
+        }
+        protected_launch.step(1.0f / 20.0f);
+    }
+    for (std::size_t column = 0; column < sim::DeformableTerrain::cell_count; ++column)
+    {
+        const float course_x = static_cast<float>(column)
+            * sim::DeformableTerrain::fine_cell_spacing;
+        if (!sim::DeformableTerrain::launch_pad_at(course_x))
+            continue;
+        const auto& before = launch_cells[column];
+        const auto& after = protected_launch.cells()[column];
+        require(before.height == after.height && before.rest_height == after.rest_height
+                && before.firmness == after.firmness
+                && before.loose_fraction == after.loose_fraction
+                && before.water_surface == after.water_surface
+                && before.water_depth == after.water_depth
+                && before.surface_material == after.surface_material
+                && before.region == after.region,
+            "launch column changed under pressure, deposit, or relaxation");
+        for (std::size_t row = 0; row < sim::DeformableTerrain::vertical_cell_count; ++row)
+        {
+            const std::size_t fine_index = row * sim::DeformableTerrain::cell_count + column;
+            const auto& fine_before = launch_fine_cells[fine_index];
+            const auto& fine_after = protected_launch.fine_cells()[fine_index];
+            require(fine_before.material_id == fine_after.material_id
+                    && fine_before.flags == fine_after.flags
+                    && fine_before.fill == fine_after.fill,
+                "launch fine cell changed under adversarial load");
+        }
+    }
+
+    constexpr float x=3.5f;
     const float volume=first.total_height_volume(), height=first.height_at(x), firmness=first.firmness_at(x);
     first.apply_pressure(x,2.4f,0.65f,1.0f/60.0f);
     require(first.height_at(x)<height,"pressure did not compact sand");
@@ -77,6 +220,32 @@ int main()
         std::cerr << "volume expected=" << (deposited+0.12f)
             << " actual=" << first.total_height_volume() << std::endl;
     require(std::abs(first.total_height_volume()-(deposited+0.12f))<8.0e-4f,"collapse leaked volume");
+    const std::array<sim::CreatureBlueprint, 8> launch_rigs{
+        sim::CreatureBlueprint::humanoid(), sim::CreatureBlueprint::biped(),
+        sim::CreatureBlueprint::scaffold(), sim::CreatureBlueprint::chicken(),
+        sim::CreatureBlueprint::quadruped(), sim::CreatureBlueprint::crawler4(),
+        sim::CreatureBlueprint::hexapod(), sim::CreatureBlueprint::monoped() };
+    for (std::size_t rig_index = 0; rig_index < launch_rigs.size(); ++rig_index)
+    {
+        for (std::uint64_t seed = 1u; seed <= 5u; ++seed)
+        {
+            sim::Environment launch_environment(launch_rigs[rig_index],
+                0x731000u + static_cast<std::uint64_t>(rig_index) * 101u + seed);
+            launch_environment.set_course(sim::CourseStage::uneven, 0.95f);
+            const std::vector<float> clearances =
+                sim::EnvironmentTestAccess::launch_support_clearances(launch_environment);
+            require(!clearances.empty(), "rig has no authored launch support");
+            float minimum_clearance = clearances.front();
+            for (const float clearance : clearances)
+            {
+                require(clearance >= -1.0e-6f, "launch support penetrated terrain");
+                minimum_clearance = std::min(minimum_clearance, clearance);
+            }
+            require(std::abs(minimum_clearance) <= 1.0e-5f,
+                "no authored support was placed on launch collision");
+        }
+    }
+
     sim::Environment environment(sim::CreatureBlueprint::quadruped(),0x5a17u);
     environment.set_course(sim::CourseStage::moving_hazards,0.80f);
     std::array<float,sim::action_count> idle{};
@@ -119,6 +288,7 @@ int main()
 
     sim::Environment escape(sim::CreatureBlueprint::quadruped(),0xE5CA9Eu);
     escape.set_course(sim::CourseStage::moving_hazards,0.75f);
+    sim::EnvironmentTestAccess::set_terrain_progress(escape, 6.0f);
     const Vec2 escape_root=sim::EnvironmentTestAccess::root_position(escape);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-1.05f,14.0f,0.22f);
     sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.35f,10.0f,0.18f);
@@ -129,6 +299,7 @@ int main()
 
     sim::Environment trapped(sim::CreatureBlueprint::quadruped(),0xB091EDu);
     trapped.set_course(sim::CourseStage::moving_hazards,0.90f);
+    sim::EnvironmentTestAccess::set_terrain_progress(trapped, 6.0f);
     const Vec2 trapped_root=sim::EnvironmentTestAccess::root_position(trapped);
     const Vec2 trapped_head=sim::EnvironmentTestAccess::node_position(
         trapped,trapped.blueprint().head_node);

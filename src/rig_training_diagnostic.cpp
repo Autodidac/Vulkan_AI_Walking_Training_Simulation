@@ -142,7 +142,7 @@ namespace runner::diagnostics
                 raw.invalid_runs,
                 raw.invalid_reason,
                 rl::foundational_walk_teacher_authority(
-                    metrics.update, rig.blueprint),
+                    trainer.lesson_update(), rig.blueprint),
                 trainer.has_best_policy(),
                 metrics.best_update,
                 metrics.best_evaluation_distance,
@@ -201,7 +201,7 @@ namespace runner::diagnostics
         const rl::TrainingMetrics& metrics = trainer.metrics();
         proof.retained_update = metrics.best_update;
         proof.teacher_authority = rl::foundational_walk_teacher_authority(
-            metrics.update, blueprint);
+            trainer.lesson_update(), blueprint);
         if (!trainer.has_best_policy())
             return proof;
 

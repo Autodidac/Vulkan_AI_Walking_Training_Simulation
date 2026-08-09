@@ -1178,6 +1178,21 @@ int main()
             || walk_teacher[1] * walk_teacher[3] < 0.0f,
         "walking teacher does not alternate the near and far leg chains");
 
+    locomotion::Plan stable_multi_support{};
+    stable_multi_support.intent = locomotion::Intent::walk;
+    stable_multi_support.balance_reserve = 1.0f;
+    require(rl::multi_support_gait_authority(stable_multi_support) == 1.0f,
+        "stable multi-support gait lost full authored authority");
+    stable_multi_support.brake = true;
+    require(rl::multi_support_gait_authority(stable_multi_support) == 0.55f,
+        "multi-support brake does not reduce gait authority");
+    stable_multi_support.intent = locomotion::Intent::recover;
+    require(rl::multi_support_gait_authority(stable_multi_support) == 0.18f,
+        "multi-support recovery continues full gait drive");
+    stable_multi_support.intent = locomotion::Intent::crawl;
+    require(rl::multi_support_gait_authority(stable_multi_support) == 0.30f,
+        "multi-support crawl authority escaped its recovery bound");
+
     const auto crouch_teacher = rl::duck_teacher_action(crouch_humanoid);
     require(std::abs(crouch_teacher[0]) < std::abs(crouch_teacher[1])
             && std::abs(crouch_teacher[2]) < std::abs(crouch_teacher[3]),
@@ -1379,19 +1394,19 @@ int main()
         "cross-platform Walk mastery aggregate drifted");
     require(rl::foundational_walk_teacher_handoff_update(biped_walk) == 500u
             && rl::foundational_walk_teacher_handoff_update(humanoid_walk) == 900u
-            && rl::foundational_walk_teacher_handoff_update(quadruped_walk) == 1200u,
+            && rl::foundational_walk_teacher_handoff_update(quadruped_walk) == 900u,
         "foundational teacher handoff ignores support and manipulator topology");
     require(rl::foundational_walk_teacher_authority(299u, biped_walk) == 1.0f
             && rl::foundational_walk_teacher_authority(500u, biped_walk) == 0.0f
             && rl::foundational_walk_teacher_authority(599u, humanoid_walk) == 1.0f
             && rl::foundational_walk_teacher_authority(900u, humanoid_walk) == 0.0f
-            && rl::foundational_walk_teacher_authority(699u, quadruped_walk) == 1.0f
-            && rl::foundational_walk_teacher_authority(1200u, quadruped_walk) == 0.0f,
+            && rl::foundational_walk_teacher_authority(599u, quadruped_walk) == 1.0f
+            && rl::foundational_walk_teacher_authority(900u, quadruped_walk) == 0.0f,
         "foundational teacher authority does not reach exact scoped boundaries");
     const float biped_mid_authority =
         rl::foundational_walk_teacher_authority(400u, biped_walk);
     const float quadruped_mid_authority =
-        rl::foundational_walk_teacher_authority(950u, quadruped_walk);
+        rl::foundational_walk_teacher_authority(750u, quadruped_walk);
     require(std::abs(biped_mid_authority - 0.5f) < 1.0e-6f
             && std::abs(quadruped_mid_authority - 0.5f) < 1.0e-6f,
         "foundational teacher authority does not decay linearly");
@@ -1402,6 +1417,43 @@ int main()
             && rl::guided_rollout_imitation_weight(
                 0u, sim::CourseStage::balance) == 0.0f,
         "guided gait imitation is not scoped and bounded");
+    require(rl::guided_rollout_imitation_weight(
+                599u, sim::CourseStage::uneven, &quadruped_walk) == 64.0f
+            && std::abs(rl::guided_rollout_imitation_weight(
+                750u, sim::CourseStage::uneven, &quadruped_walk) - 32.0f)
+                < 1.0e-6f
+            && rl::guided_rollout_imitation_weight(
+                900u, sim::CourseStage::uneven, &quadruped_walk) == 0.0f,
+        "multi-support rollout imitation survives its finite handoff");
+    require(rl::crouch_teacher_authority(
+                rl::crouch_teacher_fade_begin_update - 1u) == 1.0f
+            && rl::crouch_teacher_authority(
+                rl::crouch_teacher_handoff_update) == 0.0f
+            && std::abs(rl::crouch_teacher_authority(300u) - 0.5f) < 1.0e-6f,
+        "crouch teacher authority does not fade to an exact finite handoff");
+    require(rl::guided_rollout_imitation_weight(
+                0u, sim::CourseStage::duck_press) == 64.0f
+            && rl::guided_rollout_imitation_weight(
+                rl::crouch_teacher_handoff_update,
+                sim::CourseStage::duck_press) == 0.0f
+            && rl::lesson_teacher_authority(
+                rl::crouch_teacher_handoff_update,
+                sim::CourseStage::duck_press, humanoid_walk) == 0.0f,
+        "crouch demonstration or action authority survives the handoff");
+    sim::Environment raw_crouch_environment{ humanoid_walk, 0xC001C0DEu };
+    raw_crouch_environment.set_course(sim::CourseStage::duck_press, 0.30f);
+    std::array<float, sim::action_count> raw_crouch_action{};
+    for (std::size_t index = 0; index < humanoid_walk.active_motor_count; ++index)
+        raw_crouch_action[index] = 0.07f * static_cast<float>(index + 1u) - 0.24f;
+    const auto zero_authority_crouch = rl::effective_policy_action(
+        raw_crouch_environment, raw_crouch_action,
+        sim::CourseStage::duck_press, 0.0f);
+    require(std::equal(raw_crouch_action.begin(),
+            raw_crouch_action.begin()
+                + static_cast<std::ptrdiff_t>(humanoid_walk.active_motor_count),
+            zero_authority_crouch.begin()),
+        "zero-authority crouch still reshapes raw anatomy policy outputs");
+
     require(!rl::nursery_policy_reset_allowed(
                 sim::CourseStage::uneven, 100000u, 120u)
             && rl::nursery_policy_reset_allowed(sim::CourseStage::balance,
@@ -2164,6 +2216,18 @@ int main()
             "cumulative training time did not advance");
     }
 
+    require(trainer.lesson_update() == 2u,
+        "lesson-local update clock did not advance with optimizer work");
+    trainer.set_course(sim::CourseStage::balance, 0.35f, true);
+    require(trainer.lesson_update() == 2u,
+        "same-lesson difficulty adjustment reset the lesson clock");
+    trainer.set_course(sim::CourseStage::duck_press, 0.25f, true);
+    require(trainer.lesson_update() == 0u && trainer.metrics().update == 2u,
+        "Stand to Crouch did not reset lesson age while preserving rig work");
+    trainer.train_one_update();
+    require(trainer.lesson_update() == 1u && trainer.metrics().update == 3u,
+        "Crouch lesson age is coupled to lifetime policy age");
+
     const std::filesystem::path temporary =
         std::filesystem::temp_directory_path() / "runner-v061-core-test.eppo";
     std::string error{};
@@ -2172,6 +2236,9 @@ int main()
     require(resumed.load_checkpoint(temporary, error, false), "failed to resume checkpoint: " + error);
     require(resumed.policy().parameters() == trainer.policy().parameters(), "checkpoint policy mismatch");
     require(resumed.metrics().update == trainer.metrics().update, "checkpoint update count was not restored");
+    require(resumed.lesson_update() == trainer.lesson_update()
+            && resumed.checkpoint_data().lesson_update == trainer.lesson_update(),
+        "checkpoint did not restore the stage-local lesson clock");
     require(resumed.metrics().total_updates == trainer.metrics().total_updates
             && resumed.metrics().total_environment_steps
                 == trainer.metrics().total_environment_steps,
@@ -2196,6 +2263,7 @@ int main()
         "explicit dimension-compatible legacy weight transfer failed: " + error);
     require(transferred_legacy.policy().parameters() == trainer.policy().parameters()
             && transferred_legacy.metrics().update == 0u
+            && transferred_legacy.lesson_update() == 0u
             && transferred_legacy.optimizer_step() == 0u
             && transferred_legacy.controller_state() == rl::ControllerState::transferred,
         "legacy transfer retained optimizer, mastery, or non-transfer controller state");

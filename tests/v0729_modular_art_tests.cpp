@@ -190,23 +190,151 @@ int main()
             "draw_oriented_pixel_art", "draw_segment_art",
             "optional_upper_arm_art", "optional_forearm_art",
             "optional_thigh_art", "optional_shin_art",
-            "rig.paired_leg_chains()", "motor_index >= rig.active_motor_count",
+            "support_boot_transform", "rig.support_branch_mask(motor)",
+            "rig.node_support_mask(index)", "art::oriented_box_transform",
             "!optional_torso_art.loaded()", "!optional_forearm_art.loaded()",
-            "body_span * 0.88f", "18.0f, 56.0f", "torso_frame_bone" })
+            "body_span * 0.88f", "18.0f, 56.0f" })
         require(app.find(reference) != std::string::npos,
-            "node-bound remade-art renderer contract is missing");
+            "topology-bound remade-art renderer contract is missing");
+    require(app.find("draw_pixel_art(canvas, optional_foot_art")
+                == std::string::npos
+            && app.find("if (!optional_art_enabled || !rig.paired_leg_chains())")
+                == std::string::npos,
+        "axis-aligned boot or paired-biped art gate remains");
+    require(app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
+            && app.find("scaffold remains an internal calibration fixture")
+                != std::string::npos,
+        "near-duplicate calibration scaffold is still a user-facing preset");
+    {
+        const runner::art::OrientedArtTransform upright =
+            runner::art::support_boot_transform({ 0.0f, -10.0f },
+                { 0.0f, 0.0f }, 20.0f, 8.0f);
+        const runner::Vec2 upright_axis = upright.ending - upright.beginning;
+        require(std::abs(upright_axis.x - 20.0f) < 1.0e-5f
+                && std::abs(upright_axis.y) < 1.0e-5f
+                && std::abs(upright.thickness - 8.0f) < 1.0e-5f,
+            "upright boot transform is not horizontal and bounded");
+
+        const runner::art::OrientedArtTransform fallen =
+            runner::art::support_boot_transform({ -10.0f, 0.0f },
+                { 0.0f, 0.0f }, 20.0f, 8.0f);
+        const runner::Vec2 fallen_axis = fallen.ending - fallen.beginning;
+        require(std::abs(fallen_axis.x) < 1.0e-5f
+                && std::abs(fallen_axis.y + 20.0f) < 1.0e-5f,
+            "fallen boot did not rotate with the terminal support segment");
+
+        constexpr runner::Vec2 translation{ 7.0f, -3.0f };
+        const runner::art::OrientedArtTransform translated =
+            runner::art::support_boot_transform(
+                runner::Vec2{ -10.0f, 0.0f } + translation,
+                runner::Vec2{ 0.0f, 0.0f } + translation, 20.0f, 8.0f);
+        require(std::abs((translated.beginning - fallen.beginning).x
+                    - translation.x) < 1.0e-5f
+                && std::abs((translated.beginning - fallen.beginning).y
+                    - translation.y) < 1.0e-5f
+                && std::abs((translated.ending - fallen.ending).x
+                    - translation.x) < 1.0e-5f
+                && std::abs((translated.ending - fallen.ending).y
+                    - translation.y) < 1.0e-5f,
+            "boot translation changed its rotation or pivot");
+
+        const runner::art::OrientedArtTransform reversed =
+            runner::art::support_boot_transform({ 0.0f, 10.0f },
+                { 0.0f, 0.0f }, 20.0f, 8.0f);
+        require(reversed.ending.x < reversed.beginning.x,
+            "reversed terminal segment did not mirror boot direction");
+        const runner::art::OrientedArtTransform degenerate =
+            runner::art::support_boot_transform({ 2.0f, 3.0f },
+                { 2.0f, 3.0f }, 20.0f, 8.0f);
+        require(std::isfinite(degenerate.beginning.x)
+                && std::isfinite(degenerate.beginning.y)
+                && std::isfinite(degenerate.ending.x)
+                && std::isfinite(degenerate.ending.y),
+            "degenerate support segment produced a non-finite transform");
+    }
+
+    {
+        const std::array<runner::sim::CreatureBlueprint, 8> rigs{
+            runner::sim::CreatureBlueprint::humanoid(),
+            runner::sim::CreatureBlueprint::biped(),
+            runner::sim::CreatureBlueprint::scaffold(),
+            runner::sim::CreatureBlueprint::chicken(),
+            runner::sim::CreatureBlueprint::quadruped(),
+            runner::sim::CreatureBlueprint::crawler4(),
+            runner::sim::CreatureBlueprint::hexapod(),
+            runner::sim::CreatureBlueprint::monoped() };
+        for (const runner::sim::CreatureBlueprint& rig : rigs)
+        {
+            std::size_t classified_support_motors = 0u;
+            for (std::size_t motor_index = 0;
+                motor_index < rig.active_motor_count; ++motor_index)
+            {
+                const runner::sim::MotorConstraint& motor = rig.motors[motor_index];
+                const std::uint8_t mask = rig.support_branch_mask(motor);
+                require((mask & ~0x3u) == 0u,
+                    "authored motor produced an invalid support-role mask");
+                if (mask != 0u)
+                    ++classified_support_motors;
+            }
+            require(classified_support_motors > 0u,
+                "user-visible rig has no topology-classified support motor");
+            for (std::size_t node = 0; node < rig.nodes.size(); ++node)
+            {
+                if (rig.is_support_seed(node))
+                    require(rig.node_support_mask(node) != 0u,
+                        "authored support node lost its renderer role");
+            }
+        }
+        const std::array<runner::sim::CreatureBlueprint, 7> exposed{
+            runner::sim::CreatureBlueprint::humanoid(),
+            runner::sim::CreatureBlueprint::biped(),
+            runner::sim::CreatureBlueprint::chicken(),
+            runner::sim::CreatureBlueprint::quadruped(),
+            runner::sim::CreatureBlueprint::crawler4(),
+            runner::sim::CreatureBlueprint::hexapod(),
+            runner::sim::CreatureBlueprint::monoped() };
+        for (std::size_t left = 0; left < exposed.size(); ++left)
+            for (std::size_t right = left + 1u; right < exposed.size(); ++right)
+                require(exposed[left].signature() != exposed[right].signature(),
+                    "two exposed presets share one rig-scoped training identity");
+        const auto aspect = [](const runner::sim::CreatureBlueprint& rig)
+        {
+            float minimum_x = rig.nodes.front().x;
+            float maximum_x = minimum_x;
+            float minimum_y = rig.nodes.front().y;
+            float maximum_y = minimum_y;
+            for (const runner::Vec2 node : rig.nodes)
+            {
+                minimum_x = std::min(minimum_x, node.x);
+                maximum_x = std::max(maximum_x, node.x);
+                minimum_y = std::min(minimum_y, node.y);
+                maximum_y = std::max(maximum_y, node.y);
+            }
+            return (maximum_x - minimum_x) / (maximum_y - minimum_y);
+        };
+        require(aspect(exposed[4]) > aspect(exposed[3]) + 0.20f,
+            "low crawler silhouette is not distinct from the quadruped");
+    }
+
     const std::string main_source = read_text(root / "src" / "main.cpp");
     const std::string renderer_header = read_text(root / "src" / "renderer.hpp");
     require(main_source.find("--diagnose-art") != std::string::npos
             && main_source.find("--art-eye-test") != std::string::npos
-            && main_source.find("prepare_art_eye_test") != std::string::npos
-            && main_source.find("closeup_vertices") != std::string::npos
+            && main_source.find("prepare_art_diagnostic_rig") != std::string::npos
+            && main_source.find("prepare_art_fallen_eye_test") != std::string::npos
+            && main_source.find("rig_vertices") != std::string::npos
+            && main_source.find("fallen_vertices") != std::string::npos
             && main_source.find("headroom_limit") != std::string::npos
             && main_source.find("RUNNER_V0729_MODULAR_ART_REMAKE.md")
                 != std::string::npos
             && renderer_header.find("maximum_frame_vertex_bytes")
                 != std::string::npos,
         "modular-art vertex-budget diagnostic is missing");
+    require(app.find("case 6u: rig = sim::CreatureBlueprint::hexapod()")
+                != std::string::npos
+            && app.find("set_diagnostic_rigid_rotation") != std::string::npos
+            && app.find("HORIZONTAL ROTATION EVIDENCE") != std::string::npos,
+        "all-rig or horizontal-pose Vulkan art diagnostic is missing");
     require(app.find("ORTHOGRAPHIC ART CHECK") != std::string::npos
             && app.find("STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING")
                 != std::string::npos

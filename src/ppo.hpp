@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3001u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3101u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -192,43 +192,8 @@ namespace runner::rl
         const sim::CreatureBlueprint& rig,
         const sim::MotorConstraint& motor) noexcept
     {
-        if (!motor.enabled || motor.pivot >= rig.nodes.size()
-            || motor.c >= rig.nodes.size() || rig.nodes.size() > 128u)
-            return 0u;
-
-        std::array<bool, 128> visited{};
-        std::array<std::uint16_t, 128> stack{};
-        std::size_t stack_size = 0u;
-        visited[motor.pivot] = true;
-        visited[motor.c] = true;
-        stack[stack_size++] = motor.c;
-        std::uint8_t mask = 0u;
-        while (stack_size > 0u)
-        {
-            const std::uint16_t node = stack[--stack_size];
-            if (rig.is_left_support_seed(node))
-                mask = static_cast<std::uint8_t>(mask | 0x1u);
-            if (rig.is_right_support_seed(node))
-                mask = static_cast<std::uint8_t>(mask | 0x2u);
-            for (const sim::DistanceConstraint& bone : rig.bones)
-            {
-                if (bone.stiffness < 0.20f)
-                    continue;
-                std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
-                if (bone.a == node)
-                    next = bone.b;
-                else if (bone.b == node)
-                    next = bone.a;
-                if (next < rig.nodes.size() && !visited[next])
-                {
-                    visited[next] = true;
-                    stack[stack_size++] = next;
-                }
-            }
-        }
-        return mask;
+        return rig.support_branch_mask(motor);
     }
-
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
         const sim::MotorConstraint& motor) noexcept
@@ -446,6 +411,19 @@ namespace runner::rl
         float stance_backstroke{};
     };
 
+    [[nodiscard]] inline float multi_support_gait_authority(
+        const locomotion::Plan& movement) noexcept
+    {
+        if (movement.intent == locomotion::Intent::recover)
+            return 0.18f;
+        if (movement.intent == locomotion::Intent::crawl)
+            return 0.30f;
+        const float reserve_authority = clamp(
+            (movement.balance_reserve - 0.25f) / 0.45f, 0.35f, 1.0f);
+        return movement.brake ? std::min(reserve_authority, 0.55f)
+            : reserve_authority;
+    }
+
     [[nodiscard]] inline std::array<float, sim::action_count>
     multi_support_teacher_action(const sim::Environment& environment,
         MultiSupportTeacherParameters parameters) noexcept
@@ -453,9 +431,12 @@ namespace runner::rl
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        const float gait_authority = rig.support_seed_count() >= 6u
+            ? 1.0f : multi_support_gait_authority(movement);
         const float phase = environment.elapsed_seconds() * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
-        const float gait_drive = std::sin(phase) * movement.direction;
+        const float gait_drive = std::sin(phase) * movement.direction
+            * gait_authority;
         for (std::size_t index = 0; index < rig.active_motor_count; ++index)
         {
             const sim::MotorConstraint& motor = rig.motors[index];
@@ -470,7 +451,8 @@ namespace runner::rl
             Vec2 desired = rig.nodes[motor.c] - rig.nodes[motor.pivot];
             const float segment_length = length(desired);
             desired.x += parameters.amplitude * segment_length * drive
-                - parameters.stance_backstroke * segment_length * movement.direction;
+                - parameters.stance_backstroke * segment_length
+                    * movement.direction * gait_authority;
             desired.y += parameters.amplitude * segment_length
                 * std::max(0.0f, drive) * 0.75f;
             const float target = signed_angle(reference, desired);
@@ -600,6 +582,7 @@ namespace runner::rl
             const bool six_supports = rig.support_seed_count() >= 6u;
             const bool tall_four_supports = !six_supports
                 && root_clearance >= 1.65f;
+
             const MultiSupportTeacherParameters multi_parameters{
                 sim::authored_foundational_gait_cadence_hz(rig),
                 six_supports ? 0.90f : 0.12f,
@@ -706,7 +689,7 @@ namespace runner::rl
         const sim::CreatureBlueprint& blueprint) noexcept
     {
         if (!blueprint.paired_leg_chains())
-            return 1200u;
+            return 900u;
         return rig_has_manipulator_motors(blueprint) ? 900u : 500u;
     }
 
@@ -716,13 +699,40 @@ namespace runner::rl
         const std::uint64_t handoff =
             foundational_walk_teacher_handoff_update(blueprint);
         const std::uint64_t fade_begin = !blueprint.paired_leg_chains()
-            ? 700u : rig_has_manipulator_motors(blueprint) ? 600u : 300u;
+            ? 600u : rig_has_manipulator_motors(blueprint) ? 600u : 300u;
         if (update < fade_begin)
             return 1.0f;
         if (update < handoff)
             return 1.0f - static_cast<float>(update - fade_begin)
                 / static_cast<float>(handoff - fade_begin);
         return 0.0f;
+    }
+
+    inline constexpr std::uint64_t crouch_teacher_fade_begin_update = 180u;
+    inline constexpr std::uint64_t crouch_teacher_handoff_update = 420u;
+
+    [[nodiscard]] inline float crouch_teacher_authority(
+        std::uint64_t lesson_update) noexcept
+    {
+        if (lesson_update < crouch_teacher_fade_begin_update)
+            return 1.0f;
+        if (lesson_update < crouch_teacher_handoff_update)
+            return 1.0f - static_cast<float>(
+                lesson_update - crouch_teacher_fade_begin_update)
+                / static_cast<float>(crouch_teacher_handoff_update
+                    - crouch_teacher_fade_begin_update);
+        return 0.0f;
+    }
+
+    [[nodiscard]] inline float lesson_teacher_authority(
+        std::uint64_t lesson_update, sim::CourseStage stage,
+        const sim::CreatureBlueprint& blueprint) noexcept
+    {
+        if (stage == sim::CourseStage::duck_press)
+            return crouch_teacher_authority(lesson_update);
+        if (stage == sim::CourseStage::uneven)
+            return foundational_walk_teacher_authority(lesson_update, blueprint);
+        return 1.0f;
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count> effective_policy_action(
@@ -788,8 +798,11 @@ namespace runner::rl
         else if (stage == sim::CourseStage::duck_press)
         {
             const auto teacher = duck_teacher_action(environment);
-            blend_teacher(teacher, 0.76f + environment.duck_obstacle_weight() * 0.16f, 0.0f);
-            neutralize_non_support(0.995f);
+            const float authority = clamp(lesson_authority, 0.0f, 1.0f);
+            blend_teacher(teacher,
+                (0.76f + environment.duck_obstacle_weight() * 0.16f) * authority,
+                0.0f);
+            neutralize_non_support(0.995f * authority);
         }
         else if (stage == sim::CourseStage::uneven)
         {
@@ -836,6 +849,10 @@ namespace runner::rl
                 index < sim::action_count; ++index)
                 policy_action[index] = 0.0f;
         }
+        if ((stage == sim::CourseStage::duck_press
+                || stage == sim::CourseStage::uneven)
+            && lesson_authority <= 0.0f)
+            return policy_action;
         if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
         {
             for (std::size_t index = 0; index < active; ++index)
@@ -916,10 +933,25 @@ namespace runner::rl
     };
 
     [[nodiscard]] inline float guided_rollout_imitation_weight(
-        std::uint64_t update, sim::CourseStage stage) noexcept
+        std::uint64_t update, sim::CourseStage stage,
+        const sim::CreatureBlueprint* blueprint = nullptr) noexcept
     {
+        if (stage == sim::CourseStage::duck_press)
+        {
+            if (update < crouch_teacher_fade_begin_update)
+                return 64.0f;
+            if (update < crouch_teacher_handoff_update)
+                return lerp(64.0f, 0.0f,
+                    static_cast<float>(update - crouch_teacher_fade_begin_update)
+                        / static_cast<float>(crouch_teacher_handoff_update
+                            - crouch_teacher_fade_begin_update));
+            return 0.0f;
+        }
         if (!sim::stage_requires_forward_gait(stage))
             return 0.0f;
+        if (stage == sim::CourseStage::uneven && blueprint != nullptr)
+            return 64.0f * foundational_walk_teacher_authority(
+                update, *blueprint);
         if (update < 1200u)
             return 64.0f;
         if (update < 3600u)
@@ -1575,6 +1607,7 @@ namespace runner::rl
             std::vector<float> speed_history{};
             std::uint64_t optimizer_step{};
             std::uint64_t random_state{};
+            std::uint64_t lesson_update{};
             TrainingMetrics metrics{};
             sim::CourseStage stage{ sim::CourseStage::balance };
             float difficulty{ 0.25f };
@@ -1653,6 +1686,10 @@ namespace runner::rl
         [[nodiscard]] std::size_t maximum_worker_count() const noexcept { return rollout_worker_count_; }
         [[nodiscard]] sim::CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
+        [[nodiscard]] std::uint64_t lesson_update() const noexcept
+        {
+            return lesson_update_;
+        }
         [[nodiscard]] std::size_t self_imitation_sample_count() const noexcept
         {
             return self_imitation_prior_.size();
@@ -1759,6 +1796,7 @@ namespace runner::rl
         ControllerState controller_state_{ ControllerState::fresh };
         sim::CourseStage course_stage_{ sim::CourseStage::balance };
         float course_difficulty_{ 0.25f };
+        std::uint64_t lesson_update_{};
         int cpu_mode_{ 4 };
         std::size_t active_worker_count_{ 1 };
         std::size_t rollout_worker_count_{ 1 };

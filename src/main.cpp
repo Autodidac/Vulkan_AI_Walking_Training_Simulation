@@ -153,6 +153,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0728_COURSE_COMPLETION.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0729_MODULAR_ART_REMAKE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"
@@ -333,23 +334,41 @@ namespace
         application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
         const std::size_t course_vertices = application.vertices().size();
         const std::size_t course_bytes = application.vertices().size_bytes();
-        application.prepare_art_eye_test();
+        std::array<std::size_t, 7> rig_vertices{};
+        std::size_t vertex_count = course_vertices;
+        std::size_t vertex_bytes = course_bytes;
+        bool all_rigs_rendered = true;
+        for (std::size_t index = 0; index < rig_vertices.size(); ++index)
+        {
+            all_rigs_rendered = application.prepare_art_diagnostic_rig(index)
+                && all_rigs_rendered;
+            application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
+            rig_vertices[index] = application.vertices().size();
+            all_rigs_rendered = rig_vertices[index] > 0u && all_rigs_rendered;
+            vertex_count = std::max(vertex_count, rig_vertices[index]);
+            vertex_bytes = std::max(vertex_bytes,
+                application.vertices().size_bytes());
+        }
+        application.prepare_art_fallen_eye_test();
         application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
-        const std::size_t closeup_vertices = application.vertices().size();
-        const std::size_t closeup_bytes = application.vertices().size_bytes();
-        const std::size_t vertex_count = std::max(course_vertices, closeup_vertices);
-        const std::size_t vertex_bytes = std::max(course_bytes, closeup_bytes);
+        const std::size_t fallen_vertices = application.vertices().size();
+        vertex_count = std::max(vertex_count, fallen_vertices);
+        vertex_bytes = std::max(vertex_bytes, application.vertices().size_bytes());
         const std::size_t headroom_limit =
             runner::render::maximum_frame_vertex_bytes * 3u / 4u;
-        const bool valid = course_vertices > 0u && closeup_vertices > 0u
-            && vertex_bytes <= headroom_limit;
+        const bool valid = course_vertices > 0u && all_rigs_rendered
+            && fallen_vertices > 0u && vertex_bytes <= headroom_limit;
         std::printf(
             "Runner %s art diagnostic: %s; vertices=%zu bytes=%zu "
-            "course_vertices=%zu closeup_vertices=%zu "
-            "headroom_limit=%zu hard_limit=%zu\n",
+            "course_vertices=%zu fallen_vertices=%zu "
+            "rig_vertices=%zu,%zu,%zu,%zu,%zu,%zu,%zu "
+            "headroom_limit=%zu hard_limit=%zu",
             RUNNER_VERSION, valid ? "passed" : "failed", vertex_count,
-            vertex_bytes, course_vertices, closeup_vertices, headroom_limit,
+            vertex_bytes, course_vertices, fallen_vertices,
+            rig_vertices[0], rig_vertices[1], rig_vertices[2], rig_vertices[3],
+            rig_vertices[4], rig_vertices[5], rig_vertices[6], headroom_limit,
             runner::render::maximum_frame_vertex_bytes);
+        std::putchar(10);
         return valid ? 0 : 1;
     }
 
@@ -371,9 +390,12 @@ int main(int argc, char** argv)
         const runner::diagnostics::CourseCompletionReport report =
             runner::diagnostics::run_course_completion_diagnostic();
         std::printf(
-            "safe_runway=%s materials=%s seed_variation=%s water_holes=%s "
+            "launch_contact=%s active_terrain=%s delayed_objects=%s "
+            "materials=%s seed_variation=%s water_holes=%s "
             "observations=%s delayed_pressure=%s climb=%s equipment=%s "
             "equipment_off=%s frame_independent=%s\n",
+            report.launch_contact ? "passed" : "failed",
+            report.active_terrain ? "passed" : "failed",
             report.safe_runway ? "passed" : "failed",
             report.material_regions ? "passed" : "failed",
             report.seed_variation ? "passed" : "failed",

@@ -194,8 +194,8 @@ namespace runner::rl
                                     environment.observation());
                                 const auto action = effective_policy_action(
                                     environment, raw_action, current_stage,
-                                    foundational_walk_teacher_authority(
-                                        owner.metrics_.update,
+                                    lesson_teacher_authority(
+                                        owner.lesson_update_, current_stage,
                                         environment.blueprint()));
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;

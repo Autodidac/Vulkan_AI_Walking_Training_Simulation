@@ -14,7 +14,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "Runner v0.7.30 rig-training failure: " << message << '\n';
+        std::cerr << "Runner v0.7.31 rig-training failure: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -32,6 +32,8 @@ namespace
         require(expected.preview_last_reset_reason()
                 == actual.preview_last_reset_reason(),
             "preview reset reason depends on render cadence");
+        require(expected.lesson_update() == actual.lesson_update(),
+            "render cadence advanced a lesson-local policy clock");
         require(std::abs(expected.preview().elapsed_seconds()
                 - actual.preview().elapsed_seconds()) < 1.0e-6f,
             "preview elapsed simulation time depends on render cadence");
@@ -59,6 +61,46 @@ namespace
                 require(false, "preview physics state depends on render cadence");
             }
         }
+        const auto& expected_terrain = expected.preview().terrain();
+        const auto& actual_terrain = actual.preview().terrain();
+        require(expected_terrain.cells().size() == actual_terrain.cells().size()
+                && expected_terrain.fine_cells().size()
+                    == actual_terrain.fine_cells().size()
+                && expected_terrain.macro_tiles().size()
+                    == actual_terrain.macro_tiles().size(),
+            "terrain allocation changed across render cadence");
+        for (std::size_t index = 0; index < expected_terrain.cells().size(); ++index)
+        {
+            const auto& left = expected_terrain.cells()[index];
+            const auto& right = actual_terrain.cells()[index];
+            require(left.height == right.height && left.rest_height == right.rest_height
+                    && left.firmness == right.firmness
+                    && left.loose_fraction == right.loose_fraction
+                    && left.water_surface == right.water_surface
+                    && left.water_depth == right.water_depth
+                    && left.surface_material == right.surface_material
+                    && left.region == right.region,
+                "active terrain column depends on render cadence");
+        }
+        for (std::size_t index = 0; index < expected_terrain.fine_cells().size(); ++index)
+        {
+            const auto& left = expected_terrain.fine_cells()[index];
+            const auto& right = actual_terrain.fine_cells()[index];
+            require(left.material_id == right.material_id && left.flags == right.flags
+                    && left.fill == right.fill,
+                "active terrain fine cell depends on render cadence");
+        }
+        for (std::size_t index = 0; index < expected_terrain.macro_tiles().size(); ++index)
+        {
+            const auto& left = expected_terrain.macro_tiles()[index];
+            const auto& right = actual_terrain.macro_tiles()[index];
+            require(left.occupied_mask == right.occupied_mask
+                    && left.structural_mask == right.structural_mask
+                    && left.uniform_material == right.uniform_material
+                    && left.macro_ready == right.macro_ready
+                    && left.active == right.active,
+                "active terrain macro tile depends on render cadence");
+        }
     }
 
     struct TeacherOutcome
@@ -67,6 +109,9 @@ namespace
         float survival{};
         std::uint32_t strides{};
         std::uint32_t crossings{};
+        runner::sim::TerrainRegion region{ runner::sim::TerrainRegion::firm };
+        float firmness{};
+        float looseness{};
         runner::sim::InvalidMotion reason{ runner::sim::InvalidMotion::none };
     };
 
@@ -83,8 +128,12 @@ namespace
             if (environment.step(action).terminated)
                 break;
         }
+        const float root_x = environment.particles()[rig.root_node].position.x;
         return { environment.distance_travelled(), environment.elapsed_seconds(),
             environment.gait_cycles(), environment.limb_crossings(),
+            environment.terrain_region_at(root_x),
+            environment.terrain_firmness_at(root_x),
+            environment.terrain_looseness_at(root_x),
             environment.invalid_reason() };
     }
     void verify_walking_teachers_repeated_seeds()
@@ -118,6 +167,9 @@ namespace
                     && repeated.survival == repeated_again.survival
                     && repeated.strides == repeated_again.strides
                     && repeated.crossings == repeated_again.crossings
+                    && repeated.region == repeated_again.region
+                    && repeated.firmness == repeated_again.firmness
+                    && repeated.looseness == repeated_again.looseness
                     && repeated.reason == repeated_again.reason,
                 "walking teacher is not deterministic for a repeated seed");
             bool all_valid = true;
@@ -125,7 +177,9 @@ namespace
             bool all_walked = true;
             const bool paired_legs = test.rig.paired_leg_chains();
             const float minimum_distance = paired_legs ? 18.0f : 1.0f;
-            const std::uint32_t minimum_strides = paired_legs ? 16u : 3u;
+            const std::uint32_t minimum_strides = paired_legs
+                ? (runner::rl::rig_has_manipulator_motors(test.rig) ? 14u : 16u)
+                : 3u;
             for (const std::uint64_t seed : seeds)
             {
                 const TeacherOutcome outcome = run_teacher(test.rig, seed);
@@ -134,6 +188,9 @@ namespace
                     << " strides=" << outcome.strides
                     << " crossings=" << outcome.crossings
                     << " survival=" << outcome.survival
+                    << " terrain=" << runner::sim::terrain_region_name(outcome.region)
+                    << " firmness=" << outcome.firmness
+                    << " looseness=" << outcome.looseness
                     << " reason=" << runner::sim::invalid_motion_name(outcome.reason)
                     << '\n';
                 all_valid = all_valid
@@ -170,10 +227,13 @@ namespace
         require_same_preview(at_60_hz, at_240_hz, "240 Hz");
 
         runner::rl::PpoTrainer partial{ rig, 1u, false };
+        runner::rl::PpoTrainer unadvanced{ rig, 1u, false };
         partial.reset_preview(seed);
+        unadvanced.reset_preview(seed);
         partial.step_preview(1.0f / 120.0f);
         require(partial.preview().elapsed_seconds() == 0.0f,
             "substep frame advanced preview physics");
+        require_same_preview(unadvanced, partial, "partial frame");
         partial.reset_preview(seed);
         partial.step_preview(1.0f / 120.0f);
         require(partial.preview().elapsed_seconds() == 0.0f,
@@ -187,6 +247,10 @@ namespace
         require(std::abs(partial.preview().elapsed_seconds() - 1.0f / 60.0f)
                 < 1.0e-6f,
             "invalid frame delta changed preview physics");
+        runner::rl::PpoTrainer one_tick{ rig, 1u, false };
+        one_tick.reset_preview(seed);
+        one_tick.step_preview(1.0f / 60.0f);
+        require_same_preview(one_tick, partial, "invalid frame delta");
     }
 }
 
@@ -197,7 +261,7 @@ int main(int argc, char** argv)
     const bool run_learner = mode == "--all" || mode == "--learner";
     if (!run_references && !run_learner)
     {
-        std::cerr << "Unknown v0.7.30 test mode: " << mode << '\n';
+        std::cerr << "Unknown v0.7.31 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
     if (run_references)
@@ -206,7 +270,7 @@ int main(int argc, char** argv)
         verify_frame_independent_preview();
         if (!run_learner)
         {
-            std::cout << "Runner v0.7.30 reference gait and frame-independence checks passed\n";
+            std::cout << "Runner v0.7.31 reference gait and frame-independence checks passed\n";
             return EXIT_SUCCESS;
         }
     }
@@ -252,12 +316,12 @@ int main(int argc, char** argv)
     }
     if (!report.passed)
     {
-        std::cerr << "Runner v0.7.30 rig-training diagnostic failed\n";
+        std::cerr << "Runner v0.7.31 rig-training diagnostic failed\n";
         return EXIT_FAILURE;
     }
     if (run_references)
-        std::cout << "Runner v0.7.30 rig-training and frame-independence checks passed\n";
+        std::cout << "Runner v0.7.31 rig-training and frame-independence checks passed\n";
     else
-        std::cout << "Runner v0.7.30 rig-training checks passed\n";
+        std::cout << "Runner v0.7.31 rig-training checks passed\n";
     return EXIT_SUCCESS;
 }

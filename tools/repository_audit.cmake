@@ -18,9 +18,11 @@ foreach(required IN ITEMS
         docs/RUNNER_V0728_COURSE_COMPLETION.md
         docs/RUNNER_V0729_MODULAR_ART_REMAKE.md
         docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md
+        docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
+        tests/v0731_crouch_learning_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
@@ -62,7 +64,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.30 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.31 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -70,6 +72,8 @@ foreach(reference IN ITEMS
         "RunnerV0725ArtLegHotfixTests"
         "RunnerV0726TrainingTruthTests"
         "RunnerV0730ColdStartTests"
+        "RunnerV0731CrouchLearningTests"
+        "Runner.V0731CrouchLearning"
         "Runner.V0730ReferenceFrame"
         "COMMAND RunnerV0730ColdStartTests --references"
         "COMMAND RunnerV0730ColdStartTests --learner"
@@ -84,6 +88,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0728_COURSE_COMPLETION.md"
         "RUNNER_V0729_MODULAR_ART_REMAKE.md"
         "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md"
+        "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -156,7 +161,16 @@ foreach(reference IN ITEMS
         "WALK-COLD-START-356"
         "WALK-RELEASE-357"
         "WALK-MULTI-HANDOFF-358"
-        "WALK-HUMANOID-COLD-359")
+        "WALK-HUMANOID-COLD-359"
+        "WALK-LESSON-CLOCK-360"
+        "WALK-CROUCH-OWNERSHIP-361"
+        "WALK-LAUNCH-CONTACT-362"
+        "WALK-ACTIVE-TERRAIN-363"
+        "WALK-ART-TRANSFORM-364"
+        "WALK-ART-ALL-RIGS-365"
+        "WALK-RIG-IDENTITY-366"
+        "WALK-FRAME-TRUTH-367"
+        "WALK-RELEASE-368")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -185,7 +199,10 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3001u"
+        "training_semantics_version = 0x0007'3101u"
+        "lesson_teacher_authority"
+        "crouch_teacher_handoff_update"
+        "lesson_update() const noexcept"
         "completed_episode_passes_stage_checks"
         "foundational_walk_teacher_handoff_update"
         "guided_rollout_imitation_weight"
@@ -205,7 +222,20 @@ foreach(reference IN ITEMS
         "foundational_walk_teacher_handoff_update")
     string(FIND "${trainer_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.30 learner contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.31 learner contract missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/deformable_terrain.hpp" terrain_text)
+foreach(reference IN ITEMS
+        "launch_pad_half_width = 0.70f"
+        "launch_transition_width = 0.55f"
+        "deformation_scale = 0.06f"
+        "TerrainRegion::shallow_water"
+        "TerrainRegion::hole")
+    string(FIND "${terrain_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "v0.7.31 active-terrain contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -227,7 +257,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0730-walk-autosave.eppo"
+        "runner-v0731-active-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -372,8 +402,12 @@ foreach(forbidden IN ITEMS "rounded_background" "polygon(" "gold =" "cyan =")
 endforeach()
 
 foreach(reference IN ITEMS
-        "draw_pixel_art(canvas, optional_torso_art"
-        "Remade modular armor, bounded to the physical torso"
+        "draw_oriented_pixel_art(canvas, optional_torso_art"
+        "art::support_boot_transform"
+        "rig.support_branch_mask(motor)"
+        "rig.node_support_mask(index)"
+        "prepare_art_diagnostic_rig"
+        "prepare_art_fallen_eye_test"
         "optional_art_enabled = impl_->optional_foot_art.loaded()")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -419,12 +453,14 @@ foreach(reference IN ITEMS
         "left_air != right_air")
     string(FIND "${rig_training_diagnostic_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.30 cold-start acceptance contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.31 cold-start acceptance contract missing: ${reference}")
     endif()
 endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/course_completion_diagnostic.cpp" course_diagnostic_text)
 foreach(reference IN ITEMS
+        "launch_contact"
+        "active_terrain"
         "safe_runway"
         "material_regions"
         "water_and_holes"
@@ -441,6 +477,9 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
+        "'E', 'P', 'P', 'O', '3', '1'"
+        "v0730_checkpoint_magic"
+        "data.lesson_update"
         "v0727_checkpoint_magic"
         "v0727_parameter_count = 8'017u"
         "migrate_v0727_parameters"
@@ -475,7 +514,7 @@ if(art_workflow_pos EQUAL -1)
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-rig-training" cold_start_workflow_pos)
 if(cold_start_workflow_pos EQUAL -1)
-    message(FATAL_ERROR "Release workflow does not run the v0.7.30 cold-start diagnostic")
+    message(FATAL_ERROR "Release workflow does not run the v0.7.31 cold-start diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
@@ -511,4 +550,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.30 repository hygiene passed")
+message(STATUS "Runner v0.7.31 repository hygiene passed")

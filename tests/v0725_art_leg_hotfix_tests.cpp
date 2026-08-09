@@ -218,13 +218,13 @@ int main()
     {
         const std::filesystem::path source_root{ RUNNER_SOURCE_ROOT };
         const std::string app = read_text(source_root / "src/app.cpp");
-        require(app.find("draw_pixel_art(canvas, optional_torso_art")
+        require(app.find("draw_oriented_pixel_art(canvas, optional_torso_art")
                 != std::string::npos
-                && app.find("Remade modular armor, bounded to the physical torso")
+                && app.find("art::oriented_box_transform(center, body_right")
                     != std::string::npos
-                && app.find("std::clamp(body_span * 0.88f, 72.0f, 118.0f)")
+                && app.find("std::clamp(body_span * 0.88f, 54.0f, 118.0f)")
                     != std::string::npos,
-            "bounded v0.7.26 torso component is missing or unbounded");
+            "bounded oriented torso component is missing or unbounded");
         require(app.find("COMPACT SEGMENTED BODY ARMOR") != std::string::npos,
             "compact node-attached armor implementation is missing");
         require(app.find("optional_helmet_art.loaded()") != std::string::npos,

@@ -147,33 +147,6 @@ namespace runner
             }
         }
 
-        void draw_pixel_art(render::Canvas& canvas, const art::PixelArt& art,
-            Rect target, float alpha = 1.0f)
-        {
-            if (!art.loaded() || target.size.x <= 0.0f || target.size.y <= 0.0f)
-                return;
-            const float pixel_width = target.size.x / static_cast<float>(art.width);
-            const float pixel_height = target.size.y / static_cast<float>(art.height);
-            for (int y = 0; y < art.height; ++y)
-            {
-                for (int x = 0; x < art.width; ++x)
-                {
-                    Color color = art.pixels[static_cast<std::size_t>(
-                        y * art.width + x)];
-                    if (art.transparent(color))
-                        continue;
-                    color.a *= alpha;
-                    const Vec2 minimum = target.position + Vec2{
-                        static_cast<float>(x) * pixel_width,
-                        static_cast<float>(y) * pixel_height
-                    };
-                    canvas.quad(minimum,
-                        minimum + Vec2{ pixel_width + 0.35f,
-                            pixel_height + 0.35f }, color);
-                }
-            }
-        }
-
         void draw_oriented_pixel_art(render::Canvas& canvas,
             const art::PixelArt& art, Vec2 beginning, Vec2 ending,
             float thickness, float alpha = 1.0f, bool mirror_vertical = false)
@@ -410,9 +383,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0730-walk-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0730-walk-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0730-walk-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0731-active-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0731-active-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0731-active-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -761,6 +734,21 @@ namespace runner
             const float progress = environment.course_progress();
             const float source_left = sim::terrain_sample_x(left, progress);
             const float source_right = sim::terrain_sample_x(right, progress);
+            const float surface_step = sim::DeformableTerrain::fine_cell_spacing;
+            const float first_surface_x = std::floor(left / surface_step) * surface_step;
+            const float viewport_bottom = viewport.position.y + viewport.size.y;
+            for (float x = first_surface_x; x < right; x += surface_step)
+            {
+                const float next_x = x + surface_step;
+                const Vec2 surface_a = world_to_screen(
+                    { x, environment.ground_height_at(x) }, viewport, camera, scale);
+                const Vec2 surface_b = world_to_screen(
+                    { next_x, environment.ground_height_at(next_x) }, viewport, camera, scale);
+                const Vec2 bottom_a{ surface_a.x, viewport_bottom };
+                const Vec2 bottom_b{ surface_b.x, viewport_bottom };
+                canvas.triangle(surface_a, surface_b, bottom_b, rgb(0x4d392c));
+                canvas.triangle(surface_a, bottom_b, bottom_a, rgb(0x4d392c));
+            }
             const int first_source_macro = static_cast<int>(std::floor(
                 source_left / sim::DeformableTerrain::macro_tile_size));
             const int last_source_macro = static_cast<int>(std::ceil(
@@ -834,6 +822,16 @@ namespace runner
                         }
                     }
                 }
+            }
+
+            for (float x = first_surface_x; x < right; x += surface_step)
+            {
+                const float next_x = x + surface_step;
+                const Vec2 surface_a = world_to_screen(
+                    { x, environment.ground_height_at(x) }, viewport, camera, scale);
+                const Vec2 surface_b = world_to_screen(
+                    { next_x, environment.ground_height_at(next_x) }, viewport, camera, scale);
+                canvas.line(surface_a, surface_b, 1.25f, rgb(0xc59a65, 0.92f));
             }
 
             const float water_step = sim::DeformableTerrain::fine_cell_spacing;
@@ -1040,47 +1038,13 @@ namespace runner
             {
                 return world_to_screen(particles[index].position, viewport, camera, scale);
             };
+            auto branch_side = [](std::uint8_t mask) noexcept
+            {
+                return mask == 0x1u ? -1 : mask == 0x2u ? 1 : 0;
+            };
             auto leg_side = [&](std::size_t index) noexcept
             {
-                if (rig.is_left_support_seed(index))
-                    return -1;
-                if (rig.is_right_support_seed(index))
-                    return 1;
-                if (rig.paired_leg_chains())
-                {
-                    if (index == rig.motors[0].pivot || index == rig.motors[0].c
-                        || index == rig.motors[1].pivot || index == rig.motors[1].c)
-                        return -1;
-                    if (index == rig.motors[2].pivot || index == rig.motors[2].c
-                        || index == rig.motors[3].pivot || index == rig.motors[3].c)
-                        return 1;
-                    if (rig.active_motor_count >= 8u)
-                    {
-                        if (index == rig.motors[4].pivot || index == rig.motors[4].c
-                            || index == rig.motors[5].pivot || index == rig.motors[5].c)
-                            return -1;
-                        if (index == rig.motors[6].pivot || index == rig.motors[6].c
-                            || index == rig.motors[7].pivot || index == rig.motors[7].c)
-                            return 1;
-                    }
-                }
-                return 0;
-            };
-
-            auto torso_frame_bone = [&](const sim::DistanceConstraint& bone) noexcept
-            {
-                if (!rig.paired_leg_chains() || rig.active_motor_count < 8u)
-                    return false;
-                const std::size_t left_shoulder = rig.motors[4].pivot;
-                const std::size_t right_shoulder = rig.motors[6].pivot;
-                auto connects = [&](std::size_t first, std::size_t second) noexcept
-                {
-                    return (bone.a == first && bone.b == second)
-                        || (bone.a == second && bone.b == first);
-                };
-                return connects(rig.head_node, left_shoulder)
-                    || connects(rig.head_node, right_shoulder)
-                    || connects(left_shoulder, right_shoulder);
+                return branch_side(rig.node_support_mask(index));
             };
             auto draw_bones = [&](int pass)
             {
@@ -1090,8 +1054,7 @@ namespace runner
                         continue;
                     const int side_a = leg_side(bone.a);
                     const int side_b = leg_side(bone.b);
-                    const int side = torso_frame_bone(bone)
-                        ? 0 : side_a != 0 ? side_a : side_b;
+                    const int side = side_a != 0 ? side_a : side_b;
                     const bool near = side != 0 && ((side > 0) == right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
@@ -1106,6 +1069,25 @@ namespace runner
                         : near ? leg : rgb(0x5f493b);
                     canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
                 }
+            };
+            auto support_parent = [&](std::size_t support) noexcept
+            {
+                for (std::size_t motor_index = 0;
+                    motor_index < rig.active_motor_count; ++motor_index)
+                {
+                    const sim::MotorConstraint& motor = rig.motors[motor_index];
+                    if (motor.enabled && motor.c == support
+                        && motor.pivot < particles.size())
+                        return static_cast<std::size_t>(motor.pivot);
+                }
+                for (const sim::DistanceConstraint& bone : rig.bones)
+                {
+                    if (bone.a == support && bone.b < particles.size())
+                        return static_cast<std::size_t>(bone.b);
+                    if (bone.b == support && bone.a < particles.size())
+                        return static_cast<std::size_t>(bone.a);
+                }
+                return static_cast<std::size_t>(rig.root_node);
             };
             auto draw_nodes = [&](int pass)
             {
@@ -1124,22 +1106,26 @@ namespace runner
                     if (rig.is_support_seed(index))
                     {
                         const Vec2 center = point(index);
+                        const Vec2 proximal = point(support_parent(index));
                         if (optional_art_enabled && optional_foot_art.loaded())
                         {
                             const float width = std::max(34.0f, scale * 0.78f);
                             const float height = width
                                 * static_cast<float>(optional_foot_art.height)
                                 / static_cast<float>(optional_foot_art.width);
-                            draw_pixel_art(canvas, optional_foot_art,
-                                { center + Vec2{ -width * 0.24f, -height * 0.74f },
-                                  { width, height } },
+                            const art::OrientedArtTransform transform =
+                                art::support_boot_transform(proximal, center, width, height);
+                            draw_oriented_pixel_art(canvas, optional_foot_art,
+                                transform.beginning, transform.ending, transform.thickness,
                                 near || side == 0 ? 1.0f : 0.58f);
                         }
                         else
                         {
                             const float height = std::max(7.0f, radius * 0.55f);
-                            canvas.capsule(center - Vec2{ radius * 0.18f, 0.0f },
-                                center + Vec2{ radius * 1.45f, 0.0f },
+                            const art::OrientedArtTransform transform =
+                                art::support_boot_transform(proximal, center,
+                                    radius * 1.63f, height * 2.0f);
+                            canvas.capsule(transform.beginning, transform.ending,
                                 height, color, 14);
                         }
                     }
@@ -1163,50 +1149,61 @@ namespace runner
 
             auto draw_segment_art = [&](int pass)
             {
-                if (!optional_art_enabled || !rig.paired_leg_chains())
+                if (!optional_art_enabled)
                     return;
-                auto draw_motor_art = [&](std::size_t motor_index,
-                    const art::PixelArt& sprite, float thickness_ratio)
+                for (std::size_t motor_index = 0;
+                    motor_index < rig.active_motor_count; ++motor_index)
                 {
-                    if (!sprite.loaded() || motor_index >= rig.active_motor_count)
-                        return;
                     const sim::MotorConstraint& motor = rig.motors[motor_index];
                     if (!motor.enabled || motor.pivot >= particles.size()
                         || motor.c >= particles.size())
-                        return;
-                    const int side = leg_side(motor.c);
+                        continue;
+                    const std::uint8_t support_mask = rig.support_branch_mask(motor);
+                    const int side = branch_side(support_mask);
                     const bool near = side != 0 && ((side > 0) == right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
-                        return;
+                        continue;
+
+                    bool has_distal_motor = false;
+                    for (std::size_t other_index = 0;
+                        other_index < rig.active_motor_count; ++other_index)
+                    {
+                        if (other_index == motor_index)
+                            continue;
+                        const sim::MotorConstraint& other = rig.motors[other_index];
+                        if (other.enabled && other.pivot == motor.c
+                            && ((rig.support_branch_mask(other) != 0u)
+                                == (support_mask != 0u)))
+                        {
+                            has_distal_motor = true;
+                            break;
+                        }
+                    }
+                    const art::PixelArt& sprite = support_mask != 0u
+                        ? (has_distal_motor ? optional_thigh_art : optional_shin_art)
+                        : (has_distal_motor ? optional_upper_arm_art : optional_forearm_art);
+                    if (!sprite.loaded())
+                        continue;
+
                     Vec2 beginning = point(motor.pivot);
                     Vec2 ending = point(motor.c);
                     const Vec2 delta = ending - beginning;
                     const float span = length(delta);
                     if (span <= 1.0f)
-                        return;
+                        continue;
                     const Vec2 axis = delta / span;
                     beginning = beginning - axis * (span * 0.08f);
                     ending = ending + axis * (span * 0.08f);
+                    const float thickness_ratio = support_mask != 0u
+                        ? (has_distal_motor ? 0.52f : 0.48f)
+                        : (has_distal_motor ? 0.72f : 0.62f);
                     const float thickness = std::clamp(span * thickness_ratio,
                         18.0f, 56.0f);
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
                         thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
-                };
-
-                draw_motor_art(0u, optional_thigh_art, 0.52f);
-                draw_motor_art(1u, optional_shin_art, 0.48f);
-                draw_motor_art(2u, optional_thigh_art, 0.52f);
-                draw_motor_art(3u, optional_shin_art, 0.48f);
-                if (rig.active_motor_count >= 8u)
-                {
-                    draw_motor_art(4u, optional_upper_arm_art, 0.72f);
-                    draw_motor_art(5u, optional_forearm_art, 0.62f);
-                    draw_motor_art(6u, optional_upper_arm_art, 0.72f);
-                    draw_motor_art(7u, optional_forearm_art, 0.62f);
                 }
             };
-
             draw_bones(0);
             draw_segment_art(0);
             draw_nodes(0);
@@ -1306,37 +1303,43 @@ namespace runner
                 }
             }
             if (optional_art_enabled && optional_torso_art.loaded()
-                && rig.active_motor_count >= 8u && rig.paired_leg_chains()
                 && rig.root_node < particles.size()
                 && rig.torso_node < particles.size())
             {
-                // Remade modular armor, bounded to the physical torso.
-                // This is a single chest component, never the old full-sheet overlay.
                 const Vec2 root = point(rig.root_node);
                 const Vec2 torso = point(rig.torso_node);
                 const Vec2 center = (root + torso) * 0.5f;
+                const Vec2 body_axis = normalized(torso - root, { 0.0f, -1.0f });
+                const Vec2 body_right{ -body_axis.y, body_axis.x };
                 const float body_span = length(torso - root);
-                const float height = std::clamp(body_span * 0.88f, 72.0f, 118.0f);
+                const float height = std::clamp(body_span * 0.88f, 54.0f, 118.0f);
                 const float width = height
                     * static_cast<float>(optional_torso_art.width)
                     / static_cast<float>(optional_torso_art.height);
-                draw_pixel_art(canvas, optional_torso_art,
-                    { center - Vec2{ width * 0.50f, height * 0.54f },
-                      { width, height } }, 0.90f);
+                const art::OrientedArtTransform transform =
+                    art::oriented_box_transform(center, body_right, width, height);
+                draw_oriented_pixel_art(canvas, optional_torso_art,
+                    transform.beginning, transform.ending, transform.thickness, 0.90f);
             }
-
             if (optional_art_enabled && optional_helmet_art.loaded()
                 && rig.head_node < particles.size())
             {
                 const Vec2 center = point(rig.head_node);
+                Vec2 head_axis{ 0.0f, -1.0f };
+                if (rig.torso_node < particles.size())
+                    head_axis = normalized(center - point(rig.torso_node), head_axis);
+                else if (rig.root_node < particles.size())
+                    head_axis = normalized(center - point(rig.root_node), head_axis);
+                const Vec2 head_right{ -head_axis.y, head_axis.x };
                 const float height = std::max(38.0f,
                     particles[rig.head_node].radius * scale * 2.55f);
                 const float width = height
                     * static_cast<float>(optional_helmet_art.width)
                     / static_cast<float>(optional_helmet_art.height);
-                draw_pixel_art(canvas, optional_helmet_art,
-                    { center - Vec2{ width * 0.50f, height * 0.54f },
-                      { width, height } }, 0.92f);
+                const art::OrientedArtTransform transform =
+                    art::oriented_box_transform(center, head_right, width, height);
+                draw_oriented_pixel_art(canvas, optional_helmet_art,
+                    transform.beginning, transform.ending, transform.thickness, 0.92f);
             }
             draw_bones(2);
             draw_segment_art(2);
@@ -2588,15 +2591,14 @@ namespace runner
                 };
                 preset(0, 0, "HUMANOID", RigPreset::humanoid);
                 preset(0, 1, "BIPED", RigPreset::biped);
-                preset(1, 0, "SCAFFOLD", RigPreset::scaffold);
-                preset(1, 1, "CHICKEN", RigPreset::chicken);
+                preset(1, 0, "CHICKEN", RigPreset::chicken);
+                preset(1, 1, "MONOPED", RigPreset::monoped);
                 preset(2, 0, "QUADRUPED", RigPreset::quadruped);
-                preset(2, 1, "FOUR-LEG CRAWLER", RigPreset::crawler4);
+                preset(2, 1, "LOW FOUR-LEG CRAWLER", RigPreset::crawler4);
                 preset(3, 0, "HEXAPOD", RigPreset::hexapod);
-                preset(3, 1, "MONOPED", RigPreset::monoped);
                 cursor.y += 176.0f;
                 add_wrapped_text(canvas, cursor,
-                    "Selecting a preset restores its authored anatomy. Automatic training tunes control parameters only; it never changes limb length or adds body parts.",
+                    "Seven distinct playable rigs are exposed. The near-duplicate scaffold remains an internal calibration fixture. Training tunes controls only; it never changes anatomy.",
                     0.73f, muted, usable, 2.0f);
                 cursor.y += 55.0f;
 
@@ -3151,18 +3153,34 @@ namespace runner
         impl_->status_time = 30.0f;
     }
 
-    void Application::prepare_art_eye_test()
+    bool Application::prepare_art_diagnostic_rig(std::size_t index)
     {
+        sim::CreatureBlueprint rig{};
+        std::string_view name{};
+        switch (index)
+        {
+        case 0u: rig = sim::CreatureBlueprint::humanoid(); name = "HUMANOID"; break;
+        case 1u: rig = sim::CreatureBlueprint::biped(); name = "BIPED"; break;
+        case 2u: rig = sim::CreatureBlueprint::chicken(); name = "CHICKEN"; break;
+        case 3u: rig = sim::CreatureBlueprint::monoped(); name = "MONOPED"; break;
+        case 4u: rig = sim::CreatureBlueprint::quadruped(); name = "QUADRUPED"; break;
+        case 5u: rig = sim::CreatureBlueprint::crawler4(); name = "CRAWLER"; break;
+        case 6u: rig = sim::CreatureBlueprint::hexapod(); name = "HEXAPOD"; break;
+        default: return false;
+        }
+
         impl_->trainer.set_background_enabled(false);
         impl_->trainer.synchronize();
         impl_->art_eye_test = true;
         impl_->walk_eye_test = false;
-        impl_->course_eye_test_environment.emplace(
-            sim::CreatureBlueprint::humanoid(), 729349u);
+        impl_->course_eye_test_environment.emplace(rig, 729349u + index * 4099u);
         impl_->course_eye_test_environment->set_course(
             sim::CourseStage::balance, 0.10f);
-        impl_->course_eye_test_environment->configure_equipment(
-            sim::WeaponClass::carbine, 8.0f);
+        if (index == 0u)
+        {
+            impl_->course_eye_test_environment->configure_equipment(
+                sim::WeaponClass::carbine, 8.0f);
+        }
         impl_->course_eye_test_environment->set_course_motion_enabled(false);
         impl_->run_paused = true;
         const auto& particles = impl_->course_eye_test_environment->particles();
@@ -3173,10 +3191,26 @@ namespace runner
         impl_->live_zoom_factor = 1.0f;
         impl_->live_zoom_auto = false;
         impl_->debug_skeleton_overlay = false;
-        impl_->status = "PACKAGED ORTHOGRAPHIC ART TEST - EXACT SIDE ELEVATION";
+        impl_->status = std::format(
+            "PACKAGED ORTHOGRAPHIC ART TEST - {} SIDE ELEVATION", name);
         impl_->status_time = 30.0f;
+        return true;
     }
 
+    void Application::prepare_art_eye_test()
+    {
+        static_cast<void>(prepare_art_diagnostic_rig(0u));
+        impl_->status = "PACKAGED ORTHOGRAPHIC ART TEST - EXACT SIDE ELEVATION";
+    }
+
+    void Application::prepare_art_fallen_eye_test()
+    {
+        static_cast<void>(prepare_art_diagnostic_rig(0u));
+        impl_->course_eye_test_environment->set_diagnostic_rigid_rotation(
+            -pi * 0.5f);
+        impl_->status =
+            "PACKAGED ORTHOGRAPHIC ART TEST - HORIZONTAL ROTATION EVIDENCE";
+    }
     bool Application::prepare_walk_eye_test(std::string& error)
     {
         impl_->trainer.set_background_enabled(false);

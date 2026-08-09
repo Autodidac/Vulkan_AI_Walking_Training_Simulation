@@ -95,9 +95,7 @@ namespace runner::rl
             queue_autosave();
         }
 
-        const std::uint64_t fresh_updates = metrics.total_updates
-            >= stage_entry_total_updates_
-            ? metrics.total_updates - stage_entry_total_updates_ : 0u;
+        const std::uint64_t fresh_updates = worker_.lesson_update();
         const std::uint64_t fresh_episodes = metrics.total_episodes
             >= stage_entry_total_episodes_
             ? metrics.total_episodes - stage_entry_total_episodes_ : 0u;
@@ -624,8 +622,8 @@ namespace runner::rl
         const float difficulty = difficulty_;
         const int maximum_steps = static_cast<std::uint8_t>(stage)
             >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 1500 : 900;
-        const float lesson_authority = foundational_walk_teacher_authority(
-            worker_.metrics().update, candidate);
+        const float lesson_authority = lesson_teacher_authority(
+            worker_.lesson_update(), stage, candidate);
         std::array<float, agents> scores{};
         std::array<std::jthread, agents> evaluators{};
 

@@ -91,7 +91,8 @@ int main()
 {
     const auto report = runner::diagnostics::run_course_completion_diagnostic();
     const auto repeated = runner::diagnostics::run_course_completion_diagnostic();
-    const bool fields[] = { report.safe_runway, report.material_regions,
+    const bool fields[] = { report.launch_contact, report.active_terrain,
+        report.safe_runway, report.material_regions,
         report.seed_variation, report.water_and_holes, report.observation_truth,
         report.delayed_material_pressure, report.climb_contract,
         report.equipment_contract, report.equipment_off_identity,
@@ -119,9 +120,9 @@ int main()
     std::cout << "climb-positive-control=" << (physical_climb ? "passed" : "failed") << std::endl;
     if (!report.passed() || !repeated.passed() || !positive_material || !physical_climb)
     {
-        std::cerr << "Runner v0.7.28 course completion diagnostic failed\n";
+        std::cerr << "Runner v0.7.31 course completion diagnostic failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "Runner v0.7.28 course completion diagnostic passed\n";
+    std::cout << "Runner v0.7.31 course completion diagnostic passed\n";
     return EXIT_SUCCESS;
 }

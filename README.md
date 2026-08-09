@@ -1,5 +1,17 @@
 # Runner
 
+## v0.7.31 active terrain, lesson ownership, and rig-art transforms
+
+- Keeps the hazardous sand simulation live: pressure deformation is positive at early difficulty and grows to full strength, while waterlogged ground, water, and seeded holes remain physical hazards.
+- Protects only the short launch/calibration pad, rigidly places every rig on its exact sampled surface, and smoothly transitions into active terrain without an invisible starting curb.
+- Draws the continuous substrate and collision-surface line from the same evolving terrain samples used by contact physics.
+- Gives every curriculum lesson its own persisted update clock, so Crouch and Walk receive finite measured assistance even after long Stand training without erasing compatible policy, optimizer, or rig totals.
+- Requires a cold humanoid to learn and retain raw zero-authority Crouch, recover upright, and then enter Walk without switching rigs.
+- Extends the topology-derived zero-authority handoff for quadruped, crawler, and hexapod learning while retaining strict post-handoff controllers across seeded replays.
+- Rotates, translates, mirrors, and pivots boots and body art from authored rig geometry; the same orthographic armor family now fits all seven distinct user-visible rigs.
+- Makes the near-duplicate Scaffold blueprint an internal calibration fixture and expands art diagnostics across every exposed rig plus a horizontal fallen pose.
+- Preserves exact fixed-step state across 20, 60, and 240 Hz rendering, including terrain evolution, lesson clocks, policy handoff, contacts, and presentation transforms.
+- Isolates corrected checkpoints and automatic state under `runner-v0731-active-*` paths.
 ## v0.7.30 sustained-walk learning recovery
 
 - Stops forward-gait nursery randomization from repeatedly erasing partial walkers while cumulative rig updates keep rising.
@@ -43,7 +55,7 @@
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.30 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.31 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -121,7 +133,7 @@ Runner.exe --walk-eye-test
 Runner.exe --art-eye-test
 ```
 
-`--diagnose-rig-training` runs the v0.7.30 cold-start learner: after 1,200 fresh updates, the four-motor biped, eight-motor humanoid, quadruped, crawler, and hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority; both paired-leg subjects must exceed 18 m / a 14-step six-seed average, and multi-support rigs must sustain repeated physical contact cycles. `--walk-eye-test` independently cold-trains the default eight-motor humanoid for 1,200 updates, with its final 300 updates at zero teacher authority; it refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate with its update, distance, steps, crossings, seed, authority, and validity shown on screen. The diagnostic also runs ten-seed gait references and exact 20/60/240 frame-independence checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course and orthographic close-up frames with the packaged modular set and fails if either exceeds 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection. `--art-eye-test` opens the same production renderer at a frozen close-up humanoid frame and explicitly labels the required strict side elevation.
+`--diagnose-rig-training` runs the v0.7.31 cold-start learner: the four-motor biped, eight-motor humanoid, quadruped, crawler, and hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority; both paired-leg subjects must exceed 18 m / a 14-step six-seed average, and multi-support rigs must sustain repeated physical contact cycles after their lesson-local handoff. `--walk-eye-test` independently cold-trains the default eight-motor humanoid, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all seven exposed orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, live difficulty-scaled deformation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test` opens a frozen close-up humanoid in strict side elevation.
 
 ## Repository records
 
@@ -144,6 +156,7 @@ Runner.exe --art-eye-test
 - [`docs/RUNNER_V0728_COURSE_COMPLETION.md`](docs/RUNNER_V0728_COURSE_COMPLETION.md) documents the physical material course, climb/equipment completion, checkpoint migration, and diagnostic contract.
 - [`docs/RUNNER_V0729_MODULAR_ART_REMAKE.md`](docs/RUNNER_V0729_MODULAR_ART_REMAKE.md) documents the remade atlas, keyed runtime sprites, node-bound rendering, fallbacks, and isolation gates.
 - [`docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md`](docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md) documents the cold-start failure, observable gait clocks, optimizer separation, authority handoff, strict retention, and zero-authority acceptance gates.
+- [docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md](docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md) documents active terrain/contact truth, lesson-local ownership, raw Crouch learning, topology-derived assistance, all-rig art transforms, and frame-independence evidence.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 

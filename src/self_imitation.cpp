@@ -49,8 +49,8 @@ namespace runner::rl
                 const auto raw_action = teacher.deterministic_action(sample.observation);
                 sample.action = effective_policy_action(
                     environment, raw_action, course_stage_,
-                    foundational_walk_teacher_authority(
-                        metrics_.update, environment.blueprint()));
+                    lesson_teacher_authority(
+                        lesson_update_, course_stage_, environment.blueprint()));
                 const sim::StepResult result = environment.step(sample.action);
                 reward += result.reward;
                 const bool clean_demonstration_frame = environment.valid_motion()

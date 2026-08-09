@@ -11,7 +11,8 @@ namespace runner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '9', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '1', '\0', '\1' };
+        constexpr std::array<char, 8> v0730_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '9', '\0', '\1' };
         constexpr std::array<char, 8> v0727_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '8', '\0', '\1' };
         constexpr std::size_t v0727_input_size = 50u;
         constexpr std::size_t v0727_output_size = 8u;
@@ -320,6 +321,7 @@ namespace runner::rl
         data.speed_history = speed_history_;
         data.optimizer_step = adam_.step;
         data.random_state = random_state_;
+        data.lesson_update = lesson_update_;
         data.metrics = metrics_;
         data.stage = course_stage_;
         data.difficulty = course_difficulty_;
@@ -344,6 +346,7 @@ namespace runner::rl
             && write_value(output, data.random_state)
             && write_value(output, stage)
             && write_value(output, data.difficulty)
+            && write_value(output, data.lesson_update)
             && write_metrics(output, data.metrics)
             && write_vector(output, data.parameters)
             && write_vector(output, data.first_moment)
@@ -382,14 +385,17 @@ namespace runner::rl
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
+        const bool v0730 = magic == v0730_checkpoint_magic;
         const bool v0727 = magic == v0727_checkpoint_magic;
-        if (!input || (magic != checkpoint_magic && !v0727)
+        const bool legacy_layout = v0730 || v0727;
+        if (!input || (magic != checkpoint_magic && !legacy_layout)
             || !read_value(input, data.training_semantics)
             || !read_value(input, data.rig_signature)
             || !read_value(input, data.optimizer_step)
             || !read_value(input, data.random_state)
             || !read_value(input, stage)
             || !read_value(input, data.difficulty)
+            || (!legacy_layout && !read_value(input, data.lesson_update))
             || !(v0727 ? read_v0727_metrics(input, data.metrics)
                        : read_metrics(input, data.metrics))
             || !read_vector(input, data.parameters, 2'000'000)
@@ -405,6 +411,8 @@ namespace runner::rl
             return false;
         }
         data.stage = static_cast<sim::CourseStage>(stage);
+        if (legacy_layout)
+            data.lesson_update = 0u;
         error.clear();
         return true;
     }
@@ -463,6 +471,7 @@ namespace runner::rl
         adam_.second_moment = std::move(data.second_moment);
         adam_.step = data.optimizer_step;
         random_state_ = data.random_state;
+        lesson_update_ = data.lesson_update;
         metrics_ = data.metrics;
         best_parameters_ = std::move(data.best_parameters);
         preview_policy_.parameters() = best_parameters_.empty()
