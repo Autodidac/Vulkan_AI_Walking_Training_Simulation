@@ -48,6 +48,10 @@ namespace runner::diagnostics
         bool passed{};
     };
 
+    [[nodiscard]] bool retained_policy_release_eligible(
+        const RigTrainingResult& result,
+        const sim::CreatureBlueprint& blueprint) noexcept;
+
     struct WalkEyeTestProof
     {
         sim::Environment environment{};

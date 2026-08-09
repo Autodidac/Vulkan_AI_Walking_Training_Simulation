@@ -78,6 +78,28 @@ namespace runner::diagnostics
         }
     }
 
+    bool retained_policy_release_eligible(const RigTrainingResult& result,
+        const sim::CreatureBlueprint& blueprint) noexcept
+    {
+        const bool paired_legs = blueprint.paired_leg_chains();
+        return result.retained_policy
+            && result.retained_quality != 0u
+            && result.teacher_authority == 0.0f
+            && result.retained_update
+                >= rl::foundational_walk_teacher_handoff_update(blueprint)
+            && std::isfinite(result.retained_probe_distance)
+            && std::isfinite(result.retained_probe_stride_events)
+            && result.retained_probe_distance
+                >= (paired_legs ? rl::walk_mastery_distance : 1.0f)
+            && result.retained_probe_stride_events
+                >= (paired_legs ? rl::walk_mastery_stride_events : 12.0f)
+            && result.retained_probe_rejection_mask == 0u
+            && result.retained_probe_invalid_runs == 0u
+            && result.retained_probe_invalid_reason == sim::InvalidMotion::none
+            && !result.rollout_course_motion_enabled
+            && result.preview_resets <= 24u;
+    }
+
     RigTrainingReport run_rig_training_diagnostic(std::uint64_t updates)
     {
         updates = std::max<std::uint64_t>(1u, updates);
@@ -162,7 +184,6 @@ namespace runner::diagnostics
         for (std::size_t index = 0; index < report.rigs.size(); ++index)
         {
             const RigTrainingResult& result = report.rigs[index];
-            const bool paired_legs = cases[index].blueprint.paired_leg_chains();
             report.passed = report.passed
                 && std::isfinite(result.mean_episode_distance)
                 && std::isfinite(result.evaluation_distance)
@@ -170,18 +191,8 @@ namespace runner::diagnostics
                 && result.teacher_survival >= 19.9f
                 && result.teacher_distance >= 1.0f
                 && result.teacher_stride_events >= 3.0f
-                && result.retained_policy
-                && rl::strict_evaluation_quality(result.retained_quality)
-                && result.teacher_authority == 0.0f
-                && result.retained_update
-                    >= rl::foundational_walk_teacher_handoff_update(
-                        cases[index].blueprint)
-                && result.retained_probe_distance >= (paired_legs ? rl::walk_mastery_distance : 1.0f)
-                && result.retained_probe_stride_events >= (paired_legs
-                    ? rl::walk_mastery_stride_events : 12.0f)
-                && result.retained_probe_invalid_runs == 0u
-                && !result.rollout_course_motion_enabled
-                && result.preview_resets <= 24u;
+                && retained_policy_release_eligible(
+                    result, cases[index].blueprint);
         }
         return report;
     }

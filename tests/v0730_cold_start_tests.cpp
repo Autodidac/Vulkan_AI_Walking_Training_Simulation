@@ -24,6 +24,65 @@ namespace
             trainer.step_preview(frame_dt);
     }
 
+    void verify_retained_release_gate_contract()
+    {
+        const runner::sim::CreatureBlueprint quadruped =
+            runner::sim::CreatureBlueprint::quadruped();
+        runner::diagnostics::RigTrainingResult result{};
+        result.retained_policy = true;
+        result.retained_quality = 1u;
+        result.retained_update =
+            runner::rl::foundational_walk_teacher_handoff_update(quadruped);
+        result.retained_probe_distance = 1.0f;
+        result.retained_probe_stride_events = 12.0f;
+        require(runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "fresh strict replay was rejected by historical quality metadata");
+
+        const auto baseline = result;
+        result.retained_quality = 0u;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "retained policy without training provenance was accepted");
+        result = baseline;
+        result.retained_probe_invalid_runs = 1u;
+        result.retained_probe_rejection_mask = 1u;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "invalid retained replay was accepted");
+        result = baseline;
+        result.retained_probe_invalid_reason =
+            runner::sim::InvalidMotion::collapsed_posture;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "retained replay with an invalid-motion reason was accepted");
+        result = baseline;
+        result.teacher_authority = 0.01f;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "teacher-assisted retained replay was accepted");
+        result = baseline;
+        --result.retained_update;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "pre-handoff retained replay was accepted");
+        result = baseline;
+        result.retained_probe_distance = std::numeric_limits<float>::quiet_NaN();
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "non-finite retained replay was accepted");
+        result = baseline;
+        result.rollout_course_motion_enabled = true;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "conveyor-assisted retained replay was accepted");
+        result = baseline;
+        result.preview_resets = 25u;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "unbounded preview resets were accepted");
+    }
+
     void require_same_preview(const runner::rl::PpoTrainer& expected,
         const runner::rl::PpoTrainer& actual, std::string_view cadence)
     {
@@ -264,6 +323,7 @@ int main(int argc, char** argv)
         std::cerr << "Unknown v0.7.31 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
+    verify_retained_release_gate_contract();
     if (run_references)
     {
         verify_walking_teachers_repeated_seeds();
