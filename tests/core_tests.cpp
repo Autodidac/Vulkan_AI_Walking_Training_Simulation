@@ -438,6 +438,20 @@ namespace runner::sim
             environment.uncontrolled_spin_turns_ = 0.0f;
         }
 
+        static void qualify_walk_evidence(Environment& environment,
+            float longest_stance, std::uint32_t steps,
+            std::uint32_t crossings, float distance, float elapsed) noexcept
+        {
+            environment.invalid_reason_ = InvalidMotion::none;
+            environment.non_foot_grounded_ = false;
+            environment.elapsed_seconds_ = elapsed;
+            environment.stable_stance_seconds_ = 0.0f;
+            environment.longest_stable_stance_seconds_ = longest_stance;
+            environment.alternating_steps_ = steps;
+            environment.limb_crossings_ = crossings;
+            environment.distance_travelled_ = distance;
+        }
+
         static void force_standing_spin(Environment& environment, float turns) noexcept
         {
             environment.uncontrolled_spin_turns_ = turns;
@@ -921,6 +935,16 @@ int main()
     require(sim::recovery_terminal_fall(true, true, true),
         "hard ground impact incorrectly received recovery grace");
 
+    require(!sim::advanced_material_pressure_ready(7.9f, 8.0f, 2u, 2u, true),
+        "material pressure unlocked before protected distance");
+    require(!sim::advanced_material_pressure_ready(8.0f, 8.0f, 1u, 2u, true),
+        "material pressure unlocked before repeated gait evidence");
+    require(!sim::advanced_material_pressure_ready(8.0f, 8.0f, 2u, 1u, true),
+        "paired skating events unlocked falling material without crossings");
+    require(sim::advanced_material_pressure_ready(8.0f, 8.0f, 2u, 2u, true),
+        "paired physical gait did not unlock advanced material pressure");
+    require(sim::advanced_material_pressure_ready(8.0f, 8.0f, 2u, 0u, false),
+        "multi-support physical cycles incorrectly require biped crossings");
     require(!sim::qualifies_alternating_step(-1, 0, 0.30f, 0.10f),
         "simultaneous two-foot landing counted as a step");
     require(!sim::qualifies_alternating_step(-1, 1, 0.05f, 0.10f),
@@ -931,8 +955,10 @@ int main()
         "real spaced alternating step was rejected");
     require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.03f, 0.02f),
         "tiny contact wiggle still counts as a supported walking step");
-    require(sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.16f, 0.12f),
-        "real lifted swing and landing is rejected as a walking step");
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.07f, 0.12f)
+            && sim::qualifies_supported_step(
+                -1, 1, 0.30f, 0.08f, 0.08f, 0.12f),
+        "five-frame lifted swing boundary is not enforced as a physical step");
     require(!sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
             0.16f, 0.12f, false, true)
             && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
@@ -1123,9 +1149,14 @@ int main()
     require(sim::planted_contact_persists(
             true, true, true, 0.55f, 2.0f, false),
         "static support manifold did not retain a measured ground contact");
+    require(sim::planted_contact_persists(
+            true, true, false, 0.020f, 0.10f, false),
+        "measured moving support contact released before a deliberate lift");
     require(!sim::planted_contact_persists(
-            true, true, false, 0.040f, 0.42f, false),
-        "moving foot remained magnetically planted");
+            true, true, false, 0.020f, 0.14f, false)
+            && !sim::planted_contact_persists(
+                true, true, false, 0.040f, 0.10f, false),
+        "moving foot remained magnetically planted after lift speed or separation");
     require(!sim::planted_contact_persists(
             true, true, true, 0.018f, 0.08f, true),
         "explicit powered release was ignored");
@@ -1318,11 +1349,109 @@ int main()
         "two idle windows do not reach the reset threshold");
     require(sim::update_zero_progress_seconds(1.0f, false, 1.0f) == 0.0f,
         "useful motion does not rapidly clear the idle-reset accumulator");
+    require(sim::micro_motion_window(
+                0.11f, 0.04f, 0.04f, 0u, true, false)
+            && sim::micro_motion_window(
+                0.17f, 0.10f, 0.30f, 0u, true, false),
+        "high-energy no-gait vibration bypasses the micro-motion gate");
+    require(!sim::micro_motion_window(
+                0.17f, 0.02f, 0.30f, 1u, true, false)
+            && !sim::micro_motion_window(
+                0.17f, 0.13f, 0.40f, 0u, true, false)
+            && !sim::micro_motion_window(
+                0.17f, 0.02f, 0.30f, 0u, true, true),
+        "real gait, useful progress, or active recovery is micro-motion");
     require(rl::self_imitation_prior_weight(0, 128) > rl::self_imitation_prior_weight(500, 128)
             && rl::self_imitation_prior_weight(500, 128) > 0.0f,
         "best-result imitation guide does not decay into a light prior");
     require(rl::self_imitation_prior_weight(0, 0) == 0.0f,
         "empty imitation memory still changes PPO gradients");
+
+    const sim::CreatureBlueprint biped_walk = sim::CreatureBlueprint::biped();
+    const sim::CreatureBlueprint humanoid_walk = sim::CreatureBlueprint::humanoid();
+    const sim::CreatureBlueprint quadruped_walk = sim::CreatureBlueprint::quadruped();
+    require(sim::foundational_gait_cadence_hz == 1.20f
+            && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.20f
+            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.20f,
+        "foundational biped teacher and observed clocks diverged");
+    require(rl::walk_mastery_distance == 18.0f
+            && rl::walk_mastery_stride_events == 14.0f,
+        "cross-platform Walk mastery aggregate drifted");
+    require(rl::foundational_walk_teacher_handoff_update(biped_walk) == 500u
+            && rl::foundational_walk_teacher_handoff_update(humanoid_walk) == 900u
+            && rl::foundational_walk_teacher_handoff_update(quadruped_walk) == 1200u,
+        "foundational teacher handoff ignores support and manipulator topology");
+    require(rl::foundational_walk_teacher_authority(299u, biped_walk) == 1.0f
+            && rl::foundational_walk_teacher_authority(500u, biped_walk) == 0.0f
+            && rl::foundational_walk_teacher_authority(599u, humanoid_walk) == 1.0f
+            && rl::foundational_walk_teacher_authority(900u, humanoid_walk) == 0.0f
+            && rl::foundational_walk_teacher_authority(699u, quadruped_walk) == 1.0f
+            && rl::foundational_walk_teacher_authority(1200u, quadruped_walk) == 0.0f,
+        "foundational teacher authority does not reach exact scoped boundaries");
+    const float biped_mid_authority =
+        rl::foundational_walk_teacher_authority(400u, biped_walk);
+    const float quadruped_mid_authority =
+        rl::foundational_walk_teacher_authority(950u, quadruped_walk);
+    require(std::abs(biped_mid_authority - 0.5f) < 1.0e-6f
+            && std::abs(quadruped_mid_authority - 0.5f) < 1.0e-6f,
+        "foundational teacher authority does not decay linearly");
+    require(rl::guided_rollout_imitation_weight(
+                0u, sim::CourseStage::uneven) == 64.0f
+            && rl::guided_rollout_imitation_weight(
+                7200u, sim::CourseStage::uneven) == 0.0f
+            && rl::guided_rollout_imitation_weight(
+                0u, sim::CourseStage::balance) == 0.0f,
+        "guided gait imitation is not scoped and bounded");
+    require(!rl::nursery_policy_reset_allowed(
+                sim::CourseStage::uneven, 100000u, 120u)
+            && rl::nursery_policy_reset_allowed(sim::CourseStage::balance,
+                rl::stage_minimum_fresh_updates(sim::CourseStage::balance) + 120u,
+                12u),
+        "nursery reset can erase a partial walker or cannot recycle a stale stander");
+    require(rl::incremental_locomotion_candidate(sim::CourseStage::uneven,
+                true, true, false, true, 4u, 2u, 2.0f, 3.0f, 1.0f)
+            && !rl::incremental_locomotion_candidate(sim::CourseStage::uneven,
+                true, true, false, true, 4u, 0u, 2.0f, 3.0f, 1.0f)
+            && !rl::incremental_locomotion_candidate(sim::CourseStage::uneven,
+                true, true, true, true, 4u, 2u, 2.0f, 3.0f, 1.0f),
+        "incremental retention accepts crab/body motion or rejects real partial gait");
+
+    rl::PolicyNetwork imitation_probe{ 0x1A117A7Eu };
+    std::array<float, sim::observation_count> imitation_observation{};
+    imitation_observation[0] = 0.25f;
+    imitation_observation[1] = 0.95f;
+    imitation_observation[38] = 0.75f;
+    imitation_observation[39] = -0.25f;
+    std::array<float, sim::action_count> imitation_target{};
+    imitation_target[0] = 0.65f;
+    imitation_target[1] = -0.45f;
+    imitation_target[2] = -0.55f;
+    imitation_target[3] = 0.40f;
+    const auto imitation_error = [&](const rl::PolicyNetwork& policy)
+    {
+        const auto action = policy.deterministic_action(imitation_observation);
+        float error{};
+        for (std::size_t index = 0; index < sim::anatomy_action_count; ++index)
+        {
+            const float delta = action[index] - imitation_target[index];
+            error += delta * delta;
+        }
+        return error;
+    };
+    const float imitation_before = imitation_error(imitation_probe);
+    for (int iteration = 0; iteration < 160; ++iteration)
+    {
+        imitation_probe.zero_gradients();
+        float ignored_loss{};
+        imitation_probe.accumulate_imitation_gradient(imitation_observation,
+            imitation_target, 1.0f, ignored_loss);
+        std::vector<float>& parameters = imitation_probe.parameters();
+        const std::vector<float>& gradients = imitation_probe.gradients();
+        for (std::size_t index = 0; index < parameters.size(); ++index)
+            parameters[index] -= gradients[index] * 0.02f;
+    }
+    require(imitation_error(imitation_probe) < imitation_before * 0.10f,
+        "dedicated supervised actor gradient does not learn its gait target");
     require(rl::policy_regression_guard(10.0f, 8.5f, true),
         "large valid-policy degradation does not restore the champion");
     require(rl::policy_regression_guard(10.0f, 10.5f, false),
@@ -1360,6 +1489,9 @@ int main()
     require(sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
             0.02f, 6u, 0u),
         "a planted multi-support rig can evade the anti-skating rejection");
+    require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
+            0.02f, 2u, 0u, true),
+        "a recent physical paired-foot transfer is rejected during its planted phase");
     require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
             0.02f, 6u, 0u, true),
         "a recent physical multi-support transfer is rejected during its planted phase");
@@ -1728,6 +1860,40 @@ int main()
     }
 
     {
+        sim::Environment dynamic_walk{ humanoid, 0xD1A61Cu };
+        dynamic_walk.set_course(sim::CourseStage::uneven, 0.30f);
+        sim::EnvironmentTestAccess::qualify_walk_evidence(
+            dynamic_walk, 0.20f, 8u, 4u, 4.0f, 5.0f);
+        require(rl::stage_motion_qualification(
+                sim::CourseStage::uneven, dynamic_walk).valid,
+            "sustained alternating gait is rejected for lacking a standing hold");
+
+        sim::Environment transient_walk{ humanoid, 0x7A451Eu };
+        transient_walk.set_course(sim::CourseStage::uneven, 0.30f);
+        sim::EnvironmentTestAccess::qualify_walk_evidence(
+            transient_walk, 0.20f, 3u, 1u, 4.0f, 5.0f);
+        const auto transient = rl::stage_motion_qualification(
+            sim::CourseStage::uneven, transient_walk);
+        require(!transient.valid
+                && (transient.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::no_stable_stance)) != 0u,
+            "short transient gait bypasses both static and dynamic support proof");
+
+        sim::Environment crab_walk{ humanoid, 0xC2ABu };
+        crab_walk.set_course(sim::CourseStage::uneven, 0.30f);
+        sim::EnvironmentTestAccess::qualify_walk_evidence(
+            crab_walk, 0.20f, 8u, 0u, 4.0f, 5.0f);
+        const auto crab = rl::stage_motion_qualification(
+            sim::CourseStage::uneven, crab_walk);
+        require(!crab.valid
+                && (crab.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::no_stable_stance)) != 0u
+                && (crab.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::missing_skill)) != 0u,
+            "high-count no-crossing gait fabricates dynamic support evidence");
+    }
+
+    {
         sim::Environment neutral_stance{ humanoid, 0x576A6Eu };
         sim::EnvironmentTestAccess::qualify_stable_stance(neutral_stance);
         require(rl::stage_motion_qualification(
@@ -1818,6 +1984,14 @@ int main()
         "higher stage-valid evidence loses to scalar reward");
     require(!rl::policy_candidate_better(1u, 1000.0f, 2u, 1.0f, true),
         "high-reward lower-quality exploit can replace a valid controller");
+    const std::uint64_t strict_quality =
+        rl::strict_evaluation_quality_bit | 1u;
+    require(rl::strict_evaluation_quality(strict_quality)
+            && rl::policy_candidate_better(strict_quality, 1.0f,
+                10'000u, 1000.0f, true)
+            && !rl::policy_candidate_better(60'000u, 1000.0f,
+                strict_quality, 1.0f, true),
+        "partial invalid gait can overwrite a strict-valid retained controller");
 
     const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
     const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
@@ -2140,8 +2314,16 @@ int main()
     require(wrong_rig.optimizer_step() == 0, "transfer retained incompatible optimizer state");
     std::filesystem::remove(temporary);
 
+    const std::filesystem::path autonomy_checkpoint =
+        std::filesystem::temp_directory_path() / "runner-core-autonomy.eppo";
+    const std::filesystem::path autonomy_rig =
+        std::filesystem::temp_directory_path() / "runner-core-autonomy.rig";
+    const std::filesystem::path autonomy_state =
+        std::filesystem::temp_directory_path() / "runner-core-autonomy.state";
     {
         rl::AutonomousTrainer autonomous{ humanoid, 16 };
+        autonomous.set_autosave_paths(
+            autonomy_checkpoint, autonomy_rig, autonomy_state);
         autonomous.set_background_enabled(false);
         autonomous.synchronize();
         require(autonomous.autonomy_status().stage == sim::CourseStage::balance,
@@ -2180,6 +2362,9 @@ int main()
         autonomous.set_updates_per_cycle(4);
         require(autonomous.updates_per_cycle() == 4, "MAX CPU speed mode did not latch");
     }
+    std::filesystem::remove(autonomy_checkpoint);
+    std::filesystem::remove(autonomy_rig);
+    std::filesystem::remove(autonomy_state);
 
     std::cout << "Runner core standing, PIP, obstacle, integrity, telemetry, concurrency, gait, and rig-edit tests passed\n";
     return EXIT_SUCCESS;

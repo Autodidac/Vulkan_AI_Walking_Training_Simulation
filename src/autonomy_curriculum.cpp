@@ -21,8 +21,8 @@ namespace runner::rl
         case sim::CourseStage::duck_press:
             return strict_duck_press_mastery(metrics);
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= 18.0f
-                && metrics.evaluation_stride_events >= 16.0f
+            return metrics.evaluation_distance >= walk_mastery_distance
+                && metrics.evaluation_stride_events >= walk_mastery_stride_events
                 && metrics.evaluation_speed >= 0.55f
                 && metrics.evaluation_survival >= 18.0f
                 && metrics.evaluation_collisions <= 1.0f;
@@ -109,16 +109,29 @@ namespace runner::rl
         mastery_streak_ = dwell_complete && stage_mastered_locked()
             ? mastery_streak_ + 1 : 0;
         const int required_confirmations = required_mastery_confirmations(stage_);
-        if (worker_.has_best_policy() && metrics.evaluation_valid)
+        if (worker_.has_best_policy())
         {
-            const float tolerance = std::max(0.35f, std::abs(metrics.best_evaluation_score) * 0.35f);
-            degradation_streak_ = metrics.evaluation_score + tolerance < metrics.best_evaluation_score
+            const float tolerance = std::max(
+                0.35f, std::abs(metrics.best_evaluation_score) * 0.35f);
+            const bool quality_regressed = metrics.evaluation_quality_key == 0u
+                || metrics.evaluation_quality_key < metrics.best_quality_key;
+            const bool score_regressed = metrics.evaluation_quality_key
+                    == metrics.best_quality_key
+                && metrics.evaluation_score + tolerance
+                    < metrics.best_evaluation_score;
+            degradation_streak_ = quality_regressed || score_regressed
                 ? degradation_streak_ + 1 : 0;
-            if (degradation_streak_ >= 2 && worker_.restore_best_policy())
+            constexpr int rollback_patience_evaluations = 6;
+            if (degradation_streak_ >= rollback_patience_evaluations
+                && worker_.restore_best_policy())
             {
                 ++rollback_count_;
+                mastery_streak_ = 0;
                 degradation_streak_ = 0;
-                worker_message_ = "PERFORMANCE DROPPED - RESTORED BEST VALID WALKER";
+                worker_.set_course(stage_, difficulty_, false);
+                worker_message_ = "SUSTAINED REGRESSION - RESTORED RETAINED WALKER";
+                queue_autosave();
+                return;
             }
         }
 
@@ -127,17 +140,6 @@ namespace runner::rl
             const bool catastrophic_invalid = metrics.evaluation_quality_key == 0u
                 || metrics.evaluation_distance < -0.25f
                 || metrics.evaluation_invalid_runs >= 3u;
-            if (catastrophic_invalid && worker_.has_best_policy()
-                && worker_.restore_best_policy())
-            {
-                ++rollback_count_;
-                mastery_streak_ = 0;
-                degradation_streak_ = 0;
-                worker_.set_course(stage_, difficulty_, false);
-                worker_message_ = "INVALID/BACKWARD GENERATION - RESTORED CHAMPION AND RESTARTED LESSON";
-                queue_autosave();
-                return;
-            }
             if (catastrophic_invalid && !worker_.has_best_policy()
                 && nursery_policy_reset_allowed(stage_, fresh_updates, fresh_evaluations))
             {
@@ -622,13 +624,15 @@ namespace runner::rl
         const float difficulty = difficulty_;
         const int maximum_steps = static_cast<std::uint8_t>(stage)
             >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 1500 : 900;
+        const float lesson_authority = foundational_walk_teacher_authority(
+            worker_.metrics().update, candidate);
         std::array<float, agents> scores{};
         std::array<std::jthread, agents> evaluators{};
 
         for (std::size_t agent = 0; agent < agents; ++agent)
         {
             evaluators[agent] = std::jthread([&candidate, &policy, &scores,
-                stage, difficulty, maximum_steps, agent]
+                stage, difficulty, lesson_authority, maximum_steps, agent]
             {
                 const std::uint64_t seed = 0xA100u
                     + static_cast<std::uint64_t>(agent) * 3253u;
@@ -640,7 +644,7 @@ namespace runner::rl
                     const auto raw_action = policy.deterministic_action(
                         environment.observation());
                     const auto action = effective_policy_action(
-                        environment, raw_action, stage);
+                        environment, raw_action, stage, lesson_authority);
                     const sim::StepResult result = environment.step(action);
                     reward += result.reward;
                     if (result.terminated)

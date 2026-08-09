@@ -19,6 +19,7 @@ namespace runner::sim
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
     inline constexpr std::size_t observation_count = 60;
+    inline constexpr float foundational_gait_cadence_hz = 1.20f;
 
     enum class CourseStage : std::uint8_t
     {
@@ -361,8 +362,8 @@ namespace runner::sim
             && std::abs(root_speed) > 0.085f
             && stance_slip_speed < 0.080f
             && maximum_foot_clearance < 0.085f
-            && (authored_support_count <= 2u
-                || (meaningfully_lifted_supports == 0u && !recent_authored_support_transfer))
+            && !recent_authored_support_transfer
+            && (authored_support_count <= 2u || meaningfully_lifted_supports == 0u)
             && (std::abs(torso_turn_speed) > 0.12f || std::abs(root_speed) > 0.18f);
     }
 
@@ -397,6 +398,21 @@ namespace runner::sim
     {
         return !recovering && net_progress < 0.045f
             && new_steps == 0u && useful_foot_lift < 0.11f;
+    }
+
+    [[nodiscard]] inline bool micro_motion_window(float average_energy,
+        float net_progress, float root_path, std::uint32_t new_gait_events,
+        bool locomotion_required, bool recovery_or_terrain_step) noexcept
+    {
+        if (!locomotion_required || recovery_or_terrain_step
+            || new_gait_events > 0u)
+            return false;
+        const bool high_energy_stall = average_energy > 0.10f
+            && net_progress < 0.05f;
+        const bool inefficient_vibration = average_energy > 0.16f
+            && net_progress < 0.12f
+            && root_path > std::max(0.08f, net_progress * 2.5f);
+        return high_energy_stall || inefficient_vibration;
     }
 
     [[nodiscard]] inline float update_zero_progress_seconds(float previous_seconds,
@@ -669,7 +685,7 @@ namespace runner::sim
         return qualifies_alternating_step(previous_side, strike_side,
             seconds_since_previous, root_displacement)
             && std::abs(root_displacement) >= 0.055f
-            && swing_air_seconds >= 0.10f
+            && swing_air_seconds >= 0.08f
             && swing_clearance >= 0.075f;
     }
 
@@ -699,7 +715,7 @@ namespace runner::sim
     }
 
     inline constexpr float moving_contact_slop_m = 0.032f;
-    inline constexpr float moving_contact_release_speed_mps = 0.24f;
+    inline constexpr float moving_contact_release_speed_mps = 0.12f;
 
     [[nodiscard]] inline bool planted_contact_persists(bool contact_latched,
         bool semantic_support, bool static_support, float separation,
@@ -734,6 +750,14 @@ namespace runner::sim
                 swing_air_seconds, swing_clearance);
     }
 
+    [[nodiscard]] inline bool advanced_material_pressure_ready(
+        float distance, float required_distance, std::uint32_t gait_cycles,
+        std::uint32_t limb_crossings, bool paired_leg_chains) noexcept
+    {
+        return std::abs(distance) >= required_distance
+            && gait_cycles >= 2u
+            && (!paired_leg_chains || limb_crossings >= 2u);
+    }
     inline constexpr float course_marker_spacing_m = 8.0f;
     inline constexpr int course_safe_runway_markers = 5;
     inline constexpr int course_feature_cycle_length = 5;
@@ -1143,6 +1167,26 @@ namespace runner::sim
         [[nodiscard]] bool save(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] static CreatureBlueprint load(const std::filesystem::path& path, std::string& error);
     };
+
+    [[nodiscard]] inline float authored_foundational_gait_cadence_hz(
+        const CreatureBlueprint& blueprint) noexcept
+    {
+        if (blueprint.paired_leg_chains())
+            return foundational_gait_cadence_hz;
+        if (blueprint.support_seed_count() >= 6u)
+            return 0.96f;
+        float support_height = std::numeric_limits<float>::infinity();
+        for (std::size_t node = 0; node < blueprint.nodes.size(); ++node)
+        {
+            if (blueprint.is_support_seed(node))
+                support_height = std::min(support_height,
+                    blueprint.nodes[node].y);
+        }
+        const float root_clearance = blueprint.root_node < blueprint.nodes.size()
+                && std::isfinite(support_height)
+            ? blueprint.nodes[blueprint.root_node].y - support_height : 2.0f;
+        return root_clearance >= 1.65f ? 1.08f : 1.44f;
+    }
 
     struct StepResult
     {

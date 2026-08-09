@@ -158,6 +158,7 @@ namespace runner::rl
 
                 const float bootstrap = skill_bootstrap_weight(metrics_.update, course_stage_);
                 const auto guided = skill_bootstrap_action(environment, course_stage_);
+                transition.guided_action = guided;
                 std::array<float, sim::action_count>& previous_action
                     = rollout_previous_actions_[environment_index];
                 for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
@@ -175,7 +176,9 @@ namespace runner::rl
                     transition.action[action_index] = lerp(transition.action[action_index],
                         probe.action[action_index], probe.weight);
                 transition.action = effective_policy_action(
-                    environment, transition.action, course_stage_);
+                    environment, transition.action, course_stage_,
+                    foundational_walk_teacher_authority(
+                        metrics_.update, environment.blueprint()));
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
                 const sim::StepResult result = environment.step(transition.action);
                 transition.reward = result.reward;
@@ -562,6 +565,23 @@ namespace runner::rl
         if (!staged_update_active_ || !staged_advantages_ready_ || !staged_optimized_)
             return;
         ++metrics_.update;
+        if (course_stage_ == sim::CourseStage::uneven
+            && metrics_.update
+                == foundational_walk_teacher_handoff_update(blueprint_))
+        {
+            // Assisted and unassisted scores are not comparable. Keep the
+            // learned network and optimizer, but make every retained champion
+            // after this boundary prove itself with zero teacher authority.
+            best_parameters_.clear();
+            clear_self_imitation_prior();
+            metrics_.best_evaluation_distance =
+                -std::numeric_limits<float>::infinity();
+            metrics_.best_evaluation_score =
+                -std::numeric_limits<float>::infinity();
+            metrics_.best_quality_key = 0u;
+            metrics_.best_update = 0u;
+            preview_policy_.parameters() = policy_.parameters();
+        }
         metrics_.environment_steps += rollout_.size();
         ++metrics_.total_updates;
         metrics_.total_environment_steps += rollout_.size();
@@ -694,10 +714,61 @@ namespace runner::rl
                 sample_count += end - begin;
             }
         }
+        const float guided_weight = guided_rollout_imitation_weight(
+            metrics_.update, course_stage_);
+        if (guided_weight > 0.0f && !rollout_.empty())
+        {
+            constexpr std::size_t guided_passes = 4u;
+            constexpr std::size_t guided_samples_per_pass = 1024u;
+            constexpr float guided_gradient_limit = 1.0f;
+            constexpr float guided_learning_rate = 1.0e-3f;
+            const std::size_t guided_count = std::min(
+                guided_samples_per_pass, rollout_.size());
+            const std::size_t guided_stride = std::max<std::size_t>(
+                1u, rollout_.size() / guided_count);
+            for (std::size_t pass = 0; pass < guided_passes; ++pass)
+            {
+                policy_.zero_gradients();
+                float guided_loss{};
+                std::size_t accumulated{};
+                const std::size_t offset = pass * guided_stride / guided_passes;
+                for (std::size_t cursor = offset;
+                    cursor < rollout_.size() && accumulated < guided_count;
+                    cursor += guided_stride, ++accumulated)
+                {
+                    const Transition& demonstration = rollout_[cursor];
+                    policy_.accumulate_imitation_gradient(
+                        demonstration.observation,
+                        demonstration.guided_action,
+                        guided_weight,
+                        guided_loss);
+                }
+                if (accumulated == 0u)
+                    continue;
+                const float inverse_guided = 1.0f
+                    / static_cast<float>(accumulated);
+                float guided_norm_squared{};
+                for (const float gradient : policy_.gradients())
+                {
+                    const float scaled = gradient * inverse_guided;
+                    guided_norm_squared += scaled * scaled;
+                }
+                const float guided_norm = std::sqrt(guided_norm_squared);
+                const float guided_clip = guided_norm > guided_gradient_limit
+                    ? guided_gradient_limit / guided_norm : 1.0f;
+                apply_adam(guided_learning_rate,
+                    inverse_guided * guided_clip);
+                total_policy_loss += guided_loss;
+            }
+        }
+
         const float inverse_samples = sample_count > 0
             ? 1.0f / static_cast<float>(sample_count)
             : 0.0f;
-        if (best_parameters_.size() == policy_.parameter_count())
+        if (best_parameters_.size() == policy_.parameter_count()
+            && (!sim::stage_requires_forward_gait(course_stage_)
+                || foundational_walk_teacher_authority(
+                    metrics_.update, blueprint_) >= 0.999f))
         {
             const float anchor = metrics_.update < 1500u ? 0.004f : 0.010f;
             std::vector<float>& current = policy_.parameters();
@@ -744,7 +815,9 @@ namespace runner::rl
             const auto raw_action = display_policy.deterministic_action(
                 preview_.observation());
             const auto action = effective_policy_action(
-                preview_, raw_action, course_stage_);
+                preview_, raw_action, course_stage_,
+                foundational_walk_teacher_authority(
+                    metrics_.update, preview_.blueprint()));
             const sim::StepResult result = preview_.step(action,
                 static_cast<float>(fixed_step));
             preview_accumulator_seconds_ -= fixed_step;

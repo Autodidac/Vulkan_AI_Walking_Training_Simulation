@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string_view>
 
 namespace runner::diagnostics
@@ -17,6 +18,14 @@ namespace runner::diagnostics
         bool equipment_contract{};
         bool equipment_off_identity{};
         bool frame_independent{};
+        float runway_minimum_feature_x{};
+        float runway_distance{};
+        float runway_elapsed_seconds{};
+        std::uint32_t runway_gait_cycles{};
+        std::uint32_t runway_material_events{};
+        std::uint32_t runway_material_particles{};
+        std::uint32_t runway_invalid_reason{};
+        bool runway_unique_features{};
 
         [[nodiscard]] bool passed() const noexcept
         {

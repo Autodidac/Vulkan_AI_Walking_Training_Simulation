@@ -13,6 +13,7 @@ namespace runner::sim
         {
             environment.distance_travelled_ = 20.0f;
             environment.alternating_steps_ = 2u;
+            environment.limb_crossings_ = 2u;
             environment.elapsed_seconds_ = environment.next_material_event_seconds_;
             environment.update_materials(1.0f / 60.0f);
             return environment.material_event_count() > 0u
@@ -95,7 +96,15 @@ int main()
         report.delayed_material_pressure, report.climb_contract,
         report.equipment_contract, report.equipment_off_identity,
         report.frame_independent };
-    const auto names = runner::diagnostics::course_completion_case_names();
+
+    std::cout << "runway min_feature=" << report.runway_minimum_feature_x
+        << " unique=" << report.runway_unique_features
+        << " distance=" << report.runway_distance
+        << " gait=" << report.runway_gait_cycles
+        << " elapsed=" << report.runway_elapsed_seconds
+        << " events=" << report.runway_material_events
+        << " particles=" << report.runway_material_particles
+        << " invalid=" << report.runway_invalid_reason << '\n';    const auto names = runner::diagnostics::course_completion_case_names();
     for (std::size_t index = 0; index < names.size(); ++index)
         std::cout << names[index] << '=' << (fields[index] ? "passed" : "failed") << '\n';
 

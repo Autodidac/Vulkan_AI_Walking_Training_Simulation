@@ -257,7 +257,7 @@ namespace runner::telemetry
         case sim::CourseStage::duck_press:
             return "Crouch under pressure, hold it, then stand back up on valid supports.";
         case sim::CourseStage::uneven:
-            return "Walk at least 18 m with 16 real stride events, useful speed, and controlled balance.";
+            return "Walk at least 18 m with a 14-step multi-seed average, useful speed, and controlled balance.";
         case sim::CourseStage::crouch_walk:
             return "Stay crouched for 3.5 seconds, take 8 stride events, pass 4 obstacles, and recover upright.";
         case sim::CourseStage::ramps:
@@ -305,7 +305,7 @@ namespace runner::telemetry
 
     [[nodiscard]] constexpr std::string_view total_updates_help() noexcept
     {
-        return "TOTAL RIG UPDATES = completed learning cycles for the selected rig. It never resets during episode or policy retries for the same rig; selecting a different rig starts at zero.";
+        return "RIG UPDATES = completed optimizer cycles for the selected rig; this count never resets during ordinary episodes, required tests, or same-rig retries. POLICY AGE = cycles retained by the current policy lineage. DISCARDED = cycles lost only to an explicit policy restart.";
     }
 
     [[nodiscard]] constexpr std::string_view attempts_help() noexcept

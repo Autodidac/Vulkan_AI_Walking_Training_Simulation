@@ -69,6 +69,59 @@ namespace runner::sim
                 && node_degree(rig, node) == 1u;
         }
 
+        [[nodiscard]] std::uint8_t motor_support_mask(
+            const CreatureBlueprint& rig, const MotorConstraint& motor) noexcept
+        {
+            if (!motor.enabled || motor.pivot >= rig.nodes.size()
+                || motor.c >= rig.nodes.size() || rig.nodes.size() > 128u)
+                return 0u;
+
+            std::array<bool, 128> visited{};
+            std::array<std::uint16_t, 128> stack{};
+            std::size_t stack_size = 0u;
+            visited[motor.pivot] = true;
+            visited[motor.c] = true;
+            stack[stack_size++] = motor.c;
+            std::uint8_t mask = 0u;
+            while (stack_size > 0u)
+            {
+                const std::uint16_t node = stack[--stack_size];
+                if (rig.is_left_support_seed(node))
+                    mask = static_cast<std::uint8_t>(mask | 0x1u);
+                if (rig.is_right_support_seed(node))
+                    mask = static_cast<std::uint8_t>(mask | 0x2u);
+                for (const DistanceConstraint& bone : rig.bones)
+                {
+                    if (bone.stiffness < 0.20f)
+                        continue;
+                    std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                    if (bone.a == node)
+                        next = bone.b;
+                    else if (bone.b == node)
+                        next = bone.a;
+                    if (next < rig.nodes.size() && !visited[next])
+                    {
+                        visited[next] = true;
+                        stack[stack_size++] = next;
+                    }
+                }
+            }
+            return mask;
+        }
+
+        [[nodiscard]] bool manipulator_branch_node(const CreatureBlueprint& rig,
+            std::size_t node) noexcept
+        {
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+            {
+                const MotorConstraint& motor = rig.motors[index];
+                if (motor_support_mask(rig, motor) == 0u
+                    && (node == motor.pivot || node == motor.c))
+                    return true;
+            }
+            return false;
+        }
+
         void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
             float toe_reach = 0.34f) noexcept
         {
@@ -1089,9 +1142,10 @@ namespace runner::sim
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float interval = std::lerp(4.20f, 2.60f, course_difficulty_);
         const float required_travel = 8.0f + course_difficulty_ * 4.0f;
-        // Terrain-relative progress includes treadmill travel. Require a real gait
-        // cycle as well so an idle or fallen rig never unlocks falling material.
-        if (std::abs(distance_travelled_) < required_travel || gait_cycles() < 2u)
+        // Terrain-relative progress includes treadmill travel. Require repeated gait
+        // plus paired-leg crossings so idle skating never unlocks falling material.
+        if (!advanced_material_pressure_ready(distance_travelled_, required_travel,
+                gait_cycles(), limb_crossings_, blueprint_.paired_leg_chains()))
             return;
         while (elapsed_seconds_ >= next_material_event_seconds_)
         {
@@ -1536,6 +1590,8 @@ namespace runner::sim
                 inverse_mass = 0.58f;
             else if (index == blueprint_.head_node)
                 inverse_mass = 0.72f;
+            else if (manipulator_branch_node(blueprint_, index))
+                inverse_mass = 4.0f;
             else if (passive_endpoint(blueprint_, index))
                 inverse_mass = 0.68f;
             else if (degree == 1u && index != blueprint_.root_node
@@ -2111,11 +2167,53 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
 
     void Environment::stabilize_balance_posture() noexcept
     {
-        if (course_stage_ != CourseStage::balance
+        const bool balance_lesson = course_stage_ == CourseStage::balance;
+        const bool locomotion_core_guide = course_stage_ == CourseStage::uneven
+            && blueprint_.paired_leg_chains();
+        if ((!balance_lesson && !locomotion_core_guide)
             || !valid_node(blueprint_.root_node)
             || !valid_node(blueprint_.torso_node)
             || !valid_node(blueprint_.head_node))
             return;
+
+        if (locomotion_core_guide)
+        {
+            const Vec2 root = particles_[blueprint_.root_node].position;
+            const Vec2 rest_body = blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node];
+            const Vec2 current_body = particles_[blueprint_.torso_node].position - root;
+            if (length(rest_body) > 1.0e-5f && length(current_body) > 1.0e-5f)
+            {
+                const float body_rotation = signed_angle(rest_body, current_body);
+                bool appendaged_biped = false;
+                for (std::size_t index = 0;
+                    index < blueprint_.active_motor_count; ++index)
+                {
+                    appendaged_biped = appendaged_biped
+                        || motor_support_mask(blueprint_,
+                            blueprint_.motors[index]) == 0u;
+                }
+                const float correction_gain = appendaged_biped ? 0.040f : 0.025f;
+                const float maximum_correction = appendaged_biped ? 0.0100f : 0.0060f;
+                const float correction = clamp(-body_rotation * correction_gain,
+                    -maximum_correction, maximum_correction);
+                for (std::size_t node = 0; node < particles_.size(); ++node)
+                {
+                    const bool upper_body_node = node == blueprint_.torso_node
+                        || node == blueprint_.head_node
+                        || manipulator_branch_node(blueprint_, node);
+                    if (!upper_body_node || node == blueprint_.root_node)
+                        continue;
+                    Particle& particle = particles_[node];
+                    const Vec2 corrected = root + rotate(particle.position - root,
+                        correction);
+                    const Vec2 translation = corrected - particle.position;
+                    particle.position = corrected;
+                    particle.previous += translation;
+                }
+            }
+            return;
+        }
 
         Vec2 rest_support{};
         Vec2 current_support{};
@@ -3363,8 +3461,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         {
             const float swing_air_seconds = new_left ? left_swing_seconds_ : right_swing_seconds_;
             const float swing_clearance = new_left ? left_swing_clearance_ : right_swing_clearance_;
-            if (blueprint_.support_seed_count() > 2u
-                && swing_air_seconds >= 0.06f && swing_clearance >= 0.04f)
+            if (swing_air_seconds >= 0.06f && swing_clearance >= 0.04f)
                 last_support_transfer_seconds_ = elapsed_seconds_;
             if (last_contact_side_ == 0)
             {
@@ -3377,14 +3474,12 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 const bool swing_crossed = new_left
                     ? left_swing_started_behind_ && left_swing_crossed_
                     : right_swing_started_behind_ && right_swing_crossed_;
-                const bool crossing_required = blueprint_.paired_leg_chains();
-                if (!qualifies_crossing_step(last_contact_side_, strike_side,
+                if (!qualifies_supported_step(last_contact_side_, strike_side,
                     elapsed_seconds_ - last_step_time_, locomotion_x - last_step_x_,
-                    swing_air_seconds, swing_clearance,
-                    swing_crossed, crossing_required))
+                    swing_air_seconds, swing_clearance))
                     goto step_not_qualified;
                 ++alternating_steps_;
-                if (crossing_required)
+                if (swing_crossed)
                     ++limb_crossings_;
                 alternating_step_this_step_ = true;
                 last_contact_side_ = strike_side;
@@ -3898,16 +3993,14 @@ step_not_qualified:
         {
             const float net_progress = std::abs(root_x - progress_window_start_x_);
             const float average_energy = action_energy_window_ / progress_window_seconds_;
-            const bool high_energy_stall = average_energy > 0.10f && net_progress < 0.05f;
-            const bool inefficient_vibration = average_energy > 0.16f && net_progress < 0.12f
-                && root_path_window_ > std::max(0.08f, net_progress * 2.5f);
-            if (locomotion_required && !recovery_active_ && !terrain_step_recovery
-                && (high_energy_stall || inefficient_vibration))
+            const std::uint32_t new_steps = alternating_steps_ - progress_window_start_steps_;
+            if (micro_motion_window(average_energy, net_progress,
+                    root_path_window_, new_steps, locomotion_required,
+                    recovery_active_ || terrain_step_recovery))
                 micro_motion_seconds_ += progress_window_seconds_;
             else
                 micro_motion_seconds_ = std::max(0.0f, micro_motion_seconds_ - 0.5f);
 
-            const std::uint32_t new_steps = alternating_steps_ - progress_window_start_steps_;
             const bool idle_window = locomotion_required
                 && elapsed_seconds_ > rolling_gate_warmup_end_seconds
                 && zero_progress_window(net_progress, new_steps,
@@ -4583,7 +4676,8 @@ step_not_qualified:
         result[36] = static_cast<float>(course_stage_)
             / static_cast<float>(course_stage_count - 1);
         result[37] = course_difficulty_;
-        const float gait_phase = elapsed_seconds_ * 2.0f * pi * 1.25f;
+        const float gait_phase = elapsed_seconds_ * 2.0f * pi
+            * authored_foundational_gait_cadence_hz(blueprint_);
         result[38] = std::sin(gait_phase);
         result[39] = std::cos(gait_phase);
         result[40] = terrain_firmness_;

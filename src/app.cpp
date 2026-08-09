@@ -1,6 +1,7 @@
 #include "app.hpp"
 #include "autonomy.hpp"
 #include "pixel_art.hpp"
+#include "rig_training_diagnostic.hpp"
 #include "simulation.hpp"
 #include "training_explainer.hpp"
 #include "ui_render_contract.hpp"
@@ -331,6 +332,8 @@ namespace runner
         rl::AutonomousTrainer trainer{ blueprint, 64 };
         std::optional<sim::Environment> course_eye_test_environment{};
         bool art_eye_test{};
+        bool walk_eye_test{};
+        diagnostics::WalkEyeTestProof walk_eye_test_proof{};
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
@@ -407,9 +410,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0728-course-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0728-course-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0728-course-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0730-walk-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0730-walk-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0730-walk-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1359,14 +1362,16 @@ namespace runner
 
         void draw_training_pip(Rect rect)
         {
-            const bool course_eye_test = course_eye_test_environment.has_value();
+            const bool fixed_eye_test = course_eye_test_environment.has_value();
+            const bool course_eye_test = fixed_eye_test && !art_eye_test && !walk_eye_test;
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.99f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 12.0f, 9.0f },
                 art_eye_test ? "ORTHOGRAPHIC ART CHECK"
+                    : walk_eye_test ? "RETAINED WALK PROOF - ZERO AUTHORITY"
                     : course_eye_test ? "COURSE EYE TEST - SAFE START"
                     : "LIVE TRAINING ENVIRONMENT",
                 0.88f, accent);
-            if (!course_eye_test && !trainer.has_training_preview())
+            if (!fixed_eye_test && !trainer.has_training_preview())
             {
                 add_text_fit(canvas, rect.position + Vec2{ 12.0f, 42.0f },
                     "WAITING FOR FIRST INTACT TRAINING FRAME", 0.90f, muted,
@@ -1374,7 +1379,7 @@ namespace runner
                 return;
             }
 
-            const sim::Environment& environment = course_eye_test
+            const sim::Environment& environment = fixed_eye_test
                 ? *course_eye_test_environment : trainer.training_preview();
             const auto& particles = environment.particles();
             const auto& rig = environment.blueprint();
@@ -1390,9 +1395,10 @@ namespace runner
                 rl::stage_motion_qualification(environment.course_stage(), environment);
             const bool foot_only = !environment.non_foot_grounded();
             const bool intact = environment.body_integrity_valid();
-            const Color state_color = course_eye_test ? green : qualification.valid ? green
+            const Color state_color = fixed_eye_test ? green : qualification.valid ? green
                 : intact && foot_only ? yellow : danger;
             const std::string_view state_text = art_eye_test ? std::string_view{ "SIDE PROFILE" }
+                : walk_eye_test ? std::string_view{ "ZERO AUTHORITY" }
                 : course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
                 : qualification.valid ? "STAGE VALID" : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY CONTACT"
@@ -1466,11 +1472,20 @@ namespace runner
 
             const std::string pip_metrics = art_eye_test
                 ? std::string("STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING")
+                : walk_eye_test
+                    ? std::format(
+                        "RETAINED UPDATE {}  DIST {:.1f} M  STEPS {}  CROSSINGS {}",
+                        walk_eye_test_proof.retained_update,
+                        walk_eye_test_proof.displayed_distance,
+                        walk_eye_test_proof.displayed_steps,
+                        walk_eye_test_proof.displayed_crossings)
                 : course_eye_test
                     ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
                     : std::format(
-                    "TOTAL RIG UPDATES {}  POLICY UPDATE {}  DISTANCE {:.1f} M  STEPS {}",
+                    "RIG UPDATES {}  POLICY AGE {}  DISCARDED {}  DIST {:.1f} M  STEPS {}",
                     trainer.metrics().total_updates, trainer.metrics().update,
+                    trainer.metrics().total_updates >= trainer.metrics().update
+                        ? trainer.metrics().total_updates - trainer.metrics().update : 0u,
                     environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
                 pip_metrics, 0.70f, state_color, rect.size.x - 24.0f, 0.64f);
@@ -2061,19 +2076,34 @@ namespace runner
                 0.82f, muted, text_width);
             line.y += 23.0f;
             add_text_fit(canvas, line,
-                std::format("MOTION {}   TOTAL RIG UPDATES {}   POLICY UPDATE {}",
-                    sim::invalid_motion_name(environment.invalid_reason()),
-                    trainer.metrics().total_updates, trainer.metrics().update),
+                walk_eye_test
+                    ? std::format(
+                        "MOTION VALID   COLD UPDATES {}   AUTHORITY {:.3f}   SEEDS {}/6",
+                        walk_eye_test_proof.updates,
+                        walk_eye_test_proof.teacher_authority,
+                        6u - walk_eye_test_proof.retained_invalid_runs)
+                    : std::format(
+                        "MOTION {}   RIG UPDATES {}   POLICY AGE {}   DISCARDED {}",
+                        sim::invalid_motion_name(environment.invalid_reason()),
+                        trainer.metrics().total_updates, trainer.metrics().update,
+                        trainer.metrics().total_updates >= trainer.metrics().update
+                            ? trainer.metrics().total_updates - trainer.metrics().update : 0u),
                 0.80f, environment.valid_motion() ? accent : danger, text_width);
             line.y += 21.0f;
             const std::uint64_t preview_restarts = trainer.preview_reset_count();
             const sim::InvalidMotion preview_reason = trainer.preview_last_reset_reason();
             add_text_fit(canvas, line,
-                preview_restarts == 0u
+                walk_eye_test
+                    ? std::format(
+                        "RETAINED MEAN {:.1f} M / {:.1f} STEPS   REPLAY SEED 0x{:X}",
+                        walk_eye_test_proof.retained_distance,
+                        walk_eye_test_proof.retained_stride_events,
+                        walk_eye_test_proof.selected_seed)
+                    : preview_restarts == 0u
                     ? "PREVIEW RESTARTS 0 - REAL STATIC COURSE"
                     : std::format("PREVIEW RESTARTS {}   LAST {}",
                         preview_restarts, sim::invalid_motion_name(preview_reason)),
-                0.72f, preview_restarts == 0u ? muted : yellow, text_width);
+                0.72f, walk_eye_test || preview_restarts == 0u ? muted : yellow, text_width);
 
             draw_training_pip({ { pip_box.x, pip_box.y },
                 { pip_box.width, pip_box.height } });
@@ -2082,6 +2112,7 @@ namespace runner
             add_text_fit(canvas, bottom.position + Vec2{ 11.0f, 10.0f },
                 std::format("{}   v{}   GROUND {}   WATER {:.2f} M   EQUIP {} / {}   HITS {}   {}",
                     art_eye_test ? "PACKAGED ORTHOGRAPHIC ART TEST"
+                        : walk_eye_test ? "PACKAGED RETAINED WALK EYE TEST"
                         : course_eye_test_environment.has_value()
                             ? "PACKAGED COURSE EYE TEST"
                             : trainer.has_best_policy()
@@ -2094,6 +2125,7 @@ namespace runner
                     sim::equipment_state_name(environment.equipment_state()),
                     environment.target_hits(),
                     art_eye_test ? "FIXED SIDE PROFILE"
+                        : walk_eye_test ? "ZERO-AUTHORITY LIFTED-STEP REPLAY"
                         : course_eye_test_environment.has_value() ? "FIXED START FRAME"
                         : trainer.background_enabled() ? "TRAINING" : "PAUSED"),
                 0.86f, course_eye_test_environment.has_value() || trainer.has_best_policy()
@@ -3104,6 +3136,7 @@ namespace runner
         impl_->trainer.set_background_enabled(false);
         impl_->trainer.synchronize();
         impl_->art_eye_test = false;
+        impl_->walk_eye_test = false;
         impl_->course_eye_test_environment.emplace(
             sim::CreatureBlueprint::humanoid(), 728314u);
         impl_->course_eye_test_environment->set_course(
@@ -3123,6 +3156,7 @@ namespace runner
         impl_->trainer.set_background_enabled(false);
         impl_->trainer.synchronize();
         impl_->art_eye_test = true;
+        impl_->walk_eye_test = false;
         impl_->course_eye_test_environment.emplace(
             sim::CreatureBlueprint::humanoid(), 729349u);
         impl_->course_eye_test_environment->set_course(
@@ -3143,6 +3177,43 @@ namespace runner
         impl_->status_time = 30.0f;
     }
 
+    bool Application::prepare_walk_eye_test(std::string& error)
+    {
+        impl_->trainer.set_background_enabled(false);
+        impl_->trainer.synchronize();
+        impl_->art_eye_test = false;
+        impl_->walk_eye_test = false;
+        impl_->course_eye_test_environment.reset();
+        impl_->walk_eye_test_proof = diagnostics::run_walk_eye_test_proof();
+        const diagnostics::WalkEyeTestProof& proof = impl_->walk_eye_test_proof;
+        if (!proof.passed)
+        {
+            error = std::format(
+                "walk eye test failed: updates={} retained={} authority={:.3f} "
+                "mean={:.3f}m/{:.2f} steps invalid={}/6 displayed={:.3f}m/{} steps",
+                proof.updates, proof.retained_update, proof.teacher_authority,
+                proof.retained_distance, proof.retained_stride_events,
+                proof.retained_invalid_runs, proof.displayed_distance,
+                proof.displayed_steps);
+            return false;
+        }
+
+        impl_->course_eye_test_environment.emplace(proof.environment);
+        impl_->walk_eye_test = true;
+        impl_->run_paused = true;
+        const auto& particles = impl_->course_eye_test_environment->particles();
+        const std::size_t root = impl_->course_eye_test_environment->blueprint().root_node;
+        impl_->camera_x = root < particles.size()
+            ? particles[root].position.x + 2.5f : proof.displayed_distance;
+        impl_->live_pixels_per_meter = 105.0f;
+        impl_->live_zoom_factor = 1.0f;
+        impl_->live_zoom_auto = false;
+        impl_->debug_skeleton_overlay = true;
+        impl_->status = "PACKAGED RETAINED WALK PROOF - FRESH TRAINING, ZERO AUTHORITY";
+        impl_->status_time = 30.0f;
+        error.clear();
+        return true;
+    }
     void Application::frame(const InputState& input, float dt, int width, int height)
     {
         impl_->frame(input, dt, width, height);

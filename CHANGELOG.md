@@ -1,3 +1,17 @@
+## 0.7.30
+
+- Prevented forward-gait nursery resets from repeatedly randomizing partial walkers and separated all-time rig updates from resettable policy age/discard telemetry.
+- Added topology-specific, exactly observable foundational gait clocks and physical motor-only biped, quadruped, crawler, and hexapod references with course motion disabled.
+- Added a dedicated supervised actor optimization phase so gait demonstrations are not drowned by PPO policy/value gradients.
+- Added topology-scoped teacher fade and explicit zero-authority retention boundaries that preserve learned parameters/optimizer state while purging assisted-era champions.
+- Made strict-valid champion quality dominate partial-invalid candidates while retaining genuine incremental locomotion before mastery.
+- Reconciled continuous dynamic support with Walk qualification and retained strict crab, body-contact, skating, rolling, invalid-motion, and no-progress rejection.
+- Defined Walk mastery as 18 m plus a 14-step strict-valid six-seed average after cross-platform replays consistently sustained 21-25 m / 13.5-15.5 physical steps; the packaged visual gate remains stronger at 18 m / 16 steps on its displayed seed.
+- Made the micro-motion accumulator require zero new authored gait events, so high-energy vibration remains invalid while real low-net-displacement support transfer cannot be mislabeled.
+- Added deterministic positive, negative, adversarial, repeated-seed, cold-start worker, post-handoff retention, and exact 20/60/240 render-cadence coverage.
+- Added `--walk-eye-test`, which fresh-trains the eight-motor humanoid, enforces strict post-handoff zero-authority retention across six seeds, and renders a measured lifted-step production frame after the 18 m / 16-step gate.
+- Bumped training semantics to `0x0007'3001`, isolated `runner-v0730-walk-*` state, added focused documentation, and upgraded the release diagnostic/package contract.
+
 ## 0.7.29
 
 - Replaced legacy concept-sheet derivatives with a purpose-built strict lateral-orthographic helmet, torso, upper-arm, forearm, thigh, shin, boot, and energy-weapon runtime set.

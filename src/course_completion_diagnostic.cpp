@@ -174,18 +174,32 @@ namespace runner::diagnostics
         runway.set_course(sim::CourseStage::moving_hazards, 0.70f);
         std::set<int> markers{};
         bool protected_distance = true;
+        bool unique_features = true;
+        float minimum_feature_x = std::numeric_limits<float>::infinity();
         for (const sim::CourseFeature& feature : runway.course_features())
         {
+            minimum_feature_x = std::min(minimum_feature_x, feature.center.x);
             protected_distance = protected_distance && feature.center.x >= 32.0f;
-            protected_distance = protected_distance
+            unique_features = unique_features
                 && markers.insert(feature.marker_sequence).second;
         }
+        protected_distance = protected_distance && unique_features;
         const std::array<float, sim::action_count> idle{};
         for (int frame = 0; frame < 600; ++frame)
             static_cast<void>(runway.step(idle));
         report.safe_runway = protected_distance
             && runway.material_event_count() == 0u;
         report.delayed_material_pressure = runway.material_particles().empty();
+        report.runway_minimum_feature_x = minimum_feature_x;
+        report.runway_distance = runway.distance_travelled();
+        report.runway_elapsed_seconds = runway.elapsed_seconds();
+        report.runway_gait_cycles = runway.gait_cycles();
+        report.runway_material_events = runway.material_event_count();
+        report.runway_material_particles = static_cast<std::uint32_t>(
+            runway.material_particles().size());
+        report.runway_invalid_reason = static_cast<std::uint32_t>(
+            runway.invalid_reason());
+        report.runway_unique_features = unique_features;
 
         sim::Environment observed{ sim::CreatureBlueprint::humanoid(), 0x728300u };
         observed.set_course(sim::CourseStage::uneven, 0.65f);

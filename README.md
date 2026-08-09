@@ -1,5 +1,16 @@
 # Runner
 
+## v0.7.30 sustained-walk learning recovery
+
+- Stops forward-gait nursery randomization from repeatedly erasing partial walkers while cumulative rig updates keep rising.
+- Gives every authored topology an exactly observable foundational gait clock and motor-only physical reference with no conveyor or root translation.
+- Separates supervised gait imitation from PPO minibatch gradients, then fades teacher authority to exactly zero at topology-scoped handoff boundaries.
+- Clears only assisted-era champion state at handoff; learned network weights and Adam moments continue, and retained best policies must republish unassisted.
+- Reserves strict-valid champion quality above partial-invalid candidates while preserving genuine incremental gait before final mastery.
+- Reconciles continuous-gait support transfer with Walk qualification and prevents real support cycles from accumulating as micro-motion, without weakening crab, body-contact, skating, rolling, vibration, or no-progress rejection.
+- Adds the real `Runner.V0730ColdStart` worker/optimizer/publication/evaluation/preview gate, ten-seed physical gait probes, exact 20/60/240 render-cadence state equivalence, and a packaged `--walk-eye-test` that cold-trains and renders a measured zero-authority humanoid stride.
+- Isolates corrected training semantics and automatic state under `runner-v0730-walk-*` paths.
+
 ## v0.7.29 modular armor art remake
 
 - Replaces the old concept-sheet derivatives with eight purpose-built exact lateral-orthographic sprites: helmet, torso, upper arm, forearm, thigh, shin, boot, and compact energy weapon.
@@ -32,7 +43,7 @@
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.29 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.30 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -106,10 +117,11 @@ Runner.exe --diagnose-art
 Runner.exe --diagnose-rig-training
 Runner.exe --diagnose-course
 Runner.exe --course-eye-test
+Runner.exe --walk-eye-test
 Runner.exe --art-eye-test
 ```
 
-`--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course and orthographic close-up frames with the packaged modular set and fails if either exceeds 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection. `--art-eye-test` opens the same production renderer at a frozen close-up humanoid frame and explicitly labels the required strict side elevation.
+`--diagnose-rig-training` runs the v0.7.30 cold-start learner: after 1,200 fresh updates, the four-motor biped, eight-motor humanoid, quadruped, crawler, and hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority; both paired-leg subjects must exceed 18 m / a 14-step six-seed average, and multi-support rigs must sustain repeated physical contact cycles. `--walk-eye-test` independently cold-trains the default eight-motor humanoid for 1,200 updates, with its final 300 updates at zero teacher authority; it refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate with its update, distance, steps, crossings, seed, authority, and validity shown on screen. The diagnostic also runs ten-seed gait references and exact 20/60/240 frame-independence checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the fixed production course and orthographic close-up frames with the packaged modular set and fails if either exceeds 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies the safe runway, seeded material diversity, water/hole geometry, observation truth, delayed pressure, physical climb/descent, equipment targets, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame, with no training mutation, and labels the firm runway, dry sand, waterlogged sand, shallow water, and hole for direct packaged inspection. `--art-eye-test` opens the same production renderer at a frozen close-up humanoid frame and explicitly labels the required strict side elevation.
 
 ## Repository records
 
@@ -131,6 +143,7 @@ Runner.exe --art-eye-test
 - [`docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md`](docs/RUNNER_V0727_RIG_TRAINING_EVIDENCE.md) documents authored-contact gait evidence and the fixed four-rig comparison.
 - [`docs/RUNNER_V0728_COURSE_COMPLETION.md`](docs/RUNNER_V0728_COURSE_COMPLETION.md) documents the physical material course, climb/equipment completion, checkpoint migration, and diagnostic contract.
 - [`docs/RUNNER_V0729_MODULAR_ART_REMAKE.md`](docs/RUNNER_V0729_MODULAR_ART_REMAKE.md) documents the remade atlas, keyed runtime sprites, node-bound rendering, fallbacks, and isolation gates.
+- [`docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md`](docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md) documents the cold-start failure, observable gait clocks, optimizer separation, authority handoff, strict retention, and zero-authority acceptance gates.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 
