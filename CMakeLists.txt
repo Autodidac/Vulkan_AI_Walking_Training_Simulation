@@ -347,9 +347,12 @@ if(RUNNER_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_compile_features(RunnerV0730ColdStartTests PRIVATE cxx_std_23)
     runner_enable_warnings(RunnerV0730ColdStartTests)
+    add_test(NAME Runner.V0730ReferenceFrame
+        COMMAND RunnerV0730ColdStartTests --references)
+    set_tests_properties(Runner.V0730ReferenceFrame PROPERTIES TIMEOUT 1800)
     add_test(NAME Runner.V0730ColdStart
-        COMMAND RunnerV0730ColdStartTests)
-    set_tests_properties(Runner.V0730ColdStart PROPERTIES TIMEOUT 1200)
+        COMMAND RunnerV0730ColdStartTests --learner)
+    set_tests_properties(Runner.V0730ColdStart PROPERTIES TIMEOUT 1800)
 
     add_executable(RunnerV0728CourseCompletionTests
         tests/v0728_course_completion_tests.cpp)

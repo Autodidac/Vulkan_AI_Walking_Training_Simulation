@@ -192,12 +192,27 @@ namespace
 
 int main(int argc, char** argv)
 {
-
-    verify_walking_teachers_repeated_seeds();
-    verify_frame_independent_preview();
+    const std::string_view mode = argc > 1 ? argv[1] : "--all";
+    const bool run_references = mode == "--all" || mode == "--references";
+    const bool run_learner = mode == "--all" || mode == "--learner";
+    if (!run_references && !run_learner)
+    {
+        std::cerr << "Unknown v0.7.30 test mode: " << mode << '\n';
+        return EXIT_FAILURE;
+    }
+    if (run_references)
+    {
+        verify_walking_teachers_repeated_seeds();
+        verify_frame_independent_preview();
+        if (!run_learner)
+        {
+            std::cout << "Runner v0.7.30 reference gait and frame-independence checks passed\n";
+            return EXIT_SUCCESS;
+        }
+    }
     std::uint64_t updates = 1200u;
-    if (argc > 1)
-        updates = std::max<std::uint64_t>(1u, std::strtoull(argv[1], nullptr, 10));
+    if (argc > 2)
+        updates = std::max<std::uint64_t>(1u, std::strtoull(argv[2], nullptr, 10));
     const runner::diagnostics::RigTrainingReport report =
         runner::diagnostics::run_rig_training_diagnostic(updates);
     for (const runner::diagnostics::RigTrainingResult& rig : report.rigs)
@@ -240,6 +255,9 @@ int main(int argc, char** argv)
         std::cerr << "Runner v0.7.30 rig-training diagnostic failed\n";
         return EXIT_FAILURE;
     }
-    std::cout << "Runner v0.7.30 rig-training and frame-independence checks passed\n";
+    if (run_references)
+        std::cout << "Runner v0.7.30 rig-training and frame-independence checks passed\n";
+    else
+        std::cout << "Runner v0.7.30 rig-training checks passed\n";
     return EXIT_SUCCESS;
 }
