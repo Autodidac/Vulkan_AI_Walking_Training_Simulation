@@ -103,15 +103,18 @@ namespace runner::rl
     }
 
     PpoTrainer::PpoTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count,
-            bool enable_rollout_workers)
+            bool enable_rollout_workers, std::size_t maximum_rollout_workers)
             : blueprint_(blueprint), preview_(blueprint, 0xDEADBEEFu), policy_(0xC0FFEEu),
               preview_policy_(0xBEEFBEEFu)
         {
             environment_count = std::clamp<std::size_t>(environment_count, 8, 256);
             const std::size_t hardware = std::max<std::size_t>(1, std::thread::hardware_concurrency());
             const std::size_t available = hardware > 2 ? hardware - 2 : hardware;
+            const std::size_t worker_capacity = std::min<std::size_t>(16, environment_count);
+            const std::size_t worker_ceiling = maximum_rollout_workers == 0u
+                ? worker_capacity : std::min(worker_capacity, maximum_rollout_workers);
             rollout_worker_count_ = enable_rollout_workers
-                ? std::clamp<std::size_t>(available, 1, std::min<std::size_t>(16, environment_count))
+                ? std::clamp<std::size_t>(available, 1, worker_ceiling)
                 : 0;
 
             environments_.reserve(environment_count);
@@ -198,6 +201,8 @@ namespace runner::rl
                 const sim::StepResult result = environment.step(transition.action);
                 transition.reward = result.reward;
                 transition.terminal = result.terminated;
+                totals.total_distance += static_cast<double>(
+                    result.forward_odometer_progress);
                 episode_rewards_[environment_index] += result.reward;
                 episode_distances_[environment_index] = environment.distance_travelled();
                 totals.accumulated_speed += result.forward_speed;
@@ -211,8 +216,6 @@ namespace runner::rl
                         ++totals.valid_episodes;
                     else
                         ++totals.invalid_episodes;
-                    totals.total_distance += static_cast<double>(
-                        std::max(0.0f, environment.distance_travelled()));
                     totals.alternating_steps += environment.gait_cycles();
                     totals.collisions += static_cast<std::uint64_t>(
                         std::max(0.0f, environment.collision_count()));
@@ -289,9 +292,10 @@ namespace runner::rl
         }
         else
         {
-            // A canonical rig switch is a new training subject. Preserve totals
-            // across episode/policy retries, but never carry another rig's totals.
-            reset_policy(0xC0FFEEu, true);
+            // A canonical rig switch is a new policy subject, but the explicitly
+            // labelled ALL TIME ledger must survive it. Per-selection UI baselines
+            // keep THIS RIG separate without erasing cumulative work.
+            reset_policy(0xC0FFEEu, false);
         }
     }
 
@@ -620,7 +624,9 @@ namespace runner::rl
         metrics_.total_landed_jumps += staged_totals_.landed_jumps;
         metrics_.total_landed_flips += staged_totals_.landed_flips;
         metrics_.total_obstacles_passed += staged_totals_.obstacles_passed;
-        metrics_.total_distance += staged_totals_.total_distance;
+        if (!environments_.empty())
+            metrics_.total_distance += staged_totals_.total_distance
+                / static_cast<double>(environments_.size());
         if (!environments_.empty())
         {
             metrics_.total_training_seconds += static_cast<double>(rollout_.size())
@@ -789,12 +795,17 @@ namespace runner::rl
         const float inverse_samples = sample_count > 0
             ? 1.0f / static_cast<float>(sample_count)
             : 0.0f;
+        const bool consolidating_foundational_walk =
+            foundational_walk_consolidation_active(
+                lesson_update_, course_stage_, blueprint_);
         if (best_parameters_.size() == policy_.parameter_count()
             && (!sim::stage_requires_forward_gait(course_stage_)
                 || lesson_teacher_authority(
-                    lesson_update_, course_stage_, blueprint_) >= 0.999f))
+                    lesson_update_, course_stage_, blueprint_) >= 0.999f
+                || consolidating_foundational_walk))
         {
-            const float anchor = metrics_.update < 1500u ? 0.004f : 0.010f;
+            const float anchor = consolidating_foundational_walk
+                ? 0.012f : metrics_.update < 1500u ? 0.004f : 0.010f;
             std::vector<float>& current = policy_.parameters();
             for (std::size_t index = 0; index < current.size(); ++index)
                 current[index] = lerp(current[index], best_parameters_[index], anchor);

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #ifndef RUNNER_SOURCE_ASSET_DIRECTORY
@@ -66,6 +67,23 @@ int main()
     std::error_code remove_error{};
     std::filesystem::remove(temporary, remove_error);
 
-    std::cout << "Runner pixel-art parser tests passed\n";
+    const runner::art::SkinEnvelopeDimensions compact_skin =
+        runner::art::skin_envelope_dimensions(50.0f, 8.0f);
+    const runner::art::SkinEnvelopeDimensions large_skin =
+        runner::art::skin_envelope_dimensions(100.0f, 16.0f);
+    const runner::art::SkinEnvelopeDimensions invalid_skin =
+        runner::art::skin_envelope_dimensions(
+            std::numeric_limits<float>::infinity(), -1.0f);
+    require(compact_skin.shoulder_width >= 47.0f
+            && compact_skin.chest_radius >= 14.5f
+            && compact_skin.pelvis_half_width >= 11.0f,
+        "skin envelope preserves a connected, broad torso silhouette");
+    require(std::abs(large_skin.shoulder_width
+                / compact_skin.shoulder_width - 2.0f) < 0.001f
+            && std::isfinite(invalid_skin.shoulder_width)
+            && invalid_skin.shoulder_width > 0.0f,
+        "skin envelope does not scale or sanitize invalid authored geometry");
+
+    std::cout << "Runner pixel-art parser and skin-envelope tests passed\n";
     return 0;
 }

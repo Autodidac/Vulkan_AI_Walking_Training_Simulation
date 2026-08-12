@@ -4,6 +4,7 @@
 #include "deformable_terrain.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -70,6 +71,18 @@ namespace runner::sim
         float course_speed, float dt) noexcept
     {
         return (current_world_x - previous_world_x) + course_speed * dt;
+    }
+
+    inline constexpr float odometer_speed_limit_mps = 50.0f / 3.6f;
+
+    [[nodiscard]] inline float accepted_forward_odometer_progress(
+        float world_displacement, float dt) noexcept
+    {
+        if (!std::isfinite(world_displacement) || !std::isfinite(dt) || dt <= 0.0f)
+            return 0.0f;
+        const float maximum_displacement = odometer_speed_limit_mps * dt;
+        return world_displacement >= 0.0f && world_displacement <= maximum_displacement
+            ? world_displacement : 0.0f;
     }
 
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
@@ -297,6 +310,44 @@ namespace runner::sim
             && distance >= 0.75f
             && (support_span_ratio > 1.55f
                 || (alternating_steps >= 4u && limb_crossings < 2u));
+    }
+
+    [[nodiscard]] inline float sagittal_crossing_shaping_reward(
+        bool forward_gait, bool paired_legs, bool crossing_this_step) noexcept
+    {
+        return forward_gait && paired_legs && crossing_this_step ? 0.250f : 0.0f;
+    }
+
+    [[nodiscard]] inline float lateral_crab_shaping_penalty(
+        bool forward_gait, bool paired_legs, std::uint32_t alternating_steps,
+        std::uint32_t limb_crossings, float distance, float elapsed_seconds,
+        float support_span_ratio) noexcept
+    {
+        return forward_gait && paired_legs
+            && crab_walking_motion(alternating_steps, limb_crossings,
+                distance, elapsed_seconds, support_span_ratio)
+            ? 0.012f : 0.0f;
+    }
+
+    [[nodiscard]] inline bool strict_segment_crossing(Vec2 a, Vec2 b,
+        Vec2 c, Vec2 d) noexcept
+    {
+        const float ab_c = cross(b - a, c - a);
+        const float ab_d = cross(b - a, d - a);
+        const float cd_a = cross(d - c, a - c);
+        const float cd_b = cross(d - c, b - c);
+        constexpr float epsilon = 1.0e-5f;
+        return ab_c * ab_d < -epsilon && cd_a * cd_b < -epsilon;
+    }
+
+    inline constexpr float sustained_scissor_limit_seconds = 0.34f;
+
+    [[nodiscard]] inline float lower_leg_scissor_shaping_penalty(
+        bool forward_gait, bool paired_legs, float contiguous_seconds) noexcept
+    {
+        return forward_gait && paired_legs
+            ? clamp(contiguous_seconds - 0.08f, 0.0f, 0.50f) * 0.060f
+            : 0.0f;
     }
 
     [[nodiscard]] inline bool friction_driven_shuffle(float root_speed,
@@ -1244,6 +1295,7 @@ namespace runner::sim
     {
         float reward{};
         float forward_speed{};
+        float forward_odometer_progress{};
         bool terminated{};
         bool valid_motion{ true };
         InvalidMotion invalid_reason{ InvalidMotion::none };
@@ -1463,6 +1515,10 @@ namespace runner::sim
         [[nodiscard]] float maximum_joint_speed() const noexcept { return maximum_joint_speed_; }
         [[nodiscard]] float maximum_upper_body_motor_deviation() const noexcept;
         [[nodiscard]] float primary_support_span_ratio() const noexcept;
+        [[nodiscard]] float maximum_lower_leg_scissor_seconds() const noexcept
+        {
+            return maximum_lower_leg_scissor_seconds_;
+        }
         [[nodiscard]] float posture_failure_seconds() const noexcept
         {
             return posture_failure_seconds_;
@@ -1649,12 +1705,16 @@ namespace runner::sim
         bool left_swing_crossed_{};
         bool right_swing_crossed_{};
         std::uint32_t limb_crossings_{};
+        bool lower_leg_scissored_this_step_{};
+        float lower_leg_scissor_seconds_{};
+        float maximum_lower_leg_scissor_seconds_{};
         std::uint32_t heel_strike_count_{};
         std::uint32_t toe_off_count_{};
         FootContactPhase left_foot_phase_{ FootContactPhase::airborne };
         FootContactPhase right_foot_phase_{ FootContactPhase::airborne };
         float action_change_energy_{};
         bool alternating_step_this_step_{};
+        bool limb_crossing_this_step_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
         std::uint32_t single_leg_cycles_{};

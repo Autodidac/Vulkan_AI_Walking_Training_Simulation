@@ -187,20 +187,23 @@ int main()
 
     const std::string app = read_text(root / "src" / "app.cpp");
     for (std::string_view reference : {
-            "draw_oriented_pixel_art", "draw_segment_art",
+            "draw_oriented_pixel_art", "draw_fitted_armor", "draw_body_segments",
             "optional_upper_arm_art", "optional_forearm_art",
             "optional_thigh_art", "optional_shin_art",
             "support_boot_transform", "rig.support_branch_mask(motor)",
             "rig.node_support_mask(index)", "art::oriented_box_transform",
-            "!optional_torso_art.loaded()", "!optional_forearm_art.loaded()",
-            "body_span * 0.88f", "18.0f, 56.0f" })
+            "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
+            "minimum_shoulder", "envelope.pelvis_half_width",
+            "envelope.chest_radius", "18.0f, 56.0f" })
         require(app.find(reference) != std::string::npos,
             "topology-bound remade-art renderer contract is missing");
     require(app.find("draw_pixel_art(canvas, optional_foot_art")
                 == std::string::npos
             && app.find("if (!optional_art_enabled || !rig.paired_leg_chains())")
-                == std::string::npos,
-        "axis-aligned boot or paired-biped art gate remains");
+                == std::string::npos
+            && app.find("draw_segment_art") == std::string::npos
+            && app.find("rig.motors[4]") == std::string::npos,
+        "axis-aligned boot, bone-strip art, motor-slot, or paired-biped gate remains");
     require(app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
             && app.find("scaffold remains an internal calibration fixture")
                 != std::string::npos,

@@ -46,8 +46,13 @@ int main() {
         return fail("static-course evaluation did not run");
     if (!std::isfinite(trainer.metrics().evaluation_distance))
         return fail("static-course evaluation distance is not finite");
+    const rl::TrainingMetrics before_switch = trainer.metrics();
     trainer.set_blueprint(quadruped, false);
-    if (trainer.metrics().total_updates != 0u || trainer.metrics().total_episodes != 0u || trainer.metrics().evaluation_count != 0u) return fail("rig switch retained totals");
+    if (trainer.metrics().update != 0u
+        || trainer.metrics().total_updates != before_switch.total_updates
+        || trainer.metrics().total_episodes != before_switch.total_episodes
+        || trainer.metrics().evaluation_count != before_switch.evaluation_count)
+        return fail("rig switch erased the all-time ledger or retained local policy age");
     rl::AutonomousTrainer autonomous{quadruped, 8u}; autonomous.synchronize();
     if (autonomous.preview().course_motion_enabled()) return fail("large preview conveyor enabled");
     std::cout << "Runner v0.7.26 training-truth checks passed\n";

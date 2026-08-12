@@ -236,11 +236,17 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { -0.0034f, 2.8127f }, { -0.0060f, 4.2000f }, { -0.0060f, 4.9800f },
+            { 0.0015322268f, 2.8127f },
+            { -0.0194339529f, 3.85471725f },
+            { -0.00999999046f, 4.17547226f },
             { -0.09f, 1.56f }, { -0.14f, 0.25f },
             { 0.09f, 1.56f }, { 0.14f, 0.25f },
-            { -0.42f, 4.0200f }, { -0.78f, 3.43f }, { -0.60f, 2.76f },
-            { 0.40f, 4.0200f }, { 0.76f, 3.43f }, { 0.58f, 2.76f }
+            { -0.278820232f, 3.57886767f },
+            { -0.392027751f, 3.35245275f },
+            { -0.890742854f, 3.14490557f },
+            { 0.239952326f, 3.57886767f },
+            { 0.353159845f, 3.35245275f },
+            { 0.851874948f, 3.14490557f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -1687,12 +1693,16 @@ namespace runner::sim
         left_swing_crossed_ = false;
         right_swing_crossed_ = false;
         limb_crossings_ = 0u;
+        lower_leg_scissored_this_step_ = false;
+        lower_leg_scissor_seconds_ = 0.0f;
+        maximum_lower_leg_scissor_seconds_ = 0.0f;
         heel_strike_count_ = 0u;
         toe_off_count_ = 0u;
         left_foot_phase_ = FootContactPhase::airborne;
         right_foot_phase_ = FootContactPhase::airborne;
         action_change_energy_ = 0.0f;
         alternating_step_this_step_ = false;
+        limb_crossing_this_step_ = false;
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
         single_leg_cycles_ = 0;
@@ -3411,6 +3421,26 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
         const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
         const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
+        lower_leg_scissored_this_step_ = false;
+        if (blueprint_.paired_leg_chains() && blueprint_.active_motor_count >= 4u)
+        {
+            const MotorConstraint& left_shank = blueprint_.motors[1];
+            const MotorConstraint& right_shank = blueprint_.motors[3];
+            if (valid_node(left_shank.pivot) && valid_node(left_shank.c)
+                && valid_node(right_shank.pivot) && valid_node(right_shank.c))
+            {
+                lower_leg_scissored_this_step_ = strict_segment_crossing(
+                    particles_[left_shank.pivot].position,
+                    particles_[left_shank.c].position,
+                    particles_[right_shank.pivot].position,
+                    particles_[right_shank.c].position);
+            }
+        }
+        lower_leg_scissor_seconds_ = lower_leg_scissored_this_step_
+            ? lower_leg_scissor_seconds_ + dt
+            : std::max(0.0f, lower_leg_scissor_seconds_ - dt * 3.0f);
+        maximum_lower_leg_scissor_seconds_ = std::max(
+            maximum_lower_leg_scissor_seconds_, lower_leg_scissor_seconds_);
         if (left_swinging && left_swing_seconds_ <= 0.0f)
         {
             left_swing_started_behind_ = left_center < right_center - 0.035f;
@@ -3456,6 +3486,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         right_foot_phase_ = next_right_phase;
 
         alternating_step_this_step_ = false;
+        limb_crossing_this_step_ = false;
         if (strike_side != 0)
         {
             const float swing_air_seconds = new_left ? left_swing_seconds_ : right_swing_seconds_;
@@ -3479,7 +3510,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     goto step_not_qualified;
                 ++alternating_steps_;
                 if (swing_crossed)
+                {
                     ++limb_crossings_;
+                    limb_crossing_this_step_ = true;
+                }
                 alternating_step_this_step_ = true;
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
@@ -4029,7 +4063,7 @@ step_not_qualified:
         if (!blueprint_.valid() || !valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node)
             || !valid_node(blueprint_.head_node) || !valid_node(blueprint_.left_contact_node)
             || !valid_node(blueprint_.right_contact_node))
-            return { -5.0f, 0.0f, true, false, InvalidMotion::out_of_bounds };
+            return { -5.0f, 0.0f, 0.0f, true, false, InvalidMotion::out_of_bounds };
 
         dt = clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
         last_step_dt_ = dt;
@@ -4135,7 +4169,10 @@ step_not_qualified:
 
         elapsed_seconds_ += dt;
         const Vec2 pelvis_position = particles_[blueprint_.root_node].position;
-        const float raw_world_speed = (pelvis_position.x - previous_pelvis_.x) / dt;
+        const float world_displacement = pelvis_position.x - previous_pelvis_.x;
+        const float raw_world_speed = world_displacement / dt;
+        const float odometer_progress = accepted_forward_odometer_progress(
+            world_displacement, dt);
         const float moving_course_speed = course_speed();
         const float raw_speed = raw_world_speed + moving_course_speed;
         forward_speed_ = lerp(forward_speed_, raw_speed, 0.18f);
@@ -4375,7 +4412,16 @@ step_not_qualified:
             ? std::max(0.0f, safe_progress) * 0.80f
                 + std::max(0.0f, burial_change) * 0.35f
             : 0.0f;
-        const float real_step_reward = alternating_step_this_step_ ? 0.070f : 0.0f;
+        const bool paired_forward_gait = reward_requires_locomotion
+            && blueprint_.paired_leg_chains();
+        const float real_step_reward = (alternating_step_this_step_ ? 0.070f : 0.0f)
+            + sagittal_crossing_shaping_reward(reward_requires_locomotion,
+                paired_forward_gait, limb_crossing_this_step_)
+            - lateral_crab_shaping_penalty(reward_requires_locomotion,
+                paired_forward_gait, alternating_steps_, limb_crossings_,
+                distance_travelled_, elapsed_seconds_, primary_support_span_ratio())
+            - lower_leg_scissor_shaping_penalty(reward_requires_locomotion,
+                paired_forward_gait, lower_leg_scissor_seconds_);
         const float unearned_progress_penalty = alternating_steps_ == 0u
             ? std::max(0.0f, safe_progress) * 0.80f : 0.0f;
         const float double_support_shuffle_penalty = friction_driven_shuffle(raw_speed,
@@ -4587,7 +4633,7 @@ step_not_qualified:
             : course_stage_ == CourseStage::climb_descent ? 44.0f
             : course_stage_ == CourseStage::equipment_targets ? 32.0f : 36.0f;
         const bool terminated = invalid_reason_ != InvalidMotion::none || elapsed_seconds_ >= timeout;
-        return { last_reward_, forward_speed_, terminated,
+        return { last_reward_, forward_speed_, odometer_progress, terminated,
             invalid_reason_ == InvalidMotion::none, invalid_reason_ };
     }
 

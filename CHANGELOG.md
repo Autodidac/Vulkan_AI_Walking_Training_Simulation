@@ -9,6 +9,13 @@
 - Rotated, translated, pivoted, and mirrored boot, limb, torso, and helmet art from authored graph geometry; all seven distinct visible rigs now share the orthographic art family and the duplicate scaffold is internal-only.
 - Expanded `--diagnose-art` to render every exposed rig plus a horizontal fallen pose inside the shared vertex budget.
 - Bumped training/checkpoint semantics to `0x0007'3101`, isolated `runner-v0731-active-*` state, and added deterministic terrain/contact, crouch ownership, rig identity, art-transform, cold-learning, and 20/60/240 Hz gates.
+- Made the release learner exercise the two-worker low-core path and aligned Walk reward with its hard evidence gate by rewarding real sagittal crossings and penalizing established paired-leg crab motion without weakening rejection thresholds.
+- Replaced the humanoid-only 0.82 m foundational stride/lift assumption with bounded gait targets derived from each paired rig's authored two-link legs; arm presence and arm geometry no longer change foot targets, and post-handoff imitation is biped-scoped.
+- Replaced bone-strip presentation with a continuous graph-derived skin envelope and fitted armor, including broad torso/pelvis/shoulder structure, joint overlap, rotating supports, topology-derived shoulders, and terminal-hand equipment preview.
+- Added articulated two-link sagittal arm counter-swing and persistent lower-shank scissor shaping, retention rejection, debug telemetry, repeated-seed limits, and zero-authority walk-proof evidence.
+- Spread pressure-displaced sand into a broad conserved berm outside adjacent foot cells so active terrain no longer raises an immediate invisible trip lip.
+- Preserved the all-rig lifetime ledger across canonical subject changes, added pre-save validated lifetime-only import from incompatible current or same-folder v0.7.30 autosaves, and corrected distance to finite per-step agent-equivalent forward odometry with discontinuity and worker-aggregation guards.
+- Added the exiting `--diagnose-walk-eye` proof command; the corrected local Windows learner passed at 19.141 m / 18.83 steps with zero invalid seeds and zero teacher authority. The visual `--walk-eye-test` now finishes proof training before creating the Vulkan window, eliminating its visible not-responding/crash interval.
 ## 0.7.30
 
 - Prevented forward-gait nursery resets from repeatedly randomizing partial walkers and separated all-time rig updates from resettable policy age/discard telemetry.

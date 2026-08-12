@@ -54,6 +54,32 @@ int main(int argc, char** argv)
     require(rl::stage_fresh_work_complete(sim::CourseStage::uneven,
             420u, 8u, 8u),
         "valid fresh walk work is rejected");
+    const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
+    const std::uint64_t humanoid_handoff =
+        rl::foundational_walk_teacher_handoff_update(humanoid);
+    require(!rl::foundational_walk_consolidation_active(
+            humanoid_handoff - 1u, sim::CourseStage::uneven, humanoid),
+        "walk consolidation starts before zero-authority handoff");
+    require(rl::foundational_walk_consolidation_active(
+            humanoid_handoff, sim::CourseStage::uneven, humanoid)
+            && rl::foundational_walk_teacher_authority(
+                humanoid_handoff, humanoid) == 0.0f
+            && rl::guided_rollout_imitation_weight(
+                humanoid_handoff, sim::CourseStage::uneven, &humanoid) > 0.0f,
+        "walk consolidation is not anchored to zero-authority handoff");
+    require(rl::foundational_walk_consolidation_active(
+            humanoid_handoff + rl::foundational_walk_consolidation_updates - 1u,
+            sim::CourseStage::uneven, humanoid),
+        "walk consolidation drops its final bounded update");
+    require(!rl::foundational_walk_consolidation_active(
+            humanoid_handoff + rl::foundational_walk_consolidation_updates,
+            sim::CourseStage::uneven, humanoid)
+            && rl::guided_rollout_imitation_weight(
+                humanoid_handoff + rl::foundational_walk_consolidation_updates,
+                sim::CourseStage::uneven, &humanoid) == 0.0f
+            && !rl::foundational_walk_consolidation_active(
+                humanoid_handoff, sim::CourseStage::crouch_walk, humanoid),
+        "walk consolidation leaks past its boundary or into another lesson");
 
     require(sim::sagittal_gait_evidence(
             12u, 10u, 8.0f, 12.0f, 1.05f),
@@ -67,6 +93,26 @@ int main(int argc, char** argv)
     require(!sim::crab_walking_motion(
             12u, 10u, 8.0f, 12.0f, 1.05f),
         "normal sagittal gait is marked as crab walking");
+
+    require(sim::sagittal_crossing_shaping_reward(true, true, true) > 0.0f
+            && sim::sagittal_crossing_shaping_reward(true, true, false) == 0.0f
+            && sim::sagittal_crossing_shaping_reward(true, false, true) == 0.0f,
+        "sagittal crossing reward leaks outside a paired forward transfer");
+    require(sim::lateral_crab_shaping_penalty(
+            true, true, 8u, 0u, 2.0f, 8.0f, 1.80f) > 0.0f
+            && sim::lateral_crab_shaping_penalty(
+                true, true, 12u, 10u, 8.0f, 12.0f, 1.05f) == 0.0f
+            && sim::lateral_crab_shaping_penalty(
+                false, true, 8u, 0u, 2.0f, 8.0f, 1.80f) == 0.0f,
+        "lateral gait shaping does not match the hard crab evidence gate");
+    require(sim::strict_segment_crossing({ -0.5f, 1.0f }, { 0.5f, 0.0f },
+            { 0.5f, 1.0f }, { -0.5f, 0.0f })
+            && !sim::strict_segment_crossing({ -0.5f, 1.0f }, { -0.5f, 0.0f },
+                { 0.5f, 1.0f }, { 0.5f, 0.0f })
+            && sim::lower_leg_scissor_shaping_penalty(
+                true, true, sim::sustained_scissor_limit_seconds) > 0.0f
+            && sim::lower_leg_scissor_shaping_penalty(false, true, 1.0f) == 0.0f,
+        "persistent lower-leg scissoring is not geometrically isolated and shaped");
 
     sim::Environment quad{ sim::CreatureBlueprint::quadruped(), 0x717200u };
     quad.set_course(sim::CourseStage::duck_press, 0.45f);

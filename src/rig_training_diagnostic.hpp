@@ -3,6 +3,7 @@
 #include "simulation.hpp"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -38,6 +39,7 @@ namespace runner::diagnostics
         sim::InvalidMotion retained_probe_invalid_reason{ sim::InvalidMotion::none };
         std::uint64_t preview_resets{};
         sim::InvalidMotion preview_reset_reason{ sim::InvalidMotion::none };
+        std::size_t rollout_workers{};
         bool rollout_course_motion_enabled{};
     };
 
@@ -64,6 +66,7 @@ namespace runner::diagnostics
         float displayed_distance{};
         std::uint32_t displayed_steps{};
         std::uint32_t displayed_crossings{};
+        float displayed_max_scissor_seconds{};
         float teacher_authority{};
         bool passed{};
     };

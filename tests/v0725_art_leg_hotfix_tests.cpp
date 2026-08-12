@@ -222,11 +222,15 @@ int main()
                 != std::string::npos
                 && app.find("art::oriented_box_transform(center, body_right")
                     != std::string::npos
-                && app.find("std::clamp(body_span * 0.88f, 54.0f, 118.0f)")
+                && app.find("std::clamp(torso_length * 0.90f")
+                    != std::string::npos
+                && app.find("envelope.shoulder_width * 0.96f")
                     != std::string::npos,
             "bounded oriented torso component is missing or unbounded");
-        require(app.find("COMPACT SEGMENTED BODY ARMOR") != std::string::npos,
-            "compact node-attached armor implementation is missing");
+        require(app.find("draw_body_segments") != std::string::npos
+                && app.find("draw_fitted_armor") != std::string::npos
+                && app.find("art::SkinEnvelopeDimensions") != std::string::npos,
+            "connected skin and fitted armor implementation is missing");
         require(app.find("optional_helmet_art.loaded()") != std::string::npos,
             "approved helmet art was removed");
         require(app.find("optional_foot_art.loaded()") != std::string::npos,

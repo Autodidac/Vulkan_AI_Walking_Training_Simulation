@@ -45,6 +45,27 @@ namespace runner::art
         float thickness{};
     };
 
+    struct SkinEnvelopeDimensions
+    {
+        float shoulder_width{};
+        float chest_radius{};
+        float pelvis_half_width{};
+        float joint_overlap{};
+    };
+
+    [[nodiscard]] inline SkinEnvelopeDimensions skin_envelope_dimensions(
+        float torso_length, float authored_shoulder_width) noexcept
+    {
+        const float torso = std::isfinite(torso_length) && torso_length > 0.0f
+            ? std::clamp(torso_length, 12.0f, 240.0f) : 48.0f;
+        const float authored = std::isfinite(authored_shoulder_width)
+                && authored_shoulder_width > 0.0f
+            ? std::clamp(authored_shoulder_width, 0.0f, torso * 1.30f) : 0.0f;
+        const float shoulders = std::max(authored, torso * 0.94f);
+        return { shoulders, std::max(torso * 0.29f, shoulders * 0.30f),
+            std::max(torso * 0.22f, shoulders * 0.23f),
+            std::clamp(torso * 0.085f, 3.5f, 14.0f) };
+    }
     [[nodiscard]] inline OrientedArtTransform oriented_box_transform(
         Vec2 center, Vec2 width_axis, float width, float height) noexcept
     {

@@ -263,10 +263,11 @@ foreach(reference IN ITEMS
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
         "RETAINED WALK PROOF - ZERO AUTHORITY"
         "run_walk_eye_test_proof"
-        "COMPACT SEGMENTED BODY ARMOR"
+        "draw_body_segments"
+        "draw_fitted_armor"
+        "SkinEnvelopeDimensions"
         "shoulder_cap_radius"
         "draw_oriented_pixel_art"
-        "draw_segment_art"
         "optional_upper_arm_art"
         "optional_forearm_art"
         "optional_thigh_art"
@@ -338,6 +339,12 @@ endif()
 string(FIND "${main_text}" "--walk-eye-test" walk_eye_test_pos)
 if(walk_eye_test_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.30 packaged retained-walk eye-test launch contract missing")
+endif()
+string(FIND "${main_text}" "application.prepare_walk_eye_test(error)" walk_eye_prepare_pos)
+string(FIND "${main_text}" "SDL_CreateWindow(" window_create_pos)
+if(walk_eye_prepare_pos EQUAL -1 OR window_create_pos EQUAL -1
+        OR walk_eye_prepare_pos GREATER window_create_pos)
+    message(FATAL_ERROR "v0.7.31 walk eye proof must complete before the Vulkan window is created")
 endif()
 string(FIND "${app_text}" "Color{}" opaque_default_pos)
 if(NOT opaque_default_pos EQUAL -1)

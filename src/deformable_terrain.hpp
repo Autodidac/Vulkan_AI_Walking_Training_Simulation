@@ -259,17 +259,28 @@ namespace runner::sim
             const float removed = remove_loose_volume(center, requested);
             if (removed <= 0.0f)
                 return;
-            const std::size_t left = wrap_column(static_cast<std::ptrdiff_t>(center) - 1);
-            const std::size_t right = wrap_column(static_cast<std::ptrdiff_t>(center) + 1);
-            const float left_added = launch_pad_at(
-                static_cast<float>(left) * fine_cell_spacing) ? 0.0f
-                : add_volume(left, removed * 0.5f,
+            // A loaded footprint settles. Displaced grains form a broad berm
+            // outside the immediate contact patch instead of a one-cell spike
+            // directly under the next footfall.
+            constexpr std::array<std::ptrdiff_t, 10> offsets{
+                -2, 2, -3, 3, -4, 4, -5, 5, -6, 6 };
+            constexpr std::array<float, 10> weights{
+                0.12f, 0.12f, 0.11f, 0.11f, 0.10f,
+                0.10f, 0.09f, 0.09f, 0.08f, 0.08f };
+            float deposited{};
+            for (std::size_t index = 0; index < offsets.size(); ++index)
+            {
+                const std::size_t target = wrap_column(
+                    static_cast<std::ptrdiff_t>(center) + offsets[index]);
+                if (launch_pad_at(static_cast<float>(target) * fine_cell_spacing))
+                    continue;
+                const float added = add_volume(target, removed * weights[index],
                     sandhybrid::Material::sand, false);
-            const float right_added = launch_pad_at(
-                static_cast<float>(right) * fine_cell_spacing) ? 0.0f
-                : add_volume(right, removed - left_added,
-                    sandhybrid::Material::sand, false);
-            const float returned = removed - left_added - right_added;
+                deposited += added;
+                cells_[target].loose_fraction = std::clamp(
+                    cells_[target].loose_fraction + added * 2.0f, 0.0f, 1.0f);
+            }
+            const float returned = removed - deposited;
             if (returned > 0.0f)
                 static_cast<void>(add_volume(center, returned,
                     sandhybrid::Material::sand, false));
@@ -278,10 +289,6 @@ namespace runner::sim
                 + load * dt * 0.12f, 0.0f, 1.0f);
             column.loose_fraction = std::clamp(column.loose_fraction
                 - load * dt * 0.08f, 0.0f, 1.0f);
-            cells_[left].loose_fraction = std::clamp(
-                cells_[left].loose_fraction + removed * 2.0f, 0.0f, 1.0f);
-            cells_[right].loose_fraction = std::clamp(
-                cells_[right].loose_fraction + removed * 2.0f, 0.0f, 1.0f);
         }
 
         void deposit(float course_x, float height_volume, float material_firmness) noexcept

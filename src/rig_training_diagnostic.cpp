@@ -116,7 +116,7 @@ namespace runner::diagnostics
         for (std::size_t index = 0; index < cases.size(); ++index)
         {
             const RigCase& rig = cases[index];
-            sim::Environment teacher{ rig.blueprint, 0x7300u + index * 4099u };
+            sim::Environment teacher{ rig.blueprint, 0x7300u };
             teacher.set_course(sim::CourseStage::uneven, 0.30f);
             teacher.set_course_motion_enabled(false);
             for (int step = 0; step < 1200; ++step)
@@ -126,7 +126,9 @@ namespace runner::diagnostics
                     break;
             }
 
-            rl::PpoTrainer trainer{ rig.blueprint, 8u, true };
+            // Exercise the low-core path explicitly. Hosted runners expose two
+            // rollout workers, and release evidence must not depend on a large CPU.
+            rl::PpoTrainer trainer{ rig.blueprint, 8u, true, 2u };
             trainer.set_course(sim::CourseStage::uneven, 0.30f, false);
             for (std::uint64_t update = 0; update < updates; ++update)
             {
@@ -176,6 +178,7 @@ namespace runner::diagnostics
                 retained.invalid_reason,
                 trainer.preview_reset_count(),
                 trainer.preview_last_reset_reason(),
+                trainer.maximum_worker_count(),
                 course_motion_enabled
             };
         }
@@ -191,6 +194,7 @@ namespace runner::diagnostics
                 && result.teacher_survival >= 19.9f
                 && result.teacher_distance >= 1.0f
                 && result.teacher_stride_events >= 3.0f
+                && result.rollout_workers == 2u
                 && retained_policy_release_eligible(
                     result, cases[index].blueprint);
         }
@@ -269,6 +273,8 @@ namespace runner::diagnostics
                 proof.displayed_distance = proof.environment.distance_travelled();
                 proof.displayed_steps = proof.environment.alternating_steps();
                 proof.displayed_crossings = proof.environment.limb_crossings();
+                proof.displayed_max_scissor_seconds =
+                    proof.environment.maximum_lower_leg_scissor_seconds();
                 selected_pose = true;
             }
             total_distance += environment.distance_travelled();

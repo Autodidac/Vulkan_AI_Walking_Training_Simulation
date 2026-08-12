@@ -325,7 +325,8 @@ namespace runner::rl
         void queue_autosave();
         void queue_checkpoint_save(std::filesystem::path path, PpoTrainer::CheckpointData data);
         void queue_checkpoint_load(std::filesystem::path path, bool transfer_only);
-        void queue_autosave_load();
+        void queue_autosave_load(std::filesystem::path checkpoint,
+            std::filesystem::path rig, std::filesystem::path state);
         void persistence_main(std::stop_token stop_token);
         [[nodiscard]] bool stage_mastered_locked() const noexcept;
         void advance_stage_locked();

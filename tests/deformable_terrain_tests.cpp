@@ -206,11 +206,22 @@ int main()
     }
 
     constexpr float x=3.5f;
+    const float pressure_center = std::round(x / sim::DeformableTerrain::fine_cell_spacing)
+        * sim::DeformableTerrain::fine_cell_spacing;
+    const float adjacent_left = first.height_at(
+        pressure_center - sim::DeformableTerrain::fine_cell_spacing);
+    const float adjacent_right = first.height_at(
+        pressure_center + sim::DeformableTerrain::fine_cell_spacing);
     const float volume=first.total_height_volume(), height=first.height_at(x), firmness=first.firmness_at(x);
     first.apply_pressure(x,2.4f,0.65f,1.0f/60.0f);
     require(first.height_at(x)<height,"pressure did not compact sand");
     require(first.firmness_at(x)>firmness,"pressure did not firm sand");
     require(std::abs(first.total_height_volume()-volume)<2.0e-5f,"pressure did not conserve volume");
+    require(first.height_at(pressure_center - sim::DeformableTerrain::fine_cell_spacing)
+                <= adjacent_left + 1.0e-5f
+            && first.height_at(pressure_center + sim::DeformableTerrain::fine_cell_spacing)
+                <= adjacent_right + 1.0e-5f,
+        "foot pressure raised an immediate adjacent trip lip");
     const float deposited=first.total_height_volume(); first.deposit(18.0f,0.12f,0.20f);
     require(std::abs((first.total_height_volume()-deposited)-0.12f)<2.0e-4f,"deposit lost volume");
     const float slope=first.maximum_neighbor_delta();

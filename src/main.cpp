@@ -118,6 +118,13 @@ namespace
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--walk-eye-test";
     }
+    [[nodiscard]] bool wants_walk_eye_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-walk-eye";
+    }
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
     {
         return argc > 1
@@ -382,6 +389,24 @@ int main(int argc, char** argv)
         return 0;
     }
 
+    if (wants_walk_eye_diagnostic(argc, argv))
+    {
+        const runner::diagnostics::WalkEyeTestProof proof =
+            runner::diagnostics::run_walk_eye_test_proof();
+        std::printf(
+            "Runner %s walk-eye proof: %s; updates=%llu retained=%llu "
+            "authority=%.3f mean=%.3fm/%.2f steps invalid=%u/6 "
+            "display=%.3fm/%u steps/%u crossings scissor=%.3fs seed=%u\n",
+            RUNNER_VERSION, proof.passed ? "passed" : "failed",
+            static_cast<unsigned long long>(proof.updates),
+            static_cast<unsigned long long>(proof.retained_update),
+            proof.teacher_authority, proof.retained_distance,
+            proof.retained_stride_events, proof.retained_invalid_runs,
+            proof.displayed_distance, proof.displayed_steps,
+            proof.displayed_crossings, proof.displayed_max_scissor_seconds,
+            proof.selected_seed);
+        return proof.passed ? 0 : 1;
+    }
     if (wants_art_diagnostic(argc, argv))
         return run_art_diagnostic(invocation_directory(argc, argv));
 
@@ -575,6 +600,24 @@ if (wants_camera_diagnostic(argc, argv))
         return 0;
     }
 
+    runner::Application application{};
+    std::string error{};
+    if (!application.initialize(asset_directory, error))
+    {
+        std::fprintf(stderr, "Application initialization failed: %s\n", error.c_str());
+        SDL_Vulkan_UnloadLibrary();
+        SDL_Quit();
+        return 1;
+    }
+    if (wants_walk_eye_test(argc, argv)
+        && !application.prepare_walk_eye_test(error))
+    {
+        std::fprintf(stderr, "Walk eye test failed: %s\n", error.c_str());
+        SDL_Vulkan_UnloadLibrary();
+        SDL_Quit();
+        return 1;
+    }
+
     SDL_Window* window = SDL_CreateWindow(
         "Runner v" RUNNER_VERSION " - Autonomous Physics Locomotion Trainer",
         1900,
@@ -597,7 +640,6 @@ if (wants_camera_diagnostic(argc, argv))
     }
 
     runner::render::VulkanRenderer renderer{};
-    std::string error{};
     if (!renderer.initialize(window, shader_directory, error))
     {
         std::fprintf(stderr, "Vulkan initialization failed: %s\n", error.c_str());
@@ -607,31 +649,10 @@ if (wants_camera_diagnostic(argc, argv))
         return 1;
     }
 
-    runner::Application application{};
-    if (!application.initialize(asset_directory, error))
-    {
-        std::fprintf(stderr, "Application initialization failed: %s\n", error.c_str());
-        renderer.shutdown();
-        SDL_DestroyWindow(window);
-        SDL_Vulkan_UnloadLibrary();
-        SDL_Quit();
-        return 1;
-    }
     if (wants_art_eye_test(argc, argv))
         application.prepare_art_eye_test();
     else if (wants_course_eye_test(argc, argv))
         application.prepare_course_eye_test();
-    else if (wants_walk_eye_test(argc, argv)
-        && !application.prepare_walk_eye_test(error))
-    {
-        std::fprintf(stderr, "Walk eye test failed: %s\n", error.c_str());
-        renderer.shutdown();
-        SDL_DestroyWindow(window);
-        SDL_Vulkan_UnloadLibrary();
-        SDL_Quit();
-        return 1;
-    }
-
     bool running = true;
     std::uint64_t previous_ticks = SDL_GetTicksNS();
     runner::Vec2 previous_mouse{};

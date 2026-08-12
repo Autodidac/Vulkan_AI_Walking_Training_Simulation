@@ -206,16 +206,17 @@ namespace runner::rl
         persistence_cv_.notify_all();
     }
 
-    void AutonomousTrainer::queue_autosave_load()
+    void AutonomousTrainer::queue_autosave_load(std::filesystem::path checkpoint,
+        std::filesystem::path rig, std::filesystem::path state)
     {
         PersistenceJob job{};
         job.kind = PersistenceKind::load_autosave;
         job.blueprint = live_blueprint_;
+        job.checkpoint_path = std::move(checkpoint);
+        job.rig_path = std::move(rig);
+        job.state_path = std::move(state);
         {
             std::scoped_lock lock(persistence_mutex_);
-            job.checkpoint_path = autosave_checkpoint_;
-            job.rig_path = autosave_rig_;
-            job.state_path = autosave_state_;
             persistence_queue_.push_back(std::move(job));
         }
         persistence_cv_.notify_all();

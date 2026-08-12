@@ -28,6 +28,9 @@ namespace
     {
         const runner::sim::CreatureBlueprint quadruped =
             runner::sim::CreatureBlueprint::quadruped();
+        runner::rl::PpoTrainer low_core{ quadruped, 8u, true, 2u };
+        require(low_core.maximum_worker_count() == 2u,
+            "explicit low-core worker ceiling was not honored");
         runner::diagnostics::RigTrainingResult result{};
         result.retained_policy = true;
         result.retained_quality = 1u;
@@ -171,6 +174,7 @@ namespace
         runner::sim::TerrainRegion region{ runner::sim::TerrainRegion::firm };
         float firmness{};
         float looseness{};
+        float maximum_scissor_seconds{};
         runner::sim::InvalidMotion reason{ runner::sim::InvalidMotion::none };
     };
 
@@ -193,6 +197,7 @@ namespace
             environment.terrain_region_at(root_x),
             environment.terrain_firmness_at(root_x),
             environment.terrain_looseness_at(root_x),
+            environment.maximum_lower_leg_scissor_seconds(),
             environment.invalid_reason() };
     }
     void verify_walking_teachers_repeated_seeds()
@@ -229,6 +234,8 @@ namespace
                     && repeated.region == repeated_again.region
                     && repeated.firmness == repeated_again.firmness
                     && repeated.looseness == repeated_again.looseness
+                    && repeated.maximum_scissor_seconds
+                        == repeated_again.maximum_scissor_seconds
                     && repeated.reason == repeated_again.reason,
                 "walking teacher is not deterministic for a repeated seed");
             bool all_valid = true;
@@ -250,6 +257,7 @@ namespace
                     << " terrain=" << runner::sim::terrain_region_name(outcome.region)
                     << " firmness=" << outcome.firmness
                     << " looseness=" << outcome.looseness
+                    << " scissor=" << outcome.maximum_scissor_seconds
                     << " reason=" << runner::sim::invalid_motion_name(outcome.reason)
                     << '\n';
                 all_valid = all_valid
@@ -258,7 +266,9 @@ namespace
                 all_walked = all_walked
                     && outcome.distance >= minimum_distance
                     && outcome.strides >= minimum_strides
-                    && (!paired_legs || outcome.crossings >= 2u);
+                    && (!paired_legs || (outcome.crossings >= 2u
+                        && outcome.maximum_scissor_seconds
+                            <= runner::sim::sustained_scissor_limit_seconds));
             }
             require(all_valid,
                 "walking teacher became invalid on a deterministic terrain seed");
@@ -371,6 +381,7 @@ int main(int argc, char** argv)
             << " retained_probe_reason=" << runner::sim::invalid_motion_name(
                 rig.retained_probe_invalid_reason)
             << " preview_resets=" << rig.preview_resets
+            << " workers=" << rig.rollout_workers
             << " reason=" << runner::sim::invalid_motion_name(
                 rig.preview_reset_reason) << '\n';
     }

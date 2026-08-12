@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <format>
 #include <type_traits>
@@ -493,6 +494,48 @@ namespace runner::rl
         preview_.reset(0xDEADBEEFu + metrics_.update);
         controller_state_ = ControllerState::resumed;
         error.clear();
+        return true;
+    }
+
+    bool PpoTrainer::import_lifetime_ledger(const TrainingMetrics& lifetime,
+        std::string& error) noexcept
+    {
+        if (!std::isfinite(lifetime.total_distance)
+            || !std::isfinite(lifetime.total_training_seconds)
+            || lifetime.total_distance < 0.0 || lifetime.total_training_seconds < 0.0)
+        {
+            error = "INVALID LEGACY LIFETIME LEDGER - NON-FINITE OR NEGATIVE TOTAL";
+            return false;
+        }
+
+        metrics_.total_updates = std::max(metrics_.total_updates, lifetime.total_updates);
+        metrics_.total_environment_steps = std::max(
+            metrics_.total_environment_steps, lifetime.total_environment_steps);
+        metrics_.total_episodes = std::max(metrics_.total_episodes, lifetime.total_episodes);
+        metrics_.total_valid_episodes = std::max(
+            metrics_.total_valid_episodes, lifetime.total_valid_episodes);
+        metrics_.total_invalid_episodes = std::max(
+            metrics_.total_invalid_episodes, lifetime.total_invalid_episodes);
+        metrics_.total_resets = std::max(metrics_.total_resets, lifetime.total_resets);
+        metrics_.total_alternating_steps = std::max(
+            metrics_.total_alternating_steps, lifetime.total_alternating_steps);
+        metrics_.total_falls = std::max(metrics_.total_falls, lifetime.total_falls);
+        metrics_.total_collisions = std::max(
+            metrics_.total_collisions, lifetime.total_collisions);
+        metrics_.total_powered_jumps = std::max(
+            metrics_.total_powered_jumps, lifetime.total_powered_jumps);
+        metrics_.total_landed_jumps = std::max(
+            metrics_.total_landed_jumps, lifetime.total_landed_jumps);
+        metrics_.total_landed_flips = std::max(
+            metrics_.total_landed_flips, lifetime.total_landed_flips);
+        metrics_.total_obstacles_passed = std::max(
+            metrics_.total_obstacles_passed, lifetime.total_obstacles_passed);
+        metrics_.total_distance = std::max(metrics_.total_distance, lifetime.total_distance);
+        metrics_.total_training_seconds = std::max(
+            metrics_.total_training_seconds, lifetime.total_training_seconds);
+        metrics_.evaluation_count = std::max(
+            metrics_.evaluation_count, lifetime.evaluation_count);
+        error = "LEGACY LIFETIME LEDGER IMPORTED - POLICY, OPTIMIZER, BEST, AND MASTERY START FRESH";
         return true;
     }
 

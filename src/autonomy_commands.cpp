@@ -17,20 +17,37 @@ namespace runner::rl
 
     bool AutonomousTrainer::load_autosave(std::string& message)
     {
-        bool exists = false;
+        std::filesystem::path checkpoint{};
+        std::filesystem::path rig{};
+        std::filesystem::path state{};
+        bool legacy_lifetime_import = false;
         {
             std::scoped_lock lock(persistence_mutex_);
-            exists = std::filesystem::exists(autosave_checkpoint_)
-                || std::filesystem::exists(autosave_rig_)
-                || std::filesystem::exists(autosave_state_);
+            checkpoint = autosave_checkpoint_;
+            rig = autosave_rig_;
+            state = autosave_state_;
+            if (!std::filesystem::exists(checkpoint))
+            {
+                const std::filesystem::path v0730 = checkpoint.parent_path()
+                    / "runner-v0730-walk-autosave.eppo";
+                if (std::filesystem::exists(v0730))
+                {
+                    checkpoint = v0730;
+                    rig.clear();
+                    state.clear();
+                    legacy_lifetime_import = true;
+                }
+            }
         }
-        if (!exists)
+        if (!std::filesystem::exists(checkpoint))
         {
             message = "NO V0.7.31 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
-        queue_autosave_load();
-        message = "AUTOSAVE LOAD QUEUED - TRAINER REMAINS RESPONSIVE";
+        queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
+        message = legacy_lifetime_import
+            ? "V0.7.30 LIFETIME LEDGER IMPORT QUEUED - CURRENT TRAINING STARTS FRESH"
+            : "AUTOSAVE LOAD QUEUED - TRAINER REMAINS RESPONSIVE";
         return true;
     }
 
@@ -183,6 +200,7 @@ namespace runner::rl
             if (command.checkpoint)
             {
                 worker_.set_blueprint(command.blueprint, false);
+                const TrainingMetrics lifetime = command.checkpoint->metrics;
                 std::string error{};
                 if (worker_.apply_checkpoint_data(std::move(*command.checkpoint), error, false))
                 {
@@ -193,6 +211,13 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     worker_message_ = "V0.7.31 AUTOSAVE RESUMED ASYNCHRONOUSLY";
+                }
+                else if (worker_.import_lifetime_ledger(lifetime, error))
+                {
+                    stage_ = sim::CourseStage::balance;
+                    difficulty_ = 0.25f;
+                    worker_.set_course(stage_, difficulty_, false);
+                    worker_message_ = error;
                 }
                 else
                 {

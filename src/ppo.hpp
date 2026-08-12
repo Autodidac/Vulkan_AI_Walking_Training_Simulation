@@ -462,6 +462,55 @@ namespace runner::rl
             environment.course_stage());
     }
 
+    struct TwoLinkSagittalSolution
+    {
+        Vec2 upper{};
+        Vec2 lower{};
+        bool valid{};
+    };
+
+    [[nodiscard]] inline TwoLinkSagittalSolution solve_two_link_sagittal(
+        float upper_length, float lower_length, Vec2 target,
+        float bend_direction) noexcept
+    {
+        if (!std::isfinite(upper_length) || !std::isfinite(lower_length)
+            || !std::isfinite(target.x) || !std::isfinite(target.y)
+            || upper_length <= 0.001f || lower_length <= 0.001f)
+            return {};
+        const float target_length = length(target);
+        if (!std::isfinite(target_length) || target_length <= 0.001f)
+            return {};
+        const float reach = clamp(target_length,
+            std::abs(upper_length - lower_length) + 0.001f,
+            upper_length + lower_length - 0.001f);
+        target *= reach / target_length;
+        const float target_direction = std::atan2(target.y, target.x);
+        const float alpha = std::acos(clamp(
+            (upper_length * upper_length + reach * reach
+                - lower_length * lower_length)
+                / (2.0f * upper_length * reach), -1.0f, 1.0f));
+        const float upper_angle = target_direction
+            + (bend_direction < 0.0f ? -alpha : alpha);
+        const Vec2 upper{
+            std::cos(upper_angle) * upper_length,
+            std::sin(upper_angle) * upper_length
+        };
+        return { upper, target - upper, true };
+    }
+
+    [[nodiscard]] inline Vec2 sagittal_arm_target(float chain_length,
+        float phase, float direction = 1.0f) noexcept
+    {
+        if (!std::isfinite(chain_length) || !std::isfinite(phase)
+            || !std::isfinite(direction) || chain_length <= 0.01f)
+            return {};
+        const float bounded_length = clamp(chain_length, 0.01f, 5.0f);
+        const float swing = std::sin(phase);
+        return { bounded_length * 0.12f * swing
+                * clamp(direction, -1.0f, 1.0f),
+            -bounded_length * (0.84f - 0.025f * std::abs(swing)) };
+    }
+
     struct BipedGaitParameters
     {
         float cadence_hz{ sim::foundational_gait_cadence_hz };
@@ -470,6 +519,40 @@ namespace runner::rl
         float leg_height{ 2.30f };
         float direction{ 1.0f };
     };
+
+    [[nodiscard]] inline BipedGaitParameters anatomy_scaled_foundational_gait(
+        const sim::CreatureBlueprint& rig) noexcept
+    {
+        float total_leg_length{};
+        std::size_t measured_chains{};
+        for (const std::size_t hip_index : { 0u, 2u })
+        {
+            const std::size_t knee_index = hip_index + 1u;
+            if (knee_index >= rig.active_motor_count)
+                continue;
+            const sim::MotorConstraint& hip = rig.motors[hip_index];
+            const sim::MotorConstraint& knee = rig.motors[knee_index];
+            if (hip.pivot >= rig.nodes.size() || hip.c >= rig.nodes.size()
+                || knee.pivot >= rig.nodes.size() || knee.c >= rig.nodes.size())
+                continue;
+            const float chain_length = length(rig.nodes[hip.c] - rig.nodes[hip.pivot])
+                + length(rig.nodes[knee.c] - rig.nodes[knee.pivot]);
+            if (!std::isfinite(chain_length) || chain_length <= 0.01f)
+                continue;
+            total_leg_length += chain_length;
+            ++measured_chains;
+        }
+        const float leg_length = measured_chains > 0u
+            ? total_leg_length / static_cast<float>(measured_chains)
+            : 2.30f;
+        return {
+            sim::foundational_gait_cadence_hz,
+            clamp(leg_length * 0.24f, 0.50f, 0.66f),
+            clamp(leg_length * 0.25f, 0.52f, 0.68f),
+            clamp(leg_length * 0.90f, 1.80f, 2.35f),
+            1.0f
+        };
+    }
 
     [[nodiscard]] inline std::array<float, sim::action_count>
     biped_gait_teacher_action(const sim::Environment& environment,
@@ -505,26 +588,14 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            Vec2 target{ x, y };
-            const float target_length = std::max(0.001f, length(target));
-            const float reach = clamp(target_length,
-                std::abs(upper_length - lower_length) + 0.001f,
-                upper_length + lower_length - 0.001f);
-            target *= reach / target_length;
-            const float target_direction = std::atan2(target.y, target.x);
-            const float alpha = std::acos(clamp(
-                (upper_length * upper_length + reach * reach
-                    - lower_length * lower_length)
-                    / (2.0f * upper_length * reach), -1.0f, 1.0f));
-            const float upper_angle = target_direction + (left ? -alpha : alpha);
-            const Vec2 upper{
-                std::cos(upper_angle) * upper_length,
-                std::sin(upper_angle) * upper_length
-            };
-            const Vec2 lower = target - upper;
+            const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
+                upper_length, lower_length, { x, y }, left ? -1.0f : 1.0f);
+            if (!solution.valid)
+                return;
             const Vec2 hip_reference = rig.nodes[hip.a] - rig.nodes[hip.pivot];
-            const float hip_target = signed_angle(hip_reference, upper);
-            const float knee_target = signed_angle(-1.0f * upper, lower);
+            const float hip_target = signed_angle(hip_reference, solution.upper);
+            const float knee_target = signed_angle(-1.0f * solution.upper,
+                solution.lower);
             action[hip_index] = motor_action_for_target_angle(hip, hip_target);
             action[knee_index] = motor_action_for_target_angle(knee, knee_target);
         };
@@ -532,28 +603,67 @@ namespace runner::rl
             * parameters.cadence_hz;
         solve_leg(true, phase);
         solve_leg(false, phase + pi);
-        const float arm_swing = std::sin(phase);
+        std::array<std::size_t, sim::anatomy_action_count> shoulder_motors{};
+        std::array<std::size_t, sim::anatomy_action_count> elbow_motors{};
+        std::size_t arm_chain_count{};
         for (std::size_t index = 0; index < rig.active_motor_count; ++index)
         {
-            const sim::MotorConstraint& motor = rig.motors[index];
-            const bool manipulator = !motor_drives_support_branch(rig, motor)
-                && motor.pivot < rig.nodes.size();
-            if (!manipulator)
+            const sim::MotorConstraint& shoulder = rig.motors[index];
+            if (motor_drives_support_branch(rig, shoulder)
+                || shoulder.a != rig.torso_node
+                || shoulder.pivot >= rig.nodes.size()
+                || shoulder.c >= rig.nodes.size())
                 continue;
-            const float side = rig.nodes[motor.pivot].x
-                    < rig.nodes[rig.torso_node].x
-                ? -1.0f : 1.0f;
-            if (motor.a == rig.torso_node)
+            for (std::size_t distal = 0; distal < rig.active_motor_count; ++distal)
             {
-                action[index] = clamp(action[index]
-                    + side * 0.38f * arm_swing, -0.72f, 0.72f);
+                const sim::MotorConstraint& elbow = rig.motors[distal];
+                if (distal == index || motor_drives_support_branch(rig, elbow)
+                    || elbow.pivot != shoulder.c
+                    || elbow.c >= rig.nodes.size())
+                    continue;
+                shoulder_motors[arm_chain_count] = index;
+                elbow_motors[arm_chain_count] = distal;
+                ++arm_chain_count;
+                break;
             }
-            else
+        }
+        for (std::size_t first = 0; first < arm_chain_count; ++first)
+        {
+            for (std::size_t second = first + 1u; second < arm_chain_count; ++second)
             {
-                const float flex = -side * 0.12f
-                    * std::max(0.0f, -side * arm_swing);
-                action[index] = clamp(action[index] + flex, -0.50f, 0.50f);
+                const float first_x = rig.nodes[
+                    rig.motors[shoulder_motors[first]].pivot].x;
+                const float second_x = rig.nodes[
+                    rig.motors[shoulder_motors[second]].pivot].x;
+                if (second_x >= first_x)
+                    continue;
+                std::swap(shoulder_motors[first], shoulder_motors[second]);
+                std::swap(elbow_motors[first], elbow_motors[second]);
             }
+        }
+        for (std::size_t chain = 0; chain < arm_chain_count; ++chain)
+        {
+            const std::size_t shoulder_index = shoulder_motors[chain];
+            const std::size_t elbow_index = elbow_motors[chain];
+            const sim::MotorConstraint& shoulder = rig.motors[shoulder_index];
+            const sim::MotorConstraint& elbow = rig.motors[elbow_index];
+            const float upper_length = length(
+                rig.nodes[shoulder.c] - rig.nodes[shoulder.pivot]);
+            const float lower_length = length(
+                rig.nodes[elbow.c] - rig.nodes[elbow.pivot]);
+            const float arm_phase = phase + ((chain & 1u) == 0u ? pi : 0.0f);
+            const Vec2 target = sagittal_arm_target(upper_length + lower_length,
+                arm_phase, parameters.direction);
+            const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
+                upper_length, lower_length, target, -1.0f);
+            if (!solution.valid)
+                continue;
+            const Vec2 shoulder_reference = rig.nodes[shoulder.a]
+                - rig.nodes[shoulder.pivot];
+            action[shoulder_index] = motor_action_for_target_angle(shoulder,
+                signed_angle(shoulder_reference, solution.upper));
+            action[elbow_index] = motor_action_for_target_angle(elbow,
+                signed_angle(-1.0f * solution.upper, solution.lower));
         }
         return bilateral_joint_synergy_action(environment, action,
             environment.course_stage());
@@ -628,18 +738,16 @@ namespace runner::rl
 
         const bool foundational_walk = environment.course_stage()
             == sim::CourseStage::uneven;
-        const bool appendaged_biped = rig_has_manipulator_motors(rig);
-        const BipedGaitParameters biped_parameters{
-            foundational_walk ? sim::foundational_gait_cadence_hz
-                : movement.intent == locomotion::Intent::flee ? 1.40f
-                : movement.intent == locomotion::Intent::recover ? 0.90f : 1.20f,
-            !foundational_walk && movement.step_up ? 0.40f
-                : foundational_walk && appendaged_biped ? 0.82f : 0.50f,
-            !foundational_walk && movement.step_up ? 0.66f
-                : foundational_walk && appendaged_biped ? 0.82f : 0.50f,
-            !foundational_walk && movement.step_up ? 2.20f : 2.30f,
-            foundational_walk ? 1.0f : movement.direction
-        };
+        const BipedGaitParameters biped_parameters = foundational_walk
+            ? anatomy_scaled_foundational_gait(rig)
+            : BipedGaitParameters{
+                movement.intent == locomotion::Intent::flee ? 1.40f
+                    : movement.intent == locomotion::Intent::recover ? 0.90f : 1.20f,
+                movement.step_up ? 0.40f : 0.50f,
+                movement.step_up ? 0.66f : 0.50f,
+                movement.step_up ? 2.20f : 2.30f,
+                movement.direction
+            };
         return biped_gait_teacher_action(environment, biped_parameters);
     }
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
@@ -706,6 +814,20 @@ namespace runner::rl
             return 1.0f - static_cast<float>(update - fade_begin)
                 / static_cast<float>(handoff - fade_begin);
         return 0.0f;
+    }
+
+    inline constexpr std::uint64_t foundational_walk_consolidation_updates = 300u;
+
+    [[nodiscard]] inline bool foundational_walk_consolidation_active(
+        std::uint64_t update, sim::CourseStage stage,
+        const sim::CreatureBlueprint& blueprint) noexcept
+    {
+        if (stage != sim::CourseStage::uneven)
+            return false;
+        const std::uint64_t handoff =
+            foundational_walk_teacher_handoff_update(blueprint);
+        return update >= handoff
+            && update < handoff + foundational_walk_consolidation_updates;
     }
 
     inline constexpr std::uint64_t crouch_teacher_fade_begin_update = 180u;
@@ -950,8 +1072,23 @@ namespace runner::rl
         if (!sim::stage_requires_forward_gait(stage))
             return 0.0f;
         if (stage == sim::CourseStage::uneven && blueprint != nullptr)
-            return 64.0f * foundational_walk_teacher_authority(
+        {
+            const float authority = foundational_walk_teacher_authority(
                 update, *blueprint);
+            if (authority > 0.0f)
+                return 64.0f * authority;
+            if (blueprint->paired_leg_chains()
+                && foundational_walk_consolidation_active(
+                    update, stage, *blueprint))
+            {
+                const std::uint64_t handoff =
+                    foundational_walk_teacher_handoff_update(*blueprint);
+                const float progress = static_cast<float>(update - handoff)
+                    / static_cast<float>(foundational_walk_consolidation_updates);
+                return lerp(16.0f, 0.0f, progress);
+            }
+            return 0.0f;
+        }
         if (update < 1200u)
             return 64.0f;
         if (update < 3600u)
@@ -1004,7 +1141,8 @@ namespace runner::rl
         non_neutral_posture = 1u << 7u,
         excessive_rotation = 1u << 8u,
         invalid_crouch_posture = 1u << 9u,
-        lateral_crab_gait = 1u << 10u
+        lateral_crab_gait = 1u << 10u,
+        lower_leg_scissor = 1u << 11u
     };
 
     struct StageMotionQualification
@@ -1041,6 +1179,7 @@ namespace runner::rl
         append(MotionEvidenceFailure::excessive_rotation, "EXCESSIVE ROTATION");
         append(MotionEvidenceFailure::invalid_crouch_posture, "INVALID CROUCH");
         append(MotionEvidenceFailure::lateral_crab_gait, "LATERAL GAIT");
+        append(MotionEvidenceFailure::lower_leg_scissor, "LOWER-LEG SCISSOR");
         return result.empty() ? "STAGE VALID" : result;
     }
 
@@ -1057,6 +1196,8 @@ namespace runner::rl
             return "UNCONTROLLED STANDING SPIN";
         if ((mask & evidence_bit(MotionEvidenceFailure::invalid_crouch_posture)) != 0u)
             return "HIP HINGE - NOT A CROUCH";
+        if ((mask & evidence_bit(MotionEvidenceFailure::lower_leg_scissor)) != 0u)
+            return "LOWER LEGS SCISSOR FOR TOO LONG";
         if ((mask & evidence_bit(MotionEvidenceFailure::lateral_crab_gait)) != 0u)
             return "CRAB WALK - NO SAGITTAL CROSSING";
         if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
@@ -1149,6 +1290,10 @@ namespace runner::rl
                     environment.elapsed_seconds(),
                     environment.primary_support_span_ratio()))
                 rejection |= evidence_bit(MotionEvidenceFailure::lateral_crab_gait);
+            if (environment.blueprint().paired_leg_chains()
+                && environment.maximum_lower_leg_scissor_seconds()
+                    > sim::sustained_scissor_limit_seconds)
+                rejection |= evidence_bit(MotionEvidenceFailure::lower_leg_scissor);
             // Qualification is the safe incremental checkpoint gate, not final
             // Walk mastery. Preserve a real two-step sagittal improvement so PPO
             // can build on it instead of discarding every policy below mastery.
@@ -1431,13 +1576,15 @@ namespace runner::rl
     [[nodiscard]] inline bool incremental_locomotion_candidate(
         sim::CourseStage stage, const sim::Environment& environment) noexcept
     {
-        return incremental_locomotion_candidate(stage,
-            environment.valid_motion(), environment.body_integrity_valid(),
-            environment.non_foot_grounded(),
-            environment.blueprint().paired_leg_chains(),
-            environment.gait_cycles(), environment.limb_crossings(),
-            environment.distance_travelled(), environment.elapsed_seconds(),
-            environment.primary_support_span_ratio());
+        return environment.maximum_lower_leg_scissor_seconds()
+                <= sim::sustained_scissor_limit_seconds
+            && incremental_locomotion_candidate(stage,
+                environment.valid_motion(), environment.body_integrity_valid(),
+                environment.non_foot_grounded(),
+                environment.blueprint().paired_leg_chains(),
+                environment.gait_cycles(), environment.limb_crossings(),
+                environment.distance_travelled(), environment.elapsed_seconds(),
+                environment.primary_support_span_ratio());
     }
 
     inline constexpr std::uint64_t strict_evaluation_quality_bit = 1ull << 63u;
@@ -1614,7 +1761,8 @@ namespace runner::rl
         };
         explicit PpoTrainer(const sim::CreatureBlueprint& blueprint,
             std::size_t environment_count = 64,
-            bool enable_rollout_workers = true);
+            bool enable_rollout_workers = true,
+            std::size_t maximum_rollout_workers = 0u);
         ~PpoTrainer();
 
         PpoTrainer(const PpoTrainer&) = delete;
@@ -1641,6 +1789,8 @@ namespace runner::rl
             CheckpointData& data, std::string& error);
         [[nodiscard]] bool apply_checkpoint_data(CheckpointData data, std::string& error,
             bool transfer_only = false);
+        [[nodiscard]] bool import_lifetime_ledger(const TrainingMetrics& lifetime,
+            std::string& error) noexcept;
         [[nodiscard]] bool restore_best_policy() noexcept;
         void begin_staged_update();
         void compute_staged_advantages();

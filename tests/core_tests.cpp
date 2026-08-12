@@ -457,6 +457,12 @@ namespace runner::sim
             environment.uncontrolled_spin_turns_ = turns;
         }
 
+        static void force_sustained_leg_scissor(Environment& environment) noexcept
+        {
+            environment.maximum_lower_leg_scissor_seconds_ =
+                sustained_scissor_limit_seconds + 0.01f;
+        }
+
         static void force_arms_overhead(Environment& environment) noexcept
         {
             if (environment.particles_.size() < 13u)
@@ -776,6 +782,13 @@ int main()
     require(ui_layout::lifetime_delta(120u, 20u) == 100u
             && ui_layout::lifetime_delta(20u, 120u) == 0u,
         "rig lifetime counters can underflow");
+    require(std::abs(sim::accepted_forward_odometer_progress(0.10f, 1.0f / 60.0f)
+                - 0.10f) < 0.0001f
+            && sim::accepted_forward_odometer_progress(-0.01f, 1.0f / 60.0f) == 0.0f
+            && sim::accepted_forward_odometer_progress(1.0f, 1.0f / 60.0f) == 0.0f
+            && sim::accepted_forward_odometer_progress(
+                std::numeric_limits<float>::infinity(), 1.0f / 60.0f) == 0.0f,
+        "odometer accepts backward, teleport, or non-finite displacement");
     rl::TrainingMetrics cumulative{};
     cumulative.total_episodes = 12u;
     cumulative.total_valid_episodes = 9u;
@@ -1385,6 +1398,45 @@ int main()
     const sim::CreatureBlueprint biped_walk = sim::CreatureBlueprint::biped();
     const sim::CreatureBlueprint humanoid_walk = sim::CreatureBlueprint::humanoid();
     const sim::CreatureBlueprint quadruped_walk = sim::CreatureBlueprint::quadruped();
+    const rl::BipedGaitParameters biped_foundational_gait =
+        rl::anatomy_scaled_foundational_gait(biped_walk);
+    const rl::BipedGaitParameters humanoid_foundational_gait =
+        rl::anatomy_scaled_foundational_gait(humanoid_walk);
+    sim::CreatureBlueprint humanoid_with_shifted_arms = humanoid_walk;
+    for (std::size_t node = 7u; node < humanoid_with_shifted_arms.nodes.size(); ++node)
+        humanoid_with_shifted_arms.nodes[node].x += 4.0f;
+    const rl::BipedGaitParameters shifted_arm_gait =
+        rl::anatomy_scaled_foundational_gait(humanoid_with_shifted_arms);
+    require(std::isfinite(biped_foundational_gait.step_length)
+            && std::isfinite(humanoid_foundational_gait.swing_lift)
+            && biped_foundational_gait.step_length >= 0.50f
+            && biped_foundational_gait.step_length <= 0.66f
+            && humanoid_foundational_gait.step_length >= 0.50f
+            && humanoid_foundational_gait.step_length <= 0.66f
+            && humanoid_foundational_gait.swing_lift >= 0.52f
+            && humanoid_foundational_gait.swing_lift <= 0.68f,
+        "foundational biped gait is not finite and anatomy-bounded");
+    require(humanoid_foundational_gait.step_length < 0.82f
+            && humanoid_foundational_gait.swing_lift < 0.82f
+            && std::abs(shifted_arm_gait.step_length
+                - humanoid_foundational_gait.step_length) < 1.0e-6f
+            && std::abs(shifted_arm_gait.swing_lift
+                - humanoid_foundational_gait.swing_lift) < 1.0e-6f,
+        "foundational stride still depends on arm presence or geometry");
+    const rl::TwoLinkSagittalSolution left_knee =
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.0f, -1.6f }, -1.0f);
+    const rl::TwoLinkSagittalSolution right_knee =
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.0f, -1.6f }, 1.0f);
+    const Vec2 arm_forward = rl::sagittal_arm_target(1.5f, pi * 0.5f);
+    const Vec2 arm_backward = rl::sagittal_arm_target(1.5f, pi * 1.5f);
+    require(left_knee.valid && right_knee.valid
+            && left_knee.upper.x < 0.0f && right_knee.upper.x > 0.0f,
+        "paired-leg teacher lost its opposing sagittal gait branches");
+    require(arm_forward.x > 0.0f && arm_backward.x < 0.0f
+            && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
+            && !rl::solve_two_link_sagittal(0.0f, 1.0f,
+                { 0.0f, -1.0f }, 1.0f).valid,
+        "arm teacher is not a bounded fore/aft sagittal chain target");
     require(sim::foundational_gait_cadence_hz == 1.20f
             && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.20f
             && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.20f,
@@ -1605,8 +1657,13 @@ int main()
         "raised humanoid shoulder girdle can still invert through the upper spine");
     require(humanoid.nodes.size() == 13u,
         "human-calibrated rig does not retain the compact articulated body and arms");
-    require(std::abs(humanoid.nodes[0].y - 2.8127f) < 0.01f,
-        "uploaded humanoid pelvis calibration not applied");
+    require(std::abs(humanoid.nodes[0].x - 0.0015322268f) < 0.00001f
+            && std::abs(humanoid.nodes[0].y - 2.8127f) < 0.00001f
+            && std::abs(humanoid.nodes[1].y - 3.85471725f) < 0.00001f
+            && std::abs(humanoid.nodes[2].y - 4.17547226f) < 0.00001f
+            && std::abs(humanoid.nodes[9].x + 0.890742854f) < 0.00001f
+            && std::abs(humanoid.nodes[12].x - 0.851874948f) < 0.00001f,
+        "supplied compact humanoid calibration not applied");
     require(humanoid.bones.size() == 15u,
         "humanoid legs or articulated arms are not structurally connected");
     require(humanoid.active_motor_count == sim::anatomy_action_count,
@@ -1919,6 +1976,13 @@ int main()
         require(rl::stage_motion_qualification(
                 sim::CourseStage::uneven, dynamic_walk).valid,
             "sustained alternating gait is rejected for lacking a standing hold");
+        sim::EnvironmentTestAccess::force_sustained_leg_scissor(dynamic_walk);
+        const auto scissored = rl::stage_motion_qualification(
+            sim::CourseStage::uneven, dynamic_walk);
+        require(!scissored.valid
+                && (scissored.rejection_mask & rl::evidence_bit(
+                    rl::MotionEvidenceFailure::lower_leg_scissor)) != 0u,
+            "persistent lower-leg X gait remains eligible for retention");
 
         sim::Environment transient_walk{ humanoid, 0x7A451Eu };
         transient_walk.set_course(sim::CourseStage::uneven, 0.30f);
@@ -2214,6 +2278,10 @@ int main()
             "fresh cumulative environment count does not track policy steps");
         require(metrics.total_training_seconds > 0.0,
             "cumulative training time did not advance");
+        require(metrics.total_distance >= 0.0
+                && metrics.total_distance <= metrics.total_training_seconds
+                    * static_cast<double>(sim::odometer_speed_limit_mps + 0.001f),
+            "parallel workers multiply or discontinuously inflate the odometer");
     }
 
     require(trainer.lesson_update() == 2u,
@@ -2245,10 +2313,20 @@ int main()
         "checkpoint cumulative update/environment totals were not restored");
     require(resumed.metrics().total_training_seconds == trainer.metrics().total_training_seconds,
         "checkpoint cumulative training time was not restored");
+    require(resumed.metrics().total_distance == trainer.metrics().total_distance,
+        "checkpoint cumulative odometer was not restored");
     require(resumed.optimizer_step() == trainer.optimizer_step(), "checkpoint optimizer state was not restored");
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
     require(resumed.course_stage() == trainer.course_stage(), "checkpoint curriculum stage was not restored");
+    const rl::TrainingMetrics before_rig_switch = resumed.metrics();
+    resumed.set_blueprint(sim::CreatureBlueprint::biped(), false);
+    require(resumed.metrics().update == 0u
+            && resumed.metrics().total_updates == before_rig_switch.total_updates
+            && resumed.metrics().total_environment_steps
+                == before_rig_switch.total_environment_steps
+            && resumed.metrics().total_distance == before_rig_switch.total_distance,
+        "canonical rig switch erased the all-time training ledger");
 
     rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
     legacy.training_semantics = rl::training_semantics_version - 1u;
@@ -2258,6 +2336,60 @@ int main()
     rl::PpoTrainer blocked_legacy{ humanoid, 16 };
     require(!blocked_legacy.apply_checkpoint_data(legacy, error, false),
         "legacy semantics resumed as valid mastery instead of requiring transfer");
+    require(blocked_legacy.import_lifetime_ledger(legacy.metrics, error)
+            && blocked_legacy.metrics().update == 0u
+            && blocked_legacy.optimizer_step() == 0u
+            && blocked_legacy.metrics().total_updates == trainer.metrics().total_updates
+            && blocked_legacy.metrics().total_environment_steps
+                == trainer.metrics().total_environment_steps
+            && blocked_legacy.metrics().total_distance == trainer.metrics().total_distance,
+        "incompatible checkpoint did not preserve only its all-time ledger");
+    rl::TrainingMetrics invalid_lifetime = legacy.metrics;
+    invalid_lifetime.total_distance = std::numeric_limits<double>::infinity();
+    require(!blocked_legacy.import_lifetime_ledger(invalid_lifetime, error)
+            && blocked_legacy.metrics().total_distance == trainer.metrics().total_distance,
+        "non-finite legacy odometer was imported");
+
+    const std::filesystem::path lifetime_import_directory =
+        std::filesystem::temp_directory_path() / "runner-v0731-lifetime-import-test";
+    std::filesystem::remove_all(lifetime_import_directory);
+    std::filesystem::create_directories(lifetime_import_directory);
+    const std::filesystem::path current_autosave = lifetime_import_directory
+        / "runner-v0731-active-autosave.eppo";
+    const std::filesystem::path current_rig = lifetime_import_directory
+        / "runner-v0731-active-evolved.rig";
+    const std::filesystem::path current_state = lifetime_import_directory
+        / "runner-v0731-active-autonomy.state";
+    const std::filesystem::path v0730_autosave = lifetime_import_directory
+        / "runner-v0730-walk-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0730_autosave, error),
+        "failed to write legacy lifetime import fixture: " + error);
+    {
+        rl::AutonomousTrainer importing{ humanoid, 16 };
+        importing.set_autosave_paths(current_autosave, current_rig, current_state);
+        importing.set_background_enabled(false);
+        std::string import_message{};
+        require(importing.load_autosave(import_message)
+                && import_message.find("V0.7.30 LIFETIME LEDGER")
+                    != std::string::npos,
+            "v0.7.30 fallback autosave was not selected before a new save");
+        for (int attempt = 0; attempt < 400
+            && importing.metrics().total_updates != trainer.metrics().total_updates;
+            ++attempt)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            importing.synchronize();
+        }
+        require(importing.metrics().update == 0u
+                && importing.metrics().total_updates == trainer.metrics().total_updates
+                && importing.metrics().total_environment_steps
+                    == trainer.metrics().total_environment_steps
+                && importing.metrics().total_distance == trainer.metrics().total_distance
+                && !std::filesystem::exists(current_autosave),
+            "legacy autosave did not import only lifetime totals before current save");
+    }
+    std::filesystem::remove_all(lifetime_import_directory);
+
     rl::PpoTrainer transferred_legacy{ humanoid, 16 };
     require(transferred_legacy.apply_checkpoint_data(legacy, error, true),
         "explicit dimension-compatible legacy weight transfer failed: " + error);
