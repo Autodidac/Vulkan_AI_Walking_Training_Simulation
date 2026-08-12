@@ -83,6 +83,17 @@ int main()
             && std::isfinite(invalid_skin.shoulder_width)
             && invalid_skin.shoulder_width > 0.0f,
         "skin envelope does not scale or sanitize invalid authored geometry");
+    const float compact_armor_scale =
+        runner::art::assembled_armor_scale(50.0f, 8.0f);
+    const float large_armor_scale =
+        runner::art::assembled_armor_scale(100.0f, 16.0f);
+    const float invalid_armor_scale = runner::art::assembled_armor_scale(
+        std::numeric_limits<float>::infinity(), -1.0f);
+    require(compact_armor_scale >= 1.24f && compact_armor_scale <= 1.34f
+            && std::abs(compact_armor_scale - large_armor_scale) < 0.001f
+            && std::isfinite(invalid_armor_scale)
+            && invalid_armor_scale >= 1.24f && invalid_armor_scale <= 1.34f,
+        "assembled armor scale is undersized, non-finite, or morphology-unstable");
 
     std::cout << "Runner pixel-art parser and skin-envelope tests passed\n";
     return 0;

@@ -193,8 +193,12 @@ int main()
             "support_boot_transform", "rig.support_branch_mask(motor)",
             "rig.node_support_mask(index)", "art::oriented_box_transform",
             "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
-            "minimum_shoulder", "envelope.pelvis_half_width",
-            "envelope.chest_radius", "18.0f, 56.0f" })
+            "minimum_shoulder", "envelope.chest_radius",
+            "assembled_art_scale", "23.0f, 74.0f", "presentation_side",
+            "authored_joint_overlap", "0.36f : 0.55f",
+            "Modular armor is the exclusive presentation",
+            "Authoritative graph bones stay visible beneath authored",
+            "Raw fine-cell bottoms never render." })
         require(app.find(reference) != std::string::npos,
             "topology-bound remade-art renderer contract is missing");
     require(app.find("draw_pixel_art(canvas, optional_foot_art")
@@ -202,8 +206,18 @@ int main()
             && app.find("if (!optional_art_enabled || !rig.paired_leg_chains())")
                 == std::string::npos
             && app.find("draw_segment_art") == std::string::npos
-            && app.find("rig.motors[4]") == std::string::npos,
-        "axis-aligned boot, bone-strip art, motor-slot, or paired-biped gate remains");
+            && app.find("rig.motors[4]") == std::string::npos
+            && app.find(".fine_cell(") == std::string::npos
+            && app.find("neutral connected wrap") == std::string::npos
+            && app.find("pelvis_center") == std::string::npos
+            && app.find("rgb(0x202a31") == std::string::npos
+            && app.find("rgb(0xaeb9c1") == std::string::npos
+            && app.find("if (optional_art_enabled && optional_foot_art.loaded())")
+                == std::string::npos,
+        "axis-aligned boot, raw terrain-cell visual, generated underwrap, bone-strip art, motor-slot, or paired-biped gate remains");
+    require(app.find("ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::imperial };")
+                != std::string::npos,
+        "fresh application presentation does not default to imperial units");
     require(app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
             && app.find("scaffold remains an internal calibration fixture")
                 != std::string::npos,
@@ -348,6 +362,22 @@ int main()
     require(simulation.find("runner_armor_concepts") == std::string::npos
             && simulation.find("PixelArt") == std::string::npos,
         "optional art leaked into simulation or training state");
+
+    const std::string policy = read_text(root / "src" / "ppo.hpp");
+    const std::string parallel = read_text(root / "src" / "ppo_parallel.cpp");
+    require(policy.find("active_motor_count >= 8u") == std::string::npos
+            && policy.find("action[4]") == std::string::npos
+            && policy.find("action[5]") == std::string::npos
+            && policy.find("action[6]") == std::string::npos
+            && policy.find("action[7]") == std::string::npos
+            && policy.find("motor_drives_support_branch(rig, rig.motors[index])")
+                != std::string::npos
+            && policy.find("manipulator_chain_count == 2u")
+                != std::string::npos,
+        "policy assistance still assigns manipulator roles by motor slot");
+    require(parallel.find("const auto action = raw_action;")
+                != std::string::npos,
+        "mastery evaluation still applies lesson assistance to the policy");
 
     const std::string generator = read_text(
         root / "tools" / "generate_runner_armor_assets.py");

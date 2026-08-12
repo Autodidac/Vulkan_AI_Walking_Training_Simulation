@@ -38,8 +38,8 @@ namespace runner::rl
     {
         switch (stage)
         {
-        case sim::CourseStage::balance: return 120u;
-        case sim::CourseStage::duck_press: return 180u;
+        case sim::CourseStage::balance: return 80u;
+        case sim::CourseStage::duck_press: return crouch_teacher_handoff_update;
         case sim::CourseStage::uneven: return 420u;
         case sim::CourseStage::crouch_walk: return 360u;
         default: return 240u;

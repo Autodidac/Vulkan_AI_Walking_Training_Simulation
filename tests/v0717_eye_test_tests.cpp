@@ -109,6 +109,10 @@ int main(int argc, char** argv)
             { 0.5f, 1.0f }, { -0.5f, 0.0f })
             && !sim::strict_segment_crossing({ -0.5f, 1.0f }, { -0.5f, 0.0f },
                 { 0.5f, 1.0f }, { 0.5f, 0.0f })
+            && sim::awkward_paired_passing_pose(0.80f, 0.10f, 1.40f)
+            && !sim::awkward_paired_passing_pose(0.80f, 0.60f, 1.40f)
+            && !sim::awkward_paired_passing_pose(0.35f, 0.45f, 1.40f)
+            && !sim::awkward_paired_passing_pose(0.80f, 0.10f, 0.0f)
             && sim::lower_leg_scissor_shaping_penalty(
                 true, true, sim::sustained_scissor_limit_seconds) > 0.0f
             && sim::lower_leg_scissor_shaping_penalty(false, true, 1.0f) == 0.0f,

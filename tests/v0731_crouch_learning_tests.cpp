@@ -56,7 +56,7 @@ int main()
     runner::rl::PpoTrainer trainer{ rig, 64u };
     trainer.set_cpu_mode(4);
     trainer.set_course(runner::sim::CourseStage::balance, 0.25f, false);
-    constexpr std::uint64_t stand_updates = 120u;
+    constexpr std::uint64_t stand_updates = 80u;
     for (std::uint64_t update = 0; update < stand_updates; ++update)
         trainer.train_one_update();
     require(trainer.lesson_update() == stand_updates,
@@ -68,7 +68,7 @@ int main()
             && trainer.metrics().total_updates == rig_updates_before_crouch,
         "normal Stand-to-Crouch entry reset rig work or retained lesson age");
 
-    constexpr std::uint64_t crouch_updates = 600u;
+    constexpr std::uint64_t crouch_updates = 320u;
     for (std::uint64_t update = 0; update < crouch_updates; ++update)
         trainer.train_one_update();
     require(trainer.lesson_update() == crouch_updates

@@ -3434,6 +3434,24 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     particles_[left_shank.c].position,
                     particles_[right_shank.pivot].position,
                     particles_[right_shank.c].position);
+                const MotorConstraint& left_thigh = blueprint_.motors[0];
+                const MotorConstraint& right_thigh = blueprint_.motors[2];
+                const float mean_leg_length = 0.5f * (
+                    length(blueprint_.nodes[left_thigh.c]
+                        - blueprint_.nodes[left_thigh.pivot])
+                    + length(blueprint_.nodes[left_shank.c]
+                        - blueprint_.nodes[left_shank.pivot])
+                    + length(blueprint_.nodes[right_thigh.c]
+                        - blueprint_.nodes[right_thigh.pivot])
+                    + length(blueprint_.nodes[right_shank.c]
+                        - blueprint_.nodes[right_shank.pivot]));
+                lower_leg_scissored_this_step_ = lower_leg_scissored_this_step_
+                    || awkward_paired_passing_pose(
+                        particles_[left_shank.pivot].position.x
+                            - particles_[right_shank.pivot].position.x,
+                        particles_[left_shank.c].position.x
+                            - particles_[right_shank.c].position.x,
+                        mean_leg_length);
             }
         }
         lower_leg_scissor_seconds_ = lower_leg_scissored_this_step_

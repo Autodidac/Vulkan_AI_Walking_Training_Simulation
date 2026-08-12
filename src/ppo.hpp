@@ -276,24 +276,64 @@ namespace runner::rl
             action[3] = lerp(action[3], -knee_mirror, pair_strength);
         }
 
-        if (rig.active_motor_count >= 8u)
+        std::array<std::size_t, 2> shoulder_indices{};
+        std::array<std::size_t, 2> elbow_indices{};
+        std::size_t manipulator_chain_count{};
+        if (rig.paired_leg_chains())
         {
-            const float arm_pair_strength = sim::stage_allows_controlled_flips(stage)
-                ? 0.24f : 0.06f;
-            const float shoulder = 0.5f * (action[4] - action[6]);
-            const float elbow = 0.5f * (action[5] - action[7]);
-            action[4] = lerp(action[4], shoulder, arm_pair_strength);
-            action[6] = lerp(action[6], -shoulder, arm_pair_strength);
-            action[5] = lerp(action[5], elbow, arm_pair_strength);
-            action[7] = lerp(action[7], -elbow, arm_pair_strength);
+            for (std::size_t shoulder_index = 0;
+                shoulder_index < rig.active_motor_count
+                    && manipulator_chain_count < shoulder_indices.size();
+                ++shoulder_index)
+            {
+                const sim::MotorConstraint& shoulder = rig.motors[shoulder_index];
+                if (motor_drives_support_branch(rig, shoulder)
+                    || shoulder.a != rig.torso_node)
+                    continue;
+                for (std::size_t elbow_index = 0;
+                    elbow_index < rig.active_motor_count; ++elbow_index)
+                {
+                    const sim::MotorConstraint& elbow = rig.motors[elbow_index];
+                    if (elbow_index == shoulder_index
+                        || motor_drives_support_branch(rig, elbow)
+                        || elbow.pivot != shoulder.c)
+                        continue;
+                    shoulder_indices[manipulator_chain_count] = shoulder_index;
+                    elbow_indices[manipulator_chain_count] = elbow_index;
+                    ++manipulator_chain_count;
+                    break;
+                }
+            }
+        }
+        if (manipulator_chain_count == 2u)
+        {
+            const float arm_pair_strength = stage == sim::CourseStage::uneven
+                ? 0.06f : sim::stage_allows_controlled_flips(stage)
+                    ? 0.24f : 0.10f;
+            const std::size_t left_shoulder = shoulder_indices[0];
+            const std::size_t right_shoulder = shoulder_indices[1];
+            const std::size_t left_elbow = elbow_indices[0];
+            const std::size_t right_elbow = elbow_indices[1];
+            const float shoulder = 0.5f
+                * (action[left_shoulder] - action[right_shoulder]);
+            const float elbow = 0.5f
+                * (action[left_elbow] - action[right_elbow]);
+            action[left_shoulder] = lerp(
+                action[left_shoulder], shoulder, arm_pair_strength);
+            action[right_shoulder] = lerp(
+                action[right_shoulder], -shoulder, arm_pair_strength);
+            action[left_elbow] = lerp(
+                action[left_elbow], elbow, arm_pair_strength);
+            action[right_elbow] = lerp(
+                action[right_elbow], -elbow, arm_pair_strength);
         }
 
-        if (rig.active_motor_count >= 8u
-            && environment.longest_stable_stance_seconds() < 1.0f
+        if (environment.longest_stable_stance_seconds() < 1.0f
             && !sim::stage_allows_controlled_flips(stage))
         {
-            for (std::size_t index = 4; index < 8; ++index)
-                action[index] *= 0.08f;
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+                if (!motor_drives_support_branch(rig, rig.motors[index]))
+                    action[index] *= 0.08f;
         }
         for (float& value : action)
             value = clamp(value, -1.0f, 1.0f);
@@ -506,7 +546,7 @@ namespace runner::rl
             return {};
         const float bounded_length = clamp(chain_length, 0.01f, 5.0f);
         const float swing = std::sin(phase);
-        return { bounded_length * 0.12f * swing
+        return { bounded_length * 0.27f * swing
                 * clamp(direction, -1.0f, 1.0f),
             -bounded_length * (0.84f - 0.025f * std::abs(swing)) };
     }
@@ -721,16 +761,41 @@ namespace runner::rl
                 -0.82f, 0.82f);
             action[3] = clamp(action[3] - 0.58f - 0.18f * right_lift,
                 -0.90f, 0.90f);
-            if (rig.active_motor_count >= 8u)
+            std::array<std::size_t, 2> crawl_shoulders{};
+            std::array<std::size_t, 2> crawl_elbows{};
+            std::size_t crawl_arm_count{};
+            for (std::size_t shoulder_index = 0;
+                shoulder_index < rig.active_motor_count
+                    && crawl_arm_count < crawl_shoulders.size(); ++shoulder_index)
             {
-                action[4] = clamp(action[4] - 0.34f * directed_swing,
-                    -0.70f, 0.70f);
-                action[5] = clamp(action[5] + 0.18f * left_lift,
-                    -0.55f, 0.55f);
-                action[6] = clamp(action[6] + 0.34f * directed_swing,
-                    -0.70f, 0.70f);
-                action[7] = clamp(action[7] - 0.18f * right_lift,
-                    -0.55f, 0.55f);
+                const sim::MotorConstraint& shoulder = rig.motors[shoulder_index];
+                if (motor_drives_support_branch(rig, shoulder)
+                    || shoulder.a != rig.torso_node)
+                    continue;
+                for (std::size_t elbow_index = 0;
+                    elbow_index < rig.active_motor_count; ++elbow_index)
+                {
+                    const sim::MotorConstraint& elbow = rig.motors[elbow_index];
+                    if (elbow_index == shoulder_index
+                        || motor_drives_support_branch(rig, elbow)
+                        || elbow.pivot != shoulder.c)
+                        continue;
+                    crawl_shoulders[crawl_arm_count] = shoulder_index;
+                    crawl_elbows[crawl_arm_count] = elbow_index;
+                    ++crawl_arm_count;
+                    break;
+                }
+            }
+            if (crawl_arm_count == 2u)
+            {
+                action[crawl_shoulders[0]] = clamp(action[crawl_shoulders[0]]
+                    - 0.34f * directed_swing, -0.70f, 0.70f);
+                action[crawl_elbows[0]] = clamp(action[crawl_elbows[0]]
+                    + 0.18f * left_lift, -0.55f, 0.55f);
+                action[crawl_shoulders[1]] = clamp(action[crawl_shoulders[1]]
+                    + 0.34f * directed_swing, -0.70f, 0.70f);
+                action[crawl_elbows[1]] = clamp(action[crawl_elbows[1]]
+                    - 0.18f * right_lift, -0.55f, 0.55f);
             }
             return bilateral_joint_synergy_action(environment, action,
                 sim::CourseStage::moving_hazards);
@@ -748,6 +813,7 @@ namespace runner::rl
                 movement.step_up ? 2.20f : 2.30f,
                 movement.direction
             };
+
         return biped_gait_teacher_action(environment, biped_parameters);
     }
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
@@ -830,8 +896,8 @@ namespace runner::rl
             && update < handoff + foundational_walk_consolidation_updates;
     }
 
-    inline constexpr std::uint64_t crouch_teacher_fade_begin_update = 180u;
-    inline constexpr std::uint64_t crouch_teacher_handoff_update = 420u;
+    inline constexpr std::uint64_t crouch_teacher_fade_begin_update = 60u;
+    inline constexpr std::uint64_t crouch_teacher_handoff_update = 200u;
 
     [[nodiscard]] inline float crouch_teacher_authority(
         std::uint64_t lesson_update) noexcept

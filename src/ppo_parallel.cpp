@@ -192,11 +192,9 @@ namespace runner::rl
                             {
                                 const auto raw_action = local.deterministic_action(
                                     environment.observation());
-                                const auto action = effective_policy_action(
-                                    environment, raw_action, current_stage,
-                                    lesson_teacher_authority(
-                                        owner.lesson_update_, current_stage,
-                                        environment.blueprint()));
+                                // Mastery evaluates the raw policy. All lesson
+                                // assists belong only to training rollouts/preview.
+                                const auto action = raw_action;
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;

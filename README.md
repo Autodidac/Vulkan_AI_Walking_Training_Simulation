@@ -17,6 +17,10 @@
 - Adds `Runner.exe --diagnose-walk-eye`, a headless 1,200-update proof that prints retained authority, six-seed distance/steps, invalid count, displayed transfer evidence, and maximum scissor duration. `--walk-eye-test` completes that proof before creating its Vulkan window, so the visible window opens populated and responsive instead of appearing crashed during training.
 - Preserves exact fixed-step state across 20, 60, and 240 Hz rendering, including terrain evolution, lesson clocks, policy handoff, contacts, and presentation transforms.
 - Isolates corrected checkpoints and automatic state under `runner-v0731-active-*` paths.
+- Uses one larger graph-fitted authored armor assembly when art is enabled; thin real graph-bone links remain readable beneath joint-overlapped sprites and a shoulder/hip-fitted torso, no generated body or per-part procedural fallback can render underneath it, and debug mode adds node markers/indices.
+- Starts fresh UI sessions in imperial units and expands manual zoom from 0.28x to 3.60x (12-150 px/m); Metric/Imperial switching and automatic fit remain presentation-only.
+- Schedules Stand evidence at 80 lesson updates and raw-policy Crouch mastery from the exact update-200 handoff, retaining the full repeated-run/test and zero-authority requirements.
+- Clips every visible terrain material band to the exact live collision surface so pressure-driven sand remains active without a second moving lower-cell boundary.
 ## v0.7.30 sustained-walk learning recovery
 
 - Stops forward-gait nursery randomization from repeatedly erasing partial walkers while cumulative rig updates keep rising.
@@ -32,7 +36,7 @@
 
 - Replaces the old concept-sheet derivatives with eight purpose-built exact lateral-orthographic sprites: helmet, torso, upper arm, forearm, thigh, shin, boot, and compact energy weapon.
 - Rotates and scales arm/leg plates with their authored biped motor segments while preserving existing near/far limb layers and debug contacts.
-- Uses an explicit magenta key so dark graphite outlines remain visible; missing or malformed pieces fall back independently to procedural rendering.
+- Uses an explicit magenta key so dark graphite outlines remain visible; when modular presentation is active, a missing or malformed piece stays absent rather than exposing generated fallback art underneath the assembly.
 - Keeps quadruped, crawler, hexapod, monoped, and unrelated custom topology free from humanoid art assumptions.
 - Keeps the art toggle presentation-only: no physics, observations, rewards, policy, curriculum, checkpoint, or persistence changes.
 - Adds `Runner.exe --diagnose-art`, which renders both the fixed production course and strict side-profile close-up frames and enforces 25% headroom inside the shared 8 MiB Vulkan vertex budget.
@@ -102,7 +106,7 @@ ctest --test-dir build/linux --output-on-failure
 - `Tab`: switch between Live Autopilot and Rig Lab
 - `1`, `2`, `3`: Normal, Faster, and Max CPU modes
 - `T`: cycle Summary / Totals / Advanced Diagnostics
-- `U`: toggle Metric / Imperial reference labels
+- `U`: toggle Imperial / Metric reference labels (Imperial is the fresh-launch default)
 - `A`: toggle the complete modular helmet, torso, arm, leg, boot, and weapon presentation
 - `S`: save the current rig
 - `L`: load a rig
@@ -140,7 +144,7 @@ Runner.exe --walk-eye-test
 Runner.exe --art-eye-test
 ```
 
-`--diagnose-rig-training` runs the v0.7.31 cold-start learner: the four-motor biped, eight-motor humanoid, quadruped, crawler, and hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority; both paired-leg subjects must exceed 18 m / a 14-step six-seed average, and multi-support rigs must sustain repeated physical contact cycles after their lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--walk-eye-test` independently cold-trains the default eight-motor humanoid, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all seven exposed orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, live difficulty-scaled deformation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test` opens a frozen close-up humanoid in strict side elevation.
+`--diagnose-rig-training` runs the v0.7.31 cold-start learner: the four-motor biped, eight-motor humanoid, quadruped, crawler, and hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority; both paired-leg subjects must exceed 18 m / a 14-step six-seed average, and multi-support rigs must sustain repeated physical contact cycles after their lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--walk-eye-test` independently cold-trains the default eight-motor humanoid, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, the 0.28x-3.60x manual range, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all seven exposed orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, live difficulty-scaled deformation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test` opens a frozen close-up humanoid in strict side elevation.
 
 ## Repository records
 

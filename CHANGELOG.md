@@ -16,6 +16,12 @@
 - Spread pressure-displaced sand into a broad conserved berm outside adjacent foot cells so active terrain no longer raises an immediate invisible trip lip.
 - Preserved the all-rig lifetime ledger across canonical subject changes, added pre-save validated lifetime-only import from incompatible current or same-folder v0.7.30 autosaves, and corrected distance to finite per-step agent-equivalent forward odometry with discontinuity and worker-aggregation guards.
 - Added the exiting `--diagnose-walk-eye` proof command; the corrected local Windows learner passed at 19.141 m / 18.83 steps with zero invalid seeds and zero teacher authority. The visual `--walk-eye-test` now finishes proof training before creating the Vulkan window, eliminating its visible not-responding/crash interval.
+- Removed every concurrent generated capsule, joint-cap, foot, pelvis, chest, and shoulder body fallback whenever modular armor is enabled; retained thin authoritative graph-bone links; scaled the fitted assembly 1.24x-1.34x from the graph-derived torso/shoulder envelope; and connected it with authored limb overlap plus a broader shoulder/hip-fitted torso across all exposed rigs.
+- Replaced remaining upper-body motor-slot assumptions with topology-discovered two-link manipulator chains, increased phase-opposed sagittal arm reach, and made raw policy output the only input to strict mastery evaluation.
+- Added a persistent wide-knee/overlapping-foot scissor predicate while retaining brief valid sagittal passing; the final ten-seed biped/humanoid references stay below the unchanged 0.34-second rejection boundary.
+- Rendered the material band from the exact current collision-height samples and removed raw fine-cell underside rendering, preserving active pressure deformation without a separately moving lower terrain edge.
+- Moved Stand readiness to 80 lesson updates and Crouch's complete fade/handoff/readiness boundary to 200 updates while retaining all strict four-run/eight-test, recovery, contact, repeated-seed, and zero-authority evidence.
+- Made imperial presentation the fresh-launch default and expanded manual view control to 0.28x-3.60x / 12-150 px/m without changing automatic fit, physics, training, persistence, or fixed-step timing.
 ## 0.7.30
 
 - Prevented forward-gait nursery resets from repeatedly randomizing partial walkers and separated all-time rig updates from resettable policy age/discard telemetry.

@@ -1432,8 +1432,9 @@ int main()
     require(left_knee.valid && right_knee.valid
             && left_knee.upper.x < 0.0f && right_knee.upper.x > 0.0f,
         "paired-leg teacher lost its opposing sagittal gait branches");
-    require(arm_forward.x > 0.0f && arm_backward.x < 0.0f
+    require(arm_forward.x > 0.38f && arm_backward.x < -0.38f
             && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
+            && arm_forward.y < -1.20f
             && !rl::solve_two_link_sagittal(0.0f, 1.0f,
                 { 0.0f, -1.0f }, 1.0f).valid,
         "arm teacher is not a bounded fore/aft sagittal chain target");
@@ -1481,7 +1482,9 @@ int main()
                 rl::crouch_teacher_fade_begin_update - 1u) == 1.0f
             && rl::crouch_teacher_authority(
                 rl::crouch_teacher_handoff_update) == 0.0f
-            && std::abs(rl::crouch_teacher_authority(300u) - 0.5f) < 1.0e-6f,
+            && std::abs(rl::crouch_teacher_authority(
+                (rl::crouch_teacher_fade_begin_update
+                    + rl::crouch_teacher_handoff_update) / 2u) - 0.5f) < 1.0e-6f,
         "crouch teacher authority does not fade to an exact finite handoff");
     require(rl::guided_rollout_imitation_weight(
                 0u, sim::CourseStage::duck_press) == 64.0f

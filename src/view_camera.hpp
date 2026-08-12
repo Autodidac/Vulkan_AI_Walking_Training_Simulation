@@ -6,10 +6,11 @@
 namespace runner::view_camera
 {
     inline constexpr float default_pixels_per_meter = 42.0f;
-    inline constexpr float minimum_pixels_per_meter = 30.24f;
-    inline constexpr float maximum_pixels_per_meter = 62.0f;
-    inline constexpr float minimum_zoom_factor = 0.72f;
-    inline constexpr float maximum_zoom_factor = 1.55f;
+    inline constexpr float automatic_maximum_pixels_per_meter = 62.0f;
+    inline constexpr float minimum_pixels_per_meter = 12.0f;
+    inline constexpr float maximum_pixels_per_meter = 150.0f;
+    inline constexpr float minimum_zoom_factor = 0.28f;
+    inline constexpr float maximum_zoom_factor = 3.60f;
     inline constexpr float target_rig_height_fraction = 0.34f;
     inline constexpr float live_ground_fraction = 0.74f;
     inline constexpr float lookahead_screen_fraction = 0.17f;
@@ -30,7 +31,7 @@ namespace runner::view_camera
             current = 1.0f;
         if (!std::isfinite(wheel) || std::abs(wheel) < 0.01f)
             return clamp_zoom_factor(current);
-        return clamp_zoom_factor(current * std::pow(1.12f, wheel));
+        return clamp_zoom_factor(current * std::pow(1.25f, wheel));
     }
 
     [[nodiscard]] constexpr float automatic_pixels_per_meter(
@@ -41,7 +42,7 @@ namespace runner::view_camera
         return std::clamp(
             viewport_height * target_rig_height_fraction / std::max(rig_height, 0.75f),
             default_pixels_per_meter,
-            maximum_pixels_per_meter);
+            automatic_maximum_pixels_per_meter);
     }
 
     [[nodiscard]] constexpr float fitted_pixels_per_meter(

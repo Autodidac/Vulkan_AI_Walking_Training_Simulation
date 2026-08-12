@@ -321,7 +321,7 @@ namespace runner
         bool rig_test_loose_ground{};
         sim::RigTestPattern rig_test_pattern{ sim::RigTestPattern::manual };
         bool run_paused{};
-        ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::metric };
+        ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::imperial };
         float session_runtime_seconds{};
         float rig_lifetime_seconds{};
         std::uint64_t tracked_rig_signature{};
@@ -678,7 +678,6 @@ namespace runner
         void draw_course_ground(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
-            const sim::DeformableTerrain& terrain = environment.terrain();
             const float half_view = viewport.size.x * 0.5f / scale;
             const float left = camera - half_view - sim::DeformableTerrain::macro_tile_size;
             const float right = camera + half_view + sim::DeformableTerrain::macro_tile_size;
@@ -691,14 +690,6 @@ namespace runner
                     | (static_cast<std::uint32_t>(source.g) << 8u)
                     | static_cast<std::uint32_t>(source.b);
                 return rgb(packed);
-            };
-            auto draw_world_cell = [&](float x0, float y0, float x1, float y1,
-                sandhybrid::Material material)
-            {
-                const Vec2 minimum = world_to_screen({ x0, y0 }, viewport, camera, scale);
-                const Vec2 maximum = world_to_screen({ x1, y1 }, viewport, camera, scale);
-                canvas.quad({ minimum.x, maximum.y }, { maximum.x, minimum.y },
-                    material_color(material));
             };
             auto draw_world_color = [&](float x0, float y0, float x1, float y1,
                 Color color)
@@ -731,97 +722,35 @@ namespace runner
                 return;
             }
 
-            const float progress = environment.course_progress();
-            const float source_left = sim::terrain_sample_x(left, progress);
-            const float source_right = sim::terrain_sample_x(right, progress);
             const float surface_step = sim::DeformableTerrain::fine_cell_spacing;
             const float first_surface_x = std::floor(left / surface_step) * surface_step;
             const float viewport_bottom = viewport.position.y + viewport.size.y;
             for (float x = first_surface_x; x < right; x += surface_step)
             {
                 const float next_x = x + surface_step;
+                const float ground_a = environment.ground_height_at(x);
+                const float ground_b = environment.ground_height_at(next_x);
                 const Vec2 surface_a = world_to_screen(
-                    { x, environment.ground_height_at(x) }, viewport, camera, scale);
+                    { x, ground_a }, viewport, camera, scale);
                 const Vec2 surface_b = world_to_screen(
-                    { next_x, environment.ground_height_at(next_x) }, viewport, camera, scale);
+                    { next_x, ground_b }, viewport, camera, scale);
                 const Vec2 bottom_a{ surface_a.x, viewport_bottom };
                 const Vec2 bottom_b{ surface_b.x, viewport_bottom };
                 canvas.triangle(surface_a, surface_b, bottom_b, rgb(0x4d392c));
                 canvas.triangle(surface_a, bottom_b, bottom_a, rgb(0x4d392c));
-            }
-            const int first_source_macro = static_cast<int>(std::floor(
-                source_left / sim::DeformableTerrain::macro_tile_size));
-            const int last_source_macro = static_cast<int>(std::ceil(
-                source_right / sim::DeformableTerrain::macro_tile_size));
 
-            for (int source_macro = first_source_macro;
-                source_macro <= last_source_macro; ++source_macro)
-            {
-                const auto wrapped_macro = static_cast<std::size_t>((
-                    source_macro % static_cast<int>(sim::DeformableTerrain::macro_columns)
-                    + static_cast<int>(sim::DeformableTerrain::macro_columns))
-                    % static_cast<int>(sim::DeformableTerrain::macro_columns));
-                const float source_macro_x0 = static_cast<float>(source_macro)
-                    * sim::DeformableTerrain::macro_tile_size;
-                const float macro_x0 = sim::terrain_world_x(source_macro_x0, progress);
-                for (std::size_t macro_y = 0;
-                    macro_y < sim::DeformableTerrain::macro_rows; ++macro_y)
-                {
-                    const sim::DeformableTerrain::MacroTile& tile =
-                        terrain.macro_tile(wrapped_macro, macro_y);
-                    if (tile.occupied_mask == 0u)
-                        continue;
-                    const float macro_y0 = sim::DeformableTerrain::world_bottom
-                        + static_cast<float>(macro_y)
-                            * sim::DeformableTerrain::macro_tile_size;
-                    const float macro_y1 = macro_y0
-                        + sim::DeformableTerrain::macro_tile_size;
-                    bool near_surface = false;
-                    for (std::size_t local_x = 0;
-                        local_x < sim::DeformableTerrain::macro_cell_side; ++local_x)
-                    {
-                        const float sample_x = macro_x0
-                            + (static_cast<float>(local_x) + 0.5f)
-                                * sim::DeformableTerrain::fine_cell_spacing;
-                        if (macro_y1 >= environment.ground_height_at(sample_x)
-                            - sim::DeformableTerrain::fine_cell_spacing * 3.0f)
-                        {
-                            near_surface = true;
-                            break;
-                        }
-                    }
-                    if (tile.macro_ready && !tile.active && !near_surface)
-                        continue;
-
-                    for (std::size_t local_y = 0;
-                        local_y < sim::DeformableTerrain::macro_cell_side; ++local_y)
-                    {
-                        for (std::size_t local_x = 0;
-                            local_x < sim::DeformableTerrain::macro_cell_side; ++local_x)
-                        {
-                            const std::size_t fine_x = wrapped_macro
-                                * sim::DeformableTerrain::macro_cell_side + local_x;
-                            const std::size_t fine_y = macro_y
-                                * sim::DeformableTerrain::macro_cell_side + local_y;
-                            const sim::DeformableTerrain::FineCell& cell =
-                                terrain.fine_cell(fine_x, fine_y);
-                            if (!cell.occupied())
-                                continue;
-                            const float x0 = macro_x0 + static_cast<float>(local_x)
-                                * sim::DeformableTerrain::fine_cell_spacing;
-                            const float y0 = sim::DeformableTerrain::row_world_bottom(fine_y);
-                            const float visible_surface = environment.ground_height_at(
-                                x0 + sim::DeformableTerrain::fine_cell_spacing * 0.5f);
-                            if (y0 + sim::DeformableTerrain::fine_cell_spacing
-                                < visible_surface - 0.95f)
-                                continue;
-                            draw_world_cell(x0, y0,
-                                x0 + sim::DeformableTerrain::fine_cell_spacing,
-                                y0 + sim::DeformableTerrain::fine_cell_spacing * cell.fill,
-                                cell.material());
-                        }
-                    }
-                }
+                // The visible material band is clipped to the exact sampled
+                // collision surface. Raw fine-cell bottoms never render.
+                const float band_depth = 0.92f;
+                const Vec2 band_a = world_to_screen(
+                    { x, ground_a - band_depth }, viewport, camera, scale);
+                const Vec2 band_b = world_to_screen(
+                    { next_x, ground_b - band_depth }, viewport, camera, scale);
+                const Color band_color = material_color(
+                    environment.terrain_surface_material_at(
+                        x + surface_step * 0.5f));
+                canvas.triangle(surface_a, surface_b, band_b, band_color);
+                canvas.triangle(surface_a, band_b, band_a, band_color);
             }
 
             for (float x = first_surface_x; x < right; x += surface_step)
@@ -1042,10 +971,85 @@ namespace runner
             {
                 return mask == 0x1u ? -1 : mask == 0x2u ? 1 : 0;
             };
+            std::vector<int> presentation_side(particles.size(), 0);
+            for (std::size_t index = 0; index < particles.size(); ++index)
+                presentation_side[index] = branch_side(rig.node_support_mask(index));
+            std::vector<std::size_t> manipulator_shoulders{};
+            manipulator_shoulders.reserve(rig.active_motor_count);
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+            {
+                const sim::MotorConstraint& shoulder = rig.motors[index];
+                if (!shoulder.enabled || rig.support_branch_mask(shoulder) != 0u
+                    || shoulder.a != rig.torso_node
+                    || shoulder.pivot >= particles.size()
+                    || shoulder.c >= particles.size())
+                    continue;
+                const bool has_distal = std::ranges::any_of(rig.motors,
+                    [&](const sim::MotorConstraint& other)
+                    {
+                        return other.enabled && rig.support_branch_mask(other) == 0u
+                            && other.pivot == shoulder.c;
+                    });
+                if (has_distal)
+                    manipulator_shoulders.push_back(index);
+            }
+            std::ranges::sort(manipulator_shoulders,
+                [&](std::size_t left, std::size_t right)
+                {
+                    return rig.nodes[rig.motors[left].pivot].x
+                        < rig.nodes[rig.motors[right].pivot].x;
+                });
+            for (std::size_t chain = 0;
+                chain < manipulator_shoulders.size(); ++chain)
+            {
+                const int side = (chain & 1u) == 0u ? -1 : 1;
+                const sim::MotorConstraint& shoulder =
+                    rig.motors[manipulator_shoulders[chain]];
+                presentation_side[shoulder.pivot] = side;
+                presentation_side[shoulder.c] = side;
+                for (const sim::MotorConstraint& distal : rig.motors)
+                {
+                    if (distal.enabled && rig.support_branch_mask(distal) == 0u
+                        && distal.pivot == shoulder.c
+                        && distal.c < presentation_side.size())
+                        presentation_side[distal.c] = side;
+                }
+            }
             auto leg_side = [&](std::size_t index) noexcept
             {
-                return branch_side(rig.node_support_mask(index));
+                return index < presentation_side.size()
+                    ? presentation_side[index] : 0;
             };
+            float assembly_torso_span = 48.0f;
+            float assembly_shoulder_span = 0.0f;
+            if (rig.root_node < particles.size() && rig.torso_node < particles.size())
+            {
+                assembly_torso_span = std::max(
+                    12.0f, length(point(rig.torso_node) - point(rig.root_node)));
+                float minimum_shoulder = std::numeric_limits<float>::infinity();
+                float maximum_shoulder = -std::numeric_limits<float>::infinity();
+                const Vec2 assembly_axis = normalized(
+                    point(rig.torso_node) - point(rig.root_node), { 0.0f, -1.0f });
+                const Vec2 assembly_right{ -assembly_axis.y, assembly_axis.x };
+                for (std::size_t motor_index = 0;
+                    motor_index < rig.active_motor_count; ++motor_index)
+                {
+                    const sim::MotorConstraint& motor = rig.motors[motor_index];
+                    if (!motor.enabled || rig.support_branch_mask(motor) != 0u
+                        || motor.a != rig.torso_node || motor.pivot >= particles.size())
+                        continue;
+                    const float shoulder = dot(
+                        point(motor.pivot) - point(rig.torso_node), assembly_right);
+                    minimum_shoulder = std::min(minimum_shoulder, shoulder);
+                    maximum_shoulder = std::max(maximum_shoulder, shoulder);
+                }
+                if (std::isfinite(minimum_shoulder)
+                    && std::isfinite(maximum_shoulder)
+                    && maximum_shoulder > minimum_shoulder)
+                    assembly_shoulder_span = maximum_shoulder - minimum_shoulder;
+            }
+            const float assembled_art_scale = art::assembled_armor_scale(
+                assembly_torso_span, assembly_shoulder_span);
             auto draw_body_segments = [&](int pass)
             {
                 for (const sim::DistanceConstraint& bone : rig.bones)
@@ -1063,27 +1067,24 @@ namespace runner
                         ? rig.radii[bone.a] : 0.15f;
                     const float radius_b = bone.b < rig.radii.size()
                         ? rig.radii[bone.b] : 0.15f;
-                    const float authored_radius = std::max(radius_a, radius_b) * scale;
-                    const Color color = side == 0 ? body
-                        : near ? leg : rgb(0x5f493b);
-                    if (optional_art_enabled)
+
+                    if (!optional_art_enabled)
                     {
-                        // The visual body is a continuous skin assembled from the
-                        // authored topology. Physics bones remain a debug skeleton;
-                        // armor is fitted over this envelope in a separate pass.
-                        const float skin_radius = std::clamp(
-                            authored_radius * (side == 0 ? 0.76f : 0.68f),
-                            6.0f, side == 0 ? 18.0f : 16.0f);
-                        canvas.capsule(point(bone.a), point(bone.b), skin_radius + 2.0f,
-                            rgb(0x26333d, near || side == 0 ? 0.98f : 0.70f), 18);
-                        canvas.capsule(point(bone.a), point(bone.b), skin_radius,
-                            color, 18);
-                    }
-                    else
-                    {
+                        const Color color = side == 0 ? body
+                            : near ? leg : rgb(0x5f493b);
                         const float radius = std::max(0.035f,
                             std::min(radius_a, radius_b) * 0.34f) * scale;
                         canvas.capsule(point(bone.a), point(bone.b), radius, color, 16);
+                    }
+                    else
+                    {
+                        // Authoritative graph bones stay visible beneath authored
+                        // armor; generated body capsules and joint caps stay absent.
+                        const Color bone_color = debug_skeleton_overlay
+                            ? rgb(0x55d7e9, near || side == 0 ? 0.92f : 0.54f)
+                            : rgb(0xb8c7cf, near || side == 0 ? 0.72f : 0.38f);
+                        canvas.line(point(bone.a), point(bone.b),
+                            debug_skeleton_overlay ? 2.0f : 1.35f, bone_color);
                     }
                 }
             };
@@ -1124,17 +1125,23 @@ namespace runner
                     {
                         const Vec2 center = point(index);
                         const Vec2 proximal = point(support_parent(index));
-                        if (optional_art_enabled && optional_foot_art.loaded())
+                        if (optional_art_enabled)
                         {
-                            const float width = std::max(34.0f, scale * 0.78f);
-                            const float height = width
-                                * static_cast<float>(optional_foot_art.height)
-                                / static_cast<float>(optional_foot_art.width);
-                            const art::OrientedArtTransform transform =
-                                art::support_boot_transform(proximal, center, width, height);
-                            draw_oriented_pixel_art(canvas, optional_foot_art,
-                                transform.beginning, transform.ending, transform.thickness,
-                                near || side == 0 ? 1.0f : 0.58f);
+                            if (optional_foot_art.loaded())
+                            {
+                                const float width = std::max(42.0f,
+                                    scale * 0.78f * assembled_art_scale);
+                                const float height = width
+                                    * static_cast<float>(optional_foot_art.height)
+                                    / static_cast<float>(optional_foot_art.width);
+                                const art::OrientedArtTransform transform =
+                                    art::support_boot_transform(
+                                        proximal, center, width, height);
+                                draw_oriented_pixel_art(canvas, optional_foot_art,
+                                    transform.beginning, transform.ending,
+                                    transform.thickness,
+                                    near || side == 0 ? 1.0f : 0.58f);
+                            }
                         }
                         else
                         {
@@ -1148,15 +1155,13 @@ namespace runner
                     }
                     else
                     {
-                        const float visual_radius = index == rig.head_node
-                            ? std::clamp(radius, 9.0f, 18.0f)
-                            : optional_art_enabled
-                                ? std::clamp(radius * 0.72f, 6.0f, 14.0f)
+                        if (!optional_art_enabled)
+                        {
+                            const float visual_radius = index == rig.head_node
+                                ? std::clamp(radius, 9.0f, 18.0f)
                                 : std::clamp(radius * 0.48f, 4.5f, 10.0f);
-                        if (optional_art_enabled)
-                            canvas.circle(point(index), visual_radius + 2.0f,
-                                rgb(0x26333d, near || side == 0 ? 0.98f : 0.70f), 22);
-                        canvas.circle(point(index), visual_radius, color, 22);
+                            canvas.circle(point(index), visual_radius, color, 22);
+                        }
                     }
                     if (show_nodes || debug_skeleton_overlay)
                     {
@@ -1181,7 +1186,8 @@ namespace runner
                         || motor.c >= particles.size())
                         continue;
                     const std::uint8_t support_mask = rig.support_branch_mask(motor);
-                    const int side = branch_side(support_mask);
+                    const int side = support_mask != 0u
+                        ? branch_side(support_mask) : leg_side(motor.c);
                     const bool near = side != 0 && ((side > 0) == right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
@@ -1215,15 +1221,17 @@ namespace runner
                     if (span <= 1.0f)
                         continue;
                     const Vec2 axis = delta / span;
-                    const float overlap = art::skin_envelope_dimensions(
-                        span, 0.0f).joint_overlap;
-                    beginning = beginning - axis * overlap;
-                    ending = ending + axis * overlap;
                     const float thickness_ratio = support_mask != 0u
                         ? (has_distal_motor ? 0.52f : 0.48f)
                         : (has_distal_motor ? 0.72f : 0.62f);
-                    const float thickness = std::clamp(span * thickness_ratio,
-                        18.0f, 56.0f);
+                    const float thickness = std::clamp(
+                        span * thickness_ratio * assembled_art_scale,
+                        23.0f, 74.0f);
+                    const float authored_joint_overlap = std::max(
+                        art::skin_envelope_dimensions(span, 0.0f).joint_overlap,
+                        thickness * (support_mask != 0u ? 0.36f : 0.55f));
+                    beginning = beginning - axis * authored_joint_overlap;
+                    ending = ending + axis * authored_joint_overlap;
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
                         thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
                 }
@@ -1239,9 +1247,9 @@ namespace runner
                 && rig.root_node < particles.size()
                 && rig.torso_node < particles.size())
             {
-                // Assemble one continuous topology-derived body envelope first.
-                // The modular bitmap pieces are decorative armor fitted to that
-                // body; they are never used as the physical bone presentation.
+                // Modular armor is the exclusive presentation. The topology is
+                // used only to fit the authored side-view pieces; procedural body
+                // shapes belong to the explicit skeleton debug view.
                 const Vec2 root = point(rig.root_node);
                 const Vec2 torso = point(rig.torso_node);
                 const Vec2 body_axis = normalized(torso - root, { 0.0f, -1.0f });
@@ -1268,80 +1276,30 @@ namespace runner
                     ? maximum_shoulder - minimum_shoulder : 0.0f;
                 const art::SkinEnvelopeDimensions envelope =
                     art::skin_envelope_dimensions(torso_length, authored_shoulder_span);
-                const float shoulder_center_offset = authored_shoulder_span > 0.0f
-                    ? (minimum_shoulder + maximum_shoulder) * 0.5f : 0.0f;
-                const Vec2 shoulder_center = torso
-                    + body_right * shoulder_center_offset;
-                const Vec2 left_shoulder = shoulder_center
-                    - body_right * (envelope.shoulder_width * 0.5f);
-                const Vec2 right_shoulder = shoulder_center
-                    + body_right * (envelope.shoulder_width * 0.5f);
+
                 const Vec2 chest_bottom = root + body_axis * (torso_length * 0.16f);
                 const Vec2 chest_top = torso - body_axis * (torso_length * 0.08f);
-                const Vec2 pelvis_center = root + body_axis * (torso_length * 0.05f);
-
-                canvas.capsule(pelvis_center
-                        - body_right * envelope.pelvis_half_width,
-                    pelvis_center + body_right * envelope.pelvis_half_width,
-                    std::max(5.0f, envelope.chest_radius * 0.36f) + 2.0f,
-                    rgb(0x26333d, 0.98f), 20);
-                canvas.capsule(pelvis_center
-                        - body_right * envelope.pelvis_half_width,
-                    pelvis_center + body_right * envelope.pelvis_half_width,
-                    std::max(5.0f, envelope.chest_radius * 0.36f),
-                    rgb(0x667884, 0.98f), 20);
-                canvas.capsule(chest_bottom, chest_top,
-                    envelope.chest_radius + 2.5f, rgb(0x26333d, 0.98f), 22);
-                canvas.capsule(chest_bottom, chest_top,
-                    envelope.chest_radius, rgb(0x83939e, 0.98f), 22);
-                canvas.capsule(left_shoulder, right_shoulder,
-                    std::max(5.0f, envelope.chest_radius * 0.31f) + 2.0f,
-                    rgb(0x26333d, 0.98f), 20);
-                canvas.capsule(left_shoulder, right_shoulder,
-                    std::max(5.0f, envelope.chest_radius * 0.31f),
-                    rgb(0x71838f, 0.98f), 20);
-
-                const float shoulder_cap_radius = std::clamp(
-                    envelope.shoulder_width * 0.13f, 7.0f, 15.0f);
-                for (const Vec2 shoulder : { left_shoulder, right_shoulder })
-                {
-                    canvas.circle(shoulder, shoulder_cap_radius + 2.0f,
-                        rgb(0x26333d, 0.98f), 22);
-                    canvas.circle(shoulder, shoulder_cap_radius,
-                        rgb(0x8b99a5, 0.96f), 22);
-                }
 
                 if (optional_torso_art.loaded())
                 {
                     const Vec2 center = (chest_bottom + chest_top) * 0.5f;
-                    const float height = std::clamp(torso_length * 0.90f,
-                        42.0f, 118.0f);
+                    const float height = std::clamp(
+                        torso_length * 1.05f * assembled_art_scale,
+                        60.0f, 172.0f);
                     const float source_width = height
                         * static_cast<float>(optional_torso_art.width)
                         / static_cast<float>(optional_torso_art.height);
-                    const float width = std::clamp(source_width,
-                        envelope.chest_radius * 1.72f,
-                        envelope.shoulder_width * 0.96f);
+                    const float width = std::clamp(
+                        std::max(source_width, envelope.shoulder_width * 1.26f),
+                        envelope.chest_radius * 2.15f,
+                        torso_length * 1.45f);
                     const art::OrientedArtTransform transform =
                         art::oriented_box_transform(center, body_right, width, height);
                     draw_oriented_pixel_art(canvas, optional_torso_art,
                         transform.beginning, transform.ending,
                         transform.thickness, 0.96f);
                 }
-                else
-                {
-                    canvas.capsule(chest_bottom + body_axis * 2.0f,
-                        chest_top - body_axis * 3.0f,
-                        std::max(7.0f, envelope.chest_radius * 0.62f),
-                        rgb(0xaeb9c1, 0.78f), 18);
-                    const Vec2 indicator_center =
-                        chest_bottom + (chest_top - chest_bottom) * 0.55f;
-                    const float indicator_half = std::clamp(
-                        envelope.chest_radius * 0.56f, 6.0f, 14.0f);
-                    canvas.capsule(indicator_center - body_right * indicator_half,
-                        indicator_center + body_right * indicator_half,
-                        3.2f, rgb(0x0ed7e9), 12);
-                }
+
             }
             if (optional_art_enabled && optional_helmet_art.loaded()
                 && rig.head_node < particles.size())
@@ -1353,8 +1311,9 @@ namespace runner
                 else if (rig.root_node < particles.size())
                     head_axis = normalized(center - point(rig.root_node), head_axis);
                 const Vec2 head_right{ -head_axis.y, head_axis.x };
-                const float height = std::max(38.0f,
-                    particles[rig.head_node].radius * scale * 2.55f);
+                const float height = std::max(46.0f,
+                    particles[rig.head_node].radius * scale * 2.55f
+                        * assembled_art_scale);
                 const float width = height
                     * static_cast<float>(optional_helmet_art.width)
                     / static_cast<float>(optional_helmet_art.height);

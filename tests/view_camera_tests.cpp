@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string_view>
 
 namespace
@@ -28,6 +29,14 @@ int main()
 
     require(view_camera::default_pixels_per_meter > 22.0f,
         "default view still uses the overly distant v0.7.15 scale");
+    require(view_camera::minimum_zoom_factor <= 0.28f
+            && view_camera::maximum_zoom_factor >= 3.60f
+            && view_camera::minimum_pixels_per_meter <= 12.0f
+            && view_camera::maximum_pixels_per_meter >= 150.0f,
+        "manual zoom range is still too narrow for contact and long-course inspection");
+    require(close(view_camera::automatic_pixels_per_meter(820.0f, 0.1f),
+            view_camera::automatic_maximum_pixels_per_meter),
+        "expanded manual zoom changed automatic full-body framing");
     require(view_camera::fitted_pixels_per_meter(820.0f, 3.0f, 1.0f)
             >= view_camera::default_pixels_per_meter,
         "automatic rig fit moves farther away than the corrected default");
@@ -47,6 +56,21 @@ int main()
             view_camera::maximum_zoom_factor, 20.0f),
         view_camera::maximum_zoom_factor),
         "wheel zoom escapes the maximum factor");
+    float repeated_out = 1.0f;
+    float repeated_in = 1.0f;
+    for (int step = 0; step < 40; ++step)
+    {
+        repeated_out = view_camera::apply_wheel_zoom(repeated_out, -1.0f);
+        repeated_in = view_camera::apply_wheel_zoom(repeated_in, 1.0f);
+    }
+    require(close(repeated_out, view_camera::minimum_zoom_factor)
+            && close(repeated_in, view_camera::maximum_zoom_factor),
+        "repeated zoom controls do not reach both useful hard boundaries");
+    require(close(view_camera::apply_wheel_zoom(
+                std::numeric_limits<float>::quiet_NaN(), 1.0f), 1.25f)
+            && close(view_camera::apply_wheel_zoom(
+                1.0f, std::numeric_limits<float>::infinity()), 1.0f),
+        "invalid zoom input escapes finite deterministic sanitization");
     require(view_camera::lookahead_meters(900.0f, 42.0f) > 3.0f,
         "camera no longer preserves useful course lookahead");
 

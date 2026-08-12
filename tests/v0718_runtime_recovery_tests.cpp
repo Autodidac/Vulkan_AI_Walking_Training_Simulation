@@ -22,14 +22,25 @@ namespace
 int main()
 {
     using namespace runner;
-    require(rl::stage_minimum_fresh_updates(sim::CourseStage::balance) == 120u,
+    require(rl::stage_minimum_fresh_updates(sim::CourseStage::balance) == 80u,
         "Stand fresh-work gate changed unexpectedly");
     require(!rl::nursery_policy_reset_allowed(sim::CourseStage::balance, 10u, 3u),
         "update-10 policy reset remains possible");
-    require(!rl::nursery_policy_reset_allowed(sim::CourseStage::balance, 120u, 12u),
+    require(!rl::nursery_policy_reset_allowed(sim::CourseStage::balance, 80u, 12u),
         "nursery reset occurs as soon as Stand dwell completes");
-    require(rl::nursery_policy_reset_allowed(sim::CourseStage::balance, 240u, 12u),
+    require(rl::nursery_policy_reset_allowed(sim::CourseStage::balance, 200u, 12u),
         "extended nursery reset can never activate");
+    require(rl::stage_minimum_fresh_updates(sim::CourseStage::duck_press)
+            == rl::crouch_teacher_handoff_update
+            && !rl::stage_fresh_work_complete(sim::CourseStage::duck_press,
+                rl::crouch_teacher_handoff_update - 1u, 4u, 8u)
+            && !rl::stage_fresh_work_complete(sim::CourseStage::duck_press,
+                rl::crouch_teacher_handoff_update, 3u, 8u)
+            && !rl::stage_fresh_work_complete(sim::CourseStage::duck_press,
+                rl::crouch_teacher_handoff_update, 4u, 7u)
+            && rl::stage_fresh_work_complete(sim::CourseStage::duck_press,
+                rl::crouch_teacher_handoff_update, 4u, 8u),
+        "Crouch readiness is late, under-evidenced, or off its exact boundary");
 
     require(ui_layout::course_reference_marker_spacing_m(
             ui_layout::DistanceUnits::metric) == 10.0f,

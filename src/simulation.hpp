@@ -342,6 +342,17 @@ namespace runner::sim
 
     inline constexpr float sustained_scissor_limit_seconds = 0.34f;
 
+    [[nodiscard]] inline bool awkward_paired_passing_pose(
+        float knee_span, float foot_span, float leg_length) noexcept
+    {
+        if (!std::isfinite(knee_span) || !std::isfinite(foot_span)
+            || !std::isfinite(leg_length) || leg_length <= 0.01f)
+            return false;
+        const float knee_ratio = std::abs(knee_span) / leg_length;
+        const float foot_ratio = std::abs(foot_span) / leg_length;
+        return knee_ratio > 0.52f && foot_ratio < 0.12f;
+    }
+
     [[nodiscard]] inline float lower_leg_scissor_shaping_penalty(
         bool forward_gait, bool paired_legs, float contiguous_seconds) noexcept
     {

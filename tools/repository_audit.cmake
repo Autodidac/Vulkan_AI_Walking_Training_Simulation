@@ -266,7 +266,7 @@ foreach(reference IN ITEMS
         "draw_body_segments"
         "draw_fitted_armor"
         "SkinEnvelopeDimensions"
-        "shoulder_cap_radius"
+        "Modular armor is the exclusive presentation"
         "draw_oriented_pixel_art"
         "optional_upper_arm_art"
         "optional_forearm_art"
@@ -277,6 +277,10 @@ foreach(reference IN ITEMS
         message(FATAL_ERROR "v0.7.28 application contract missing: ${reference}")
     endif()
 endforeach()
+string(FIND "${app_text}" "shoulder_cap_radius" legacy_shoulder_cap_pos)
+if(NOT legacy_shoulder_cap_pos EQUAL -1)
+    message(FATAL_ERROR "procedural shoulder-cap presentation remains under modular armor")
+endif()
 file(READ "${RUNNER_SOURCE_DIR}/src/renderer.hpp" renderer_header_text)
 string(FIND "${renderer_header_text}" "maximum_frame_vertex_bytes" art_budget_pos)
 if(art_budget_pos EQUAL -1)

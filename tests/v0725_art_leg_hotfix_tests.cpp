@@ -222,10 +222,11 @@ int main()
                 != std::string::npos
                 && app.find("art::oriented_box_transform(center, body_right")
                     != std::string::npos
-                && app.find("std::clamp(torso_length * 0.90f")
+                && app.find("torso_length * 1.05f * assembled_art_scale")
                     != std::string::npos
-                && app.find("envelope.shoulder_width * 0.96f")
-                    != std::string::npos,
+                && app.find("envelope.shoulder_width * 1.26f")
+                    != std::string::npos
+                && app.find("assembled_art_scale") != std::string::npos,
             "bounded oriented torso component is missing or unbounded");
         require(app.find("draw_body_segments") != std::string::npos
                 && app.find("draw_fitted_armor") != std::string::npos
@@ -235,8 +236,9 @@ int main()
             "approved helmet art was removed");
         require(app.find("optional_foot_art.loaded()") != std::string::npos,
             "approved foot art was removed");
-        require(app.find("shoulder_cap_radius") != std::string::npos,
-            "compact shoulder caps are not bounded explicitly");
+        require(app.find("shoulder_cap_radius") == std::string::npos
+                && app.find("pelvis_center") == std::string::npos,
+            "procedural shoulder/pelvis presentation still duplicates modular armor");
         require(app.find("ui_font_scale") == std::string::npos,
             "legacy bitmap-cell font multiplier remains in the renderer");
         require(app.find("font::make_bitmap_font_metrics") != std::string::npos,
