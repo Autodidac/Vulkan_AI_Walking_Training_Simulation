@@ -83,7 +83,7 @@ namespace runner::diagnostics
     {
         const bool paired_legs = blueprint.paired_leg_chains();
         return result.retained_policy
-            && result.retained_quality != 0u
+            && rl::strict_evaluation_quality(result.retained_quality)
             && result.teacher_authority == 0.0f
             && result.retained_update
                 >= rl::foundational_walk_teacher_handoff_update(blueprint)

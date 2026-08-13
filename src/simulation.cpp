@@ -936,7 +936,7 @@ namespace runner::sim
             : 6.0f + static_cast<float>((random_state_ >> 8u) % 3u) * 4.0f;
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
-        equipment_target_.position.x = root_x + target_distance;
+        equipment_target_.position.x = root_x + target_distance * facing_direction();
         equipment_target_.position.y = ground_height_at(equipment_target_.position.x)
             + 0.85f + static_cast<float>((random_state_ >> 16u) % 4u) * 0.42f;
         equipment_target_.radius = 0.28f + course_difficulty_ * 0.08f;
@@ -980,8 +980,9 @@ namespace runner::sim
                 transition(EquipmentState::safe_carry);
         }
 
-        equipment_aim_angle_ = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
-            * (pi * 0.42f);
+        const float facing_angle = facing_direction() < 0.0f ? pi : 0.0f;
+        equipment_aim_angle_ = wrap_angle(facing_angle
+            + clamp(actions[equipment_aim_action], -1.0f, 1.0f) * (pi * 0.42f));
         if ((equipment_state_ == EquipmentState::dropped
                 || equipment_state_ == EquipmentState::disarmed)
             && weapon_class_ != WeaponClass::none)
@@ -1036,7 +1037,7 @@ namespace runner::sim
                 const float distance = 6.0f
                     + static_cast<float>((equipment_target_.sequence
                         + static_cast<std::uint32_t>(random_state_)) % 4u) * 3.0f;
-                equipment_target_.position.x = root_x + distance;
+                equipment_target_.position.x = root_x + distance * facing_direction();
                 equipment_target_.position.y =
                     ground_height_at(equipment_target_.position.x)
                     + 0.75f + static_cast<float>(
@@ -1326,14 +1327,50 @@ namespace runner::sim
         previous_burial_depth_ = prior_burial;
     }
 
+    void Environment::update_shuttle(float root_x, float root_speed, float dt) noexcept
+    {
+        if (!shuttle_enabled())
+        {
+            shuttle_state_ = {};
+            return;
+        }
+        const ShuttlePhase prior_phase = shuttle_state_.phase;
+        const std::uint32_t prior_turns = shuttle_state_.completed_turns;
+        shuttle_state_ = advance_shuttle_state(
+            shuttle_state_, root_x, dt, root_speed);
+        if (shuttle_state_.phase != prior_phase)
+        {
+            progress_window_seconds_ = 0.0f;
+            progress_window_start_x_ = root_x;
+            progress_window_start_steps_ = alternating_steps_;
+            action_energy_window_ = 0.0f;
+            root_path_window_ = 0.0f;
+            if (valid_node(blueprint_.root_node))
+                previous_root_for_path_ = particles_[blueprint_.root_node].position;
+            micro_motion_seconds_ = 0.0f;
+            zero_progress_seconds_ = 0.0f;
+            foot_pivot_rolling_seconds_ = 0.0f;
+        }
+        if (shuttle_state_.completed_turns != prior_turns
+            && equipment_target_.active)
+        {
+            const float target_distance = equipment_override_
+                ? configured_target_distance_ : 8.0f;
+            equipment_target_.position.x = root_x
+                + target_distance * shuttle_state_.facing_direction;
+            equipment_target_.position.y =
+                ground_height_at(equipment_target_.position.x) + 1.20f;
+        }
+    }
+
     void Environment::rebuild_course_features() noexcept
     {
         course_features_.clear();
-        // Walk / Run teaches gait over the physical material course. Authored
-        // rocks, bars, and projectiles begin only in prerequisite-gated lessons.
-        if (course_stage_ == CourseStage::uneven)
-            return;
+        // Preview locomotion uses a finite physical shuttle. Obstacles are
+        // regenerated only ahead of a proven gait and are absent while backing
+        // or turning, so completed challenges never linger behind the rig.
         if (course_stage_ != CourseStage::duck_press
+            && course_stage_ != CourseStage::uneven
             && course_stage_ != CourseStage::crouch_walk
             && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards
@@ -1345,6 +1382,81 @@ namespace runner::sim
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float progress = course_progress();
+        if (shuttle_enabled())
+        {
+            const bool dynamic_ready = shuttle_dynamic_course_ready(
+                shuttle_state_.completed_turns, gait_cycles(),
+                longest_stable_stance_seconds_);
+            if (shuttle_state_.phase != ShuttlePhase::traverse
+                || (course_stage_ == CourseStage::uneven && !dynamic_ready))
+                return;
+
+            const float direction = shuttle_state_.locomotion_direction;
+            const std::array<float, 2> stations = direction > 0.0f
+                ? std::array<float, 2>{ 2.0f, 6.0f }
+                : std::array<float, 2>{ 6.0f, 2.0f };
+            for (std::size_t slot = 0; slot < stations.size(); ++slot)
+            {
+                const float x = stations[slot];
+                const float ahead = (x - root_x) * direction;
+                if (ahead < 3.2f)
+                    continue;
+                const float ground = ground_height_at(x);
+                CourseFeatureKind kind = CourseFeatureKind::rock;
+                if (course_stage_ == CourseStage::uneven)
+                    kind = slot == 0u ? CourseFeatureKind::rock
+                        : CourseFeatureKind::hurdle;
+                else if (course_stage_ == CourseStage::crouch_walk)
+                    kind = slot == 0u ? CourseFeatureKind::overhead_bar
+                        : CourseFeatureKind::rock;
+                else if (course_stage_ == CourseStage::hurdles)
+                    kind = slot == 0u ? CourseFeatureKind::hurdle
+                        : CourseFeatureKind::overhead_bar;
+                else if (course_stage_ == CourseStage::moving_hazards
+                    || course_stage_ == CourseStage::combat_course)
+                    kind = slot == 0u ? CourseFeatureKind::moving_hazard
+                        : CourseFeatureKind::projectile;
+
+                const int sequence = 10'000
+                    + static_cast<int>(shuttle_state_.completed_turns * 8u + slot);
+                if (kind == CourseFeatureKind::rock)
+                {
+                    const float radius = 0.18f + course_difficulty_ * 0.09f;
+                    course_features_.push_back({
+                        kind, { x, ground + radius }, {}, radius, {}, sequence });
+                }
+                else if (kind == CourseFeatureKind::hurdle)
+                {
+                    const float height = 0.26f + course_difficulty_ * 0.28f;
+                    course_features_.push_back({
+                        kind, { x, ground + height * 0.5f },
+                        { 0.14f, height * 0.5f }, 0.0f, {}, sequence });
+                }
+                else if (kind == CourseFeatureKind::overhead_bar)
+                {
+                    const float clearance = 3.42f - course_difficulty_ * 0.55f;
+                    course_features_.push_back({
+                        kind, { x, ground + clearance + 0.12f },
+                        { 0.95f, 0.12f }, 0.0f, {}, sequence });
+                }
+                else
+                {
+                    const float oscillation = std::sin(
+                        elapsed_seconds_ * 1.8f + static_cast<float>(sequence));
+                    const float radius = kind == CourseFeatureKind::projectile
+                        ? 0.16f : 0.22f;
+                    course_features_.push_back({
+                        kind,
+                        { x + oscillation * 0.42f,
+                            ground + 1.05f + oscillation * 0.30f },
+                        {}, radius,
+                        { oscillation * 0.28f, 0.0f }, sequence });
+                }
+            }
+            return;
+        }
+        if (course_stage_ == CourseStage::uneven)
+            return;
         if (course_stage_ == CourseStage::duck_press)
         {
             const float rest_head_top = valid_node(blueprint_.head_node)
@@ -1628,6 +1740,8 @@ namespace runner::sim
         }
         elapsed_seconds_ = 0.0f;
         distance_travelled_ = 0.0f;
+        shuttle_distance_travelled_ = 0.0f;
+        shuttle_state_ = {};
         forward_speed_ = course_speed();
         last_reward_ = 0.0f;
         fallen_ = false;
@@ -2353,8 +2467,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 if (node == left_knee || node == right_knee)
                 {
                     target.y -= requested_drop * 0.48f;
-                    const float direction = node == left_knee ? -1.0f : 1.0f;
-                    target.x += direction * requested_drop * 0.18f;
+                    // Both knees flex toward the current facing direction in a
+                    // sagittal side view. Opposing knee signs created the crab
+                    // stance even though the support semantics were correct.
+                    target.x += facing_direction() * requested_drop * 0.22f;
                 }
                 else if (node == left_ankle || node == right_ankle)
                 {
@@ -2857,10 +2973,13 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         {
             const MotorConstraint& left_knee = blueprint_.motors[1];
             const MotorConstraint& right_knee = blueprint_.motors[3];
-            evidence.left_knee_flex = std::max(0.0f, wrap_angle(
+            // Flexion evidence is a magnitude in the local joint frame. The old
+            // left-positive/right-negative convention encoded a single mirrored
+            // rest drawing and rejected the same-facing sagittal crouch.
+            evidence.left_knee_flex = std::abs(wrap_angle(
                 joint_angle(left_knee) - left_knee.neutral_angle));
-            evidence.right_knee_flex = std::max(0.0f, wrap_angle(
-                right_knee.neutral_angle - joint_angle(right_knee)));
+            evidence.right_knee_flex = std::abs(wrap_angle(
+                joint_angle(right_knee) - right_knee.neutral_angle));
         }
         else
         {
@@ -2970,6 +3089,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
     {
         constexpr std::array<std::size_t, 2> knee_motors{ 1u, 3u };
         constexpr std::array<bool, 2> left_side{ true, false };
+        const float requested = locomotion_direction();
+        const float direction = std::abs(requested) >= 0.5f
+            ? (requested < 0.0f ? -1.0f : 1.0f)
+            : (facing_direction() < 0.0f ? -1.0f : 1.0f);
         for (std::size_t side = 0; side < knee_motors.size(); ++side)
         {
             const MotorConstraint& knee_motor = blueprint_.motors[knee_motors[side]];
@@ -2977,13 +3100,26 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 continue;
             const std::uint16_t foot = left_side[side]
                 ? blueprint_.left_contact_node : blueprint_.right_contact_node;
-            const float knee_front = particles_[knee_motor.pivot].position.x
-                + particles_[knee_motor.pivot].radius;
-            const float foot_front = contact_cluster_front_x(foot);
+            const Particle& knee = particles_[knee_motor.pivot];
+            const float knee_front = (knee.position.x
+                + knee.radius * direction) * direction;
+            float foot_front = -std::numeric_limits<float>::infinity();
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+            {
+                if (!contact_cluster_contains(foot, index))
+                    continue;
+                const Particle& item = particles_[index];
+                foot_front = std::max(foot_front,
+                    (item.position.x + item.radius * direction) * direction);
+            }
             const float foot_top = contact_cluster_top_y(foot);
             for (const CourseFeature& feature : course_features_)
             {
-                if (knee_crosses_before_foot(knee_front, foot_front, foot_top, feature))
+                CourseFeature oriented = feature;
+                oriented.center.x *= direction;
+                oriented.velocity.x *= direction;
+                if (knee_crosses_before_foot(
+                        knee_front, foot_front, foot_top, oriented))
                     return true;
             }
         }
@@ -3612,9 +3748,12 @@ step_not_qualified:
                     + particles_[blueprint_.head_node].radius
                 : bar_bottom;
             const float clearance = bar_bottom - head_top;
+            const float travel_direction = std::abs(locomotion_direction()) >= 0.5f
+                ? locomotion_direction() : facing_direction();
             const float weight = feature.kind == CourseFeatureKind::duck_press
                 ? clamp((1.10f - clearance) / 1.10f, 0.0f, 1.0f)
-                : duck_obstacle_approach_weight(feature.center.x - root_x);
+                : duck_obstacle_approach_weight(
+                    (feature.center.x - root_x) * travel_direction);
             if (weight <= duck_obstacle_weight_)
                 continue;
             duck_obstacle_weight_ = weight;
@@ -3951,7 +4090,11 @@ step_not_qualified:
                 invalidate(InvalidMotion::body_rolling);
         }
 
-        const bool locomotion_required = stage_requires_forward_gait(course_stage_);
+        const bool intentional_shuttle_hold = shuttle_enabled()
+            && (shuttle_state_.phase == ShuttlePhase::braking
+                || shuttle_state_.phase == ShuttlePhase::turning);
+        const bool locomotion_required = stage_requires_forward_gait(course_stage_)
+            && !intentional_shuttle_hold;
         const float recent_swing_clearance = std::max(left_clearance, right_clearance);
         if (locomotion_required && friction_driven_shuffle(root_speed,
                 left, right, stance_slip_speed_, gait_cycles(), recent_swing_clearance))
@@ -3962,13 +4105,15 @@ step_not_qualified:
         // It is never a hard invalidation. Pure friction-driven shuffling simply
         // receives no gait credit and a mild shaping penalty until a real cycle occurs.
 
+        const float gait_direction = std::abs(locomotion_direction()) >= 0.5f
+            ? locomotion_direction() : facing_direction();
         float nearest_hazard_dx = std::numeric_limits<float>::infinity();
         float nearest_hazard_target = 0.20f;
         for (const CourseFeature& feature : course_features_)
         {
             if (!ground_clearance_hazard(feature.kind))
                 continue;
-            const float dx = feature.center.x - root_x;
+            const float dx = (feature.center.x - root_x) * gait_direction;
             if (dx < nearest_hazard_dx && dx >= -0.35f)
             {
                 nearest_hazard_dx = dx;
@@ -3988,9 +4133,10 @@ step_not_qualified:
         {
             if (feature.kind == CourseFeatureKind::duck_press)
                 continue;
-            const float trailing_edge = feature.center.x + course_feature_half_width(feature);
-            if (trailing_edge < root_x - 0.10f)
-                highest_passed_sequence = std::max(highest_passed_sequence, feature.marker_sequence);
+            const float passed_distance = (root_x - feature.center.x) * gait_direction;
+            if (passed_distance > course_feature_half_width(feature) + 0.10f)
+                highest_passed_sequence = std::max(
+                    highest_passed_sequence, feature.marker_sequence);
         }
         if (highest_passed_sequence > last_passed_feature_sequence_)
         {
@@ -4001,7 +4147,7 @@ step_not_qualified:
         const std::size_t lifted_supports = support_seed_lifted_count(0.085f);
         const bool recent_support_transfer = elapsed_seconds_
             - last_support_transfer_seconds_ <= 0.90f;
-        if (stage_requires_forward_gait(course_stage_) && foot_pivot_rolling_motion(root_speed,
+        if (locomotion_required && foot_pivot_rolling_motion(root_speed,
             left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_,
             blueprint_.support_seed_count(), lifted_supports, recent_support_transfer))
             foot_pivot_rolling_seconds_ += dt;
@@ -4186,19 +4332,24 @@ step_not_qualified:
         collision_contact_active_ = collided_this_step_;
 
         elapsed_seconds_ += dt;
+        const float step_direction = locomotion_direction();
         const Vec2 pelvis_position = particles_[blueprint_.root_node].position;
         const float world_displacement = pelvis_position.x - previous_pelvis_.x;
         const float raw_world_speed = world_displacement / dt;
-        const float odometer_progress = accepted_forward_odometer_progress(
-            world_displacement, dt);
+        const float odometer_progress = accepted_directed_odometer_progress(
+            world_displacement, dt, step_direction);
         const float moving_course_speed = course_speed();
         const float raw_speed = raw_world_speed + moving_course_speed;
         forward_speed_ = lerp(forward_speed_, raw_speed, 0.18f);
         const float frame_progress = terrain_relative_frame_progress(
             pelvis_position.x, previous_pelvis_.x, moving_course_speed, dt);
         previous_pelvis_ = pelvis_position;
-        distance_travelled_ = terrain_relative_distance(pelvis_position.x,
-            blueprint_.nodes[blueprint_.root_node].x, course_progress());
+        if (shuttle_enabled())
+            shuttle_distance_travelled_ += odometer_progress;
+        update_shuttle(pelvis_position.x, raw_world_speed, dt);
+        distance_travelled_ = shuttle_enabled() ? shuttle_distance_travelled_
+            : terrain_relative_distance(pelvis_position.x,
+                blueprint_.nodes[blueprint_.root_node].x, course_progress());
         maximum_speed_kmh_ = std::max(maximum_speed_kmh_, std::max(std::abs(raw_speed), std::abs(forward_speed_)) * 3.6f);
 
         float action_energy = 0.0f;
@@ -4224,17 +4375,20 @@ step_not_qualified:
         fallen_ = geometric_fall;
 
         locomotion::Signals motion_signals{};
+        const float step_lookahead_direction = std::abs(step_direction) >= 0.5f
+            ? step_direction : facing_direction();
         motion_signals.uprightness = upright;
         motion_signals.root_x = pelvis_position.x;
         motion_signals.left_support_x = particles_[blueprint_.left_contact_node].position.x;
         motion_signals.right_support_x = particles_[blueprint_.right_contact_node].position.x;
         motion_signals.left_supported = contact_supported(blueprint_.left_contact_node);
         motion_signals.right_supported = contact_supported(blueprint_.right_contact_node);
-        motion_signals.near_rise = ground_height_at(pelvis_position.x + 0.65f) - local_ground;
-        motion_signals.mid_rise = ground_height_at(pelvis_position.x + 1.50f) - local_ground;
-        motion_signals.far_rise = ground_height_at(pelvis_position.x + 3.00f) - local_ground;
+        motion_signals.near_rise = ground_height_at(pelvis_position.x + 0.65f * step_lookahead_direction) - local_ground;
+        motion_signals.mid_rise = ground_height_at(pelvis_position.x + 1.50f * step_lookahead_direction) - local_ground;
+        motion_signals.far_rise = ground_height_at(pelvis_position.x + 3.00f * step_lookahead_direction) - local_ground;
         motion_signals.slope = terrain_.slope_at(
-            terrain_sample_x(pelvis_position.x, course_progress()));
+            terrain_sample_x(pelvis_position.x, course_progress()))
+            * step_lookahead_direction;
         motion_signals.forward_speed = forward_speed_;
         motion_signals.recovering = recovery_active_;
         motion_signals.non_foot_grounded = non_foot_grounded_;
@@ -4245,6 +4399,9 @@ step_not_qualified:
         motion_signals.incoming_time_to_impact = incoming_time_to_impact_;
         motion_signals.incoming_density = incoming_material_density_;
         motion_signals.gait_cycles = gait_cycles();
+        motion_signals.requested_direction = step_direction;
+        motion_signals.turning = shuttle_enabled()
+            && shuttle_state_.phase == ShuttlePhase::turning;
         for (const CourseFeature& feature : course_features_)
         {
             if (feature.kind != CourseFeatureKind::moving_hazard
@@ -4699,18 +4856,21 @@ step_not_qualified:
         result[24] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
         result[25] = non_foot_grounded_ ? -1.0f
             : recovery_active_ ? clamp(torso.y, -1.0f, 1.0f) : 1.0f;
-        result[26] = clamp(ground_height_at(root.x + 0.65f) - ground_height_at(root.x),
-            -1.0f, 1.0f);
-        result[27] = clamp(ground_height_at(root.x + 1.50f) - ground_height_at(root.x),
-            -1.0f, 1.0f);
-        result[28] = clamp(ground_height_at(root.x + 3.00f) - ground_height_at(root.x),
-            -1.0f, 1.0f);
+        const float requested_direction = locomotion_direction();
+        const float lookahead_direction = std::abs(requested_direction) >= 0.5f
+            ? requested_direction : facing_direction();
+        result[26] = clamp(ground_height_at(root.x + 0.65f * lookahead_direction)
+            - ground_height_at(root.x), -1.0f, 1.0f);
+        result[27] = clamp(ground_height_at(root.x + 1.50f * lookahead_direction)
+            - ground_height_at(root.x), -1.0f, 1.0f);
+        result[28] = clamp(ground_height_at(root.x + 3.00f * lookahead_direction)
+            - ground_height_at(root.x), -1.0f, 1.0f);
 
         const CourseFeature* nearest = nullptr;
         float nearest_dx = std::numeric_limits<float>::max();
         for (const CourseFeature& feature : course_features_)
         {
-            const float dx = feature.center.x - root.x;
+            const float dx = (feature.center.x - root.x) * lookahead_direction;
             if (dx >= -0.3f && dx < nearest_dx)
             {
                 nearest_dx = dx;
@@ -4732,7 +4892,7 @@ step_not_qualified:
             }
             result[31] = clamp((nearest->center.y - root.y) / 4.0f, -2.0f, 2.0f);
             result[32] = course_feature_observation_size(*nearest);
-            result[33] = clamp(nearest->velocity.x / 5.0f, -1.0f, 1.0f);
+            result[33] = clamp(nearest->velocity.x * lookahead_direction / 5.0f, -1.0f, 1.0f);
         }
         result[34] = airborne_ratio();
         result[35] = clamp(static_cast<float>(alternating_steps_) / 10.0f, 0.0f, 2.0f);
@@ -4746,13 +4906,14 @@ step_not_qualified:
         result[40] = terrain_firmness_;
         result[41] = terrain_looseness_;
         result[42] = clamp(burial_depth_ / 0.80f, 0.0f, 2.0f);
-        result[43] = free_space_direction_;
+        result[43] = shuttle_enabled() ? requested_direction : free_space_direction_;
         result[44] = clamp(incoming_material_velocity_.x / 6.0f, -2.0f, 2.0f);
         result[45] = clamp(incoming_material_velocity_.y / 6.0f, -2.0f, 2.0f);
         result[46] = clamp(incoming_time_to_impact_ / 4.0f, 0.0f, 2.5f);
         result[47] = clamp(incoming_material_density_, 0.0f, 1.0f);
         result[48] = static_cast<float>(obstruction_mask_) / 7.0f;
-        result[49] = clamp(terrain_.slope_at(root.x + course_progress()), -2.0f, 2.0f);
+        result[49] = clamp(terrain_.slope_at(root.x + course_progress())
+            * lookahead_direction, -2.0f, 2.0f);
         result[50] = clamp(water_depth_ / 0.80f, 0.0f, 2.0f);
         result[51] = clamp(water_submersion_, 0.0f, 1.0f);
         result[52] = static_cast<float>(terrain_region_at(root.x))

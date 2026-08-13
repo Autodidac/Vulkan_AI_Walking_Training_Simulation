@@ -20,6 +20,23 @@
 
 namespace runner::rl
 {
+    enum class RigOptimizationMode : std::uint8_t
+    {
+        control_optimize,
+        morphology_evolve
+    };
+
+    [[nodiscard]] constexpr std::string_view rig_optimization_mode_name(
+        RigOptimizationMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case RigOptimizationMode::control_optimize: return "CONTROL OPTIMIZE";
+        case RigOptimizationMode::morphology_evolve: return "MORPHOLOGY EVOLVE";
+        }
+        return "CONTROL OPTIMIZE";
+    }
+
     inline constexpr int mastery_lock_confirmations = 8;
     inline constexpr int balance_mastery_lock_confirmations = 3;
     inline constexpr std::uint32_t balance_mastery_invalid_seed_limit = 1u;
@@ -114,6 +131,7 @@ namespace runner::rl
         std::uint64_t rig_generation{};
         std::uint64_t accepted_rig_changes{};
         std::uint64_t rejected_rig_changes{};
+        RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
         int mastery_streak{};
         int rollback_count{};
         std::size_t rollout_threads{ 1 };
@@ -161,6 +179,11 @@ namespace runner::rl
         const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept;
     [[nodiscard]] RigMutationCandidate automatic_rig_tuning_candidate(
         const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept;
+    [[nodiscard]] RigMutationCandidate rig_optimization_candidate(
+        RigOptimizationMode mode, const sim::CreatureBlueprint& source,
+        std::uint64_t generation) noexcept;
+    [[nodiscard]] float rig_complexity_cost(
+        const sim::CreatureBlueprint& blueprint) noexcept;
 
     class AutonomousTrainer
     {
@@ -181,6 +204,7 @@ namespace runner::rl
         [[nodiscard]] bool load_autosave(std::string& message);
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
+        void set_rig_optimization_mode(RigOptimizationMode mode) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
         void train_one_update() noexcept;
@@ -224,6 +248,7 @@ namespace runner::rl
             set_blueprint,
             reset_policy,
             set_exploration,
+            set_optimization_mode,
             restore_best,
             save_checkpoint,
             apply_checkpoint,
@@ -237,6 +262,7 @@ namespace runner::rl
             bool preserve_policy{};
             std::uint64_t seed{};
             float scalar{};
+            RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
             std::filesystem::path path{};
             std::shared_ptr<PpoTrainer::CheckpointData> checkpoint{};
             bool transfer_only{};
@@ -360,6 +386,7 @@ namespace runner::rl
             std::uint64_t accepted_rig_changes{};
             std::uint64_t rejected_rig_changes{};
             int rollback_count{};
+            RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
         };
 
         mutable std::mutex persistence_mutex_{};
@@ -393,6 +420,7 @@ namespace runner::rl
         std::uint64_t rig_generation_{};
         std::uint64_t accepted_rig_changes_{};
         std::uint64_t rejected_rig_changes_{};
+        RigOptimizationMode optimization_mode_{ RigOptimizationMode::control_optimize };
         std::uint64_t last_evaluation_count_{};
         std::uint64_t last_saved_best_update_{};
         std::uint64_t stage_entry_total_updates_{};

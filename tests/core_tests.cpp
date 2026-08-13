@@ -632,6 +632,15 @@ namespace
             && write_v0727_vector(output, data.reward_history)
             && write_v0727_vector(output, data.speed_history);
     }
+    bool rewrite_checkpoint_magic(const std::filesystem::path& path,
+        const std::array<char, 8>& magic)
+    {
+        std::fstream stream(path, std::ios::binary | std::ios::in | std::ios::out);
+        if (!stream)
+            return false;
+        stream.write(magic.data(), static_cast<std::streamsize>(magic.size()));
+        return static_cast<bool>(stream);
+    }
     void require(bool condition, std::string_view message)
     {
         if (condition)
@@ -1476,8 +1485,14 @@ int main()
                 750u, sim::CourseStage::uneven, &quadruped_walk) - 32.0f)
                 < 1.0e-6f
             && rl::guided_rollout_imitation_weight(
-                900u, sim::CourseStage::uneven, &quadruped_walk) == 0.0f,
-        "multi-support rollout imitation survives its finite handoff");
+                900u, sim::CourseStage::uneven, &quadruped_walk) == 16.0f
+            && rl::guided_rollout_imitation_weight(
+                1050u, sim::CourseStage::uneven, &quadruped_walk) == 8.0f
+            && rl::guided_rollout_imitation_weight(
+                1200u, sim::CourseStage::uneven, &quadruped_walk) == 0.0f
+            && rl::lesson_teacher_authority(
+                900u, sim::CourseStage::uneven, quadruped_walk) == 0.0f,
+        "multi-support consolidation is not finite or survives as action authority");
     require(rl::crouch_teacher_authority(
                 rl::crouch_teacher_fade_begin_update - 1u) == 1.0f
             && rl::crouch_teacher_authority(
@@ -2106,6 +2121,12 @@ int main()
     const std::uint64_t strict_quality =
         rl::strict_evaluation_quality_bit | 1u;
     require(rl::strict_evaluation_quality(strict_quality)
+            && rl::policy_candidate_retainable(
+                sim::CourseStage::uneven, strict_quality)
+            && !rl::policy_candidate_retainable(
+                sim::CourseStage::uneven, 60'000u)
+            && rl::policy_candidate_retainable(
+                sim::CourseStage::balance, 60'000u)
             && rl::policy_candidate_better(strict_quality, 1.0f,
                 10'000u, 1000.0f, true)
             && !rl::policy_candidate_better(60'000u, 1000.0f,
@@ -2354,28 +2375,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0731-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0732-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0731-active-autosave.eppo";
+        / "runner-v0732-shuttle-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0731-active-evolved.rig";
+        / "runner-v0732-shuttle-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0731-active-autonomy.state";
-    const std::filesystem::path v0730_autosave = lifetime_import_directory
-        / "runner-v0730-walk-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0730_autosave, error),
+        / "runner-v0732-shuttle-autonomy.state";
+    const std::filesystem::path v0731_autosave = lifetime_import_directory
+        / "runner-v0731-active-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0731_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
+    constexpr std::array<char, 8> v0731_magic{
+        'E', 'P', 'P', 'O', '3', '1', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0731_autosave, v0731_magic),
+        "failed to mark the fallback fixture as an EPPO31 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.30 LIFETIME LEDGER")
+                && import_message.find("V0.7.31 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.30 fallback autosave was not selected before a new save");
+            "v0.7.31 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

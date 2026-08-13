@@ -1,5 +1,17 @@
 # Runner
 
+## v0.7.32 finite shuttle, mirrored gait, and completed armor
+
+- Uses a compact -2 m to 10 m physical shuttle: the rig backs away from each boundary, pauses to turn, mirrors completely, and travels forward toward the other end.
+- Shares one facing/travel sign across gait targets, contacts, obstacle approach and passage, observations, equipment aim, camera lookahead, and rendering.
+- Makes both knees bend to the same sagittal side, gives the two arms visibly opposed forward/back swing, and suppresses gait impulses during turns.
+- Extracts the fitted open hand from the strict `Side View` row of the supplied modular sheet, applies it to every topology-discovered manipulator terminal, retains thin real graph bones, and excludes generated hand/body substitutes.
+- Spawns only two lesson-appropriate obstacles after physical readiness, ahead of the active traversal, and clears them during reverse/turn, retries, and lesson transitions.
+- Keeps active deformable terrain synchronized to collision, keeps physics fixed-step, and proves identical turn state at 20, 60, and 240 Hz.
+- Corrects authored Static Crouch to flex both support knees toward one sagittal side through the proven exact update-200 raw-policy handoff.
+- Exposes CONTROL OPTIMIZE and MORPHOLOGY EVOLVE in Rig Lab. The default keeps anatomy byte-stable; evolution applies bounded editable graph changes only after six raw-policy held-out seeds beat the current rig after complexity cost.
+- Persists the selected optimization mode with the rig (state v17, safe v16 fallback) and reports mode-specific generation, acceptance, rejection, and rollback telemetry.
+- Advances training semantics to 0x0007'3201, isolates state under runner-v0732-shuttle-*, and imports validated v0.7.31 lifetime totals without resuming incompatible policy, optimizer, or mastery state.
 ## v0.7.31 active terrain, lesson ownership, and rig-art transforms
 
 - Keeps the hazardous sand simulation live: pressure deformation is positive at early difficulty and grows to full strength, while waterlogged ground, water, and seeded holes remain physical hazards.
@@ -65,7 +77,7 @@ Runner.exe --diagnose-walk-eye`, a deterministic 100-update biped/quadruped/craw
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.31 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.32 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -168,6 +180,7 @@ Runner.exe --art-eye-test
 - [`docs/RUNNER_V0729_MODULAR_ART_REMAKE.md`](docs/RUNNER_V0729_MODULAR_ART_REMAKE.md) documents the remade atlas, keyed runtime sprites, node-bound rendering, fallbacks, and isolation gates.
 - [`docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md`](docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md) documents the cold-start failure, observable gait clocks, optimizer separation, authority handoff, strict retention, and zero-authority acceptance gates.
 - [docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md](docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md) documents active terrain/contact truth, lesson-local ownership, raw Crouch learning, topology-derived assistance, all-rig art transforms, and frame-independence evidence.
+- [docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md](docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md) documents finite shuttle sequencing, shared facing semantics, delayed obstacle lifecycle, same-facing knees, phase-opposed arms, terminal hands, checkpoint migration, and fixed-step evidence.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 

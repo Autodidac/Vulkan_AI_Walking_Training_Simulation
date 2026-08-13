@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -57,6 +58,7 @@ int main()
     constexpr std::array expected{
         ExpectedSprite{ "foot_side.ppm", 32, 28 },
         ExpectedSprite{ "forearm_side.ppm", 40, 20 },
+        ExpectedSprite{ "hand_side.ppm", 40, 28 },
         ExpectedSprite{ "helmet_side.ppm", 32, 32 },
         ExpectedSprite{ "shin_side.ppm", 38, 20 },
         ExpectedSprite{ "thigh_side.ppm", 36, 20 },
@@ -123,8 +125,16 @@ int main()
             "remade sprite has implausible subject coverage");
         require(dark_count > 0u,
             "explicit chroma key did not preserve dark armor detail");
-        require(ivory_count > 0u,
-            "remade sprite lost the shared ivory material language");
+        if (expected_sprite.name == "hand_side.ppm")
+        {
+            require(cyan_count > 0u,
+                "supplied graphite glove lost its authored cyan highlight");
+        }
+        else
+        {
+            require(ivory_count > 0u,
+                "remade sprite lost the shared ivory material language");
+        }
         if (cyan_count > 0u)
             ++cyan_sprite_count;
         total_cyan_count += cyan_count;
@@ -195,6 +205,7 @@ int main()
             "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
             "minimum_shoulder", "envelope.chest_radius",
             "assembled_art_scale", "23.0f, 74.0f", "presentation_side",
+            "art::facing_presented_position",
             "authored_joint_overlap", "0.36f : 0.55f",
             "Modular armor is the exclusive presentation",
             "Authoritative graph bones stay visible beneath authored",
@@ -219,9 +230,27 @@ int main()
                 != std::string::npos,
         "fresh application presentation does not default to imperial units");
     require(app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
-            && app.find("scaffold remains an internal calibration fixture")
+            && app.find("Scaffold stays internal")
                 != std::string::npos,
         "near-duplicate calibration scaffold is still a user-facing preset");
+    {
+        constexpr runner::Vec2 presentation_root{ 5.0f, 2.0f };
+        constexpr runner::Vec2 node{ 7.5f, 4.0f };
+        const runner::Vec2 right = runner::art::facing_presented_position(
+            node, presentation_root, 1.0f);
+        const runner::Vec2 left = runner::art::facing_presented_position(
+            node, presentation_root, -1.0f);
+        const runner::Vec2 repeated = runner::art::facing_presented_position(
+            left, presentation_root, -1.0f);
+        require(right.x == node.x && right.y == node.y
+                && left.x == 2.5f && left.y == node.y
+                && repeated.x == node.x && repeated.y == node.y,
+            "whole-rig facing reflection changed root-relative geometry");
+        const runner::Vec2 invalid = runner::art::facing_presented_position(
+            node, presentation_root, std::numeric_limits<float>::quiet_NaN());
+        require(invalid.x == node.x && invalid.y == node.y,
+            "invalid facing changed presentation geometry");
+    }
     {
         const runner::art::OrientedArtTransform upright =
             runner::art::support_boot_transform({ 0.0f, -10.0f },
@@ -394,9 +423,22 @@ int main()
     require(generator.find("EXPECTED_SOURCE_SIZE = (1403, 1121)")
             != std::string::npos,
         "deterministic generator does not lock the remade atlas dimensions");
+    require(generator.find("EXPECTED_USER_SHEET_SIZE = (1024, 1536)")
+                != std::string::npos
+            && generator.find("USER_HAND_BOX = (205, 1148, 248, 1203)")
+                != std::string::npos
+            && generator.find("d1db49b2c376a87a060b9bb18402f8374c1f5730e132e51f5385c1dcc28f1195")
+                != std::string::npos,
+        "supplied side-view hand source is not dimension, crop, and hash locked");
     require(std::filesystem::is_regular_file(
             root / "tools" / "art_sources" / "runner_v0729_modular_atlas.png"),
         "remade transparent atlas source is missing");
+    require(std::filesystem::is_regular_file(
+            root / "tools" / "art_sources" / "runner_user_modular_sheet.png"),
+        "user-supplied modular sheet source is missing");
+    require(!std::filesystem::exists(
+            root / "tools" / "art_sources" / "runner_v0732_hand_source.png"),
+        "rejected generated hand source remains in the repository");
     require(!std::filesystem::exists(
             root / "assets" / "optional" / "runner_armor_concepts" / "PROVENANCE.md")
             && !std::filesystem::exists(

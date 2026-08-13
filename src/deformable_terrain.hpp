@@ -143,8 +143,8 @@ namespace runner::sim
                         ? 0.96f : 0.88f + variation * 0.08f;
                     break;
                 case TerrainRegion::dry_sand:
-                    cell.firmness = 0.42f - difficulty_ * 0.14f
-                        + variation * 0.20f;
+                    cell.firmness = 0.52f - difficulty_ * 0.24f
+                        + variation * 0.18f;
                     break;
                 case TerrainRegion::waterlogged:
                     cell.firmness = 0.12f + variation * 0.12f;

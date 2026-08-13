@@ -980,7 +980,7 @@ Require repository hygiene, Linux GCC 14 warnings-as-errors and all tests, the c
 The packaged v0.7.28 screenshot remains authoritative for the unchanged v0.7.29 trainer path. At Walk / Run 30%, the UI shows 24,363 total rig updates but only 173 policy updates, 1 real step, 1 leg crossing, zero heel strikes, zero toe lifts, zero features cleared, 1,693 preview restarts ending in `FLIPPED`, mastery 0/8, and no retained best controller. It simultaneously reports 9.6 mph while distance remains 0 ft. This is a failed learning system, not an insufficient waiting period. The next release must prove a cold policy learns and retains sustained physical walking; scripted-looking motion, conveyor progress, short probes, and static helper tests are insufficient.
 
 ### WALK-UPDATE-FLOW-351 — Account for every rollout, accepted batch, rejection, and policy publication
-**Status:** IMPLEMENTED — FULL RELEASE VALIDATION PENDING
+**Status:** COMPLETED — FULL RELEASE VALIDATION PASSED
 
 Trace and reconcile worker rollouts, completed training batches, rejected samples, optimizer steps, published policy versions, evaluations, and preview consumption. Surface stage-scoped counters and dominant rejection reasons so tens of thousands of rig updates cannot collapse into a few unexplained policy updates or silently starve PPO.
 
@@ -990,17 +990,17 @@ Trace and reconcile worker rollouts, completed training batches, rejected sample
 Observation scaling, action authority, bootstrap decay, reward terms, termination rules, and PPO batching must jointly produce repeated left/right support transfer, foot passing, swing clearance, traction, upright balance, and terrain-relative distance. High joint or body speed without forward distance and stride evidence must not score as walking.
 
 ### WALK-INCREMENTAL-RETENTION-353 — Retain genuine partial walkers before final mastery
-**Status:** IMPLEMENTED — STRICT-VALID RETENTION AND HANDOFF BOUNDARIES TESTED LOCALLY
+**Status:** COMPLETED — STRICT-VALID RETENTION, HANDOFF, AND RELEASE GATES PASSED
 
 Checkpoint physically valid incremental improvements and carry them through same-rig retries under the measured final 18 m / 14-step six-seed mastery aggregate while retaining the 18 m / 16-step packaged display gate. Evaluation noise or one failed required test may not erase a clearly better multi-step controller; rig changes and incompatible training semantics still start fresh.
 
 ### WALK-RESET-CONVERGENCE-354 — Align rollout, evaluation, preview, and restart truth
-**Status:** IMPLEMENTED — SHARED ZERO-AUTHORITY EVALUATION/PREVIEW PATH TESTED LOCALLY
+**Status:** COMPLETED — SHARED ZERO-AUTHORITY EVALUATION/PREVIEW AND RELEASE GATES PASSED
 
 Rollout, evaluation, champion selection, and preview must share motion validity, contact, distance, and stride definitions. Cluster reset causes and prove the dominant failure rate falls as learning advances. Preview restarts remain visible and may not conceal a persistent collapse, flip, overspeed, skating, or support-loss attractor.
 
 ### WALK-CURRICULUM-355 — Progress from stable steps to sustained walking before harder pressure
-**Status:** IMPLEMENTED — TOPOLOGY-SCOPED DEMONSTRATION AND ZERO-AUTHORITY HANDOFF TESTED LOCALLY
+**Status:** COMPLETED — TOPOLOGY-SCOPED DEMONSTRATION, ZERO-AUTHORITY HANDOFF, AND RELEASE GATES PASSED
 
 Use a firm hazard-free learning runway and staged evidence gates that first establish support transfer and alternating steps, then distance and speed, then terrain and hazards. Required tests must diagnose competence without monopolizing training or repeatedly testing a policy that has not received enough accepted optimizer updates.
 
@@ -1066,42 +1066,42 @@ Required packaged proof: add a `--walk-eye-test` that performs a fresh humanoid 
 The user's v0.7.29 packaged screenshots remain authoritative. At Walk / Run 30%, the UI shows 31,124 rig updates but only 14 policy updates, 1,707 preview restarts, no retained controller, six feet of evidence, zero real strides, and rejection because the body touched the ground before gait formation. A second screenshot shows the rig apparently tripping over collision that is not visibly represented at the start. The user explicitly requires a hazardous active sand simulation: the correction may stabilize the short launch/calibration pad and make its collision visible, but it must not freeze the course. Beyond that pad, sand must deform under load, water and waterlogged material must behave as authored hazards, holes must be real collision geometry, and all evolving collision must be rendered from the same state.
 
 ### WALK-LESSON-CLOCK-360 — Make learning schedules local to the current lesson
-**Status:** IMPLEMENTED — LESSON RESET/PRESERVE/CHECKPOINT AND HANDOFF TESTS PASS LOCALLY
+**Status:** COMPLETED LOCALLY — LESSON RESET/PRESERVE/CHECKPOINT, HANDOFF, AND V0.7.32 PACKAGE GATES PASS
 
 Persist an explicit lesson update clock inside PpoTrainer. Reset it on a real course-stage boundary without resetting rig-scoped lifetime work, optimizer state, or compatible policy progress. Teacher authority, skill bootstrap, guided imitation, assisted-best clearing, evaluation eligibility, preview authority, and lesson telemetry must use the lesson clock where their meaning is stage-local. Preserve it in compatible checkpoints, migrate older state explicitly, and prove Stand → Crouch → Walk on one rig without switching presets or depending on lifetime update age.
 
 ### WALK-CROUCH-OWNERSHIP-361 — Prove a cold raw policy learns and retains crouch
-**Status:** IMPLEMENTED — COLD RAW ZERO-AUTHORITY CROUCH GATE PASSES SIX SEEDS LOCALLY
+**Status:** COMPLETED LOCALLY — COLD RAW ZERO-AUTHORITY CROUCH AND V0.7.32 PACKAGE GATES PASS
 
 Replace indefinite/fixed crouch assistance with a finite, measured handoff. Train the actual policy, clear assisted-era champion state at the boundary without discarding the learned network or Adam moments, and require a post-handoff zero-authority controller to pass valid crouch depth, hold, balance, forbidden-body-contact, recovery, and repeated-seed gates. The default rig must learn Crouch from normal curriculum entry without rig-selection fiddling.
 
 ### WALK-LAUNCH-CONTACT-362 — Align every authored rig to visible launch collision
-**Status:** IMPLEMENTED — ALL-RIG REPEATED-SEED LAUNCH CONTACT TESTS PASS LOCALLY
+**Status:** COMPLETED LOCALLY — ALL-RIG REPEATED-SEED LAUNCH CONTACT AND V0.7.32 PACKAGE GATES PASS
 
 After deterministic terrain creation, rigidly place every rig so authored support nodes begin on the exact sampled launch surface, with no penetration, hidden drop, anatomy distortion, or initialization-order drift. Use a short, explicit launch/calibration pad whose rendered surface, collision height, material, and stability contract are identical. Pressure or relaxation must not create a subpixel invisible lip beneath an unmoving initial stance; transition continuously into the active terrain rather than extending a long sterile runway.
 
 ### WALK-ACTIVE-TERRAIN-363 — Preserve and improve hazardous sand, water, and holes
-**Status:** IMPLEMENTED — ACTIVE DEFORMATION/BOUNDARY/WATER/HOLE/SEED TESTS PASS LOCALLY
+**Status:** COMPLETED LOCALLY — ACTIVE DEFORMATION/BOUNDARY/WATER/HOLE/SEED AND V0.7.32 PACKAGE GATES PASS
 
 Keep pressure-driven deformation and relaxation active beyond the launch pad. Render a continuous substrate and an exact collision-surface line from the same interpolated terrain samples used by physics, then layer sand, mud, water, and hole materials without exposing a changing cosmetic lower edge. Delay large course objects until a locomotion foundation exists, while seeded terrain regions vary in location and microstructure. Add positive deformation and volume checks; negative launch-pad mutation checks; adversarial boundary, deposit, wrap, water, and hole checks; repeated-seed determinism; and visible packaged evidence that active hazards move only where collision moves.
 
 ### WALK-ART-TRANSFORM-364 — Make boots and body art follow full physical transforms
-**Status:** IMPLEMENTED — PURE ROTATION/TRANSLATION/FALLEN TRANSFORMS AND DIAGNOSTIC PASS LOCALLY
+**Status:** COMPLETED LOCALLY — PURE ROTATION/TRANSLATION/FALLEN TRANSFORMS AND V0.7.32 PACKAGE EYES PASS
 
 Boot art must translate, rotate, pivot, and mirror from the terminal authored support segment instead of remaining axis-aligned at a support node. Torso, helmet, limb plates, and compact equipment must follow the relevant physical orientation for vertical, fallen, horizontal, and reversed rigs while remaining presentation-only. Add pure transform tests for arbitrary rotations, reflections, degenerate segments, and repeated poses plus a real Vulkan diagnostic that makes a horizontal fallen pose obvious.
 
 ### WALK-ART-ALL-RIGS-365 — Apply the shared armor language to every rig topology
-**Status:** IMPLEMENTED — GRAPH-DERIVED ART RENDERS ALL SEVEN EXPOSED RIGS LOCALLY
+**Status:** COMPLETED LOCALLY — GRAPH-DERIVED ART RENDERS ALL SEVEN EXPOSED RIGS IN PACKAGE QA
 
 Replace paired-biped and hard-coded motor-slot gates with graph-derived support, manipulator, torso, and head roles. Every user-visible rig receives the same current art family, fitted to its actual topology; individual art sets are deferred. Render rigs sequentially in diagnostics so the existing shared vertex budget remains bounded. Art must not alter physics, contacts, observations, rewards, policy dimensions, persistence, or frame timing.
 
 ### WALK-RIG-IDENTITY-366 — Remove or distinguish duplicate user-facing presets
-**Status:** IMPLEMENTED — SCAFFOLD INTERNALIZED AND SEVEN EXPOSED SIGNATURES PROVEN DISTINCT
+**Status:** COMPLETED LOCALLY — SCAFFOLD INTERNALIZED AND SEVEN EXPOSED SIGNATURES/PACKAGE UI PROVEN DISTINCT
 
 Audit normalized graph, silhouette, motor, support, and role identity across Humanoid, Biped, Scaffold, Chicken, Quadruped, Four-leg Crawler, Hexapod, and Monoped. Calibration-only blueprints may remain internal, but every exposed canonical preset must have a meaningfully distinct topology or silhouette and its own rig-scoped training identity. Add deterministic structural and rendered distinctness checks; switching aliases may not masquerade as a new rig or destroy compatible progress.
 
 ### WALK-FRAME-TRUTH-367 — Prove the new systems are render-cadence independent
-**Status:** IMPLEMENTED — EXACT REFERENCE/PREVIEW/TERRAIN/LESSON STATE CADENCE GATES PASS LOCALLY
+**Status:** COMPLETED LOCALLY — EXACT REFERENCE/PREVIEW/TERRAIN/LESSON STATE CADENCE AND PACKAGE GATES PASS
 
 Preserve fixed-step simulation and show exact full-state equivalence at 20, 60, and 240 render Hz for launch placement, active terrain evolution, lesson updates, teacher handoff, raw-policy evaluation, preview resets, gait/contact evidence, and art transforms. Invalid or partial render deltas may not advance physics, terrain, curriculum, or policy clocks.
 
@@ -1111,27 +1111,31 @@ Preserve fixed-step simulation and show exact full-state equivalence at 20, 60, 
 Update versioned source, documentation, focused design notes, package/install lists, diagnostics, release workflow contracts, and cleanup. Require repository hygiene and git diff --check; Linux GCC 14 warnings-as-errors and all CTests; the complete Windows SDL3/Vulkan build and all tests; package, acceptance, camera, UI, art, rig-training, course, crouch-learning, terrain/contact, and cadence diagnostics; installed and independently extracted run.bat from an unrelated directory; ZIP checksum and per-file manifest audit; packaged Vulkan eye evidence; public-asset re-download and byte comparison; zero cleanup PRs; main-only remote state; mission-cache closeout; and removal of generated release garbage.
 
 ### WALK-EVOLVING-RIG-369 — Optimize edited rigs and evolve bounded morphology
-**Status:** NOT STARTED — PRESERVED FOR THE NEXT AUDITED RELEASE
+**Status:** COMPLETED LOCALLY — TWO-MODE ROUTING, SIX-SEED RAW EVALUATION, COMPLEXITY COST, STATE ROUND-TRIP, AND PACKAGE/RIG-LAB EYE GATES PASS
 
 Provide two explicit rig-optimization modes: maximize control and authored parameters for the current edited blueprint without changing its anatomy, and evolve morphology through bounded add, remove, split, mirror, resize, and reconnect mutations. Evolution must preserve finite connected anatomy, distinct valid supports, controllable parent-pivot-child chains, policy-dimension migration or intentional reset boundaries, rig-scoped persistence, complexity pressure, deterministic repeated-seed evaluation, adversarial invalid-candidate rejection, editor round-trip, and graph-derived art fit. Candidates must improve held-out locomotion and hazard performance without conveyor motion, teacher authority, hidden assists, or duplicate aliases, and every accepted evolved rig must remain editable, recognizable, package-safe, and frame independent.
 
+The v0.7.32 audit found that deterministic morphology generation, neutral activation of new policy outputs, nursery adaptation, held-out six-seed evaluation, rollback, and editor-copy/save paths already exist, but `mutate_rig_locked()` is hardwired to the anatomy-immutable tuner and the UI claims anatomy can change only manually. Complete the mission by exposing explicit `CONTROL OPTIMIZE` and `MORPHOLOGY EVOLVE` modes, persisting the selected rig-scoped mode, routing only the latter through bounded morphology candidates, labeling generation/accept/reject telemetry truthfully, and proving the default control mode remains byte-for-byte anatomy immutable while morphology mode can generate and safely reject or accept structurally valid editable candidates.
+
+The runtime now has explicit RigOptimizationMode state. Fresh or canonical rig boundaries default safely to CONTROL OPTIMIZE; MORPHOLOGY EVOLVE alone routes through the existing bounded topology candidate engine. The mode is command-queued, shown in status/accept/reject/rollback telemetry, written in autonomy-state version 17, restored per rig, and read-only compatible with version 16 as control mode. Focused tests cover control anatomy immutability, deterministic topology growth, invalid-mode fallback, and explicit naming; final compiler, persistence, UI, package, and eye gates subsequently passed as recorded below.
+
 ### WALK-SKIN-WRAP-370 - Assemble a connected body skin before fitting armor art
-**Status:** IMPLEMENTED LOCALLY - CONNECTED SKIN, SEVEN-RIG ART BUDGET, AND PACKAGE EYE QA PASS
+**Status:** COMPLETED LOCALLY - CONNECTED SKIN, SEVEN-RIG ART BUDGET, AND PACKAGE EYE QA PASS
 
 Replace independent bone-strip sprites with one graph-derived, joint-overlapped body envelope and fitted armor layer. The skin must connect shoulders, torso, pelvis, limbs, joints, hands, and supports; preserve the physical pose without exposing a skeletal gap field; produce a broader armored humanoid silhouette rather than the current narrow torso and hips; remain topology-derived for every canonical rig; and keep rendering bounded, finite, deterministic, and frame independent. Add upright, crouched, fallen, mirrored, adversarial-scale, and all-rig visual/structural coverage.
 
 ### WALK-ARM-GAIT-371 - Give paired arms a true sagittal counter-swing
-**Status:** IMPLEMENTED LOCALLY - GRAPH-DISCOVERED PHASE-OPPOSED ARMS; FINAL ZERO-AUTHORITY PACKAGE PROOF PASSED
+**Status:** COMPLETED LOCALLY - GRAPH-DISCOVERED PHASE-OPPOSED ARMS; FINAL ZERO-AUTHORITY PACKAGE PROOF PASSED
 
 Drive complete two-link manipulator chains through bounded side-view targets opposite the paired support-chain phase. Arms must swing fore and aft with articulated elbows, may not spread into the current symmetric side/T pose, must remain fully policy-controlled after teacher handoff, and must derive roles and dimensions from authored topology rather than motor slot numbers. Prove zero-authority evaluation, absent/manipulator-extra topology behavior, finite targets, repeated terrain seeds, and render-cadence equivalence.
 
 ### WALK-CRAB-EYE-372 - Eliminate the retained humanoid's visible scissor/crab gait
-**Status:** IMPLEMENTED LOCALLY - PERSISTENT X-STEP REJECTION; FINAL PACKAGE PROOF PEAKED AT 0.183 S
+**Status:** COMPLETED LOCALLY - PERSISTENT X-STEP REJECTION; FINAL PACKAGE PROOF PEAKED AT 0.183 S
 
 The packaged screenshots outrank aggregate distance and crossing counters: the retained humanoid still holds a wide split and crosses its lower legs into an X. Correct the support-chain bend/lane geometry, distinguish sagittal foot passing from sustained shank scissoring, shape and reject the latter with the same contact-valid predicate used by retention, and expose the evidence in diagnostics. Require long zero-authority retained previews with forward distance, alternating valid contacts, bounded support span, no persistent lower-leg intersection, no teacher/conveyor motion, adversarial negatives, and repeated-seed/cadence coverage.
 
 ### WALK-TERRAIN-PRESSURE-373 - Preserve active sand without contact bubbles or trip lips
-**Status:** IMPLEMENTED LOCALLY - EXACT COLLISION-SAMPLED SURFACE; DPI-CORRECT PACKAGE COURSE EYE PASSED
+**Status:** COMPLETED LOCALLY - EXACT COLLISION-SAMPLED SURFACE; DPI-CORRECT PACKAGE COURSE EYE PASSED
 
 Foot pressure must compact or shear the loaded surface while redistributing displaced material into a broad, smooth, volume-conserving berm away from immediate contact. It may not deposit into the adjacent cell and raise a spike beneath or directly beside the next footfall. Preserve visibly active dry and waterlogged sand, water coupling, holes, deterministic repeated seeds, launch stability, cadence independence, and physically matched collision/render heights; add repeated-footfall, alternating-foot, edge, saturated, non-finite, and long-run conservation tests.
 
@@ -1145,7 +1149,7 @@ The local packaged `--walk-eye-test` exits or crashes instead of producing durab
 Final extracted eye evidence isolated the remaining launch defect: the full 1,200-update proof runs synchronously after SDL creates the Vulkan window but before the event loop starts, so Windows marks the visible window not responding and the user correctly experiences it as another crash. Run the proof before creating the window, fail headlessly with printed evidence, then open an already-populated responsive Vulkan proof window. Do not relaunch the blocking path again.
 
 ### WALK-LIFETIME-ODOMETER-375 - Preserve lifetime totals and reject distance discontinuities
-**Status:** IMPLEMENTED LOCALLY - ODOMETER, INCOMPATIBLE-CURRENT, V0.7.30 FALLBACK, AND PRE-SAVE IMPORT GATES PASS
+**Status:** COMPLETED LOCALLY - ODOMETER, INCOMPATIBLE-CURRENT, V0.7.30 FALLBACK, AND PRE-SAVE IMPORT GATES PASS
 
 All-time statistics must survive preview, episode, lesson, retry, recalibration, same-rig, rig-switch, process, and compatible-version persistence boundaries according to their documented scope. Distance must integrate only finite accepted simulated displacement within one continuous episode and may never count spawn placement, camera movement, terrain motion, origin rebasing, preview teleport/reset, worker aggregation duplication, or unit conversion more than once. Add reset-matrix, rig-scope, persistence round-trip, discontinuity, adversarial non-finite, metric/imperial, repeated-step, and cadence tests, and expose separate episode, selected-rig lifetime, and true all-rig lifetime labels.
 
@@ -1194,24 +1198,24 @@ The user's v0.7.31 totals screenshot is direct contradictory evidence: THIS RIG 
 
 The 2026-08-12 14:45:09 side-view screenshot makes the combined failure exact: grey/orange procedural capsules and joints remain exposed beneath the desired ivory armor; both hands and elbows occupy nearly mirrored forward/lateral poses instead of one arm leading and one trailing; the knees split excessively, lower legs converge into an X, and the feet overlap during an exaggerated high-knee step. Fix pose generation and retention predicates, not only draw order. Require phase-opposed shoulder targets tied to opposite support-chain phase, rear-arm occlusion/layering, bounded knee separation and lift, non-overlapping foot lanes outside the brief physical passing interval, and long raw-policy eye evidence.
 ### WALK-ART-LAYER-SCALE-376 - Remove legacy duplicate art and size the assembled armor correctly
-**Status:** IMPLEMENTED LOCALLY - REAL GRAPH BONES RESTORED; GENERATED BODY REMAINS REMOVED
+**Status:** COMPLETED LOCALLY - REAL GRAPH BONES RESTORED; GENERATED BODY REMAINS REMOVED
 
 The user's first v0.7.31 local-package eye test outranks the prior diagnostic budget pass: old unattractive bone-attached presentation is visible again underneath or beside the correctly assembled fitted armor, while the desired fitted pieces are too small on the physical body. The direct corrected-package window test then proved that recoloring and shrinking those capsules did not remove them: the neutral underwrap, joint caps, pelvis bridge, chest capsule, and shoulder bridge are still the same generated layer and must not render at all when modular art is enabled. Inventory every presentation pass and asset load, remove the legacy duplicate body/limb/foot/torso/helmet layer rather than hiding it by draw order, and derive one bounded visual scale from the assembled topology envelope. The fitted armor must cover the connected skin at the intended readable humanoid scale without changing node positions, collision, mass, motors, contacts, observations, policy dimensions, gait, camera, or frame timing. Apply the same assembly contract to every exposed rig, retain deliberate debug skeleton rendering only when explicitly requested, and add structural negative coverage proving the legacy body-art path cannot render concurrently plus upright, fallen, compact, large, all-rig, vertex-budget, and packaged Vulkan eye evidence.
 
 The next direct package eye test corrected an overreach: removing generated capsule art must not erase the readable real-bone structure. Preserve the authoritative graph as thin bone links beneath the assembled armor in normal presentation, while keeping node circles, indices, and edit markers in the explicit debug overlay. Bone links are structural visualization, not the removed procedural body mass; they may not change physics or replace the connected authored silhouette.
 
 ### WALK-EARLY-CURRICULUM-LATENCY-377 - Turn passing first-goal evidence into timely mastery tests
-**Status:** IMPLEMENTED LOCALLY - 80/200 READINESS, RAW EVALUATION, INSTALLED/EXTRACTED QA PASS
+**Status:** COMPLETED LOCALLY - 80/200 READINESS, RAW EVALUATION, INSTALLED/EXTRACTED QA PASS
 
 The user's v0.7.31 MAX CPU screenshot at Static Crouch / Hold / Recover is direct performance evidence: session time is 8:40, training time 9:13, 704 simulated runs and 704 passed stage checks are reported, but lesson completion remains 0%, mastery tests remain 0/8, runs show 0/4, and only about 204-220 learning updates have accrued. Audit lesson-local clocks, readiness, evaluation cadence, worker aggregation, test scheduling, retry/reset ownership, and UI counter consistency. Passing foundational Stand and Crouch evidence must trigger bounded early mastery evaluation without lowering crouch depth, hold, recovery, balance, contact, repeated-seed, raw-policy, or zero-authority requirements. Add positive ready-sooner, negative insufficient-evidence, exact-boundary, retry, lesson-transition, checkpoint-resume, worker-count, and 20/60/240 Hz tests, and expose why a mastery test is not yet scheduled instead of leaving a zero counter for minutes.
 
 ### WALK-IMPERIAL-DEFAULT-378 - Start the UI in imperial units
-**Status:** IMPLEMENTED LOCALLY - FRESH IMPERIAL DEFAULT; INSTALLED/EXTRACTED QA PASS
+**Status:** COMPLETED LOCALLY - FRESH IMPERIAL DEFAULT; INSTALLED/EXTRACTED QA PASS
 
 Make imperial the default user-facing distance, speed, course-marker, and totals presentation on a fresh launch while preserving metric SI units internally for physics, terrain, learning, persistence, diagnostics, and deterministic tests. The existing Units control must still switch both ways without resetting training or changing any simulation state, and a persisted explicit user choice may override the fresh-install default if such preference persistence exists. Add default, toggle round-trip, formatting, and no-state-mutation coverage.
 
 ### WALK-CAMERA-RANGE-379 - Make manual zoom materially useful
-**Status:** IMPLEMENTED LOCALLY - 0.28X-3.60X / 12-150 PX/M; INSTALLED/EXTRACTED QA PASS
+**Status:** COMPLETED LOCALLY - 0.28X-3.60X / 12-150 PX/M; INSTALLED/EXTRACTED QA PASS
 
 Expand manual zoom-in and zoom-out limits and step response enough to inspect fitted art, foot contact, posture, and terrain locally or frame a substantially longer course. Preserve smooth finite clamping, auto-view full-body/course behavior, PIP framing, resize and DPI handling, camera follow, unit switching, and exact separation from fixed-step simulation, terrain, curriculum, and policy state. Add repeated-button boundary, wheel/key, auto/manual transition, viewport-size, invalid-delta, and 20/60/240 Hz no-state-mutation coverage plus packaged eye evidence at both extremes.
 ## v0.7.31 corrected-local eye-test response evidence
@@ -1223,4 +1227,52 @@ Expand manual zoom-in and zoom-out limits and step response enough to inspect fi
 - Stand readiness is 80 lesson updates. Crouch fades from update 60 to exact zero authority at update 200, and its readiness boundary is the same update while retaining four completed runs, eight mastery tests, strict depth/hold/contact/recovery, and repeated-seed requirements. The corrected cold raw Crouch test passes after 80 Stand plus 320 Crouch updates.
 - Fresh UI state is Imperial. Manual camera control now spans 0.28x-3.60x and 12-150 px/m; automatic fit keeps its separate 62 px/m ceiling. Repeated input, invalid values, toggle behavior, and presentation/simulation separation are covered.
 - The exact final bones-visible Runner executable is SHA-256 `35c4f7d7c9040b7e5ad545caff3db50a158dde2ac3369de95bc7b2990523d6b8`. Its fresh 1,200-update package proof retained update 1190 at authority 0.000, averaged 20.787 m / 24.83 steps over six seeds with 0/6 invalid, displayed 21.646 m / 23 steps / 16 crossings, and peaked at 0.183 s scissor duration. The exact-source 27-test Windows non-learner matrix, prior unchanged long Windows learner/Crouch gates, final GCC 14 warnings-as-errors rebuild/art gates, installed short diagnostics, and DPI-correct orthographic/course Vulkan eyes pass. The prior five-rig learner retained biped 24.0765 m / 33.833 steps, humanoid 25.9546 m / 21.0 steps, quadruped 5.37336 m / 47.666 cycles, crawler 11.9068 m / 55.5 cycles, and hexapod 20.9148 m / 54.5 cycles with course motion disabled.
-- WALK-EVOLVING-RIG-369 remains explicitly unfinished and preserved. This corrected local package does not mislabel the existing control-only automatic tuner as the requested two-mode held-out morphology evolution system.
+- WALK-EVOLVING-RIG-369 is complete locally as explicit control-locked and bounded morphology modes. Both compilers, asynchronous state round-trip and fallback, installed/extracted package, and selected-mode Rig Lab eye evidence pass.
+
+### WALK-CROUCH-HINGE-380 - Prevent Static Crouch from stalling on hip-hinge retries
+**Status:** COMPLETED LOCALLY - RAW-POLICY HANDOFF, EXACT BOUNDARY, REPEATED-SEED, AND PACKAGE EYE GATES PASS
+
+The 2026-08-12 17:27:12 screenshot is authoritative: Static Crouch / Hold / Recover is stuck at 72% completion and 181/200 updates with 0/8 mastery passes, 64 preview restarts, and repeated `HIP HINGE - NOT A CROUCH` rejection. Audit authored crouch targets, torso/pelvis height, knee bend, support contact, raw-policy handoff, evaluation scheduling, retry ownership, and progress telemetry. A crouch must lower through both support chains while keeping the torso bounded, hold, recover, and schedule raw-policy mastery promptly; a forward fold must remain rejected. Add positive, hip-hinge negative, partial-depth, contact-loss, exact 200-update boundary, retry, checkpoint, repeated-seed, and 20/60/240 Hz coverage.
+
+### WALK-FACING-GAIT-381 - Make the entire rig and gait direction-aware
+**Status:** COMPLETED LOCALLY - BIDIRECTIONAL PHYSICS, WHOLE-RIG MIRRORING, AND ZERO-AUTHORITY WALK EYE PASS
+
+The current side-view art is close but its arms, legs, boots, helmet, and gait targets do not agree on forward. Introduce one authoritative facing sign shared by locomotion intent, support/manipulator target construction, equipment aim, art mirroring, near/far layering, camera lookahead, observations, diagnostics, and retained-policy evaluation. Backward motion must use a bounded reverse gait without visually pretending the rig faces backward; after the turn phase the complete rig presentation must mirror and forward locomotion must proceed in the new facing direction. No fixed motor slots, biped-only render gate, observation-dimension drift, checkpoint corruption, or render-clock mutation is allowed. Cover both facings, reverse motion, turn boundaries, all canonical topologies, repeated seeds, and exact render-cadence equivalence.
+
+Cross-platform reference replay found a release-blocking return edge: GCC 14 exposes a deterministic humanoid flip when repeated foot pressure destabilizes foundation sand, even when Windows survives. Strengthen the dry-sand foundation firmness enough to keep bounded support while retaining active pressure displacement, material variation, water, holes, and the original full-difficulty deformation scale; bound backing with a timeout; and require the exact adversarial seed to survive repeated full reverse traversals on both platforms. The subsequent cold gate found that a nonzero partial quality key could be retained as a champion when no strict candidate existed; forward-gait best snapshots and release eligibility must require the strict-valid bit, with partial walkers preserved only as learning signal, never publication state.
+
+### WALK-HAND-ART-382 - Complete the assembled armor with side-view hands
+**Status:** COMPLETED LOCALLY - SUPPLIED SIDE-VIEW HAND SOURCE, GRAPH FIT, HASH LOCK, AND PACKAGE EYE PASS
+
+Extract the hand only from the strict `Side View` row of the user-supplied modular character sheet already represented by the repository art source; do not create, retain, or package a separately generated hand substitute. Build the bounded graphite/cyan open-glove side-elevation sprite present in that supplied row so it follows the terminal manipulator segment, mirrors with facing and chain side, overlaps the forearm, and remains presentation-only. Apply it graph-wise to every valid manipulator terminal, tolerate zero/one/many manipulators, preserve weapon mounting, and add source-lock, load/key/padding/color, translated/rotated/mirrored, missing/malformed, all-rig, vertex-budget, and package-eye coverage. Remove the rejected generated hand source and prove the installed package contains only the supplied-sheet derivative.
+
+### WALK-SHUTTLE-COURSE-383 - Train on a compact bidirectional dynamic course
+**Status:** COMPLETED LOCALLY - FINITE SHUTTLE, DELAYED DYNAMIC HAZARDS, CLEANUP, TERRAIN SYNC, AND PACKAGE EYE PASS
+
+Replace the effectively unbounded one-way preview course with a finite shuttle arena. Each traversal starts with a short controlled reverse segment, transitions through a stable turn that flips facing, runs toward the opposite boundary, and repeats symmetrically. Spawn lesson-appropriate obstacles dynamically ahead of the active traversal only after readiness, retire their physics/render/observation state after the evaluation or lesson completes, and never let stale obstacles leak across retries, direction changes, rig switches, checkpoints, or mastery boundaries. Keep terrain pressure active and collision/render synchronized while bounding map length, camera framing, object count, policy observations, and memory. Add lifecycle, left/right symmetry, reverse-turn-forward sequencing, no-early-object, cleanup, repeated-seed, all-rig, checkpoint, and 20/60/240 Hz state-equivalence diagnostics plus installed Vulkan eye evidence.
+
+Linux GCC 14 strict cold evidence remains release-blocking after the strict-retention correction: Windows retained all five subjects, while Linux retained biped, humanoid, quadruped, and crawler but produced no strict hexapod champion before the bounded gate; its terminal raw evaluations clustered on overspeed and flip despite a valid physical reference. Audit topology-scaled multi-support action authority, speed shaping, rollout schedule, evaluation cadence, and strict publication timing. The fix must improve the actual six-support learner rather than relaxing strict validity, accepting partial quality, or extending one platform with an arbitrary timeout. Require repeated-seed retained replay on both platforms before packaging.
+
+The structural learner correction passed the unchanged bounded strict gate on both platforms: Windows retained all five rigs in 736.10 seconds, and Linux GCC 14 retained all five—including the previously missing hexapod—in 570.47 seconds. Validity, six-seed replay, zero authority, topology-specific distance/cycle requirements, and the 1,200-update budget were not relaxed. The final application relink and complete platform matrices remain required because the later optimization-mode work changes shared autonomy objects even though it does not change PPO behavior.
+
+The explicit optimization implementation now compiles warning-clean under MSVC and GCC 14. Focused tests pass control anatomy immutability, deterministic bounded topology growth, invalid-mode fallback, explicit complexity pressure, asynchronous v17 morphology-mode save/load, v16 safe default, adversarial invalid persisted mode, and exact temporary-file cleanup. Publication evaluation is six deterministic raw-policy seeds with no lesson action blend; mode-specific UI/package eye evidence and the full matrices subsequently passed.
+
+### WALK-RELEASE-384 - Build and audit the next local Runner release
+**Status:** COMPLETED LOCALLY - V0.7.32 SOURCE, WINDOWS/LINUX MATRICES, PACKAGE, MANIFEST, AND VULKAN EYES PASS
+
+Integrate missions 380-383 coherently, advance source/package identity, update missioncache, changelog, README, focused docs, install lists, workflow contracts, and tests, then run the complete Windows, Linux GCC 14 warnings-as-errors, diagnostic, installed/extracted launcher, manifest/checksum, and direct eye gates. Produce a clean local package and commit only. Do not push, tag, publish, or mutate remote state unless the user later authorizes it.
+
+## v0.7.32 local release evidence
+
+- The compact shuttle uses one signed facing/travel contract for reverse, turn, forward gait, support/manipulator targets, contacts, obstacle approach, observations, rewards, camera, equipment aim, sprite mirroring, and near/far ordering. Reverse and turn are bounded; dynamic obstacles remain absent before physical readiness and are retired across turns, retries, lesson changes, rig switches, and completion.
+- Active pressure deformation remains enabled, but renderer geometry is derived from the same `ground_height_at` collision samples. Deterministic course diagnostics cover delayed pressure, sand, waterlogged sand, water, holes, synchronized contact, repeated seeds, and exact 20/60/240 Hz state equivalence.
+- Authored foundational gait bends both knees to one sagittal side, swings topology-discovered arm chains in opposition, suppresses gait drive while turning, and consolidates strict post-handoff champions for every topology. No retained forward-gait champion may omit the strict-valid quality bit.
+- Static Crouch now drives bilateral support-chain flexion instead of a hip fold, reaches exact zero teacher authority at lesson-local update 200, and retains the original depth, hold, support, recovery, repeated-seed, and forward-hinge rejection gates.
+- The runtime hand is cropped only from the strict Side View row of `tools/art_sources/runner_user_modular_sheet.png` (source SHA-256 `D1DB49B2C376A87A060B9BB18402F8374C1F5730E132E51F5385C1DCC28F1195`). The installed `hand_side.ppm` SHA-256 is `BCD64BA364A4E6A9073CB11B4AE23F598426CB1258D97D0101CBBFE9CD625EDF`; the rejected generated substitute is absent from source, install, and manifest.
+- Rig Lab exposes seven graph-distinct canonical side-view subjects rather than aliases. `CONTROL OPTIMIZE` keeps anatomy byte-stable; `MORPHOLOGY EVOLVE` alone applies bounded connected graph mutations, neutralizes new action slots, adapts, evaluates six held-out raw-policy seeds with explicit complexity cost, and accepts or rolls back. State v17 round-trips the rig-scoped mode; v16 and malformed values fall back safely to control mode.
+- The final strict learner gates retained all five subjects without conveyor motion or teacher authority. Windows passed in 736.10 seconds; Linux GCC 14 passed in 570.47 seconds. Final retained replay was biped `23.6746 m / 31.50`, humanoid `23.7014 m / 27.17`, quadruped `12.4292 m / 46.00`, crawler `16.1524 m / 41.83`, and hexapod `22.5489 m / 56.17`, each with `0/6` invalid seeds.
+- The complete Windows SDL3/Vulkan build and 30-test matrix pass, including the cold learner and corrected raw Crouch learner. The GCC 14 warnings-as-errors build and effective 25-test matrix pass; the sole stale UI-wording assertion exposed by the uninterrupted run was corrected to the structural no-Scaffold-button contract and passed focused re-execution without product-source change.
+- Production diagnostics pass version, Vulkan, package, 24/24 acceptance, camera, five-layout DPI UI, modular-art vertex budget, synchronized course, five-rig training, and headless walk-eye. The fresh walk proof retained update 1030 at authority `0.000`, averaged `23.8 m / 21.5` real steps over six valid seeds, and displayed a direction-matched `23.8 m / 19-step` physical replay.
+- The installed and independently extracted 48-file package each passed `run.bat` from an unrelated system temporary directory. The extracted tree matched the per-file SHA-256 manifest 48/48. The outer ZIP checksum is intentionally recorded after the embedded ledger is finalized so the archive does not depend on its own checksum.
+- DPI-aware physical-screen Vulkan evidence supersedes invalid `PrintWindow` captures, which cannot capture the Vulkan swapchain. Accepted SHA-256 images are: course `2A365C7CF6BB1D3B94256FDE854B22858A9859CF341FD26E86E69A697F433046`, orthographic assembled art `7D1E74472EE4349F32C7BAAE910D50C0E93CBB7EC5BE95FB0CF15035C15E9CA5`, Humanoid plus selected Morphology Evolve Rig Lab `E2F347BEAC7E4ED1667306333E9AB925A395DB886303097B829741AEFF29B658`, and packaged retained walk `66F01914782340F2DE5C0105511C9D65047ED6C63AC19B5AF6B094EE429BC33D`.
+- Authority remains local only. No tag, push, GitHub release, remote branch mutation, or published-asset operation was performed.

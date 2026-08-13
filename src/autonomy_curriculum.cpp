@@ -611,26 +611,42 @@ namespace runner::rl
         return result;
     }
 
+    RigMutationCandidate rig_optimization_candidate(RigOptimizationMode mode,
+        const sim::CreatureBlueprint& source, std::uint64_t generation) noexcept
+    {
+        return mode == RigOptimizationMode::morphology_evolve
+            ? evolve_rig_candidate(source, generation)
+            : automatic_rig_tuning_candidate(source, generation);
+    }
+
+    float rig_complexity_cost(const sim::CreatureBlueprint& blueprint) noexcept
+    {
+        return static_cast<float>(blueprint.nodes.size()) * 0.004f
+            + static_cast<float>(blueprint.bones.size()) * 0.003f
+            + static_cast<float>(blueprint.active_motor_count) * 0.010f
+            + static_cast<float>(blueprint.support_seed_count()) * 0.002f;
+    }
+
     float AutonomousTrainer::evaluate_rig_locked(
         const sim::CreatureBlueprint& candidate, const PolicyNetwork& policy) const
     {
         if (!candidate.valid())
             return -std::numeric_limits<float>::infinity();
 
-        constexpr std::size_t agents = 4;
+        constexpr std::size_t agents = 6;
         const sim::CourseStage stage = stage_;
         const float difficulty = difficulty_;
         const int maximum_steps = static_cast<std::uint8_t>(stage)
             >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 1500 : 900;
-        const float lesson_authority = lesson_teacher_authority(
-            worker_.lesson_update(), stage, candidate);
+        // Rig publication is decided by held-out raw policy only. Lesson assistance
+        // remains a training signal and cannot make a morphology candidate publishable.
         std::array<float, agents> scores{};
         std::array<std::jthread, agents> evaluators{};
 
         for (std::size_t agent = 0; agent < agents; ++agent)
         {
             evaluators[agent] = std::jthread([&candidate, &policy, &scores,
-                stage, difficulty, lesson_authority, maximum_steps, agent]
+                stage, difficulty, maximum_steps, agent]
             {
                 const std::uint64_t seed = 0xA100u
                     + static_cast<std::uint64_t>(agent) * 3253u;
@@ -641,9 +657,7 @@ namespace runner::rl
                 {
                     const auto raw_action = policy.deterministic_action(
                         environment.observation());
-                    const auto action = effective_policy_action(
-                        environment, raw_action, stage, lesson_authority);
-                    const sim::StepResult result = environment.step(action);
+                    const sim::StepResult result = environment.step(raw_action);
                     reward += result.reward;
                     if (result.terminated)
                         break;
@@ -680,13 +694,13 @@ namespace runner::rl
                 return -std::numeric_limits<float>::infinity();
             total += score;
         }
-        return total / static_cast<float>(agents);
+        return total / static_cast<float>(agents) - rig_complexity_cost(candidate);
     }
 
     RigMutationCandidate AutonomousTrainer::mutate_rig_locked() noexcept
     {
-        return automatic_rig_tuning_candidate(
-            worker_.blueprint(), rig_generation_);
+        return rig_optimization_candidate(
+            optimization_mode_, worker_.blueprint(), rig_generation_);
     }
 
     void AutonomousTrainer::attempt_rig_evolution_locked()
@@ -696,12 +710,13 @@ namespace runner::rl
         const float baseline = evaluate_rig_locked(champion_rig, worker_.policy());
         RigMutationCandidate mutation = mutate_rig_locked();
         ++rig_generation_;
+        const std::string_view operation = rig_optimization_mode_name(optimization_mode_);
         if (!mutation.changed)
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "CONTROLLER TUNING {} SKIPPED - INVALID/EMPTY {} CHANGE",
-                rig_generation_, mutation_name(mutation.kind));
+                "{} {} SKIPPED - INVALID/EMPTY {} CHANGE",
+                operation, rig_generation_, mutation_name(mutation.kind));
             return;
         }
 
@@ -713,8 +728,8 @@ namespace runner::rl
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "CONTROLLER TUNING {} REJECTED - POLICY TRANSFER FAILED",
-                rig_generation_);
+                "{} {} REJECTED - POLICY TRANSFER FAILED",
+                operation, rig_generation_);
             return;
         }
         for (std::size_t slot = 0; slot < sim::anatomy_action_count; ++slot)
@@ -747,16 +762,16 @@ namespace runner::rl
                 ++rejected_rig_changes_;
                 ++rollback_count_;
                 worker_message_ = std::format(
-                    "CONTROLLER TUNING {} ROLLED BACK - ADAPTED POLICY APPLY FAILED",
-                    rig_generation_);
+                    "{} {} ROLLED BACK - ADAPTED POLICY APPLY FAILED",
+                    operation, rig_generation_);
                 return;
             }
             ++accepted_rig_changes_;
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             worker_message_ = std::format(
-                "CONTROLLER TUNING {} ACCEPTED {}{}  {:+.3f} VALID SCORE",
-                rig_generation_, mutation_name(mutation.kind),
+                "{} {} ACCEPTED {}{}  {:+.3f} VALID SCORE",
+                operation, rig_generation_, mutation_name(mutation.kind),
                 mutation.activated_motor_mask != 0u ? " + ACTIVE JOINT" : "",
                 candidate_score - (std::isfinite(baseline) ? baseline : 0.0f));
             queue_autosave();
@@ -765,8 +780,8 @@ namespace runner::rl
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
-                "CONTROLLER TUNING {} REJECTED {} - NO VALID IMPROVEMENT",
-                rig_generation_, mutation_name(mutation.kind));
+                "{} {} REJECTED {} - NO VALID IMPROVEMENT",
+                operation, rig_generation_, mutation_name(mutation.kind));
         }
     }
 

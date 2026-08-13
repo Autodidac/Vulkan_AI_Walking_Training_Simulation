@@ -38,6 +38,8 @@ namespace runner::locomotion
         float incoming_time_to_impact{ 10.0f };
         float incoming_density{};
         std::uint32_t gait_cycles{};
+        float requested_direction{ 1.0f };
+        bool turning{};
     };
 
     struct Plan
@@ -131,14 +133,26 @@ namespace runner::locomotion
         Plan result{};
         result.balance_reserve = balance_reserve(signals);
         result.terrain_demand = terrain_demand(signals);
-        result.direction = 1.0f;
+        result.direction = std::abs(signals.requested_direction) >= 0.5f
+            ? (signals.requested_direction < 0.0f ? -1.0f : 1.0f) : 0.0f;
+        if (signals.turning || result.direction == 0.0f)
+        {
+            result.intent = Intent::hold;
+            result.direction = 0.0f;
+            result.target_speed = 0.0f;
+            result.cadence_hz = 0.0f;
+            result.stride_scale = 0.0f;
+            result.swing_lift = 0.0f;
+            result.stance_extension = 0.48f;
+            result.brake = true;
+            return result;
+        }
 
         const bool threat = urgent_threat(signals);
         if (threat)
             result.direction = escape_direction(signals);
 
-        result.step_up = result.direction > 0.0f
-            && signals.near_rise >= 0.14f
+        result.step_up = signals.near_rise >= 0.14f
             && signals.near_rise <= 1.20f;
         result.emergency_crawl = emergency_crawl_allowed(signals,
             result.balance_reserve);

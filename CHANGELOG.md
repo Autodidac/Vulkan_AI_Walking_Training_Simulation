@@ -1,3 +1,14 @@
+## 0.7.32
+
+- Added the finite bidirectional shuttle with controlled backup, stationary turn, complete facing flip, bounded auto framing, and visible phase/facing telemetry.
+- Propagated travel direction through foundational gait, two-knee sagittal bend, phase-opposed arms, obstacle approach and passage, knee-first contact, terrain observations, rewards, camera, equipment placement, and local weapon aim.
+- Extracted the open hand from the hash-locked `Side View` row of the user-supplied modular sheet, fitted it to graph terminals, mirrored it with the rig, and added package/source validation that rejects the discarded generated substitute.
+- Delayed compact dynamic obstacles until real gait and stability readiness and cleared or rebuilt them symmetrically across reverse, turn, lesson, retry, and completion boundaries.
+- Corrected authored Crouch so both support knees flex toward one sagittal side while preserving the proven fade and exact update-200 zero-authority handoff.
+- Added deterministic positive, negative, adversarial, repeated-sequence, all-rig, lifecycle, exact-boundary, and 20/60/240 Hz shuttle/facing tests.
+- Added explicit per-rig CONTROL OPTIMIZE and MORPHOLOGY EVOLVE modes. Control mode changes only motor strength/range; morphology mode uses bounded graph mutations, neutralizes new actions, pays a complexity cost, and must improve across six held-out raw-policy seeds before acceptance.
+- Extended the post-handoff champion-consolidation bridge to every authored topology, allowing the Linux hexapod to retain a strict zero-authority controller without relaxing validity or extending the learner budget.
+- Advanced training semantics to 0x0007'3201, checkpoint magic to EPPO32, local state to runner-v0732-shuttle-*, and lifetime-only fallback import from v0.7.31 then v0.7.30.
 ## 0.7.31
 
 - Added a persisted lesson-local update clock so Stand, Crouch, and Walk each receive their own measured teacher/imitation handoff without erasing rig-scoped policy, optimizer, or lifetime work.

@@ -149,7 +149,8 @@ namespace runner
 
         void draw_oriented_pixel_art(render::Canvas& canvas,
             const art::PixelArt& art, Vec2 beginning, Vec2 ending,
-            float thickness, float alpha = 1.0f, bool mirror_vertical = false)
+            float thickness, float alpha = 1.0f, bool mirror_vertical = false,
+            bool mirror_horizontal = false)
         {
             const Vec2 delta = ending - beginning;
             const float span = length(delta);
@@ -162,7 +163,8 @@ namespace runner
 
             auto point = [&](float u, float v) noexcept
             {
-                return beginning + axis * (u * span)
+                const float mapped_u = mirror_horizontal ? 1.0f - u : u;
+                return beginning + axis * (mapped_u * span)
                     + normal * ((v - 0.5f) * thickness);
             };
             const float inverse_width = 1.0f / static_cast<float>(art.width);
@@ -373,6 +375,7 @@ namespace runner
         art::PixelArt optional_torso_art{};
         art::PixelArt optional_upper_arm_art{};
         art::PixelArt optional_forearm_art{};
+        art::PixelArt optional_hand_art{};
         art::PixelArt optional_thigh_art{};
         art::PixelArt optional_shin_art{};
         art::PixelArt optional_weapon_art{};
@@ -383,9 +386,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0731-active-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0731-active-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0731-active-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0732-shuttle-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0732-shuttle-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0732-shuttle-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -819,6 +822,29 @@ namespace runner
             const float half_view = viewport.size.x * 0.5f / scale;
             const float left = camera - half_view - 2.0f;
             const float right = camera + half_view + 2.0f;
+            if (environment.shuttle_enabled())
+            {
+                constexpr std::array boundaries{
+                    sim::shuttle_left_boundary, sim::shuttle_right_boundary };
+                for (std::size_t index = 0; index < boundaries.size(); ++index)
+                {
+                    const float x = boundaries[index];
+                    const float ground = environment.ground_height_at(x);
+                    const Vec2 base = world_to_screen(
+                        { x, ground }, viewport, camera, scale);
+                    const Vec2 top = world_to_screen(
+                        { x, ground + 0.82f }, viewport, camera, scale);
+                    canvas.line(base, top, 3.5f, accent_dim);
+                    const Rect sign{ top + Vec2{ -58.0f, -26.0f },
+                        { 116.0f, 26.0f } };
+                    add_rounded_rect(canvas, sign, 5.0f,
+                        rgb(0x102431, 0.97f), accent, 1.0f);
+                    add_text_fit(canvas, sign.position + Vec2{ 6.0f, 5.0f },
+                        index == 0u ? "TURN A" : "TURN B",
+                        0.82f, white, sign.size.x - 12.0f, 0.72f);
+                }
+                return;
+            }
             const float marker_spacing = ui_layout::course_reference_marker_spacing_m(distance_units);
             const int first_marker = static_cast<int>(std::floor((left + progress) / marker_spacing));
             const int last_marker = static_cast<int>(std::ceil((right + progress) / marker_spacing));
@@ -963,9 +989,17 @@ namespace runner
             const auto& rig = environment.blueprint();
             if (particles.empty())
                 return;
+            const bool mirrored_facing = environment.facing_direction() < 0.0f;
+            const bool presentation_right_leg_near = mirrored_facing
+                ? !right_leg_near : right_leg_near;
+            const Vec2 presentation_root = rig.root_node < particles.size()
+                ? particles[rig.root_node].position : particles.front().position;
             auto point = [&](std::size_t index)
             {
-                return world_to_screen(particles[index].position, viewport, camera, scale);
+                const Vec2 presented = art::facing_presented_position(
+                    particles[index].position, presentation_root,
+                    environment.facing_direction());
+                return world_to_screen(presented, viewport, camera, scale);
             };
             auto branch_side = [](std::uint8_t mask) noexcept
             {
@@ -1059,7 +1093,7 @@ namespace runner
                     const int side_a = leg_side(bone.a);
                     const int side_b = leg_side(bone.b);
                     const int side = side_a != 0 ? side_a : side_b;
-                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const bool near = side != 0 && ((side > 0) == presentation_right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
                         continue;
@@ -1112,7 +1146,7 @@ namespace runner
                 for (std::size_t index = 0; index < particles.size(); ++index)
                 {
                     const int side = leg_side(index);
-                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const bool near = side != 0 && ((side > 0) == presentation_right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
                         continue;
@@ -1188,7 +1222,7 @@ namespace runner
                     const std::uint8_t support_mask = rig.support_branch_mask(motor);
                     const int side = support_mask != 0u
                         ? branch_side(support_mask) : leg_side(motor.c);
-                    const bool near = side != 0 && ((side > 0) == right_leg_near);
+                    const bool near = side != 0 && ((side > 0) == presentation_right_leg_near);
                     const int layer = side == 0 ? 1 : near ? 2 : 0;
                     if (layer != pass)
                         continue;
@@ -1216,6 +1250,7 @@ namespace runner
 
                     Vec2 beginning = point(motor.pivot);
                     Vec2 ending = point(motor.c);
+                    const Vec2 terminal_joint = ending;
                     const Vec2 delta = ending - beginning;
                     const float span = length(delta);
                     if (span <= 1.0f)
@@ -1234,6 +1269,19 @@ namespace runner
                     ending = ending + axis * authored_joint_overlap;
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
                         thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
+                    if (support_mask == 0u && !has_distal_motor
+                        && optional_hand_art.loaded())
+                    {
+                        const float hand_length = std::clamp(
+                            thickness * 0.92f, 26.0f, 58.0f);
+                        const float hand_thickness = std::clamp(
+                            thickness * 0.72f, 20.0f, 44.0f);
+                        draw_oriented_pixel_art(canvas, optional_hand_art,
+                            terminal_joint - axis * (hand_length * 0.10f),
+                            terminal_joint + axis * (hand_length * 0.90f),
+                            hand_thickness,
+                            near || side == 0 ? 0.98f : 0.56f, side < 0);
+                    }
                 }
             };
             draw_body_segments(0);
@@ -1297,7 +1345,7 @@ namespace runner
                         art::oriented_box_transform(center, body_right, width, height);
                     draw_oriented_pixel_art(canvas, optional_torso_art,
                         transform.beginning, transform.ending,
-                        transform.thickness, 0.96f);
+                        transform.thickness, 0.96f, false, mirrored_facing);
                 }
 
             }
@@ -1320,7 +1368,8 @@ namespace runner
                 const art::OrientedArtTransform transform =
                     art::oriented_box_transform(center, head_right, width, height);
                 draw_oriented_pixel_art(canvas, optional_helmet_art,
-                    transform.beginning, transform.ending, transform.thickness, 0.92f);
+                    transform.beginning, transform.ending, transform.thickness,
+                    0.92f, false, mirrored_facing);
             }
             draw_body_segments(2);
             draw_fitted_armor(2);
@@ -2026,8 +2075,15 @@ namespace runner
             }
             if (!course_eye_test_environment.has_value())
             {
-                const float target_pixels_per_meter = view_camera::fitted_pixels_per_meter(
+                float target_pixels_per_meter = view_camera::fitted_pixels_per_meter(
                     viewport.size.y, rig_height, live_zoom_factor);
+                if (environment.shuttle_enabled() && live_zoom_auto)
+                {
+                    const float arena_span = sim::shuttle_right_boundary
+                        - sim::shuttle_left_boundary + 3.0f;
+                    target_pixels_per_meter = std::min(target_pixels_per_meter,
+                        viewport.size.x / arena_span);
+                }
                 live_pixels_per_meter = view_camera::smooth_zoom(
                     live_pixels_per_meter, target_pixels_per_meter, dt);
             }
@@ -2036,9 +2092,14 @@ namespace runner
                 const std::size_t root = environment.blueprint().root_node;
                 if (root < particles.size())
                 {
-                    const float target_camera = particles[root].position.x
-                        + view_camera::lookahead_meters(
-                            viewport.size.x, live_pixels_per_meter);
+                    const float target_camera = environment.shuttle_enabled()
+                        && live_zoom_auto
+                        ? 0.5f * (sim::shuttle_left_boundary
+                            + sim::shuttle_right_boundary)
+                        : particles[root].position.x
+                            + view_camera::lookahead_meters(
+                                viewport.size.x, live_pixels_per_meter)
+                                * environment.facing_direction();
                     camera_x = view_camera::smooth_camera(
                         camera_x, target_camera, live_pixels_per_meter, dt);
                 }
@@ -2127,6 +2188,14 @@ namespace runner
                 { pip_box.width, pip_box.height } });
             add_rounded_rect(canvas, bottom, 8.0f,
                 rgb(0x07111b, 0.96f), border, 1.0f);
+            const std::string run_status = art_eye_test ? "FIXED SIDE PROFILE"
+                : walk_eye_test ? "ZERO-AUTHORITY LIFTED-STEP REPLAY"
+                : course_eye_test_environment.has_value() ? "FIXED START FRAME"
+                : environment.shuttle_enabled()
+                    ? std::format("SHUTTLE {} {}",
+                        sim::shuttle_phase_name(environment.shuttle_phase()),
+                        environment.facing_direction() > 0.0f ? "RIGHT" : "LEFT")
+                : trainer.background_enabled() ? "TRAINING" : "PAUSED";
             add_text_fit(canvas, bottom.position + Vec2{ 11.0f, 10.0f },
                 std::format("{}   v{}   GROUND {}   WATER {:.2f} M   EQUIP {} / {}   HITS {}   {}",
                     art_eye_test ? "PACKAGED ORTHOGRAPHIC ART TEST"
@@ -2142,10 +2211,7 @@ namespace runner
                     sim::weapon_class_name(environment.weapon_class()),
                     sim::equipment_state_name(environment.equipment_state()),
                     environment.target_hits(),
-                    art_eye_test ? "FIXED SIDE PROFILE"
-                        : walk_eye_test ? "ZERO-AUTHORITY LIFTED-STEP REPLAY"
-                        : course_eye_test_environment.has_value() ? "FIXED START FRAME"
-                        : trainer.background_enabled() ? "TRAINING" : "PAUSED"),
+                    run_status),
                 0.86f, course_eye_test_environment.has_value() || trainer.has_best_policy()
                     ? green : yellow,
                 bottom.size.x - 22.0f, 0.76f);
@@ -2613,9 +2679,26 @@ namespace runner
                 preset(3, 0, "HEXAPOD", RigPreset::hexapod);
                 cursor.y += 176.0f;
                 add_wrapped_text(canvas, cursor,
-                    "Seven distinct playable rigs are exposed. The near-duplicate scaffold remains an internal calibration fixture. Training tunes controls only; it never changes anatomy.",
+                    "Seven graph-distinct playable rigs are exposed; Scaffold stays internal. Choose topology-safe control tuning or bounded held-out morphology evolution for this rig.",
                     0.73f, muted, usable, 2.0f);
                 cursor.y += 55.0f;
+                const bool morphology_mode = autonomy.optimization_mode
+                    == rl::RigOptimizationMode::morphology_evolve;
+                if (button({ cursor, { half, 35.0f } }, "CONTROL OPTIMIZE", input,
+                    !morphology_mode))
+                {
+                    trainer.set_rig_optimization_mode(
+                        rl::RigOptimizationMode::control_optimize);
+                    set_status("CONTROL OPTIMIZE SELECTED - ANATOMY LOCKED");
+                }
+                if (button({ cursor + Vec2{ half + 6.0f, 0.0f }, { half, 35.0f } },
+                    "MORPHOLOGY EVOLVE", input, morphology_mode))
+                {
+                    trainer.set_rig_optimization_mode(
+                        rl::RigOptimizationMode::morphology_evolve);
+                    set_status("MORPHOLOGY EVOLVE SELECTED - HELD-OUT CHANGES ONLY");
+                }
+                cursor.y += 48.0f;
 
                 const float third = (usable - 12.0f) / 3.0f;
                 if (button({ cursor, { third, 35.0f } }, "SAVE RIG", input)
@@ -2675,17 +2758,18 @@ namespace runner
                     debug_skeleton_overlay = !debug_skeleton_overlay;
                 cursor.y += 50.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("CONTROL TUNING {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                    std::format("{} {}   ACCEPTED {}   REJECTED {}   ROLLBACKS {}",
+                        rl::rig_optimization_mode_name(autonomy.optimization_mode),
                         autonomy.rig_generation, autonomy.accepted_rig_changes,
                         autonomy.rejected_rig_changes, autonomy.rollback_count),
-                    0.74f, accent, usable, 0.60f);
+                    0.74f, accent, usable, 0.56f);
             }
             else if (rig_panel_page == RigPanelPage::structure)
             {
                 add_text(canvas, cursor, "MANUAL STRUCTURE EDITING", 1.02f, accent);
                 cursor.y += 25.0f;
                 add_wrapped_text(canvas, cursor,
-                    "Only manual edits change anatomy. Select and drag nodes in the viewport. Shift adds a node, Ctrl connects it, Alt selects a bone.",
+                    "Edit anatomy directly here, or select Morphology Evolve on Presets for bounded held-out changes. Shift adds a node, Ctrl connects it, Alt selects a bone.",
                     0.72f, muted, usable, 2.0f);
                 cursor.y += 58.0f;
                 add_text_fit(canvas, cursor,
@@ -3119,6 +3203,7 @@ namespace runner
         load_optional("torso_side.ppm", impl_->optional_torso_art);
         load_optional("upper_arm_side.ppm", impl_->optional_upper_arm_art);
         load_optional("forearm_side.ppm", impl_->optional_forearm_art);
+        load_optional("hand_side.ppm", impl_->optional_hand_art);
         load_optional("thigh_side.ppm", impl_->optional_thigh_art);
         load_optional("shin_side.ppm", impl_->optional_shin_art);
         load_optional("weapon_side.ppm", impl_->optional_weapon_art);
@@ -3127,6 +3212,7 @@ namespace runner
             || impl_->optional_torso_art.loaded()
             || impl_->optional_upper_arm_art.loaded()
             || impl_->optional_forearm_art.loaded()
+            || impl_->optional_hand_art.loaded()
             || impl_->optional_thigh_art.loaded()
             || impl_->optional_shin_art.loaded()
             || impl_->optional_weapon_art.loaded();

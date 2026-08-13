@@ -11,7 +11,7 @@ namespace runner::rl
         bool write_autonomy_state(const std::filesystem::path& path,
             sim::CourseStage stage, float difficulty, std::uint64_t rig_generation,
             std::uint64_t accepted, std::uint64_t rejected, int rollback,
-            std::string& error)
+            RigOptimizationMode optimization_mode, std::string& error)
         {
             if (path.empty())
                 return true;
@@ -22,9 +22,10 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 16\n";
+            output << "RUNAUTONOMY 17\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
-                << accepted << ' ' << rejected << ' ' << rollback << '\n';
+                << accepted << ' ' << rejected << ' ' << rollback << ' '
+                << static_cast<int>(optimization_mode) << '\n';
             output.close();
             if (!output)
             {
@@ -45,7 +46,8 @@ namespace runner::rl
 
         void read_autonomy_state(const std::filesystem::path& path,
             sim::CourseStage& stage, float& difficulty, std::uint64_t& rig_generation,
-            std::uint64_t& accepted, std::uint64_t& rejected, int& rollback)
+            std::uint64_t& accepted, std::uint64_t& rejected, int& rollback,
+            RigOptimizationMode& optimization_mode)
         {
             if (path.empty() || !std::filesystem::exists(path))
                 return;
@@ -53,13 +55,33 @@ namespace runner::rl
             std::string magic{};
             int version{};
             int stage_value{};
-            input >> magic >> version >> stage_value >> difficulty >> rig_generation
-                >> accepted >> rejected >> rollback;
-            if (!input || magic != "RUNAUTONOMY" || version != 16
-                || stage_value < 0 || stage_value >= static_cast<int>(sim::course_stage_count))
+            float loaded_difficulty{};
+            std::uint64_t loaded_generation{};
+            std::uint64_t loaded_accepted{};
+            std::uint64_t loaded_rejected{};
+            int loaded_rollback{};
+            int mode_value = static_cast<int>(RigOptimizationMode::control_optimize);
+            input >> magic >> version;
+            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17))
+                return;
+            input >> stage_value >> loaded_difficulty >> loaded_generation
+                >> loaded_accepted >> loaded_rejected >> loaded_rollback;
+            if (version == 17)
+                input >> mode_value;
+            if (!input || stage_value < 0
+                || stage_value >= static_cast<int>(sim::course_stage_count)
+                || !(loaded_difficulty >= 0.10f && loaded_difficulty <= 1.0f)
+                || loaded_rollback < 0
+                || (mode_value != static_cast<int>(RigOptimizationMode::control_optimize)
+                    && mode_value != static_cast<int>(RigOptimizationMode::morphology_evolve)))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
-            difficulty = clamp(difficulty, 0.10f, 1.0f);
+            difficulty = loaded_difficulty;
+            rig_generation = loaded_generation;
+            accepted = loaded_accepted;
+            rejected = loaded_rejected;
+            rollback = loaded_rollback;
+            optimization_mode = static_cast<RigOptimizationMode>(mode_value);
         }
     }
 
@@ -126,6 +148,7 @@ namespace runner::rl
         snapshot.status.rig_generation = rig_generation_;
         snapshot.status.accepted_rig_changes = accepted_rig_changes_;
         snapshot.status.rejected_rig_changes = rejected_rig_changes_;
+        snapshot.status.optimization_mode = optimization_mode_;
         snapshot.status.mastery_streak = mastery_streak_;
         snapshot.status.rollback_count = rollback_count_;
         snapshot.status.rollout_threads = worker_.rollout_worker_count();
@@ -179,6 +202,7 @@ namespace runner::rl
         job.accepted_rig_changes = accepted_rig_changes_;
         job.rejected_rig_changes = rejected_rig_changes_;
         job.rollback_count = rollback_count_;
+        job.optimization_mode = optimization_mode_;
         {
             std::scoped_lock lock(persistence_mutex_);
             job.checkpoint_path = autosave_checkpoint_;
@@ -264,7 +288,8 @@ namespace runner::rl
                 if (ok)
                     ok = write_autonomy_state(job.state_path, job.stage, job.difficulty,
                         job.rig_generation, job.accepted_rig_changes,
-                        job.rejected_rig_changes, job.rollback_count, message);
+                        job.rejected_rig_changes, job.rollback_count,
+                        job.optimization_mode, message);
                 if (ok)
                     message = "AUTOSAVE SNAPSHOT PUBLISHED ASYNCHRONOUSLY";
             }
@@ -298,7 +323,8 @@ namespace runner::rl
                 {
                     read_autonomy_state(job.state_path, job.stage, job.difficulty,
                         job.rig_generation, job.accepted_rig_changes,
-                        job.rejected_rig_changes, job.rollback_count);
+                        job.rejected_rig_changes, job.rollback_count,
+                        job.optimization_mode);
                     PendingCommand command{};
                     command.type = CommandType::apply_autosave;
                     command.blueprint = std::move(job.blueprint);
@@ -307,6 +333,7 @@ namespace runner::rl
                     command.accepted_rig_changes = job.accepted_rig_changes;
                     command.rejected_rig_changes = job.rejected_rig_changes;
                     command.rollback_count = job.rollback_count;
+                    command.optimization_mode = job.optimization_mode;
                     enqueue_command(std::move(command));
                     message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
                 }

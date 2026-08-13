@@ -33,7 +33,8 @@ namespace
             "explicit low-core worker ceiling was not honored");
         runner::diagnostics::RigTrainingResult result{};
         result.retained_policy = true;
-        result.retained_quality = 1u;
+        result.retained_quality =
+            runner::rl::strict_evaluation_quality_bit | 1u;
         result.retained_update =
             runner::rl::foundational_walk_teacher_handoff_update(quadruped);
         result.retained_probe_distance = 1.0f;
@@ -43,6 +44,10 @@ namespace
             "fresh strict replay was rejected by historical quality metadata");
 
         const auto baseline = result;
+        result.retained_quality = 1u;
+        require(!runner::diagnostics::retained_policy_release_eligible(
+                result, quadruped),
+            "partial training candidate was accepted as a retained champion");
         result.retained_quality = 0u;
         require(!runner::diagnostics::retained_policy_release_eligible(
                 result, quadruped),
@@ -175,6 +180,9 @@ namespace
         float firmness{};
         float looseness{};
         float maximum_scissor_seconds{};
+        float root_x{};
+        runner::sim::ShuttlePhase phase{ runner::sim::ShuttlePhase::traverse };
+        std::uint32_t turns{};
         runner::sim::InvalidMotion reason{ runner::sim::InvalidMotion::none };
     };
 
@@ -197,7 +205,8 @@ namespace
             environment.terrain_region_at(root_x),
             environment.terrain_firmness_at(root_x),
             environment.terrain_looseness_at(root_x),
-            environment.maximum_lower_leg_scissor_seconds(),
+            environment.maximum_lower_leg_scissor_seconds(), root_x,
+            environment.shuttle_phase(), environment.completed_shuttle_turns(),
             environment.invalid_reason() };
     }
     void verify_walking_teachers_repeated_seeds()
@@ -236,6 +245,9 @@ namespace
                     && repeated.looseness == repeated_again.looseness
                     && repeated.maximum_scissor_seconds
                         == repeated_again.maximum_scissor_seconds
+                    && repeated.root_x == repeated_again.root_x
+                    && repeated.phase == repeated_again.phase
+                    && repeated.turns == repeated_again.turns
                     && repeated.reason == repeated_again.reason,
                 "walking teacher is not deterministic for a repeated seed");
             bool all_valid = true;
@@ -258,6 +270,9 @@ namespace
                     << " firmness=" << outcome.firmness
                     << " looseness=" << outcome.looseness
                     << " scissor=" << outcome.maximum_scissor_seconds
+                    << " root_x=" << outcome.root_x
+                    << " phase=" << runner::sim::shuttle_phase_name(outcome.phase)
+                    << " turns=" << outcome.turns
                     << " reason=" << runner::sim::invalid_motion_name(outcome.reason)
                     << '\n';
                 all_valid = all_valid

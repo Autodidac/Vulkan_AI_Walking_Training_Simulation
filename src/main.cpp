@@ -161,6 +161,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0729_MODULAR_ART_REMAKE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0732_SHUTTLE_FACING_HANDS.md",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"

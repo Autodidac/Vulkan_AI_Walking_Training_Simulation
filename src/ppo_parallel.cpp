@@ -622,7 +622,9 @@ namespace runner::rl
         // immutable best snapshot for preview/autosave, but let PPO continue
         // accumulating from partial walkers between bounded curriculum
         // rollback decisions.
-        if (policy_candidate_better(metrics_.evaluation_quality_key,
+        if (policy_candidate_retainable(course_stage_,
+                metrics_.evaluation_quality_key)
+            && policy_candidate_better(metrics_.evaluation_quality_key,
                 metrics_.evaluation_score, metrics_.best_quality_key,
                 metrics_.best_evaluation_score, has_best))
         {

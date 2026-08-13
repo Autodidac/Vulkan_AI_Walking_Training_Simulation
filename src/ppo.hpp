@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3101u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3201u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -390,17 +390,21 @@ namespace runner::rl
 
         const Vec2 root = particles[rig.root_node].position;
         const float ground = environment.ground_height_at(root.x);
+        const float requested_direction = environment.locomotion_direction();
+        const float lookahead_direction = std::abs(requested_direction) >= 0.5f
+            ? requested_direction : environment.facing_direction();
         signals.uprightness = environment.uprightness();
         signals.root_x = root.x;
         signals.left_support_x = particles[rig.left_contact_node].position.x;
         signals.right_support_x = particles[rig.right_contact_node].position.x;
         signals.left_supported = environment.left_supported();
         signals.right_supported = environment.right_supported();
-        signals.near_rise = environment.ground_height_at(root.x + 0.65f) - ground;
-        signals.mid_rise = environment.ground_height_at(root.x + 1.50f) - ground;
-        signals.far_rise = environment.ground_height_at(root.x + 3.00f) - ground;
+        signals.near_rise = environment.ground_height_at(root.x + 0.65f * lookahead_direction) - ground;
+        signals.mid_rise = environment.ground_height_at(root.x + 1.50f * lookahead_direction) - ground;
+        signals.far_rise = environment.ground_height_at(root.x + 3.00f * lookahead_direction) - ground;
         signals.slope = environment.terrain().slope_at(
-            sim::terrain_sample_x(root.x, environment.course_progress()));
+            sim::terrain_sample_x(root.x, environment.course_progress()))
+            * lookahead_direction;
         signals.forward_speed = environment.forward_speed();
         signals.recovering = environment.recovering();
         signals.non_foot_grounded = environment.non_foot_grounded();
@@ -411,6 +415,8 @@ namespace runner::rl
         signals.incoming_time_to_impact = environment.incoming_time_to_impact();
         signals.incoming_density = environment.incoming_material_density();
         signals.gait_cycles = environment.gait_cycles();
+        signals.requested_direction = requested_direction;
+        signals.turning = environment.shuttle_phase() == sim::ShuttlePhase::turning;
 
         for (const sim::CourseFeature& feature : environment.course_features())
         {
@@ -628,8 +634,9 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
+            const float bend_direction = left ? -1.0f : 1.0f;
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, { x, y }, left ? -1.0f : 1.0f);
+                upper_length, lower_length, { x, y }, bend_direction);
             if (!solution.valid)
                 return;
             const Vec2 hip_reference = rig.nodes[hip.a] - rig.nodes[hip.pivot];
@@ -695,7 +702,7 @@ namespace runner::rl
             const Vec2 target = sagittal_arm_target(upper_length + lower_length,
                 arm_phase, parameters.direction);
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, target, -1.0f);
+                upper_length, lower_length, target, parameters.direction < 0.0f ? 1.0f : -1.0f);
             if (!solution.valid)
                 continue;
             const Vec2 shoulder_reference = rig.nodes[shoulder.a]
@@ -803,7 +810,7 @@ namespace runner::rl
 
         const bool foundational_walk = environment.course_stage()
             == sim::CourseStage::uneven;
-        const BipedGaitParameters biped_parameters = foundational_walk
+        BipedGaitParameters biped_parameters = foundational_walk
             ? anatomy_scaled_foundational_gait(rig)
             : BipedGaitParameters{
                 movement.intent == locomotion::Intent::flee ? 1.40f
@@ -813,6 +820,7 @@ namespace runner::rl
                 movement.step_up ? 2.20f : 2.30f,
                 movement.direction
             };
+        biped_parameters.direction = movement.direction;
 
         return biped_gait_teacher_action(environment, biped_parameters);
     }
@@ -966,11 +974,15 @@ namespace runner::rl
             const Vec2 delta = target.position
                 - environment.equipment_mount_position();
             const float desired_angle = std::atan2(delta.y, delta.x);
+            const float facing_angle = environment.facing_direction() < 0.0f
+                ? pi : 0.0f;
+            const float local_desired_angle = std::remainder(
+                desired_angle - facing_angle, 2.0f * pi);
             const float aim_error = std::remainder(
                 desired_angle - environment.equipment_aim_angle(), 2.0f * pi);
             policy_action[sim::anatomy_action_count] = 0.72f;
             policy_action[sim::anatomy_action_count + 1u] = clamp(
-                desired_angle / (pi * 0.42f), -1.0f, 1.0f);
+                local_desired_angle / (pi * 0.42f), -1.0f, 1.0f);
             policy_action[sim::anatomy_action_count + 2u] =
                 environment.equipment_state() == sim::EquipmentState::ready
                     && std::abs(aim_error) < 0.10f
@@ -1143,8 +1155,7 @@ namespace runner::rl
                 update, *blueprint);
             if (authority > 0.0f)
                 return 64.0f * authority;
-            if (blueprint->paired_leg_chains()
-                && foundational_walk_consolidation_active(
+            if (foundational_walk_consolidation_active(
                     update, stage, *blueprint))
             {
                 const std::uint64_t handoff =
@@ -1659,6 +1670,13 @@ namespace runner::rl
         std::uint64_t quality) noexcept
     {
         return (quality & strict_evaluation_quality_bit) != 0u;
+    }
+
+    [[nodiscard]] inline bool policy_candidate_retainable(
+        sim::CourseStage stage, std::uint64_t quality) noexcept
+    {
+        return !sim::stage_requires_forward_gait(stage)
+            || strict_evaluation_quality(quality);
     }
 
     [[nodiscard]] inline bool policy_candidate_better(std::uint64_t quality,

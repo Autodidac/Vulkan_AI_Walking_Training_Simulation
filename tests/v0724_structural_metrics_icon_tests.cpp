@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -12,6 +13,7 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifndef RUNNER_GENERATED_ASSET_DIRECTORY
@@ -163,6 +165,170 @@ int main()
             require(same_anatomy(source, candidate.blueprint),
                 "automatic controller tuning must preserve anatomy and stiffness");
         }
+    }
+
+    {
+        const CreatureBlueprint source = CreatureBlueprint::humanoid();
+        const RigMutationCandidate control = runner::rl::rig_optimization_candidate(
+            runner::rl::RigOptimizationMode::control_optimize, source, 5u);
+        const RigMutationCandidate direct_control =
+            runner::rl::automatic_rig_tuning_candidate(source, 5u);
+        require(control.blueprint.signature() == direct_control.blueprint.signature()
+                && !control.topology_changed && same_anatomy(source, control.blueprint),
+            "control mode did not route to anatomy-immutable controller tuning");
+
+        const RigMutationCandidate evolved = runner::rl::rig_optimization_candidate(
+            runner::rl::RigOptimizationMode::morphology_evolve, source, 5u);
+        const RigMutationCandidate repeated = runner::rl::rig_optimization_candidate(
+            runner::rl::RigOptimizationMode::morphology_evolve, source, 5u);
+        require(evolved.changed && evolved.topology_changed && evolved.blueprint.valid()
+                && evolved.blueprint.signature() == repeated.blueprint.signature(),
+            "morphology mode did not deterministically route to bounded topology evolution");
+        require(runner::rl::rig_complexity_cost(evolved.blueprint)
+                > runner::rl::rig_complexity_cost(source),
+            "topology growth does not carry an explicit acceptance cost");
+
+        const RigMutationCandidate invalid_mode = runner::rl::rig_optimization_candidate(
+            static_cast<runner::rl::RigOptimizationMode>(255), source, 5u);
+        require(invalid_mode.blueprint.signature() == direct_control.blueprint.signature()
+                && !invalid_mode.topology_changed,
+            "invalid optimization mode did not fail safely to anatomy-locked control tuning");
+        require(runner::rl::rig_optimization_mode_name(
+                    runner::rl::RigOptimizationMode::control_optimize)
+                    == "CONTROL OPTIMIZE"
+                && runner::rl::rig_optimization_mode_name(
+                    runner::rl::RigOptimizationMode::morphology_evolve)
+                    == "MORPHOLOGY EVOLVE",
+            "optimization mode telemetry names are not explicit");
+    }
+
+    {
+        const auto suffix = std::chrono::steady_clock::now()
+            .time_since_epoch().count();
+        const std::filesystem::path root = std::filesystem::temp_directory_path()
+            / ("runner-v0732-rig-mode-" + std::to_string(suffix));
+        std::error_code filesystem_error{};
+        require(std::filesystem::create_directories(root, filesystem_error)
+                && !filesystem_error,
+            "could not create rig-mode persistence test directory");
+        const std::filesystem::path checkpoint = root / "mode.eppo";
+        const std::filesystem::path rig = root / "mode.rig";
+        const std::filesystem::path state = root / "mode.state";
+
+        const auto wait_for_mode = [](runner::rl::AutonomousTrainer& trainer,
+            runner::rl::RigOptimizationMode expected)
+        {
+            for (int attempt = 0; attempt < 500; ++attempt)
+            {
+                trainer.synchronize();
+                if (trainer.autonomy_status().optimization_mode == expected)
+                    return true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            return false;
+        };
+        const auto wait_for_loaded_mode = [](runner::rl::AutonomousTrainer& trainer,
+            runner::rl::RigOptimizationMode expected)
+        {
+            for (int attempt = 0; attempt < 500; ++attempt)
+            {
+                trainer.synchronize();
+                const runner::rl::AutonomyStatus& status = trainer.autonomy_status();
+                if (status.optimization_mode == expected
+                    && status.message.find("AUTOSAVE RESUMED") != std::string::npos)
+                {
+                    return true;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            return false;
+        };
+        const auto persisted_mode = [&state]
+        {
+            std::ifstream input(state);
+            std::string magic{};
+            int version{};
+            int stage{};
+            float difficulty{};
+            std::uint64_t generation{};
+            std::uint64_t accepted{};
+            std::uint64_t rejected{};
+            int rollbacks{};
+            int mode = -1;
+            input >> magic >> version >> stage >> difficulty >> generation
+                >> accepted >> rejected >> rollbacks >> mode;
+            return input && magic == "RUNAUTONOMY" && version == 17 ? mode : -1;
+        };
+
+        {
+            runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
+            trainer.set_autosave_paths(checkpoint, rig, state);
+            trainer.set_rig_optimization_mode(
+                runner::rl::RigOptimizationMode::morphology_evolve);
+            require(wait_for_mode(trainer,
+                    runner::rl::RigOptimizationMode::morphology_evolve),
+                "morphology mode command was not published");
+            bool state_written = false;
+            for (int attempt = 0; attempt < 500; ++attempt)
+            {
+                state_written = std::filesystem::exists(checkpoint)
+                    && std::filesystem::exists(rig) && persisted_mode() == 1;
+                if (state_written)
+                    break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            require(state_written,
+                "morphology mode was not atomically persisted with its rig");
+        }
+
+        {
+            runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
+            trainer.set_autosave_paths(checkpoint, rig, state);
+            std::string message{};
+            require(trainer.load_autosave(message),
+                "persisted morphology autosave was not queued");
+            require(wait_for_mode(trainer,
+                    runner::rl::RigOptimizationMode::morphology_evolve),
+                "persisted morphology mode did not round-trip");
+        }
+
+        {
+            std::ofstream legacy(state, std::ios::trunc);
+            legacy << "RUNAUTONOMY 16\n0 0.25 0 0 0 0\n";
+            require(static_cast<bool>(legacy),
+                "could not author backward-compatible version-16 state");
+        }
+        {
+            runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
+            trainer.set_autosave_paths(checkpoint, rig, state);
+            std::string message{};
+            require(trainer.load_autosave(message),
+                "version-16 autosave was not queued");
+            require(wait_for_loaded_mode(trainer,
+                    runner::rl::RigOptimizationMode::control_optimize),
+                "version-16 state did not default safely to control mode");
+        }
+
+        {
+            std::ofstream malformed(state, std::ios::trunc);
+            malformed << "RUNAUTONOMY 17\n0 0.25 0 0 0 0 255\n";
+            require(static_cast<bool>(malformed),
+                "could not author adversarial version-17 state");
+        }
+        {
+            runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
+            trainer.set_autosave_paths(checkpoint, rig, state);
+            std::string message{};
+            require(trainer.load_autosave(message),
+                "adversarial autosave was not queued");
+            require(wait_for_loaded_mode(trainer,
+                    runner::rl::RigOptimizationMode::control_optimize),
+                "invalid persisted mode did not fail safely to control mode");
+        }
+
+        std::filesystem::remove_all(root, filesystem_error);
+        require(!filesystem_error,
+            "could not clean rig-mode persistence test directory");
     }
 
     {

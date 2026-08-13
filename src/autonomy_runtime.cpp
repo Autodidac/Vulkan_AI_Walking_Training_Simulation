@@ -151,6 +151,16 @@ namespace runner::rl
         enqueue_command(std::move(command));
     }
 
+    void AutonomousTrainer::set_rig_optimization_mode(RigOptimizationMode mode) noexcept
+    {
+        PendingCommand command{};
+        command.type = CommandType::set_optimization_mode;
+        command.optimization_mode = mode == RigOptimizationMode::morphology_evolve
+            ? RigOptimizationMode::morphology_evolve
+            : RigOptimizationMode::control_optimize;
+        enqueue_command(std::move(command));
+    }
+
     void AutonomousTrainer::reset_policy(std::uint64_t seed)
     {
         PendingCommand command{};

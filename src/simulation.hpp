@@ -22,6 +22,113 @@ namespace runner::sim
     inline constexpr std::size_t observation_count = 60;
     inline constexpr float foundational_gait_cadence_hz = 1.20f;
 
+    enum class ShuttlePhase : std::uint8_t
+    {
+        traverse,
+        braking,
+        backing,
+        turning
+    };
+
+    [[nodiscard]] inline std::string_view shuttle_phase_name(
+        ShuttlePhase phase) noexcept
+    {
+        switch (phase)
+        {
+        case ShuttlePhase::traverse: return "FORWARD";
+        case ShuttlePhase::braking: return "BRAKING";
+        case ShuttlePhase::backing: return "BACKING";
+        case ShuttlePhase::turning: return "TURNING";
+        }
+        return "UNKNOWN";
+    }
+
+    struct ShuttleState
+    {
+        ShuttlePhase phase{ ShuttlePhase::traverse };
+        float facing_direction{ 1.0f };
+        float locomotion_direction{ 1.0f };
+        float phase_origin_x{};
+        float phase_seconds{};
+        std::uint32_t completed_turns{};
+    };
+
+    inline constexpr float shuttle_left_boundary = -2.0f;
+    inline constexpr float shuttle_right_boundary = 10.0f;
+    inline constexpr float shuttle_brake_seconds = 0.65f;
+    inline constexpr float shuttle_brake_speed = 0.22f;
+    inline constexpr float shuttle_backup_distance = 0.30f;
+    inline constexpr float shuttle_backup_timeout_seconds = 1.50f;
+    inline constexpr float shuttle_turn_seconds = 0.32f;
+
+    [[nodiscard]] inline bool shuttle_dynamic_course_ready(
+        std::uint32_t completed_turns, std::uint32_t gait_cycles,
+        float stable_seconds) noexcept
+    {
+        return completed_turns >= 2u && gait_cycles >= 14u
+            && std::isfinite(stable_seconds) && stable_seconds >= 2.0f;
+    }
+    [[nodiscard]] inline ShuttleState advance_shuttle_state(
+        ShuttleState state, float root_x, float dt,
+        float root_speed = 0.0f) noexcept
+    {
+        if (!std::isfinite(root_x) || !std::isfinite(dt) || dt <= 0.0f)
+            return state;
+        if (state.phase == ShuttlePhase::traverse)
+        {
+            const bool at_boundary = state.facing_direction > 0.0f
+                ? root_x >= shuttle_right_boundary
+                : root_x <= shuttle_left_boundary;
+            if (at_boundary)
+            {
+                state.phase = ShuttlePhase::braking;
+                state.locomotion_direction = 0.0f;
+                state.phase_origin_x = root_x;
+                state.phase_seconds = 0.0f;
+            }
+        }
+        else if (state.phase == ShuttlePhase::braking)
+        {
+            state.phase_seconds += dt;
+            if (state.phase_seconds >= shuttle_brake_seconds
+                && std::isfinite(root_speed)
+                && std::abs(root_speed) <= shuttle_brake_speed)
+            {
+                state.phase = ShuttlePhase::backing;
+                state.locomotion_direction = -state.facing_direction;
+                state.phase_origin_x = root_x;
+                state.phase_seconds = 0.0f;
+            }
+        }
+        else if (state.phase == ShuttlePhase::backing)
+        {
+            state.phase_seconds += dt;
+            const float backed_distance = (root_x - state.phase_origin_x)
+                * state.locomotion_direction;
+            if (backed_distance >= shuttle_backup_distance
+                || state.phase_seconds >= shuttle_backup_timeout_seconds)
+            {
+                state.phase = ShuttlePhase::turning;
+                state.locomotion_direction = 0.0f;
+                state.phase_seconds = 0.0f;
+            }
+        }
+        else
+        {
+            state.phase_seconds += dt;
+            if (state.phase_seconds >= shuttle_turn_seconds)
+            {
+                state.phase = ShuttlePhase::traverse;
+                state.facing_direction = -state.facing_direction;
+                state.locomotion_direction = state.facing_direction;
+                state.phase_origin_x = root_x;
+                state.phase_seconds = 0.0f;
+                ++state.completed_turns;
+            }
+        }
+        return state;
+    }
+
     enum class CourseStage : std::uint8_t
     {
         balance,
@@ -83,6 +190,15 @@ namespace runner::sim
         const float maximum_displacement = odometer_speed_limit_mps * dt;
         return world_displacement >= 0.0f && world_displacement <= maximum_displacement
             ? world_displacement : 0.0f;
+    }
+
+    [[nodiscard]] inline float accepted_directed_odometer_progress(
+        float world_displacement, float dt, float direction) noexcept
+    {
+        if (!std::isfinite(direction) || std::abs(direction) < 0.5f)
+            return 0.0f;
+        return accepted_forward_odometer_progress(
+            world_displacement * (direction < 0.0f ? -1.0f : 1.0f), dt);
     }
 
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
@@ -1385,6 +1501,27 @@ namespace runner::sim
         {
             return course_motion_enabled_;
         }
+        [[nodiscard]] bool shuttle_enabled() const noexcept
+        {
+            return !course_motion_enabled_ && stage_requires_forward_gait(course_stage_)
+                && course_stage_ != CourseStage::climb_descent;
+        }
+        [[nodiscard]] ShuttlePhase shuttle_phase() const noexcept
+        {
+            return shuttle_state_.phase;
+        }
+        [[nodiscard]] float facing_direction() const noexcept
+        {
+            return shuttle_enabled() ? shuttle_state_.facing_direction : 1.0f;
+        }
+        [[nodiscard]] float locomotion_direction() const noexcept
+        {
+            return shuttle_enabled() ? shuttle_state_.locomotion_direction : 1.0f;
+        }
+        [[nodiscard]] std::uint32_t completed_shuttle_turns() const noexcept
+        {
+            return shuttle_state_.completed_turns;
+        }
         [[nodiscard]] float elapsed_seconds() const noexcept { return elapsed_seconds_; }
         [[nodiscard]] float distance_travelled() const noexcept { return distance_travelled_; }
         [[nodiscard]] float forward_speed() const noexcept { return forward_speed_; }
@@ -1572,6 +1709,7 @@ namespace runner::sim
         void update_materials(float dt) noexcept;
         void update_material_metrics(float dt) noexcept;
         void rebuild_course_features() noexcept;
+        void update_shuttle(float root_x, float root_speed, float dt) noexcept;
         void reset_equipment() noexcept;
         void update_equipment(std::span<const float, action_count> actions,
             float dt) noexcept;
@@ -1654,6 +1792,8 @@ namespace runner::sim
         CourseStage course_stage_{ CourseStage::balance };
         float course_difficulty_{ 0.25f };
         bool course_motion_enabled_{ true };
+        ShuttleState shuttle_state_{};
+        float shuttle_distance_travelled_{};
         float collision_count_{};
         float airborne_seconds_{};
         float cumulative_airborne_{};

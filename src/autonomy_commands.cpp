@@ -20,7 +20,7 @@ namespace runner::rl
         std::filesystem::path checkpoint{};
         std::filesystem::path rig{};
         std::filesystem::path state{};
-        bool legacy_lifetime_import = false;
+        std::string legacy_lifetime_version{};
         {
             std::scoped_lock lock(persistence_mutex_);
             checkpoint = autosave_checkpoint_;
@@ -28,25 +28,35 @@ namespace runner::rl
             state = autosave_state_;
             if (!std::filesystem::exists(checkpoint))
             {
-                const std::filesystem::path v0730 = checkpoint.parent_path()
-                    / "runner-v0730-walk-autosave.eppo";
-                if (std::filesystem::exists(v0730))
+                const std::array legacy_candidates{
+                    std::pair{ checkpoint.parent_path()
+                        / "runner-v0731-active-autosave.eppo",
+                        std::string{ "V0.7.31" } },
+                    std::pair{ checkpoint.parent_path()
+                        / "runner-v0730-walk-autosave.eppo",
+                        std::string{ "V0.7.30" } }
+                };
+                for (const auto& [candidate, version] : legacy_candidates)
                 {
-                    checkpoint = v0730;
+                    if (!std::filesystem::exists(candidate))
+                        continue;
+                    checkpoint = candidate;
                     rig.clear();
                     state.clear();
-                    legacy_lifetime_import = true;
+                    legacy_lifetime_version = version;
+                    break;
                 }
             }
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.31 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.32 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
-        message = legacy_lifetime_import
-            ? "V0.7.30 LIFETIME LEDGER IMPORT QUEUED - CURRENT TRAINING STARTS FRESH"
+        message = !legacy_lifetime_version.empty()
+            ? std::format("{} LIFETIME LEDGER IMPORT QUEUED - CURRENT TRAINING STARTS FRESH",
+                legacy_lifetime_version)
             : "AUTOSAVE LOAD QUEUED - TRAINER REMAINS RESPONSIVE";
         return true;
     }
@@ -128,6 +138,7 @@ namespace runner::rl
                 accepted_rig_changes_ = 0;
                 rejected_rig_changes_ = 0;
                 rollback_count_ = 0;
+                optimization_mode_ = RigOptimizationMode::control_optimize;
             }
             worker_.set_blueprint(command.blueprint, command.preserve_policy);
             worker_.set_course(stage_, difficulty_, false);
@@ -161,6 +172,16 @@ namespace runner::rl
         case CommandType::set_exploration:
             worker_.set_exploration(command.scalar);
             worker_message_ = std::format("EXPLORATION SET TO {:.3f}", command.scalar);
+            break;
+
+        case CommandType::set_optimization_mode:
+            optimization_mode_ = command.optimization_mode
+                == RigOptimizationMode::morphology_evolve
+                ? RigOptimizationMode::morphology_evolve
+                : RigOptimizationMode::control_optimize;
+            worker_message_ = std::format("{} MODE SELECTED - NEXT HELD-OUT RIG CANDIDATE USES THIS CONTRACT",
+                rig_optimization_mode_name(optimization_mode_));
+            queue_autosave();
             break;
 
         case CommandType::restore_best:
@@ -210,7 +231,9 @@ namespace runner::rl
                     accepted_rig_changes_ = command.accepted_rig_changes;
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
-                    worker_message_ = "V0.7.31 AUTOSAVE RESUMED ASYNCHRONOUSLY";
+                    optimization_mode_ = command.optimization_mode;
+                    worker_message_ = std::format("V0.7.32 AUTOSAVE RESUMED - {}",
+                        rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))
                 {

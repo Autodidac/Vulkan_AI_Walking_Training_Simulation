@@ -19,16 +19,19 @@ foreach(required IN ITEMS
         docs/RUNNER_V0729_MODULAR_ART_REMAKE.md
         docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md
         docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md
+        docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
         tests/v0731_crouch_learning_tests.cpp
+        tests/v0732_shuttle_facing_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
         src/course_completion_diagnostic.hpp
         assets/optional/runner_armor_concepts/runtime/foot_side.ppm
         assets/optional/runner_armor_concepts/runtime/forearm_side.ppm
+        assets/optional/runner_armor_concepts/runtime/hand_side.ppm
         assets/optional/runner_armor_concepts/runtime/helmet_side.ppm
         assets/optional/runner_armor_concepts/runtime/shin_side.ppm
         assets/optional/runner_armor_concepts/runtime/thigh_side.ppm
@@ -39,6 +42,7 @@ foreach(required IN ITEMS
         tools/generate_runner_icon.py
         tools/generate_runner_armor_assets.py
         tools/art_sources/runner_v0729_modular_atlas.png
+        tools/art_sources/runner_user_modular_sheet.png
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
         tests/v0720_ui_tests.cpp
@@ -64,7 +68,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.31 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.32 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -74,6 +78,7 @@ foreach(reference IN ITEMS
         "RunnerV0730ColdStartTests"
         "RunnerV0731CrouchLearningTests"
         "Runner.V0731CrouchLearning"
+        "RunnerV0732ShuttleFacingTests"
         "Runner.V0730ReferenceFrame"
         "COMMAND RunnerV0730ColdStartTests --references"
         "COMMAND RunnerV0730ColdStartTests --learner"
@@ -89,6 +94,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0729_MODULAR_ART_REMAKE.md"
         "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md"
         "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md"
+        "RUNNER_V0732_SHUTTLE_FACING_HANDS.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -170,7 +176,13 @@ foreach(reference IN ITEMS
         "WALK-ART-ALL-RIGS-365"
         "WALK-RIG-IDENTITY-366"
         "WALK-FRAME-TRUTH-367"
-        "WALK-RELEASE-368")
+        "WALK-RELEASE-368"
+        "WALK-EVOLVING-RIG-369"
+        "WALK-CROUCH-HINGE-380"
+        "WALK-FACING-GAIT-381"
+        "WALK-HAND-ART-382"
+        "WALK-SHUTTLE-COURSE-383"
+        "WALK-RELEASE-384")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -184,7 +196,11 @@ foreach(reference IN ITEMS
         "maximum_bone_length_error_ratio"
         "InvalidMotion::structural_compression"
         "chain_convergence_passes = 16"
-        "structural_error > 0.020f")
+        "structural_error > 0.020f"
+        "advance_shuttle_state"
+        "accepted_directed_odometer_progress"
+        "rebuild_course_features"
+        "ShuttlePhase::turning")
     string(FIND "${simulation_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Walking-leg rigidity contract missing: ${reference}")
@@ -196,10 +212,38 @@ string(FIND "${curriculum_text}" "RigMutationKind::structural_stiffness" stiffne
 if(NOT stiffness_mutation_pos EQUAL -1)
     message(FATAL_ERROR "Automatic structural-stiffness mutation remains enabled")
 endif()
+foreach(reference IN ITEMS
+        "rig_optimization_candidate"
+        "RigOptimizationMode::morphology_evolve"
+        "evolve_rig_candidate(source, generation)"
+        "automatic_rig_tuning_candidate(source, generation)"
+        "optimization_mode_"
+        "constexpr std::size_t agents = 6"
+        "environment.step(raw_action)"
+        "rig_complexity_cost(candidate)")
+    string(FIND "${curriculum_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Explicit rig optimization routing missing: ${reference}")
+    endif()
+endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
+foreach(reference IN ITEMS
+        "RUNAUTONOMY 17"
+        "version != 16 && version != 17"
+        "job.optimization_mode"
+        "command.optimization_mode"
+        "RigOptimizationMode::control_optimize"
+        "RigOptimizationMode::morphology_evolve")
+    string(FIND "${autonomy_persistence_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Rig-scoped optimization persistence missing: ${reference}")
+    endif()
+endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3101u"
+        "training_semantics_version = 0x0007'3201u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -257,7 +301,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0731-active-autosave.eppo"
+        "runner-v0732-shuttle-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -270,6 +314,10 @@ foreach(reference IN ITEMS
         "draw_oriented_pixel_art"
         "optional_upper_arm_art"
         "optional_forearm_art"
+        "optional_hand_art"
+        "CONTROL OPTIMIZE"
+        "MORPHOLOGY EVOLVE"
+        "set_rig_optimization_mode"
         "optional_thigh_art"
         "optional_shin_art")
     string(FIND "${app_text}" "${reference}" pos)
@@ -488,7 +536,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
-        "'E', 'P', 'P', 'O', '3', '1'"
+        "'E', 'P', 'P', 'O', '3', '2'"
+        "v0731_checkpoint_magic"
         "v0730_checkpoint_magic"
         "data.lesson_update"
         "v0727_checkpoint_magic"
@@ -527,6 +576,10 @@ string(FIND "${release_workflow_text}" "--diagnose-rig-training" cold_start_work
 if(cold_start_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.31 cold-start diagnostic")
 endif()
+string(FIND "${release_workflow_text}" "--diagnose-walk-eye" walk_eye_workflow_pos)
+if(walk_eye_workflow_pos EQUAL -1)
+    message(FATAL_ERROR "Release workflow does not run the v0.7.32 raw-policy walk-eye diagnostic")
+endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.28 course diagnostic")
@@ -561,4 +614,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.31 repository hygiene passed")
+message(STATUS "Runner v0.7.32 repository hygiene passed")

@@ -77,6 +77,15 @@ namespace runner::art
         return std::clamp(1.30f + (0.98f - silhouette_ratio) * 0.20f,
             1.24f, 1.34f);
     }
+    [[nodiscard]] inline Vec2 facing_presented_position(
+        Vec2 position, Vec2 root, float facing_direction) noexcept
+    {
+        if (!std::isfinite(position.x) || !std::isfinite(position.y)
+            || !std::isfinite(root.x) || !std::isfinite(root.y)
+            || !std::isfinite(facing_direction) || facing_direction >= 0.0f)
+            return position;
+        return { root.x - (position.x - root.x), position.y };
+    }
     [[nodiscard]] inline OrientedArtTransform oriented_box_transform(
         Vec2 center, Vec2 width_axis, float width, float height) noexcept
     {
