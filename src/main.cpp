@@ -162,6 +162,9 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0732_SHUTTLE_FACING_HANDS.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0733_GRANULAR_FACING_RIGLAB.md",
+            std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
+                / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.bmp",
             std::filesystem::path{ "assets" } / "ui" / "runner.ico"
@@ -223,6 +226,7 @@ namespace
             const std::array optional_runtime{
                 std::filesystem::path{ "runtime" } / "foot_side.ppm",
                 std::filesystem::path{ "runtime" } / "forearm_side.ppm",
+                std::filesystem::path{ "runtime" } / "hand_side.ppm",
                 std::filesystem::path{ "runtime" } / "helmet_side.ppm",
                 std::filesystem::path{ "runtime" } / "shin_side.ppm",
                 std::filesystem::path{ "runtime" } / "thigh_side.ppm",

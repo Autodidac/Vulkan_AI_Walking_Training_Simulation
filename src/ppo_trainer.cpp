@@ -835,6 +835,13 @@ namespace runner::rl
         }
     }
 
+    void PpoTrainer::configure_preview_equipment(
+        sim::WeaponClass weapon, float target_distance)
+    {
+        preview_equipment_test_enabled_ = weapon != sim::WeaponClass::none;
+        preview_.configure_equipment(weapon, target_distance);
+        preview_accumulator_seconds_ = 0.0;
+    }
     void PpoTrainer::step_preview(float dt)
     {
         if (!std::isfinite(dt) || dt <= 0.0f)
@@ -849,10 +856,25 @@ namespace runner::rl
                 ? policy_ : preview_policy_;
             const auto raw_action = display_policy.deterministic_action(
                 preview_.observation());
-            const auto action = effective_policy_action(
+            auto action = effective_policy_action(
                 preview_, raw_action, course_stage_,
                 lesson_teacher_authority(
                     lesson_update_, course_stage_, preview_.blueprint()));
+            if (preview_equipment_test_enabled_
+                && preview_.equipment_target().active)
+            {
+                const Vec2 target_delta = preview_.equipment_target().position
+                    - preview_.equipment_mount_position();
+                const float desired_world_angle = std::atan2(
+                    target_delta.y, target_delta.x);
+                const float local_angle = preview_.facing_direction() < 0.0f
+                    ? wrap_angle(pi - desired_world_angle)
+                    : wrap_angle(desired_world_angle);
+                action[sim::equipment_state_action] = 1.0f;
+                action[sim::equipment_aim_action] = clamp(
+                    local_angle / (pi * 0.42f), -1.0f, 1.0f);
+                action[sim::equipment_trigger_action] = 1.0f;
+            }
             const sim::StepResult result = preview_.step(action,
                 static_cast<float>(fixed_step));
             preview_accumulator_seconds_ -= fixed_step;

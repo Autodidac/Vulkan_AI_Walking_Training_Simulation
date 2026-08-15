@@ -174,6 +174,7 @@ namespace
     {
         float distance{};
         float survival{};
+        float minimum_uprightness{ 1.0f };
         std::uint32_t strides{};
         std::uint32_t crossings{};
         runner::sim::TerrainRegion region{ runner::sim::TerrainRegion::firm };
@@ -193,15 +194,17 @@ namespace
         environment.set_course(runner::sim::CourseStage::uneven, 0.30f);
         environment.set_course_motion_enabled(false);
 
+        float minimum_uprightness = 1.0f;
         for (int step = 0; step < 1200; ++step)
         {
+            minimum_uprightness = std::min(minimum_uprightness, environment.uprightness());
             const auto action = runner::rl::walking_teacher_action(environment);
             if (environment.step(action).terminated)
                 break;
         }
         const float root_x = environment.particles()[rig.root_node].position.x;
         return { environment.distance_travelled(), environment.elapsed_seconds(),
-            environment.gait_cycles(), environment.limb_crossings(),
+            minimum_uprightness, environment.gait_cycles(), environment.limb_crossings(),
             environment.terrain_region_at(root_x),
             environment.terrain_firmness_at(root_x),
             environment.terrain_looseness_at(root_x),
@@ -266,6 +269,7 @@ namespace
                     << " strides=" << outcome.strides
                     << " crossings=" << outcome.crossings
                     << " survival=" << outcome.survival
+                    << " min_upright=" << outcome.minimum_uprightness
                     << " terrain=" << runner::sim::terrain_region_name(outcome.region)
                     << " firmness=" << outcome.firmness
                     << " looseness=" << outcome.looseness

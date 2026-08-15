@@ -1,3 +1,13 @@
+## 0.7.33
+
+- Applied one facing transform to the complete articulated presentation, including limbs, boots, supplied-sheet hands, layering, skeleton, and equipment, with arbitrary-pose and both-direction coverage.
+- Enlarged the supplied Side View hands from anatomy-aware opaque bounds, shortened disproportionate humanoid support chains without changing accepted arm reach, and restored consistent single-plane knee/elbow bends with opposed arm swing.
+- Added deterministic fixed-step falling sand/mud, excavation, deposition, stacking, and moving-block hazards with delayed readiness, measured safety dwell, lifecycle cleanup, and exact 20/60/240 Hz equivalence.
+- Made mutable sand/mud and structural dirt derive labels, colors, collision, deformation, deposition, and excavation from the same material field.
+- Restored visible graph-mounted weapons, dropped-state rendering, fixed-step projectiles, hit telemetry, no-fire unarmed behavior, and physical Rig Lab equipment preview.
+- Reflowed overlapping Rig Lab Test controls and refit the editor world from the active graph plus ground; ghosts no longer dominate framing and node/label presentation is bounded.
+- Corrected Walk retention with a 1.51 Hz anatomy-scaled gait, taller flexed leg target, stable backup/turn hold, contiguous scissor timing, and a 0.50-second spawn-settling grace while preserving the 0.34-second sustained rejection boundary.
+- Advanced training semantics to `0x0007'3302`, checkpoint magic to `EPPO33`, and local files to `runner-v0733-granular-*`, with lifetime-only fallback import from v0.7.32, v0.7.31, then v0.7.30.
 ## 0.7.32
 
 - Added the finite bidirectional shuttle with controlled backup, stationary turn, complete facing flip, bounded auto framing, and visible phase/facing telemetry.

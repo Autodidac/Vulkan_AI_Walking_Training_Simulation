@@ -12,7 +12,8 @@ namespace runner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '2', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
+        constexpr std::array<char, 8> v0732_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '2', '\0', '\1' };
         constexpr std::array<char, 8> v0731_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '1', '\0', '\1' };
         constexpr std::array<char, 8> v0730_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '9', '\0', '\1' };
         constexpr std::array<char, 8> v0727_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '8', '\0', '\1' };
@@ -387,10 +388,11 @@ namespace runner::rl
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
+        const bool v0732 = magic == v0732_checkpoint_magic;
         const bool v0731 = magic == v0731_checkpoint_magic;
         const bool v0730 = magic == v0730_checkpoint_magic;
         const bool v0727 = magic == v0727_checkpoint_magic;
-        const bool legacy_magic = v0731 || v0730 || v0727;
+        const bool legacy_magic = v0732 || v0731 || v0730 || v0727;
         const bool legacy_layout = v0730 || v0727;
         if (!input || (magic != checkpoint_magic && !legacy_magic)
             || !read_value(input, data.training_semantics)

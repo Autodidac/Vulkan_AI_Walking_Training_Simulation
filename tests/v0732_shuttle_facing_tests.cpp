@@ -23,7 +23,26 @@ struct EnvironmentTestAccess {
         e.distance_travelled_=distance;e.shuttle_distance_travelled_=distance;
     }
     static void rebuild(Environment& e) noexcept { e.rebuild_course_features(); }
-};}
+    static void configure_facing_target(Environment& e,float facing) noexcept {
+        ShuttleState state{};state.facing_direction=facing;state.locomotion_direction=facing;
+        state.completed_turns=2u;e.shuttle_state_=state;
+        const Vec2 mount=e.equipment_mount_position();
+        e.equipment_target_.active=true;e.equipment_target_.position={mount.x+facing*4.0f,mount.y};
+        e.equipment_target_.radius=0.42f;
+    }
+    static void drive_equipment(Environment& e,int steps) noexcept {
+        for(int step=0;step<steps;++step){std::array<float,action_count> action{};
+            const Vec2 delta=e.equipment_target_.position-e.equipment_mount_position();
+            const float desired=std::atan2(delta.y,delta.x);
+            const float local=e.facing_direction()<0.0f?wrap_angle(pi-desired):wrap_angle(desired);
+            action[equipment_state_action]=1.0f;
+            action[equipment_aim_action]=clamp(local/(pi*0.42f),-1.0f,1.0f);
+            action[equipment_trigger_action]=1.0f;e.update_equipment(action,1.0f/60.0f);}
+    }
+    static void coast_equipment(Environment& e,int steps) noexcept {
+        std::array<float,action_count> action{};
+        for(int step=0;step<steps;++step)e.update_equipment(action,1.0f/60.0f);
+    }};}
 
 namespace {
 namespace sim=runner::sim; namespace rl=runner::rl; namespace loco=runner::locomotion;
@@ -103,6 +122,13 @@ int main(){
  require(held.intent==loco::Intent::hold&&held.direction==0.0f&&held.brake
   &&held.cadence_hz==0.0f,"turn gait suppression");
 
+ signals.turning=false;signals.near_rise=0.0f;signals.gait_cycles=8u;
+ signals.dynamic_hazard_active=true;const loco::Plan hazard_hold=loco::plan(signals);
+ require(hazard_hold.intent==loco::Intent::hold&&hazard_hold.direction==0.0f
+  &&hazard_hold.brake,"active granular hazard was traversed before safe");
+ signals.dynamic_hazard_active=false;signals.dynamic_hazard_safe=true;
+ require(loco::plan(signals).intent==loco::Intent::walk,
+  "settled granular terrain did not resume traversal");
  const auto ka=rl::solve_two_link_sagittal(1.0f,1.0f,{-0.25f,-1.6f},1.0f);
  const auto kb=rl::solve_two_link_sagittal(1.0f,1.0f,{0.25f,-1.6f},1.0f);
  const auto ma=rl::solve_two_link_sagittal(1.0f,1.0f,{0.25f,-1.6f},-1.0f);
@@ -182,14 +208,60 @@ int main(){
    static_cast<float>(environment.completed_shuttle_turns()),static_cast<float>(environment.invalid_reason())};};
  const std::array<float,4> reverse_first=reverse_humanoid_probe();
  const std::array<float,4> reverse_repeated=reverse_humanoid_probe();
+ std::cout<<"humanoid reverse distance="<<reverse_first[0]<<" elapsed="<<reverse_first[1]
+  <<" turns="<<reverse_first[2]<<" reason="<<reverse_first[3]<<'\n';
  require(reverse_first==reverse_repeated&&reverse_first[0]>=18.0f&&reverse_first[1]>=19.9f
   &&reverse_first[2]>=1.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
   "repeated reverse humanoid terrain traversal");
  sim::Environment equipment{sim::CreatureBlueprint::humanoid(),0x7322u};
- equipment.set_course(sim::CourseStage::equipment_targets,0.30f);equipment.set_course_motion_enabled(false);
- sim::EnvironmentTestAccess::shuttle(equipment,returning);equipment.configure_equipment(sim::WeaponClass::sidearm,8.0f);
- std::array<float,sim::action_count> zero{};
- const auto aim=rl::effective_policy_action(equipment,zero,sim::CourseStage::equipment_targets,1.0f);
- require(std::abs(aim[sim::anatomy_action_count+1u])<0.40f,"left-facing local aim");
- std::cout<<"Runner v0.7.32 shuttle/facing tests passed\n";return EXIT_SUCCESS;
+ equipment.set_course(sim::CourseStage::combat_course,0.30f);
+ equipment.set_course_motion_enabled(false);
+ equipment.configure_equipment(sim::WeaponClass::sidearm,4.0f);
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
+ const float root_x=equipment.particles()[equipment.blueprint().root_node].position.x;
+ const runner::Vec2 right_mount=equipment.equipment_mount_position();
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,-1.0f);
+ const runner::Vec2 mirrored_same_pose_mount=equipment.equipment_mount_position();
+ require(std::abs((right_mount.x-root_x)+(mirrored_same_pose_mount.x-root_x))<1.0e-5f
+  &&std::abs(right_mount.y-mirrored_same_pose_mount.y)<1.0e-5f,
+  "equipment mount did not follow exact whole-rig facing reflection");
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
+ sim::EnvironmentTestAccess::drive_equipment(equipment,90);
+ require(equipment.shots_fired()>0u&&equipment.target_hits()>0u,
+  "right-facing fixed-step equipment did not fire and hit");
+ equipment.configure_equipment(sim::WeaponClass::carbine,4.0f);
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,-1.0f);
+ sim::EnvironmentTestAccess::drive_equipment(equipment,1);
+ require(std::abs(std::abs(equipment.equipment_aim_angle())-runner::pi)<0.05f,
+  "left-facing equipment did not initially aim along mirrored facing");
+ sim::EnvironmentTestAccess::drive_equipment(equipment,89);
+ require(equipment.shots_fired()>0u&&equipment.target_hits()>0u,
+  "left-facing fixed-step equipment did not mirror aim, fire, and hit");
+ equipment.configure_equipment(sim::WeaponClass::none,4.0f);
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
+ sim::EnvironmentTestAccess::drive_equipment(equipment,90);
+ require(equipment.shots_fired()==0u&&equipment.equipment_projectiles().empty(),
+  "unarmed equipment path created a shot");
+ sim::Environment dropped{sim::CreatureBlueprint::humanoid(),0x7330u};
+ dropped.set_course(sim::CourseStage::equipment_targets,0.30f);
+ dropped.configure_equipment(sim::WeaponClass::launcher,4.0f);
+ const runner::Vec2 carried_position=dropped.equipment_display_position();
+ require(std::abs(carried_position.x-dropped.equipment_mount_position().x)<1.0e-6f
+  &&std::abs(carried_position.y-dropped.equipment_mount_position().y)<1.0e-6f,
+  "carried equipment display position diverged from its graph mount");
+ dropped.disarm_equipment();
+ const runner::Vec2 released_position=dropped.equipment_display_position();
+ sim::EnvironmentTestAccess::coast_equipment(dropped,12);
+ const runner::Vec2 fallen_weapon=dropped.equipment_display_position();
+ require(dropped.equipment_state()==sim::EquipmentState::disarmed
+  &&std::abs(released_position.x-carried_position.x)<1.0e-6f
+  &&std::abs(released_position.y-carried_position.y)<1.0e-6f
+  &&fallen_weapon.y<released_position.y,
+  "dropped/disarmed equipment has no visible fixed-step world trajectory"); rl::PpoTrainer preview_equipment{sim::CreatureBlueprint::humanoid(),8u,false};
+ preview_equipment.configure_preview_equipment(sim::WeaponClass::sidearm,3.0f);
+ for(int frame=0;frame<45;++frame)preview_equipment.step_preview(1.0f/60.0f);
+ require(preview_equipment.preview().weapon_class()==sim::WeaponClass::sidearm
+  &&preview_equipment.preview().shots_fired()>0u
+  &&preview_equipment.preview().target_hits()>0u,
+  "Rig Lab preview equipment selector did not drive real firing physics"); std::cout<<"Runner v0.7.32 shuttle/facing tests passed\n";return EXIT_SUCCESS;
 }

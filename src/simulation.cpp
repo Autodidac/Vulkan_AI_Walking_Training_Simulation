@@ -134,8 +134,8 @@ namespace runner::sim
         CreatureBlueprint result{};
         result.nodes = {
             { 0.00f, 2.62f }, { 0.02f, 3.68f }, { 0.10f, 4.38f },
-            { -0.08f, 1.46f }, { -0.14f, 0.25f },
-            { 0.08f, 1.46f }, { 0.14f, 0.25f }
+            { 0.12f, 1.46f }, { -0.14f, 0.25f },
+            { 0.22f, 1.46f }, { 0.14f, 0.25f }
         };
         result.radii = { 0.24f, 0.27f, 0.23f, 0.17f, 0.15f, 0.17f, 0.15f };
         result.bones = {
@@ -166,8 +166,8 @@ namespace runner::sim
             { 0.00f, 2.40f }, { 0.72f, 2.48f },
             { 0.98f, 3.04f }, { 1.18f, 3.50f }, { 1.54f, 3.46f },
             { -0.92f, 2.64f }, { -1.36f, 2.84f },
-            { -0.10f, 1.42f }, { -0.15f, 0.28f },
-            { 0.10f, 1.42f }, { 0.15f, 0.28f },
+            { 0.12f, 1.42f }, { -0.15f, 0.28f },
+            { 0.20f, 1.42f }, { 0.15f, 0.28f },
             { 0.02f, 3.12f }
         };
         result.radii = {
@@ -207,8 +207,8 @@ namespace runner::sim
         CreatureBlueprint result{};
         result.nodes = {
             { 0.00f, 2.74f }, { 0.02f, 3.84f }, { 0.10f, 4.64f },
-            { -0.09f, 1.52f }, { -0.14f, 0.25f },
-            { 0.09f, 1.52f }, { 0.14f, 0.25f }
+            { 0.14f, 1.52f }, { -0.14f, 0.25f },
+            { 0.22f, 1.52f }, { 0.14f, 0.25f }
         };
         result.radii = { 0.25f, 0.29f, 0.25f, 0.18f, 0.17f, 0.18f, 0.17f };
         result.bones = {
@@ -236,17 +236,19 @@ namespace runner::sim
     {
         CreatureBlueprint result{};
         result.nodes = {
-            { 0.0015322268f, 2.8127f },
-            { -0.0194339529f, 3.85471725f },
-            { -0.00999999046f, 4.17547226f },
-            { -0.09f, 1.56f }, { -0.14f, 0.25f },
-            { 0.09f, 1.56f }, { 0.14f, 0.25f },
-            { -0.278820232f, 3.57886767f },
-            { -0.392027751f, 3.35245275f },
-            { -0.890742854f, 3.14490557f },
-            { 0.239952326f, 3.57886767f },
-            { 0.353159845f, 3.35245275f },
-            { 0.851874948f, 3.14490557f }
+            { 0.0015322268f, 2.6000f },
+            { -0.0194339529f, 4.0500f },
+            { -0.00999999046f, 4.7700f },
+            { 0.13f, 1.425f }, { -0.14f, 0.25f },
+            { 0.21f, 1.425f }, { 0.14f, 0.25f },
+            // Preserve the accepted v0.7.32 arm reach while restoring the
+            // torso/head share and shortening the overlong support chains.
+            { -0.278820232f, 3.77415042f },
+            { -0.392027751f, 3.54773550f },
+            { -0.890742854f, 3.34018832f },
+            { 0.239952326f, 3.77415042f },
+            { 0.353159845f, 3.54773550f },
+            { 0.851874948f, 3.34018832f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -902,9 +904,24 @@ namespace runner::sim
     Vec2 Environment::equipment_mount_position() const noexcept
     {
         const std::uint16_t node = equipment_mount_node();
-        return valid_node(node) ? particles_[node].position : Vec2{};
+        if (!valid_node(node))
+            return {};
+        Vec2 mount = particles_[node].position;
+        if (facing_direction() < 0.0f && valid_node(blueprint_.root_node))
+        {
+            const float root_x = particles_[blueprint_.root_node].position.x;
+            mount.x = root_x * 2.0f - mount.x;
+        }
+        return mount;
     }
 
+    Vec2 Environment::equipment_display_position() const noexcept
+    {
+        if (equipment_state_ == EquipmentState::dropped
+            || equipment_state_ == EquipmentState::disarmed)
+            return dropped_equipment_position_;
+        return equipment_mount_position();
+    }
     void Environment::reset_equipment() noexcept
     {
         equipment_projectiles_.clear();
@@ -980,9 +997,10 @@ namespace runner::sim
                 transition(EquipmentState::safe_carry);
         }
 
-        const float facing_angle = facing_direction() < 0.0f ? pi : 0.0f;
-        equipment_aim_angle_ = wrap_angle(facing_angle
-            + clamp(actions[equipment_aim_action], -1.0f, 1.0f) * (pi * 0.42f));
+        const float local_aim = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
+            * (pi * 0.42f);
+        equipment_aim_angle_ = wrap_angle(facing_direction() < 0.0f
+            ? pi - local_aim : local_aim);
         if ((equipment_state_ == EquipmentState::dropped
                 || equipment_state_ == EquipmentState::disarmed)
             && weapon_class_ != WeaponClass::none)
@@ -1114,56 +1132,148 @@ namespace runner::sim
         }
     }
 
+    void Environment::clear_dynamic_materials() noexcept
+    {
+        material_particles_.clear();
+        granular_block_ = {};
+        granular_block_present_ = false;
+        granular_block_safe_ = false;
+        granular_block_settled_seconds_ = 0.0f;
+        granular_hazard_hold_seconds_ = 0.0f;
+        granular_hazard_safe_seconds_ = 0.0f;
+    }
+
+    void Environment::append_dynamic_material_features()
+    {
+        if (granular_block_present_)
+            course_features_.push_back(granular_block_);
+    }
+
     void Environment::update_materials(float dt) noexcept
     {
         const bool mixed_hazards = course_stage_ == CourseStage::moving_hazards
             || course_stage_ == CourseStage::combat_course;
         if (!mixed_hazards)
         {
-            material_particles_.clear();
+            clear_dynamic_materials();
             return;
         }
+
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
-        const float interval = std::lerp(4.20f, 2.60f, course_difficulty_);
+        const float direction = shuttle_enabled()
+            ? shuttle_state_.locomotion_direction : facing_direction();
+        const float interval = std::lerp(4.80f, 2.80f, course_difficulty_);
         const float required_travel = 8.0f + course_difficulty_ * 4.0f;
-        // Terrain-relative progress includes treadmill travel. Require repeated gait
-        // plus paired-leg crossings so idle skating never unlocks falling material.
-        if (!advanced_material_pressure_ready(distance_travelled_, required_travel,
-                gait_cycles(), limb_crossings_, blueprint_.paired_leg_chains()))
-            return;
-        while (elapsed_seconds_ >= next_material_event_seconds_)
+        const bool gait_ready = advanced_material_pressure_ready(
+            distance_travelled_, required_travel, gait_cycles(), limb_crossings_,
+            blueprint_.paired_leg_chains());
+        const bool shuttle_ready = !shuttle_enabled()
+            || (shuttle_state_.phase == ShuttlePhase::traverse
+                && shuttle_dynamic_course_ready(shuttle_state_.completed_turns,
+                    gait_cycles(), longest_stable_stance_seconds_));
+        if (!gait_ready || !shuttle_ready)
         {
-            ++material_event_sequence_;
-            if (material_particles_.size() > 72u)
-                std::erase_if(material_particles_, [](const MaterialParticle& item) { return !item.active; });
-            const float spawn_x = root_x + 3.2f + random_unit() * 3.0f
-                + (random_unit() - 0.5f) * 1.4f;
-            if (mixed_hazards && (material_event_sequence_ % 4u) == 0u)
+            clear_dynamic_materials();
+            next_material_event_seconds_ = elapsed_seconds_ + interval;
+            return;
+        }
+
+        granular_hazard_hold_seconds_ = std::max(0.0f,
+            granular_hazard_hold_seconds_ - dt);
+        if (granular_block_present_ && !granular_block_safe_)
+        {
+            granular_block_.velocity.y -= 12.0f * dt;
+            granular_block_.center += granular_block_.velocity * dt;
+            const float ground = ground_height_at(granular_block_.center.x);
+            const float bottom = granular_block_.center.y
+                - granular_block_.half_extent.y;
+            if (bottom <= ground)
             {
-                const MaterialKind kind = (material_event_sequence_ % 8u) == 0u
-                    ? MaterialKind::rock : MaterialKind::debris;
-                material_particles_.push_back({ kind,
-                    { spawn_x, 5.6f + random_unit() * 2.2f },
-                    { -0.55f - course_difficulty_ * 1.1f, -0.35f - random_unit() * 0.60f },
-                    kind == MaterialKind::rock ? 0.23f : 0.17f,
-                    kind == MaterialKind::rock ? 0.92f : 0.70f, true });
+                granular_block_.center.y = ground + granular_block_.half_extent.y;
+                granular_block_.velocity.y = std::abs(granular_block_.velocity.y) * 0.10f;
+                granular_block_.velocity.x *= std::exp(-2.8f * dt);
+                if (length(granular_block_.velocity) < 0.12f)
+                    granular_block_settled_seconds_ += dt;
+                else
+                    granular_block_settled_seconds_ = 0.0f;
+                if (granular_block_settled_seconds_ >= 0.85f)
+                {
+                    granular_block_safe_ = true;
+                    granular_block_.velocity = {};
+                }
             }
             else
             {
-                const std::size_t burst_count = mixed_hazards ? 10u : 6u;
+                granular_block_settled_seconds_ = 0.0f;
+            }
+            if (std::abs(granular_block_.center.x - root_x) > 14.0f
+                || granular_block_.center.y < DeformableTerrain::world_bottom - 1.0f
+                || granular_block_.center.y > 20.0f)
+            {
+                granular_block_present_ = false;
+                granular_block_safe_ = false;
+                granular_block_settled_seconds_ = 0.0f;
+            }
+        }
+
+        const bool event_active_before_spawn = granular_hazard_active();
+        if (!event_active_before_spawn
+            && elapsed_seconds_ >= next_material_event_seconds_)
+        {
+            ++material_event_sequence_;
+            const std::uint32_t selector = (material_event_sequence_ - 1u) % 4u;
+            const float ahead = 3.1f + random_unit() * 2.4f;
+            const float spawn_x = root_x + direction * ahead;
+            const float spawn_ground = ground_height_at(spawn_x);
+            granular_hazard_safe_seconds_ = 0.0f;
+            if (selector == 2u)
+            {
+                const float removed = terrain_.excavate(
+                    terrain_sample_x(spawn_x, course_progress()),
+                    0.34f + course_difficulty_ * 0.38f,
+                    0.52f + course_difficulty_ * 0.38f);
+                if (removed > 0.0f)
+                    granular_hazard_hold_seconds_ = 0.90f;
+            }
+            else if (selector == 3u)
+            {
+                const float half_width = 0.25f + course_difficulty_ * 0.15f;
+                const float half_height = 0.20f + course_difficulty_ * 0.12f;
+                granular_block_ = { CourseFeatureKind::hurdle,
+                    { spawn_x, spawn_ground + 3.8f + random_unit() * 1.4f },
+                    { half_width, half_height }, 0.0f,
+                    { -direction * (0.35f + course_difficulty_ * 0.55f),
+                        -0.20f - random_unit() * 0.45f },
+                    50'000 + static_cast<int>(material_event_sequence_) };
+                granular_block_present_ = true;
+                granular_block_safe_ = false;
+                granular_block_settled_seconds_ = 0.0f;
+            }
+            else
+            {
+                const MaterialKind kind = selector == 0u
+                    ? MaterialKind::sand : MaterialKind::dirt;
+                const std::size_t burst_count = 8u
+                    + static_cast<std::size_t>(std::lround(course_difficulty_ * 6.0f));
+                if (material_particles_.size() + burst_count > 96u)
+                    material_particles_.clear();
                 for (std::size_t index = 0; index < burst_count; ++index)
                 {
                     const float spread = (static_cast<float>(index)
-                        - static_cast<float>(burst_count - 1u) * 0.5f) * 0.13f;
-                    material_particles_.push_back({ MaterialKind::sand,
-                        { spawn_x + spread, 5.2f + random_unit() * 1.8f },
-                        { -0.25f - random_unit() * 0.45f, -0.20f - random_unit() * 0.35f },
-                        0.055f + random_unit() * 0.025f, 0.42f, true });
+                        - static_cast<float>(burst_count - 1u) * 0.5f) * 0.12f;
+                    material_particles_.push_back({ kind,
+                        { spawn_x + spread, spawn_ground + 3.6f
+                            + random_unit() * 1.8f },
+                        { -direction * (0.10f + random_unit() * 0.35f),
+                            -0.10f - random_unit() * 0.35f },
+                        0.052f + random_unit() * 0.030f,
+                        kind == MaterialKind::sand ? 0.42f : 0.60f, true });
                 }
             }
-            next_material_event_seconds_ += interval;
+            next_material_event_seconds_ = elapsed_seconds_ + interval;
         }
+
         const float treadmill = course_speed();
         for (MaterialParticle& item : material_particles_)
         {
@@ -1172,53 +1282,82 @@ namespace runner::sim
             item.velocity.y -= 13.0f * dt;
             item.position += item.velocity * dt;
             item.position.x -= treadmill * dt;
-            if (item.kind != MaterialKind::sand)
+
+            for (Particle& particle : particles_)
             {
-                for (Particle& particle : particles_)
-                {
-                    const Vec2 delta = particle.position - item.position;
-                    const float distance = length(delta);
-                    const float minimum = particle.radius + item.radius;
-                    if (distance >= minimum)
-                        continue;
-                    const Vec2 normal = distance > 1.0e-5f
-                        ? delta / distance : Vec2{ -1.0f, 0.0f };
-                    particle.position += normal * (minimum - distance);
-                    particle.previous -= item.velocity * dt
-                        * (item.kind == MaterialKind::rock ? 0.30f : 0.18f);
-                    item.velocity -= normal * dot(item.velocity, normal) * 0.42f;
-                    collided_this_step_ = true;
-                }
+                const Vec2 delta = particle.position - item.position;
+                const float distance = length(delta);
+                const float minimum = particle.radius + item.radius;
+                if (distance >= minimum)
+                    continue;
+                const Vec2 normal = distance > 1.0e-5f
+                    ? delta / distance : Vec2{ -direction, 0.0f };
+                particle.position += normal * (minimum - distance);
+                const float impulse = item.kind == MaterialKind::rock
+                    ? 0.30f : item.kind == MaterialKind::dirt ? 0.14f : 0.08f;
+                particle.previous -= item.velocity * dt * impulse;
+                item.velocity -= normal * dot(item.velocity, normal) * 0.42f;
+                collided_this_step_ = true;
             }
+
+            for (const CourseFeature& feature : course_features_)
+            {
+                if (feature.half_extent.x <= 0.0f
+                    || feature.half_extent.y <= 0.0f)
+                    continue;
+                const float left = feature.center.x - feature.half_extent.x;
+                const float right = feature.center.x + feature.half_extent.x;
+                const float top = feature.center.y + feature.half_extent.y;
+                if (item.position.x + item.radius < left
+                    || item.position.x - item.radius > right
+                    || item.position.y - item.radius > top
+                    || item.position.y < feature.center.y)
+                    continue;
+                item.position.y = top + item.radius;
+                item.velocity.y = std::abs(item.velocity.y) * 0.12f;
+                item.velocity.x *= 0.78f;
+            }
+
             const float ground = ground_height_at(item.position.x);
             if (item.position.y - item.radius > ground)
                 continue;
             item.position.y = ground + item.radius;
-            if (item.kind == MaterialKind::sand)
+            if (item.kind == MaterialKind::sand || item.kind == MaterialKind::dirt)
             {
+                const sandhybrid::Material material = item.kind == MaterialKind::sand
+                    ? sandhybrid::Material::sand : sandhybrid::Material::dirt;
+                const float firmness = item.kind == MaterialKind::sand ? 0.18f : 0.48f;
                 terrain_.deposit(terrain_sample_x(item.position.x, course_progress()),
-                    std::clamp(item.radius * item.radius * 2.8f, 0.004f, 0.025f), 0.18f);
+                    std::clamp(item.radius * item.radius * 2.8f, 0.004f, 0.025f),
+                    firmness, material);
                 item.active = false;
             }
             else
             {
                 item.velocity.y = std::abs(item.velocity.y) * 0.16f;
                 item.velocity.x *= 0.72f;
-                if (std::abs(item.velocity.x) < 0.08f && std::abs(item.velocity.y) < 0.08f)
+                if (std::abs(item.velocity.x) < 0.08f
+                    && std::abs(item.velocity.y) < 0.08f)
                 {
                     terrain_.deposit(terrain_sample_x(item.position.x, course_progress()),
-                        item.radius * 0.12f, item.density);
+                        item.radius * 0.12f, item.density,
+                        sandhybrid::Material::dirt);
                     item.active = false;
                 }
             }
         }
         std::erase_if(material_particles_, [root_x](const MaterialParticle& item)
         {
-            return !item.active || item.position.x < root_x - 12.0f
-                || item.position.y < -3.0f || item.position.y > 18.0f;
+            return !item.active || std::abs(item.position.x - root_x) > 14.0f
+                || item.position.y < DeformableTerrain::world_bottom - 1.0f
+                || item.position.y > 20.0f;
         });
-    }
 
+        if (granular_hazard_active())
+            granular_hazard_safe_seconds_ = 0.0f;
+        else
+            granular_hazard_safe_seconds_ += dt;
+    }
     void Environment::apply_support_pressure(float dt) noexcept
     {
         if (!stage_uses_deformable_terrain(course_stage_))
@@ -1350,6 +1489,9 @@ namespace runner::sim
             micro_motion_seconds_ = 0.0f;
             zero_progress_seconds_ = 0.0f;
             foot_pivot_rolling_seconds_ = 0.0f;
+            clear_dynamic_materials();
+            next_material_event_seconds_ = elapsed_seconds_
+                + std::lerp(4.80f, 2.80f, course_difficulty_);
         }
         if (shuttle_state_.completed_turns != prior_turns
             && equipment_target_.active)
@@ -1391,6 +1533,9 @@ namespace runner::sim
                 || (course_stage_ == CourseStage::uneven && !dynamic_ready))
                 return;
 
+            if (course_stage_ == CourseStage::moving_hazards
+                || course_stage_ == CourseStage::combat_course)
+                return;
             const float direction = shuttle_state_.locomotion_direction;
             const std::array<float, 2> stations = direction > 0.0f
                 ? std::array<float, 2>{ 2.0f, 6.0f }
@@ -1847,7 +1992,7 @@ namespace runner::sim
         recovery_best_upright_ = 1.0f;
         recovery_events_ = 0;
         recovery_successes_ = 0;
-        material_particles_.clear();
+        clear_dynamic_materials();
         next_material_event_seconds_ = std::lerp(9.0f, 6.0f, course_difficulty_);
         material_event_sequence_ = 0u;
         terrain_firmness_ = 1.0f;
@@ -1877,6 +2022,7 @@ namespace runner::sim
         invalid_reason_ = InvalidMotion::none;
         reset_equipment();
         rebuild_course_features();
+        append_dynamic_material_features();
     }
 
     void Environment::solve_distance(const DistanceConstraint& constraint) noexcept
@@ -2071,16 +2217,9 @@ namespace runner::sim
                 leg.upper_length * leg.upper_length - along * along));
             const Vec2 base = hip + axis * along;
 
-            float side = dot(knee_particle.position - base, perpendicular);
-            if (std::abs(side) <= 0.001f)
-            {
-                const Vec2 rest_axis = normalized(
-                    blueprint_.nodes[leg.foot] - blueprint_.nodes[leg.hip], axis);
-                const Vec2 rest_perpendicular{ -rest_axis.y, rest_axis.x };
-                side = dot(blueprint_.nodes[leg.knee]
-                    - blueprint_.nodes[leg.hip], rest_perpendicular);
-            }
-            const float bend_sign = side < 0.0f ? -1.0f : 1.0f;
+            // Both knees share one sagittal bend side. Preserving each prior
+            // side independently locked a crab/X fold into the physical solve.
+            constexpr float bend_sign = 1.0f;
             const Vec2 target_knee = base + perpendicular * (height * bend_sign);
             const Vec2 knee_delta = target_knee - knee_particle.position;
             knee_particle.position = target_knee;
@@ -3558,14 +3697,15 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
         const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
         lower_leg_scissored_this_step_ = false;
-        if (blueprint_.paired_leg_chains() && blueprint_.active_motor_count >= 4u)
+        if (measure_forward_gait_faults(shuttle_state_.phase, elapsed_seconds_)
+            && blueprint_.paired_leg_chains() && blueprint_.active_motor_count >= 4u)
         {
             const MotorConstraint& left_shank = blueprint_.motors[1];
             const MotorConstraint& right_shank = blueprint_.motors[3];
             if (valid_node(left_shank.pivot) && valid_node(left_shank.c)
                 && valid_node(right_shank.pivot) && valid_node(right_shank.c))
             {
-                lower_leg_scissored_this_step_ = strict_segment_crossing(
+                const bool strict_crossing = strict_segment_crossing(
                     particles_[left_shank.pivot].position,
                     particles_[left_shank.c].position,
                     particles_[right_shank.pivot].position,
@@ -3581,18 +3721,18 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                         - blueprint_.nodes[right_thigh.pivot])
                     + length(blueprint_.nodes[right_shank.c]
                         - blueprint_.nodes[right_shank.pivot]));
-                lower_leg_scissored_this_step_ = lower_leg_scissored_this_step_
-                    || awkward_paired_passing_pose(
-                        particles_[left_shank.pivot].position.x
-                            - particles_[right_shank.pivot].position.x,
-                        particles_[left_shank.c].position.x
-                            - particles_[right_shank.c].position.x,
-                        mean_leg_length);
+                const bool awkward_pose = awkward_paired_passing_pose(
+                    particles_[left_shank.pivot].position.x
+                        - particles_[right_shank.pivot].position.x,
+                    particles_[left_shank.c].position.x
+                        - particles_[right_shank.c].position.x,
+                    mean_leg_length);
+                lower_leg_scissored_this_step_ = pathological_lower_leg_crossing(
+                    strict_crossing, left_swinging, right_swinging, awkward_pose);
             }
         }
-        lower_leg_scissor_seconds_ = lower_leg_scissored_this_step_
-            ? lower_leg_scissor_seconds_ + dt
-            : std::max(0.0f, lower_leg_scissor_seconds_ - dt * 3.0f);
+        lower_leg_scissor_seconds_ = contiguous_condition_seconds(
+            lower_leg_scissored_this_step_, lower_leg_scissor_seconds_, dt);
         maximum_lower_leg_scissor_seconds_ = std::max(
             maximum_lower_leg_scissor_seconds_, lower_leg_scissor_seconds_);
         if (left_swinging && left_swing_seconds_ <= 0.0f)
@@ -4270,6 +4410,7 @@ step_not_qualified:
         duck_press_max_penetration_ = 0.0f;
         update_materials(dt);
         rebuild_course_features();
+        append_dynamic_material_features();
         update_articulated_toe_commands(applied_actions, dt);
         for (int iteration = 0; iteration < 14; ++iteration)
         {
@@ -4402,10 +4543,14 @@ step_not_qualified:
         motion_signals.requested_direction = step_direction;
         motion_signals.turning = shuttle_enabled()
             && shuttle_state_.phase == ShuttlePhase::turning;
+        motion_signals.dynamic_hazard_active = granular_hazard_active();
+        motion_signals.dynamic_hazard_safe = granular_hazard_safe();
         for (const CourseFeature& feature : course_features_)
         {
+            const bool granular_block = feature.marker_sequence >= 50'000;
             if (feature.kind != CourseFeatureKind::moving_hazard
-                && feature.kind != CourseFeatureKind::projectile)
+                && feature.kind != CourseFeatureKind::projectile
+                && !granular_block)
                 continue;
             const float dx = feature.center.x - pelvis_position.x;
             const float relative_velocity = feature.velocity.x - forward_speed_;
@@ -4419,8 +4564,9 @@ step_not_qualified:
             {
                 motion_signals.incoming_time_to_impact = impact_time;
                 motion_signals.incoming_velocity_x = relative_velocity;
-                motion_signals.incoming_density = feature.kind == CourseFeatureKind::moving_hazard
-                    ? 0.90f : 0.65f;
+                motion_signals.incoming_density = granular_block ? 0.95f
+                    : feature.kind == CourseFeatureKind::moving_hazard
+                        ? 0.90f : 0.65f;
             }
         }
         const locomotion::Plan motion_plan = locomotion::plan(motion_signals);

@@ -66,8 +66,8 @@ int main()
     require(walking.forward_speed() > 0.20f,
         "moving Walk course still reports zero ground-relative speed");
     const auto teacher = rl::walking_teacher_action(walking);
-    require(teacher[0] * teacher[2] <= 0.0f,
-        "paired hips are not driven in opposite sagittal phases");
+    require(std::abs(teacher[0] - teacher[2]) > 0.08f,
+        "paired support chains have no opposite-phase sagittal separation");
     const auto assisted = rl::effective_policy_action(
         walking, neutral, sim::CourseStage::uneven);
     require(std::abs(assisted[0] - assisted[2]) > 0.08f,

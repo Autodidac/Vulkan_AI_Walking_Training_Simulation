@@ -300,6 +300,50 @@ int main()
     }
 
     {
+        const runner::art::HandArtDimensions normal =
+            runner::art::hand_art_dimensions(40.0f, 43, 55);
+        const runner::art::HandArtDimensions compact =
+            runner::art::hand_art_dimensions(2.0f, 1, 1000);
+        const runner::art::HandArtDimensions large =
+            runner::art::hand_art_dimensions(500.0f, 1000, 1);
+        const runner::art::HandArtDimensions invalid =
+            runner::art::hand_art_dimensions(
+                std::numeric_limits<float>::quiet_NaN(), 0, 0);
+        require(normal.thickness >= 39.0f && normal.length >= 40.0f
+                && normal.wrist_overlap > 6.0f
+                && normal.wrist_overlap < normal.length * 0.20f,
+            "supplied side-view glove still renders as fingertips");
+        for (const runner::art::HandArtDimensions hand :
+            { compact, large, invalid })
+            require(std::isfinite(hand.length) && std::isfinite(hand.thickness)
+                    && std::isfinite(hand.wrist_overlap)
+                    && hand.length >= 40.0f && hand.length <= 92.0f
+                    && hand.thickness >= 28.0f && hand.thickness <= 64.0f,
+                "hand fit escaped compact/large/malformed bounds");
+        require(!runner::art::presented_transverse_mirror(false, 1.0f)
+                && runner::art::presented_transverse_mirror(true, 1.0f)
+                && runner::art::presented_transverse_mirror(false, -1.0f)
+                && !runner::art::presented_transverse_mirror(true, -1.0f),
+            "branch and whole-rig facing reflection do not compose by XOR");
+        const runner::art::OrientedArtTransform left_boot =
+            runner::art::support_boot_transform({ 0.0f, 10.0f },
+                { 0.0f, 0.0f }, 20.0f, 8.0f, -1.0f);
+        require(left_boot.ending.x > left_boot.beginning.x,
+            "left-facing vertical boot did not reverse its complete presentation");
+        const runner::art::OrientedArtTransform diagonal_right =
+            runner::art::support_boot_transform({ -4.0f, 7.0f },
+                { 2.0f, 1.0f }, 22.0f, 9.0f, 1.0f);
+        const runner::art::OrientedArtTransform diagonal_left =
+            runner::art::support_boot_transform({ -4.0f, 7.0f },
+                { 2.0f, 1.0f }, 22.0f, 9.0f, -1.0f);
+        const runner::Vec2 right_axis = diagonal_right.ending
+            - diagonal_right.beginning;
+        const runner::Vec2 left_axis = diagonal_left.ending
+            - diagonal_left.beginning;
+        require(runner::dot(right_axis, left_axis) < -400.0f,
+            "arbitrarily rotated boot did not reverse along signed facing");
+    }
+    {
         const std::array<runner::sim::CreatureBlueprint, 8> rigs{
             runner::sim::CreatureBlueprint::humanoid(),
             runner::sim::CreatureBlueprint::biped(),

@@ -831,6 +831,49 @@ int main()
                 ui_layout::bottom_telemetry_box(minimum_world)),
         "training PIP overlaps primary telemetry at the supported minimum window");
 
+    for (const auto& size : ui_layout::validation_sizes)
+    {
+        const ui_layout::Box content = ui_layout::content_box(size[0], size[1]);
+        const ui_layout::Box rig_world = ui_layout::rig_lab_world_box(content);
+        const ui_layout::BlueprintFit fit = ui_layout::fit_blueprint(
+            rig_world, -0.9f, 1.1f, 0.0f, 4.9f);
+        const float left = ui_layout::blueprint_screen_x(fit, rig_world, -0.9f);
+        const float right = ui_layout::blueprint_screen_x(fit, rig_world, 1.1f);
+        const float top = ui_layout::blueprint_screen_y(fit, 4.9f);
+        const float ground = ui_layout::blueprint_screen_y(fit, 0.0f);
+        require(left >= rig_world.x + 47.0f
+                && right <= rig_world.x + rig_world.width - 47.0f
+                && top >= rig_world.y + 69.0f
+                && ground <= rig_world.y + rig_world.height - 47.0f,
+            "Rig Lab active graph escapes its bounded world framing");
+    }
+    {
+        const ui_layout::Box viewport{ 572.0f, 78.0f, 1360.0f, 1080.0f };
+        const ui_layout::BlueprintFit malformed = ui_layout::fit_blueprint(
+            viewport, -500.0f, 500.0f, -100.0f, 700.0f);
+        require(ui_layout::blueprint_screen_x(malformed, viewport, -500.0f)
+                    >= viewport.x + 47.0f
+                && ui_layout::blueprint_screen_x(malformed, viewport, 500.0f)
+                    <= viewport.x + viewport.width - 47.0f
+                && ui_layout::blueprint_screen_y(malformed, 700.0f)
+                    >= viewport.y + 69.0f
+                && ui_layout::blueprint_screen_y(malformed, -100.0f)
+                    <= viewport.y + viewport.height - 47.0f,
+            "large edited Rig Lab graph is clipped by a minimum zoom floor");
+        const ui_layout::Box test_card{ 20.0f, 200.0f, 520.0f, 225.0f };
+        const ui_layout::RigLabTestLayout rows =
+            ui_layout::rig_lab_test_layout(test_card);
+        require(ui_layout::contains(test_card, rows.selection_row)
+                && ui_layout::contains(test_card, rows.range_row)
+                && ui_layout::contains(test_card, rows.pattern_row)
+                && ui_layout::contains(test_card, rows.status_row)
+                && ui_layout::contains(test_card, rows.manual_slider)
+                && !ui_layout::overlaps(rows.selection_row, rows.range_row)
+                && !ui_layout::overlaps(rows.range_row, rows.pattern_row)
+                && !ui_layout::overlaps(rows.pattern_row, rows.status_row)
+                && !ui_layout::overlaps(rows.status_row, rows.manual_slider),
+            "Rig Lab Test controls or status rows overlap");
+    }
     require(sim::classify_motion_gate(1.0f, 50.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::overspeed, "50 km/h hard gate missing");
     require(sim::classify_motion_gate(-0.2f, 0.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
@@ -1346,6 +1389,27 @@ int main()
     rock_order.kind = sim::CourseFeatureKind::rock;
     rock_order.center = { 1.0f, 0.25f };
     rock_order.radius = 0.25f;
+    require(!sim::measure_forward_gait_faults(sim::ShuttlePhase::traverse, 0.49f)
+            && sim::measure_forward_gait_faults(sim::ShuttlePhase::traverse, 0.50f)
+            && !sim::measure_forward_gait_faults(sim::ShuttlePhase::backing, 2.0f)
+            && !sim::measure_forward_gait_faults(sim::ShuttlePhase::braking, 2.0f)
+            && !sim::measure_forward_gait_faults(sim::ShuttlePhase::turning, 2.0f)
+            && !sim::measure_forward_gait_faults(sim::ShuttlePhase::traverse,
+                std::numeric_limits<float>::quiet_NaN()),
+        "reverse/turn transition poses leak into forward gait quality telemetry");
+
+    require(!sim::pathological_lower_leg_crossing(true, true, false, false)
+            && !sim::pathological_lower_leg_crossing(true, false, true, false)
+            && sim::pathological_lower_leg_crossing(true, false, false, false)
+            && sim::pathological_lower_leg_crossing(true, true, true, false)
+            && sim::pathological_lower_leg_crossing(false, true, false, true),
+        "normal single-support pass-through and pathological crossed stance are conflated");
+    require(std::abs(sim::contiguous_condition_seconds(true, 0.10f, 0.05f) - 0.15f) < 1.0e-6f
+            && sim::contiguous_condition_seconds(false, 0.30f, 0.05f) == 0.0f
+            && sim::contiguous_condition_seconds(true, -0.10f, 0.05f) == 0.0f
+            && sim::contiguous_condition_seconds(true, 0.10f,
+                std::numeric_limits<float>::quiet_NaN()) == 0.0f,
+        "contiguous gait fault timer carries separated or invalid samples");
     require(!sim::knee_crosses_before_foot(1.12f, 0.92f, 0.34f, rock_order),
         "normal bent-knee lead is still over-constrained");
     require(sim::knee_crosses_before_foot(1.42f, 0.82f, 0.20f, rock_order),
@@ -1432,24 +1496,38 @@ int main()
             && std::abs(shifted_arm_gait.swing_lift
                 - humanoid_foundational_gait.swing_lift) < 1.0e-6f,
         "foundational stride still depends on arm presence or geometry");
+    require(std::abs(rl::sagittal_step_x(0.60f, 0.0f, false) - 0.30f) < 1.0e-6f
+            && std::abs(rl::sagittal_step_x(0.60f, 0.5f, false)) < 1.0e-6f
+            && std::abs(rl::sagittal_step_x(0.60f, 1.0f, false) + 0.30f) < 1.0e-6f
+            && std::abs(rl::sagittal_step_x(0.60f, 0.0f, true) + 0.30f) < 1.0e-6f
+            && rl::sagittal_step_x(std::numeric_limits<float>::quiet_NaN(),
+                0.5f, false) == 0.0f,
+        "sagittal cosine step path changed endpoints, crossing, or finite bounds");
     const rl::TwoLinkSagittalSolution left_knee =
-        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.0f, -1.6f }, -1.0f);
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { -0.20f, -1.6f }, 1.0f);
     const rl::TwoLinkSagittalSolution right_knee =
-        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.0f, -1.6f }, 1.0f);
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.20f, -1.6f }, 1.0f);
+    const rl::TwoLinkSagittalSolution mirrored_left_knee =
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.20f, -1.6f }, -1.0f);
+    const rl::TwoLinkSagittalSolution mirrored_right_knee =
+        rl::solve_two_link_sagittal(1.0f, 1.0f, { -0.20f, -1.6f }, -1.0f);
     const Vec2 arm_forward = rl::sagittal_arm_target(1.5f, pi * 0.5f);
     const Vec2 arm_backward = rl::sagittal_arm_target(1.5f, pi * 1.5f);
     require(left_knee.valid && right_knee.valid
-            && left_knee.upper.x < 0.0f && right_knee.upper.x > 0.0f,
-        "paired-leg teacher lost its opposing sagittal gait branches");
+            && mirrored_left_knee.valid && mirrored_right_knee.valid
+            && left_knee.upper.x > 0.0f && right_knee.upper.x > 0.0f
+            && mirrored_left_knee.upper.x < 0.0f
+            && mirrored_right_knee.upper.x < 0.0f,
+        "paired knees do not share and mirror one facing-relative bend side");
     require(arm_forward.x > 0.38f && arm_backward.x < -0.38f
             && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
             && arm_forward.y < -1.20f
             && !rl::solve_two_link_sagittal(0.0f, 1.0f,
                 { 0.0f, -1.0f }, 1.0f).valid,
         "arm teacher is not a bounded fore/aft sagittal chain target");
-    require(sim::foundational_gait_cadence_hz == 1.20f
-            && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.20f
-            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.20f,
+    require(sim::foundational_gait_cadence_hz == 1.51f
+            && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.51f
+            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.51f,
         "foundational biped teacher and observed clocks diverged");
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
@@ -1676,9 +1754,9 @@ int main()
     require(humanoid.nodes.size() == 13u,
         "human-calibrated rig does not retain the compact articulated body and arms");
     require(std::abs(humanoid.nodes[0].x - 0.0015322268f) < 0.00001f
-            && std::abs(humanoid.nodes[0].y - 2.8127f) < 0.00001f
-            && std::abs(humanoid.nodes[1].y - 3.85471725f) < 0.00001f
-            && std::abs(humanoid.nodes[2].y - 4.17547226f) < 0.00001f
+            && std::abs(humanoid.nodes[0].y - 2.6000f) < 0.00001f
+            && std::abs(humanoid.nodes[1].y - 4.0500f) < 0.00001f
+            && std::abs(humanoid.nodes[2].y - 4.7700f) < 0.00001f
             && std::abs(humanoid.nodes[9].x + 0.890742854f) < 0.00001f
             && std::abs(humanoid.nodes[12].x - 0.851874948f) < 0.00001f,
         "supplied compact humanoid calibration not applied");
@@ -2375,32 +2453,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0732-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0733-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0732-shuttle-autosave.eppo";
+        / "runner-v0733-granular-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0732-shuttle-evolved.rig";
+        / "runner-v0733-granular-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0732-shuttle-autonomy.state";
-    const std::filesystem::path v0731_autosave = lifetime_import_directory
-        / "runner-v0731-active-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0731_autosave, error),
+        / "runner-v0733-granular-autonomy.state";
+    const std::filesystem::path v0732_autosave = lifetime_import_directory
+        / "runner-v0732-shuttle-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0732_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0731_magic{
-        'E', 'P', 'P', 'O', '3', '1', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0731_autosave, v0731_magic),
-        "failed to mark the fallback fixture as an EPPO31 checkpoint");
+    constexpr std::array<char, 8> v0732_magic{
+        'E', 'P', 'P', 'O', '3', '2', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0732_autosave, v0732_magic),
+        "failed to mark the fallback fixture as an EPPO32 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.31 LIFETIME LEDGER")
+                && import_message.find("V0.7.32 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.31 fallback autosave was not selected before a new save");
+            "v0.7.32 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

@@ -40,6 +40,8 @@ namespace runner::locomotion
         std::uint32_t gait_cycles{};
         float requested_direction{ 1.0f };
         bool turning{};
+        bool dynamic_hazard_active{};
+        bool dynamic_hazard_safe{};
     };
 
     struct Plan
@@ -149,9 +151,20 @@ namespace runner::locomotion
         }
 
         const bool threat = urgent_threat(signals);
+        if (signals.dynamic_hazard_active && !threat)
+        {
+            result.intent = Intent::hold;
+            result.direction = 0.0f;
+            result.target_speed = 0.0f;
+            result.cadence_hz = 0.0f;
+            result.stride_scale = 0.0f;
+            result.swing_lift = 0.0f;
+            result.stance_extension = 0.56f;
+            result.brake = true;
+            return result;
+        }
         if (threat)
             result.direction = escape_direction(signals);
-
         result.step_up = signals.near_rise >= 0.14f
             && signals.near_rise <= 1.20f;
         result.emergency_crawl = emergency_crawl_allowed(signals,

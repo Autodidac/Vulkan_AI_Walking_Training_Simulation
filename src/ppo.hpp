@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3201u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3302u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -417,11 +417,15 @@ namespace runner::rl
         signals.gait_cycles = environment.gait_cycles();
         signals.requested_direction = requested_direction;
         signals.turning = environment.shuttle_phase() == sim::ShuttlePhase::turning;
+        signals.dynamic_hazard_active = environment.granular_hazard_active();
+        signals.dynamic_hazard_safe = environment.granular_hazard_safe();
 
         for (const sim::CourseFeature& feature : environment.course_features())
         {
+            const bool granular_block = feature.marker_sequence >= 50'000;
             if (feature.kind != sim::CourseFeatureKind::moving_hazard
-                && feature.kind != sim::CourseFeatureKind::projectile)
+                && feature.kind != sim::CourseFeatureKind::projectile
+                && !granular_block)
                 continue;
             const float dx = feature.center.x - root.x;
             const float relative_velocity = feature.velocity.x
@@ -436,8 +440,9 @@ namespace runner::rl
             {
                 signals.incoming_time_to_impact = time;
                 signals.incoming_velocity_x = relative_velocity;
-                signals.incoming_density = feature.kind == sim::CourseFeatureKind::moving_hazard
-                    ? 0.90f : 0.65f;
+                signals.incoming_density = granular_block ? 0.95f
+                    : feature.kind == sim::CourseFeatureKind::moving_hazard
+                        ? 0.90f : 0.65f;
             }
         }
         return signals;
@@ -557,6 +562,17 @@ namespace runner::rl
             -bounded_length * (0.84f - 0.025f * std::abs(swing)) };
     }
 
+    [[nodiscard]] inline float sagittal_step_x(float step_length,
+        float progress, bool swing_phase) noexcept
+    {
+        if (!std::isfinite(step_length) || !std::isfinite(progress))
+            return 0.0f;
+        const float bounded_progress = clamp(progress, 0.0f, 1.0f);
+        const float linear = 0.5f - bounded_progress;
+        const float profile = linear;
+        return step_length * (swing_phase ? -profile : profile);
+    }
+
     struct BipedGaitParameters
     {
         float cadence_hz{ sim::foundational_gait_cadence_hz };
@@ -593,9 +609,9 @@ namespace runner::rl
             : 2.30f;
         return {
             sim::foundational_gait_cadence_hz,
-            clamp(leg_length * 0.24f, 0.50f, 0.66f),
+            clamp(leg_length * 0.26f, 0.50f, 0.66f),
             clamp(leg_length * 0.25f, 0.52f, 0.68f),
-            clamp(leg_length * 0.90f, 1.80f, 2.35f),
+            clamp(leg_length * 0.94f, 1.90f, 2.42f),
             1.0f
         };
     }
@@ -617,12 +633,12 @@ namespace runner::rl
             if (phase < pi)
             {
                 progress = phase / pi;
-                x = parameters.step_length * (0.5f - progress);
+                x = sagittal_step_x(parameters.step_length, progress, false);
             }
             else
             {
                 progress = (phase - pi) / pi;
-                x = parameters.step_length * (progress - 0.5f);
+                x = sagittal_step_x(parameters.step_length, progress, true);
                 y += parameters.swing_lift * std::sin(progress * pi);
             }
             x *= parameters.direction;
@@ -634,7 +650,7 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            const float bend_direction = left ? -1.0f : 1.0f;
+            constexpr float bend_direction = 1.0f;
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
                 upper_length, lower_length, { x, y }, bend_direction);
             if (!solution.valid)
@@ -702,7 +718,7 @@ namespace runner::rl
             const Vec2 target = sagittal_arm_target(upper_length + lower_length,
                 arm_phase, parameters.direction);
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, target, parameters.direction < 0.0f ? 1.0f : -1.0f);
+                upper_length, lower_length, target, -1.0f);
             if (!solution.valid)
                 continue;
             const Vec2 shoulder_reference = rig.nodes[shoulder.a]
@@ -820,7 +836,15 @@ namespace runner::rl
                 movement.step_up ? 2.20f : 2.30f,
                 movement.direction
             };
+
         biped_parameters.direction = movement.direction;
+        if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
+        {
+            // Preload the supported stance before turning. The shuttle state
+            // bounds this phase; commanding another swing here can place one
+            // articulated foot across the other on a rough boundary cell.
+            return balance_teacher_action(environment);
+        }
 
         return biped_gait_teacher_action(environment, biped_parameters);
     }
@@ -1884,6 +1908,8 @@ namespace runner::rl
         void train_one_update();
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+        void configure_preview_equipment(sim::WeaponClass weapon,
+            float target_distance = 8.0f);
         void set_preview_course_motion_enabled(bool enabled) noexcept
         {
             preview_.set_course_motion_enabled(enabled);
@@ -2046,6 +2072,7 @@ namespace runner::rl
         std::uint64_t preview_reset_sequence_{};
         sim::InvalidMotion preview_last_reset_reason_{ sim::InvalidMotion::none };
         double preview_accumulator_seconds_{};
+        bool preview_equipment_test_enabled_{};
         std::vector<std::jthread> rollout_workers_{};
         std::shared_ptr<ParallelState> parallel_{};
         RolloutTotals staged_totals_{};

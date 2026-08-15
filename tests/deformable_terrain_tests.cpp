@@ -44,6 +44,57 @@ namespace runner::sim
             environment.rebuild_course_features();
         }
 
+        static void prepare_granular_event(Environment& environment,
+            std::uint32_t prior_sequence) noexcept
+        {
+            environment.clear_dynamic_materials();
+            environment.shuttle_state_.phase = ShuttlePhase::traverse;
+            environment.shuttle_state_.facing_direction = 1.0f;
+            environment.shuttle_state_.locomotion_direction = 1.0f;
+            environment.shuttle_state_.completed_turns = 2u;
+            environment.distance_travelled_ = 24.0f;
+            environment.shuttle_distance_travelled_ = 24.0f;
+            environment.alternating_steps_ = 20u;
+            environment.limb_crossings_ = 20u;
+            environment.longest_stable_stance_seconds_ = 3.0f;
+            environment.material_event_sequence_ = prior_sequence;
+            environment.elapsed_seconds_ = 20.0f + static_cast<float>(prior_sequence);
+            environment.next_material_event_seconds_ = environment.elapsed_seconds_;
+            environment.update_materials(1.0f / 60.0f);
+            environment.rebuild_course_features();
+            environment.append_dynamic_material_features();
+            environment.next_material_event_seconds_ = 1.0e6f;
+        }
+
+        static void tick_granular(Environment& environment, int steps) noexcept
+        {
+            for (int step = 0; step < steps; ++step)
+            {
+                environment.elapsed_seconds_ += 1.0f / 60.0f;
+                environment.update_materials(1.0f / 60.0f);
+                environment.rebuild_course_features();
+                environment.append_dynamic_material_features();
+            }
+        }
+
+        static void advance_granular_render_schedule(Environment& environment,
+            int render_hz, int seconds) noexcept
+        {
+            int accumulator = 0;
+            for (int frame = 0; frame < render_hz * seconds; ++frame)
+            {
+                accumulator += 60;
+                while (accumulator >= render_hz)
+                {
+                    tick_granular(environment, 1);
+                    accumulator -= render_hz;
+                }
+            }
+        }
+        static float terrain_volume(const Environment& environment) noexcept
+        {
+            return environment.terrain_.total_height_volume();
+        }
         static std::vector<float> launch_support_clearances(
             const Environment& environment)
         {
@@ -231,6 +282,147 @@ int main()
         std::cerr << "volume expected=" << (deposited+0.12f)
             << " actual=" << first.total_height_volume() << std::endl;
     require(std::abs(first.total_height_volume()-(deposited+0.12f))<8.0e-4f,"collapse leaked volume");
+    sim::DeformableTerrain firm_truth{};
+    firm_truth.reset(0x733001u, 0.85f);
+    float firm_x = 0.0f;
+    bool found_firm = false;
+    for (std::size_t column = 0; column < sim::DeformableTerrain::cell_count; ++column)
+    {
+        const float sample = static_cast<float>(column)
+            * sim::DeformableTerrain::fine_cell_spacing;
+        if (!sim::DeformableTerrain::launch_pad_at(sample)
+            && firm_truth.region_at(sample) == sim::TerrainRegion::firm)
+        {
+            firm_x = sample;
+            found_firm = true;
+            break;
+        }
+    }
+    require(found_firm, "material-truth test could not find firm dirt");
+    const float firm_height = firm_truth.height_at(firm_x);
+    const float firm_volume = firm_truth.total_height_volume();
+    const sandhybrid::Material firm_material = firm_truth.surface_material_at(firm_x);
+    for (int iteration = 0; iteration < 120; ++iteration)
+        firm_truth.apply_pressure(firm_x, 4.0f, 5.0f, 1.0f / 60.0f);
+    require(std::abs(firm_truth.height_at(firm_x) - firm_height) < 1.0e-7f
+            && std::abs(firm_truth.total_height_volume() - firm_volume) < 1.0e-6f
+            && firm_truth.surface_material_at(firm_x) == firm_material,
+        "firm dirt deformed or converted under support pressure");
+
+    sim::DeformableTerrain excavated_a{}, excavated_b{};
+    excavated_a.reset(0x733002u, 0.85f);
+    excavated_b.reset(0x733002u, 0.85f);
+    constexpr float excavation_x = 3.5f;
+    const float excavation_height = excavated_a.height_at(excavation_x);
+    const float removed_a = excavated_a.excavate(excavation_x, 2.00f, 0.35f);
+    const float removed_b = excavated_b.excavate(excavation_x, 2.00f, 0.35f);
+    require(removed_a > 0.20f && std::abs(removed_a - removed_b) < 1.0e-7f,
+        "seeded excavation failed or was nondeterministic");
+    require(excavated_a.height_at(excavation_x) < excavation_height - 0.15f
+            && excavated_a.region_at(excavation_x) == sim::TerrainRegion::hole,
+        "excavation did not form a collision-visible hole");
+    require(std::abs(excavated_a.height_at(excavation_x)
+            - excavated_b.height_at(excavation_x)) < 1.0e-7f,
+        "repeated-seed excavation changed the resulting surface");
+    require(excavated_a.excavate(0.0f, 1.0f, 0.5f) == 0.0f
+            && excavated_a.excavate(std::numeric_limits<float>::quiet_NaN(),
+                1.0f, 0.5f) == 0.0f,
+        "launch or non-finite excavation bypassed its guard");
+
+    sim::DeformableTerrain deposited_truth{};
+    deposited_truth.reset(0x733003u, 0.85f);
+    deposited_truth.deposit(firm_x, 0.24f, 0.18f, sandhybrid::Material::sand);
+    require(deposited_truth.surface_material_at(firm_x) == sandhybrid::Material::sand
+            && deposited_truth.region_at(firm_x) == sim::TerrainRegion::dry_sand,
+        "sand deposition did not update the authoritative material label");
+
+    sim::Environment granular{ sim::CreatureBlueprint::humanoid(), 0x733100u };
+    granular.set_course(sim::CourseStage::moving_hazards, 0.75f);
+    granular.set_course_motion_enabled(false);
+    require(granular.material_event_count() == 0u
+            && granular.material_particles().empty()
+            && !granular.granular_block_present(),
+        "granular hazards spawned before gait and shuttle readiness");
+    const float granular_volume = sim::EnvironmentTestAccess::terrain_volume(granular);
+    sim::EnvironmentTestAccess::prepare_granular_event(granular, 0u);
+    require(granular.material_event_count() == 1u
+            && !granular.material_particles().empty()
+            && std::ranges::all_of(granular.material_particles(),
+                [](const sim::MaterialParticle& particle)
+                { return particle.kind == sim::MaterialKind::sand; })
+            && granular.granular_hazard_active(),
+        "first ready granular event is not an active falling-sand burst");
+    sim::EnvironmentTestAccess::tick_granular(granular, 150);
+    require(granular.material_particles().empty()
+            && sim::EnvironmentTestAccess::terrain_volume(granular) > granular_volume
+            && granular.granular_hazard_safe(),
+        "falling sand did not settle, stack, and become safely traversable");
+
+    sim::EnvironmentTestAccess::prepare_granular_event(granular, 1u);
+    require(std::ranges::all_of(granular.material_particles(),
+            [](const sim::MaterialParticle& particle)
+            { return particle.kind == sim::MaterialKind::dirt; }),
+        "second granular event did not preserve falling dirt material");
+    sim::EnvironmentTestAccess::prepare_granular_event(granular, 2u);
+    require(granular.material_event_count() == 3u
+            && granular.granular_hazard_active()
+            && granular.material_particles().empty(),
+        "excavation event did not expose an unsafe formation window");
+    sim::EnvironmentTestAccess::tick_granular(granular, 120);
+    require(granular.granular_hazard_safe(),
+        "excavated terrain never transitioned to the safe traversal state");
+    sim::EnvironmentTestAccess::prepare_granular_event(granular, 3u);
+    require(granular.granular_block_present()
+            && granular.granular_hazard_active()
+            && std::ranges::any_of(granular.course_features(),
+                [](const sim::CourseFeature& feature)
+                { return feature.marker_sequence >= 50'000; }),
+        "moving block did not enter collision, render, and observation state");
+    sim::EnvironmentTestAccess::tick_granular(granular, 300);
+    require(granular.granular_block_present()
+            && granular.granular_hazard_safe(),
+        "moving block did not settle into a persistent traversable obstacle");
+    const auto granular_fingerprint = [](const sim::Environment& subject)
+    {
+        std::vector<float> result{
+            static_cast<float>(subject.material_event_count()),
+            static_cast<float>(subject.material_particles().size()),
+            static_cast<float>(subject.granular_hazard_active()),
+            static_cast<float>(subject.granular_hazard_safe()),
+            static_cast<float>(subject.granular_block_present()),
+            sim::EnvironmentTestAccess::terrain_volume(subject) };
+        for (const sim::MaterialParticle& particle : subject.material_particles())
+            result.insert(result.end(), { static_cast<float>(particle.kind),
+                particle.position.x, particle.position.y,
+                particle.velocity.x, particle.velocity.y, particle.radius });
+        for (const sim::CourseFeature& feature : subject.course_features())
+        {
+            if (feature.marker_sequence < 50'000)
+                continue;
+            result.insert(result.end(), { feature.center.x, feature.center.y,
+                feature.velocity.x, feature.velocity.y,
+                feature.half_extent.x, feature.half_extent.y });
+        }
+        return result;
+    };
+    for (const std::uint32_t sequence : { 0u, 3u })
+    {
+        sim::Environment at_20(sim::CreatureBlueprint::humanoid(), 0x733333u);
+        sim::Environment at_60(sim::CreatureBlueprint::humanoid(), 0x733333u);
+        sim::Environment at_240(sim::CreatureBlueprint::humanoid(), 0x733333u);
+        for (sim::Environment* subject : { &at_20, &at_60, &at_240 })
+        {
+            subject->set_course(sim::CourseStage::moving_hazards, 0.80f);
+            subject->set_course_motion_enabled(false);
+            sim::EnvironmentTestAccess::prepare_granular_event(*subject, sequence);
+        }
+        sim::EnvironmentTestAccess::advance_granular_render_schedule(at_20, 20, 5);
+        sim::EnvironmentTestAccess::advance_granular_render_schedule(at_60, 60, 5);
+        sim::EnvironmentTestAccess::advance_granular_render_schedule(at_240, 240, 5);
+        require(granular_fingerprint(at_20) == granular_fingerprint(at_60)
+                && granular_fingerprint(at_60) == granular_fingerprint(at_240),
+            "granular fixed-step state differs at 20/60/240 Hz render cadence");
+    }
     const std::array<sim::CreatureBlueprint, 8> launch_rigs{
         sim::CreatureBlueprint::humanoid(), sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::scaffold(), sim::CreatureBlueprint::chicken(),

@@ -117,6 +117,7 @@ namespace runner::sim
         {
             seed_ = seed == 0u ? 1u : seed;
             difficulty_ = std::clamp(difficulty, 0.0f, 1.0f);
+            live_surface_updates_ = false;
             std::fill(cells_.begin(), cells_.end(), Cell{});
             std::fill(fine_cells_.begin(), fine_cells_.end(), FineCell{});
             std::fill(macro_tiles_.begin(), macro_tiles_.end(), MacroTile{});
@@ -168,6 +169,7 @@ namespace runner::sim
                         0.0f, 1.0f);
                 }
             }
+            live_surface_updates_ = true;
             refresh_all_macro_tiles();
             macro_promotions_ = 0u;
             macro_demotions_ = 0u;
@@ -244,6 +246,13 @@ namespace runner::sim
             const std::size_t center = nearest_index(course_x);
             if (launch_pad_at(static_cast<float>(center) * fine_cell_spacing))
                 return;
+            FineCell* surface = top_cell(center);
+            if (surface == nullptr || surface->structural())
+                return;
+            const sandhybrid::Material displaced_material = surface->material();
+            if (displaced_material != sandhybrid::Material::sand
+                && displaced_material != sandhybrid::Material::mud)
+                return;
             Cell& column = cells_[center];
             const float load = std::clamp(normalized_load, 0.0f, 4.0f);
             const float slip = std::clamp(std::abs(slip_speed), 0.0f, 5.0f);
@@ -262,11 +271,18 @@ namespace runner::sim
             // A loaded footprint settles. Displaced grains form a broad berm
             // outside the immediate contact patch instead of a one-cell spike
             // directly under the next footfall.
-            constexpr std::array<std::ptrdiff_t, 10> offsets{
-                -2, 2, -3, 3, -4, 4, -5, 5, -6, 6 };
-            constexpr std::array<float, 10> weights{
-                0.12f, 0.12f, 0.11f, 0.11f, 0.10f,
-                0.10f, 0.09f, 0.09f, 0.08f, 0.08f };
+            constexpr std::array<std::ptrdiff_t, 28> offsets{
+                -5, 5, -6, 6, -7, 7, -8, 8, -9, 9, -10, 10,
+                -11, 11, -12, 12, -13, 13, -14, 14, -15, 15,
+                -16, 16, -17, 17, -18, 18 };
+            constexpr std::array<float, 28> weights{
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f,
+                1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f, 1.0f / 28.0f };
             float deposited{};
             for (std::size_t index = 0; index < offsets.size(); ++index)
             {
@@ -275,7 +291,7 @@ namespace runner::sim
                 if (launch_pad_at(static_cast<float>(target) * fine_cell_spacing))
                     continue;
                 const float added = add_volume(target, removed * weights[index],
-                    sandhybrid::Material::sand, false);
+                    displaced_material, false);
                 deposited += added;
                 cells_[target].loose_fraction = std::clamp(
                     cells_[target].loose_fraction + added * 2.0f, 0.0f, 1.0f);
@@ -283,7 +299,7 @@ namespace runner::sim
             const float returned = removed - deposited;
             if (returned > 0.0f)
                 static_cast<void>(add_volume(center, returned,
-                    sandhybrid::Material::sand, false));
+                    displaced_material, false));
 
             column.firmness = std::clamp(column.firmness
                 + load * dt * 0.12f, 0.0f, 1.0f);
@@ -291,7 +307,8 @@ namespace runner::sim
                 - load * dt * 0.08f, 0.0f, 1.0f);
         }
 
-        void deposit(float course_x, float height_volume, float material_firmness) noexcept
+        void deposit(float course_x, float height_volume, float material_firmness,
+            sandhybrid::Material material = sandhybrid::Material::sand) noexcept
         {
             const std::size_t center = nearest_index(course_x);
             if (launch_pad_at(static_cast<float>(center) * fine_cell_spacing))
@@ -309,7 +326,7 @@ namespace runner::sim
                 const float requested = offset + 1u == weights.size()
                     ? remaining : amount * weights[offset];
                 const float added = add_volume(column_index, requested,
-                    sandhybrid::Material::sand, false);
+                    material, false);
                 remaining -= added;
                 Cell& column = cells_[column_index];
                 column.firmness = std::lerp(column.firmness,
@@ -320,9 +337,43 @@ namespace runner::sim
             }
             if (remaining > 0.0f)
                 static_cast<void>(add_volume(center, remaining,
-                    sandhybrid::Material::sand, false));
+                    material, false));
         }
 
+        [[nodiscard]] float excavate(float course_x, float height_volume,
+            float radius) noexcept
+        {
+            if (!std::isfinite(course_x) || !std::isfinite(height_volume)
+                || !std::isfinite(radius) || height_volume <= 0.0f)
+                return 0.0f;
+            const std::size_t center = nearest_index(course_x);
+            const int radius_cells = std::clamp(static_cast<int>(std::ceil(
+                std::max(radius, fine_cell_spacing) / fine_cell_spacing)), 1, 18);
+            float weight_sum{};
+            for (int offset = -radius_cells; offset <= radius_cells; ++offset)
+                weight_sum += 1.0f - static_cast<float>(std::abs(offset))
+                    / static_cast<float>(radius_cells + 1);
+            float removed{};
+            for (int offset = -radius_cells; offset <= radius_cells; ++offset)
+            {
+                const std::size_t column = wrap_column(
+                    static_cast<std::ptrdiff_t>(center) + offset);
+                if (launch_pad_at(static_cast<float>(column) * fine_cell_spacing))
+                    continue;
+                const FineCell* surface = top_cell(column);
+                if (surface == nullptr || surface->structural())
+                    continue;
+                const float weight = 1.0f - static_cast<float>(std::abs(offset))
+                    / static_cast<float>(radius_cells + 1);
+                const float column_removed = remove_excavatable_volume(column,
+                    height_volume * weight / std::max(weight_sum, 1.0e-6f));
+                removed += column_removed;
+                cells_[column].loose_fraction = std::clamp(
+                    cells_[column].loose_fraction + column_removed * 2.0f,
+                    0.0f, 1.0f);
+            }
+            return removed;
+        }
         void step(float dt) noexcept
         {
             const float bounded_dt = std::clamp(dt, 0.0f, 0.05f);
@@ -349,7 +400,9 @@ namespace runner::sim
                 const std::size_t high = difference > 0.0f ? index : right;
                 const std::size_t low = difference > 0.0f ? right : index;
                 const FineCell* high_top = top_cell(high);
-                if (high_top == nullptr || high_top->structural())
+                if (high_top == nullptr || high_top->structural()
+                    || (high_top->material() != sandhybrid::Material::sand
+                        && high_top->material() != sandhybrid::Material::mud))
                     continue;
                 const float mobility = std::clamp(1.0f - average_firmness, 0.08f, 1.0f);
                 const float movement = std::min(excess * 0.20f,
@@ -789,6 +842,25 @@ namespace runner::sim
                     + std::clamp(fine_cells_[fine_index(column,
                         static_cast<std::size_t>(top))].fill, 0.0f, 1.0f))
                     * fine_cell_spacing;
+            if (!live_surface_updates_)
+                return;
+            Cell& surface = cells_[column];
+            const FineCell* top_surface = top_cell(column);
+            surface.surface_material = top_surface == nullptr
+                ? sandhybrid::Material::empty : top_surface->material();
+            if (launch_pad_at(static_cast<float>(column) * fine_cell_spacing))
+                surface.region = TerrainRegion::firm;
+            else if (surface.water_depth > 0.08f)
+                surface.region = TerrainRegion::shallow_water;
+            else if (surface.water_depth > 0.001f
+                || surface.surface_material == sandhybrid::Material::mud)
+                surface.region = TerrainRegion::waterlogged;
+            else if (surface.height < surface.rest_height - 0.16f)
+                surface.region = TerrainRegion::hole;
+            else if (surface.surface_material == sandhybrid::Material::sand)
+                surface.region = TerrainRegion::dry_sand;
+            else
+                surface.region = TerrainRegion::firm;
         }
 
         void refresh_all_macro_tiles() noexcept
@@ -854,6 +926,32 @@ namespace runner::sim
                 static_cast<std::int32_t>(row) });
         }
 
+        [[nodiscard]] float remove_excavatable_volume(std::size_t column,
+            float requested) noexcept
+        {
+            float remaining = std::max(0.0f, requested);
+            float removed = 0.0f;
+            while (remaining > 1.0e-7f)
+            {
+                const int top = surface_rows_[column];
+                if (top < 0)
+                    break;
+                FineCell& cell = fine_cells_[fine_index(column,
+                    static_cast<std::size_t>(top))];
+                if (cell.material() == sandhybrid::Material::stone)
+                    break;
+                const float available = cell.fill * fine_cell_spacing;
+                const float take = std::min(remaining, available);
+                cell.fill -= take / fine_cell_spacing;
+                remaining -= take;
+                removed += take;
+                const std::size_t changed_row = static_cast<std::size_t>(top);
+                if (cell.fill <= 1.0e-6f)
+                    clear_cell(cell);
+                changed_cell(column, changed_row);
+            }
+            return removed;
+        }
         [[nodiscard]] float remove_loose_volume(std::size_t column,
             float requested) noexcept
         {
@@ -920,15 +1018,17 @@ namespace runner::sim
         [[nodiscard]] float move_loose_volume(std::size_t from,
             std::size_t to, float requested) noexcept
         {
+            const FineCell* source = top_cell(from);
+            if (source == nullptr || source->structural())
+                return 0.0f;
+            const sandhybrid::Material material = source->material();
             const float removed = remove_loose_volume(from, requested);
             if (removed <= 0.0f)
                 return 0.0f;
-            const float added = add_volume(to, removed,
-                sandhybrid::Material::sand, false);
+            const float added = add_volume(to, removed, material, false);
             const float remainder = removed - added;
             if (remainder > 0.0f)
-                static_cast<void>(add_volume(from, remainder,
-                    sandhybrid::Material::sand, false));
+                static_cast<void>(add_volume(from, remainder, material, false));
             return added;
         }
 
@@ -972,6 +1072,7 @@ namespace runner::sim
         float difficulty_{ 0.25f };
         std::size_t macro_promotions_{};
         std::size_t macro_demotions_{};
+        bool live_surface_updates_{};
     };
 
     static_assert(sizeof(DeformableTerrain) < 128u * 1024u,

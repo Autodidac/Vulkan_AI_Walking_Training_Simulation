@@ -210,6 +210,8 @@ namespace runner::rl
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+        void configure_preview_equipment(sim::WeaponClass weapon,
+            float target_distance = 8.0f);
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error);
         [[nodiscard]] bool load_checkpoint(const std::filesystem::path& path, std::string& error,
             bool transfer_only = false);

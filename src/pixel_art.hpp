@@ -53,6 +53,35 @@ namespace runner::art
         float joint_overlap{};
     };
 
+    struct HandArtDimensions
+    {
+        float length{};
+        float thickness{};
+        float wrist_overlap{};
+    };
+
+    [[nodiscard]] inline bool presented_transverse_mirror(
+        bool branch_mirror, float facing_direction) noexcept
+    {
+        const bool facing_mirror = std::isfinite(facing_direction)
+            && facing_direction < 0.0f;
+        return branch_mirror != facing_mirror;
+    }
+
+    [[nodiscard]] inline HandArtDimensions hand_art_dimensions(
+        float forearm_thickness, int source_width, int source_height) noexcept
+    {
+        const float thickness = std::clamp(
+            std::isfinite(forearm_thickness) ? forearm_thickness * 0.98f : 38.0f,
+            28.0f, 64.0f);
+        const float aspect = source_width > 0 && source_height > 0
+            ? std::clamp(static_cast<float>(source_width)
+                / static_cast<float>(source_height), 1.05f, 1.65f)
+            : 1.40f;
+        const float length = std::clamp(thickness * aspect, 40.0f, 92.0f);
+        return { length, thickness, length * 0.16f };
+    }
+
     [[nodiscard]] inline SkinEnvelopeDimensions skin_envelope_dimensions(
         float torso_length, float authored_shoulder_width) noexcept
     {
@@ -96,14 +125,19 @@ namespace runner::art
     }
 
     [[nodiscard]] inline OrientedArtTransform support_boot_transform(
-        Vec2 proximal, Vec2 support, float width, float height) noexcept
+        Vec2 proximal, Vec2 support, float width, float height,
+        float facing_direction = 1.0f) noexcept
     {
         const Vec2 terminal = normalized(support - proximal, { 0.0f, 1.0f });
-        const Vec2 forward{ terminal.y, -terminal.x };
-        const Vec2 normal{ -forward.y, forward.x };
+        const float facing = std::isfinite(facing_direction)
+                && facing_direction < 0.0f
+            ? -1.0f : 1.0f;
+        const Vec2 forward = Vec2{ terminal.y, -terminal.x } * facing;
         const float bounded_width = std::max(0.0f, width);
         const float bounded_height = std::max(0.0f, height);
-        const Vec2 center = support - normal * (bounded_height * 0.24f)
+        // Terminal points toward the support surface and therefore remains the
+        // vertical/sole reference when the toe direction reverses.
+        const Vec2 center = support - terminal * (bounded_height * 0.24f)
             + forward * (bounded_width * 0.26f);
         return oriented_box_transform(center, forward, bounded_width, bounded_height);
     }

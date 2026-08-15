@@ -19,6 +19,22 @@ namespace runner::ui_layout
         float x{ 1.0f };
         float y{ 1.0f };
     };
+    struct BlueprintFit
+    {
+        float camera_x{};
+        float world_center_y{};
+        float pixels_per_meter{ 42.0f };
+        float content_center_y{};
+    };
+
+    struct RigLabTestLayout
+    {
+        Box selection_row{};
+        Box range_row{};
+        Box pattern_row{};
+        Box status_row{};
+        Box manual_slider{};
+    };
 
     inline constexpr float minimum_window_width = 1280.0f;
     inline constexpr float minimum_window_height = 820.0f;
@@ -176,6 +192,56 @@ namespace runner::ui_layout
         return { panel.x + panel.width + panel_gap, content.y,
             std::max(0.0f, content.width - panel.width - panel_gap),
             content.height };
+    }
+
+    [[nodiscard]] constexpr RigLabTestLayout rig_lab_test_layout(Box card) noexcept
+    {
+        const float inset_width = std::max(0.0f, card.width - 28.0f);
+        return {
+            { card.x + 14.0f, card.y + 39.0f, inset_width, 31.0f },
+            { card.x + 14.0f, card.y + 75.0f, inset_width, 31.0f },
+            { card.x + 14.0f, card.y + 111.0f, inset_width, 31.0f },
+            { card.x + 14.0f, card.y + 149.0f, inset_width, 17.0f },
+            { card.x + 14.0f, card.y + 174.0f, inset_width, 36.0f }
+        };
+    }
+
+    [[nodiscard]] constexpr BlueprintFit fit_blueprint(
+        Box viewport, float minimum_x, float maximum_x,
+        float minimum_y, float maximum_y) noexcept
+    {
+        minimum_x = std::min(minimum_x, 0.0f);
+        maximum_x = std::max(maximum_x, 0.0f);
+        minimum_y = std::min(minimum_y, 0.0f);
+        maximum_y = std::max(maximum_y, 0.0f);
+        const float horizontal_span = std::max(0.5f, maximum_x - minimum_x);
+        const float vertical_span = std::max(0.5f, maximum_y - minimum_y);
+        const float usable_width = std::max(1.0f, viewport.width - 96.0f);
+        const float content_top = viewport.y + 70.0f;
+        const float content_bottom = viewport.y
+            + std::max(90.0f, viewport.height - 48.0f);
+        const float usable_height = std::max(1.0f, content_bottom - content_top);
+        return {
+            (minimum_x + maximum_x) * 0.5f,
+            (minimum_y + maximum_y) * 0.5f,
+            std::clamp(std::min(usable_width / horizontal_span,
+                usable_height / vertical_span), 1.0f, 168.0f),
+            (content_top + content_bottom) * 0.5f
+        };
+    }
+
+    [[nodiscard]] constexpr float blueprint_screen_x(
+        const BlueprintFit& fit, Box viewport, float world_x) noexcept
+    {
+        return viewport.x + viewport.width * 0.5f
+            + (world_x - fit.camera_x) * fit.pixels_per_meter;
+    }
+
+    [[nodiscard]] constexpr float blueprint_screen_y(
+        const BlueprintFit& fit, float world_y) noexcept
+    {
+        return fit.content_center_y
+            - (world_y - fit.world_center_y) * fit.pixels_per_meter;
     }
 
     [[nodiscard]] constexpr bool rig_lab_layout_valid(

@@ -1,5 +1,14 @@
 # Runner
 
+## v0.7.33 granular hazards, complete facing, and readable Rig Lab
+
+- Mirrors the complete assembled side-view presentation across both travel directions: torso, helmet, arms, legs, boots, supplied-sheet hands, near/far layering, skeleton, and equipment.
+- Fits readable supplied hands to forearm anatomy, shortens disproportionate support chains without changing accepted arm reach, and enforces same-sided knee/elbow bends with phase-opposed arm swing.
+- Replaces the misleading height-band hazard with fixed-step falling sand/mud, excavation, settling, stacking, moving blocks, delayed readiness, safe-state traversal, and exact collision/render material ownership.
+- Mounts visible functional equipment to graph-discovered manipulators in live, replay, and Rig Lab views; deterministic projectiles report hits and clean up across lifecycle boundaries.
+- Reflows the Rig Lab Test panel and frames the active authored graph above ground while demoting ghosts, bounding nodes, compacting labels, and preserving editor hit testing through the same transform.
+- Retains strict zero-authority Walk champions across biped, humanoid, quadruped, crawler, and hexapod with a stable 1.51 Hz anatomy-scaled gait and unchanged sustained scissor rejection.
+- Advances training semantics to `0x0007'3302`, checkpoint magic to `EPPO33`, and local state to `runner-v0733-granular-*`; v0.7.32 contributes lifetime totals only.
 ## v0.7.32 finite shuttle, mirrored gait, and completed armor
 
 - Uses a compact -2 m to 10 m physical shuttle: the rig backs away from each boundary, pauses to turn, mirrors completely, and travels forward toward the other end.
@@ -77,7 +86,7 @@ Runner.exe --diagnose-walk-eye`, a deterministic 100-update biped/quadruped/craw
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.32 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+Runner 0.7.33 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
 
 ## Build requirements
 
@@ -181,6 +190,7 @@ Runner.exe --art-eye-test
 - [`docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md`](docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md) documents the cold-start failure, observable gait clocks, optimizer separation, authority handoff, strict retention, and zero-authority acceptance gates.
 - [docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md](docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md) documents active terrain/contact truth, lesson-local ownership, raw Crouch learning, topology-derived assistance, all-rig art transforms, and frame-independence evidence.
 - [docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md](docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md) documents finite shuttle sequencing, shared facing semantics, delayed obstacle lifecycle, same-facing knees, phase-opposed arms, terminal hands, checkpoint migration, and fixed-step evidence.
+- [docs/RUNNER_V0733_GRANULAR_FACING_RIGLAB.md](docs/RUNNER_V0733_GRANULAR_FACING_RIGLAB.md) documents whole-rig facing, supplied-hand fitting, proportions and gait, granular sky hazards, material truth, functional equipment, Rig Lab layout/framing, state isolation, and release evidence.
 
 A release is incomplete until Linux and Windows tests, build-tree and installed diagnostics, independent archive extraction, checksum and manifest audits, release-asset re-download, branch cleanup, and open-PR audit all pass.
 

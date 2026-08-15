@@ -280,16 +280,7 @@ namespace runner
             };
         }
 
-        [[nodiscard]] Vec2 screen_to_world(Vec2 screen, Rect viewport, float camera_x,
-            float pixels_per_meter) noexcept
-        {
-            const float ground_y = viewport.position.y
-                + viewport.size.y * view_camera::live_ground_fraction;
-            return {
-                camera_x + (screen.x - (viewport.position.x + viewport.size.x * 0.50f)) / pixels_per_meter,
-                (ground_y - screen.y) / pixels_per_meter
-            };
-        }
+
     }
 
     struct Application::Impl
@@ -386,9 +377,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0732-shuttle-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0732-shuttle-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0732-shuttle-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0733-granular-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0733-granular-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0733-granular-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -880,6 +871,7 @@ namespace runner
             for (const sim::CourseFeature& feature : environment.course_features())
             {
                 const Vec2 feature_screen = world_to_screen(feature.center, viewport, camera, scale);
+                const bool granular_block = feature.marker_sequence >= 50'000;
                 if (feature.kind == sim::CourseFeatureKind::moving_hazard
                     || feature.kind == sim::CourseFeatureKind::rock
                     || feature.kind == sim::CourseFeatureKind::projectile)
@@ -901,7 +893,8 @@ namespace runner
                     const Rect rect{ { minimum.x, maximum.y },
                         { maximum.x - minimum.x, minimum.y - maximum.y } };
                     const bool ledge = feature.kind == sim::CourseFeatureKind::ledge;
-                    const Color fill = ledge ? rgb(0x596b75)
+                    const Color fill = granular_block ? rgb(0x70533f)
+                        : ledge ? rgb(0x596b75)
                         : feature.kind == sim::CourseFeatureKind::hurdle ? yellow
                         : feature.kind == sim::CourseFeatureKind::duck_press
                             ? rgb(0x315b70) : accent_dim;
@@ -914,9 +907,12 @@ namespace runner
                     continue;
                 const bool trainer_feature = feature.kind == sim::CourseFeatureKind::duck_press
                     || feature.kind == sim::CourseFeatureKind::ledge;
-                const std::string label = std::format("{}: {}",
-                    trainer_feature ? "TRAINER" : "HAZARD",
-                    sim::course_feature_name(feature.kind));
+                const std::string label = granular_block
+                    ? std::format("{}: {}", environment.granular_hazard_active()
+                        ? "HAZARD" : "SAFE", environment.granular_hazard_active()
+                            ? "FALLING BLOCK" : "SETTLED BLOCK")
+                    : std::format("{}: {}", trainer_feature ? "TRAINER" : "HAZARD",
+                        sim::course_feature_name(feature.kind));
                 const float x = clamp(feature_screen.x - 68.0f,
                     viewport.position.x + 8.0f, viewport.position.x + viewport.size.x - 190.0f);
                 const float y = viewport.position.y + 144.0f
@@ -954,13 +950,17 @@ namespace runner
                     canvas.circle(world_to_screen(projectile.position, viewport, camera, scale),
                         projectile.radius * scale, yellow, 12);
             }
-            if (environment.weapon_class() != sim::WeaponClass::none
-                && environment.equipment_state() != sim::EquipmentState::dropped
-                && environment.equipment_state() != sim::EquipmentState::disarmed)
+            if (environment.weapon_class() != sim::WeaponClass::none)
             {
-                const Vec2 mount = environment.equipment_mount_position();
+                const bool loose = environment.equipment_state()
+                    == sim::EquipmentState::dropped
+                    || environment.equipment_state() == sim::EquipmentState::disarmed;
+                const Vec2 mount = environment.equipment_display_position();
                 const Vec2 direction{ std::cos(environment.equipment_aim_angle()),
                     std::sin(environment.equipment_aim_angle()) };
+                const float alpha = loose ? 0.86f
+                    : environment.equipment_state() == sim::EquipmentState::ready
+                        ? 0.98f : 0.76f;
                 if (optional_art_enabled && optional_weapon_art.loaded())
                 {
                     const Vec2 beginning = world_to_screen(
@@ -969,16 +969,15 @@ namespace runner
                         mount + direction * 0.68f, viewport, camera, scale);
                     const float thickness = std::clamp(scale * 0.42f, 24.0f, 42.0f);
                     draw_oriented_pixel_art(canvas, optional_weapon_art,
-                        beginning, ending, thickness,
-                        environment.equipment_state() == sim::EquipmentState::ready
-                            ? 0.98f : 0.72f);
+                        beginning, ending, thickness, alpha,
+                        environment.facing_direction() < 0.0f);
                 }
                 else
                 {
                     canvas.line(world_to_screen(mount, viewport, camera, scale),
                         world_to_screen(mount + direction * 0.55f, viewport, camera, scale),
-                        5.0f, environment.equipment_state() == sim::EquipmentState::ready
-                            ? accent : muted);
+                        5.0f, loose ? danger : environment.equipment_state()
+                            == sim::EquipmentState::ready ? accent : muted);
                 }
             }
         }
@@ -1170,11 +1169,13 @@ namespace runner
                                     / static_cast<float>(optional_foot_art.width);
                                 const art::OrientedArtTransform transform =
                                     art::support_boot_transform(
-                                        proximal, center, width, height);
+                                        proximal, center, width, height,
+                                        environment.facing_direction());
                                 draw_oriented_pixel_art(canvas, optional_foot_art,
                                     transform.beginning, transform.ending,
                                     transform.thickness,
-                                    near || side == 0 ? 1.0f : 0.58f);
+                                    near || side == 0 ? 1.0f : 0.58f,
+                                    mirrored_facing);
                             }
                         }
                         else
@@ -1182,7 +1183,8 @@ namespace runner
                             const float height = std::max(7.0f, radius * 0.55f);
                             const art::OrientedArtTransform transform =
                                 art::support_boot_transform(proximal, center,
-                                    radius * 1.63f, height * 2.0f);
+                                    radius * 1.63f, height * 2.0f,
+                                    environment.facing_direction());
                             canvas.capsule(transform.beginning, transform.ending,
                                 height, color, 14);
                         }
@@ -1267,20 +1269,24 @@ namespace runner
                         thickness * (support_mask != 0u ? 0.36f : 0.55f));
                     beginning = beginning - axis * authored_joint_overlap;
                     ending = ending + axis * authored_joint_overlap;
+                    const bool transverse_mirror = art::presented_transverse_mirror(
+                        side < 0, environment.facing_direction());
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
-                        thickness, near || side == 0 ? 0.98f : 0.56f, side < 0);
+                        thickness, near || side == 0 ? 0.98f : 0.56f,
+                        transverse_mirror);
                     if (support_mask == 0u && !has_distal_motor
                         && optional_hand_art.loaded())
                     {
-                        const float hand_length = std::clamp(
-                            thickness * 0.92f, 26.0f, 58.0f);
-                        const float hand_thickness = std::clamp(
-                            thickness * 0.72f, 20.0f, 44.0f);
+                        const art::HandArtDimensions hand =
+                            art::hand_art_dimensions(thickness,
+                                optional_hand_art.width, optional_hand_art.height);
                         draw_oriented_pixel_art(canvas, optional_hand_art,
-                            terminal_joint - axis * (hand_length * 0.10f),
-                            terminal_joint + axis * (hand_length * 0.90f),
-                            hand_thickness,
-                            near || side == 0 ? 0.98f : 0.56f, side < 0);
+                            terminal_joint - axis * hand.wrist_overlap,
+                            terminal_joint + axis * (hand.length
+                                - hand.wrist_overlap),
+                            hand.thickness,
+                            near || side == 0 ? 0.98f : 0.56f,
+                            transverse_mirror);
                     }
                 }
             };
@@ -1375,51 +1381,7 @@ namespace runner
             draw_fitted_armor(2);
             draw_nodes(2);
 
-            if (show_nodes && optional_art_enabled && optional_weapon_art.loaded())
-            {
-                std::size_t hand = particles.size();
-                float hand_distance{-1.0f};
-                for (std::size_t motor_index = 0;
-                    motor_index < rig.active_motor_count; ++motor_index)
-                {
-                    const sim::MotorConstraint& motor = rig.motors[motor_index];
-                    if (!motor.enabled || rig.support_branch_mask(motor) != 0u
-                        || motor.c >= particles.size())
-                        continue;
-                    bool has_distal_manipulator{};
-                    for (std::size_t other_index = 0;
-                        other_index < rig.active_motor_count; ++other_index)
-                    {
-                        const sim::MotorConstraint& other = rig.motors[other_index];
-                        if (other.enabled && rig.support_branch_mask(other) == 0u
-                            && other.pivot == motor.c)
-                        {
-                            has_distal_manipulator = true;
-                            break;
-                        }
-                    }
-                    if (has_distal_manipulator)
-                        continue;
-                    const float distance = rig.torso_node < particles.size()
-                        ? length(point(motor.c) - point(rig.torso_node)) : 0.0f;
-                    if (distance > hand_distance)
-                    {
-                        hand = motor.c;
-                        hand_distance = distance;
-                    }
-                }
-                if (hand < particles.size())
-                {
-                    const Vec2 anchor = point(hand);
-                    const float width = 92.0f;
-                    const float height = width
-                        * static_cast<float>(optional_weapon_art.height)
-                        / static_cast<float>(optional_weapon_art.width);
-                    draw_oriented_pixel_art(canvas, optional_weapon_art,
-                        anchor + Vec2{ -12.0f, 0.0f },
-                        anchor + Vec2{ width - 12.0f, 0.0f }, height, 0.90f);
-                }
-            }
+
         }
 
         void draw_training_pip(Rect rect)
@@ -2225,8 +2187,10 @@ namespace runner
             const auto names = motor_names();
             add_text(canvas, rect.position + Vec2{ 14.0f, 10.0f },
                 std::format("JOINT TEST - {}", names[static_cast<std::size_t>(selected_motor)]), 1.45f, white);
-            const float group_width = (rect.size.x - 28.0f) * 0.25f;
-            Vec2 row = rect.position + Vec2{ 14.0f, 39.0f };
+            const ui_layout::RigLabTestLayout layout = ui_layout::rig_lab_test_layout({
+                rect.position.x, rect.position.y, rect.size.x, rect.size.y });
+            const float group_width = layout.selection_row.width * 0.25f;
+            Vec2 row{ layout.selection_row.x, layout.selection_row.y };
             if (button({ row, { group_width - 4.0f, 31.0f } }, "SELECTED", input,
                 joint_test_group == JointTestGroup::selected))
                 joint_test_group = JointTestGroup::selected;
@@ -2240,7 +2204,7 @@ namespace runner
                 joint_test_group == JointTestGroup::all))
                 joint_test_group = JointTestGroup::all;
 
-            row.y += 39.0f;
+            row = { layout.range_row.x, layout.range_row.y };
             if (button({ row, { group_width - 4.0f, 31.0f } }, "MIN", input))
             {
                 rig_test_pattern = sim::RigTestPattern::manual;
@@ -2266,7 +2230,7 @@ namespace runner
                 joint_auto_sweep = !joint_auto_sweep;
             }
 
-            row.y += 39.0f;
+            row = { layout.pattern_row.x, layout.pattern_row.y };
             if (button({ row, { group_width - 4.0f, 31.0f } }, "CROUCH", input,
                 rig_test_pattern == sim::RigTestPattern::crouch))
             {
@@ -2289,48 +2253,70 @@ namespace runner
             const float friction = sim::foot_friction_retention(0.45f,
                 rig_test_loose_ground ? 0.25f : 1.0f,
                 rig_test_loose_ground ? 0.75f : 0.0f, false, false);
-            add_text(canvas, rect.position + Vec2{ 14.0f, 119.0f },
+            add_text(canvas, { layout.status_row.x, layout.status_row.y },
                 std::format("TRACTION TEST RETENTION {:.3f}  {}",
                     friction, rig_test_loose_ground ? "LOOSE" : "FIRM"),
                 0.92f, rig_test_loose_ground ? yellow : green);
-            joint_test_input = slider({ rect.position + Vec2{ 14.0f, 157.0f }, { rect.size.x - 28.0f, 36.0f } },
-                "MANUAL INPUT  -1 MIN / 0 REST / +1 MAX", joint_test_input, -1.0f, 1.0f, input);
+            joint_test_input = slider({ { layout.manual_slider.x, layout.manual_slider.y },
+                { layout.manual_slider.width, layout.manual_slider.height } },
+                "MANUAL INPUT", joint_test_input, -1.0f, 1.0f, input);
         }
 
         void draw_blueprint(Rect viewport, const InputState& input)
         {
             float minimum_x = std::numeric_limits<float>::infinity();
             float maximum_x = -std::numeric_limits<float>::infinity();
-            float maximum_y = 0.0f;
+            float minimum_y = std::numeric_limits<float>::infinity();
+            float maximum_y = -std::numeric_limits<float>::infinity();
             for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
             {
                 const float radius = index < blueprint.radii.size()
                     ? blueprint.radii[index] : 0.15f;
                 minimum_x = std::min(minimum_x, blueprint.nodes[index].x - radius);
                 maximum_x = std::max(maximum_x, blueprint.nodes[index].x + radius);
+                minimum_y = std::min(minimum_y, blueprint.nodes[index].y - radius);
                 maximum_y = std::max(maximum_y, blueprint.nodes[index].y + radius);
             }
-            if (!std::isfinite(minimum_x) || !std::isfinite(maximum_x))
+            if (!std::isfinite(minimum_x) || !std::isfinite(maximum_x)
+                || !std::isfinite(minimum_y) || !std::isfinite(maximum_y))
             {
                 minimum_x = -1.0f;
                 maximum_x = 1.0f;
+                minimum_y = 0.0f;
+                maximum_y = 2.0f;
             }
-            const float blueprint_camera = 0.5f * (minimum_x + maximum_x);
-            const float horizontal_scale = (viewport.size.x - 90.0f)
-                / std::max(1.0f, maximum_x - minimum_x + 0.50f);
-            const float vertical_scale = (viewport.size.y * 0.70f - 45.0f)
-                / std::max(1.0f, maximum_y + 0.30f);
-            const float scale = std::clamp(
-                std::min(horizontal_scale, vertical_scale), 42.0f, 106.0f);
-            const float ground_y = world_to_screen({ 0.0f, 0.0f }, viewport,
-                blueprint_camera, scale).y;
-            canvas.quad({ viewport.position.x, ground_y }, viewport.position + viewport.size, rgb(0x111820));
-            canvas.line({ viewport.position.x, ground_y }, { viewport.position.x + viewport.size.x, ground_y },
+            const ui_layout::Box layout_viewport{ viewport.position.x,
+                viewport.position.y, viewport.size.x, viewport.size.y };
+            const ui_layout::BlueprintFit fit = ui_layout::fit_blueprint(
+                layout_viewport, minimum_x, maximum_x, minimum_y, maximum_y);
+            const float scale = fit.pixels_per_meter;
+            auto project = [&](Vec2 world)
+            {
+                return Vec2{
+                    ui_layout::blueprint_screen_x(fit, layout_viewport, world.x),
+                    ui_layout::blueprint_screen_y(fit, world.y)
+                };
+            };
+            auto unproject = [&](Vec2 screen_position)
+            {
+                return Vec2{
+                    fit.camera_x + (screen_position.x
+                        - (viewport.position.x + viewport.size.x * 0.5f)) / scale,
+                    fit.world_center_y
+                        + (fit.content_center_y - screen_position.y) / scale
+                };
+            };
+            const float ground_y = project({ 0.0f, 0.0f }).y;
+            if (ground_y < viewport.position.y + viewport.size.y)
+                canvas.quad({ viewport.position.x, std::max(ground_y, viewport.position.y) },
+                    viewport.position + viewport.size, rgb(0x111820));
+            canvas.line({ viewport.position.x, ground_y },
+                { viewport.position.x + viewport.size.x, ground_y },
                 3.0f, rgb(0x475762));
 
             auto screen = [&](std::size_t index)
             {
-                return world_to_screen(blueprint.nodes[index], viewport, blueprint_camera, scale);
+                return project(blueprint.nodes[index]);
             };
             std::vector<Vec2> preview = blueprint.nodes;
             for (int motor_index = 0; motor_index < static_cast<int>(sim::anatomy_action_count); ++motor_index)
@@ -2372,78 +2358,135 @@ namespace runner
             }
             auto preview_screen = [&](std::size_t index)
             {
-                return world_to_screen(preview[index], viewport, blueprint_camera, scale);
+                return project(preview[index]);
             };
-            for (std::size_t index = 0; index < blueprint.bones.size(); ++index)
-            {
-                const sim::DistanceConstraint& bone = blueprint.bones[index];
-                if (bone.a >= preview.size() || bone.b >= preview.size())
-                    continue;
-                const Vec2 a = preview_screen(bone.a);
-                const Vec2 b = preview_screen(bone.b);
-                canvas.line(a, b, 1.25f, with_alpha(accent, 0.24f));
-                const float packet_phase = std::fmod(session_runtime_seconds * 0.55f
-                    + static_cast<float>(index) * 0.137f, 1.0f);
-                canvas.circle(a + (b - a) * packet_phase, 2.4f,
-                    with_alpha(body_light, 0.68f), 12);
-            }
-            for (std::size_t index = 0; index < preview.size(); ++index)
-            {
-                if (index != blueprint.root_node && index != blueprint.torso_node
-                    && index != blueprint.head_node && !blueprint.is_support_seed(index))
-                    continue;
-                const Vec2 center = preview_screen(index);
-                const float radius = 13.0f + std::sin(session_runtime_seconds * 2.2f
-                    + static_cast<float>(index)) * 2.0f;
-                std::array<Vec2, 25> halo{};
-                for (std::size_t point_index = 0; point_index < halo.size(); ++point_index)
-                {
-                    const float angle = static_cast<float>(point_index)
-                        / static_cast<float>(halo.size() - 1u) * pi * 2.0f;
-                    halo[point_index] = center
-                        + Vec2{ std::cos(angle), std::sin(angle) } * radius;
-                }
-                canvas.polyline(halo, 1.25f, with_alpha(accent, 0.44f));
-            }
             for (const sim::DistanceConstraint& bone : blueprint.bones)
             {
                 if (bone.a < preview.size() && bone.b < preview.size())
-                    canvas.line(preview_screen(bone.a), preview_screen(bone.b), 9.0f, with_alpha(accent, 0.34f));
+                    canvas.line(preview_screen(bone.a), preview_screen(bone.b),
+                        1.5f, with_alpha(accent, 0.08f));
             }
-
             for (std::size_t bone_index = 0; bone_index < blueprint.bones.size(); ++bone_index)
             {
                 const sim::DistanceConstraint& bone = blueprint.bones[bone_index];
                 if (bone.a < blueprint.nodes.size() && bone.b < blueprint.nodes.size())
                     canvas.line(screen(bone.a), screen(bone.b),
-                        bone_index == static_cast<std::size_t>(selected_bone) ? 22.0f : 17.0f,
+                        bone_index == static_cast<std::size_t>(selected_bone) ? 10.0f : 7.0f,
                         bone_index == static_cast<std::size_t>(selected_bone) ? accent : rgb(0x835927));
             }
+            const bool structure_labels = rig_panel_page == RigPanelPage::structure;
+            std::vector<ui_layout::Box> occupied_annotations{};
+            occupied_annotations.reserve(blueprint.nodes.size() * 2u + 8u);
             for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
             {
-                const float radius = (index < blueprint.radii.size() ? blueprint.radii[index] : 0.15f) * scale;
+                const float physical_radius = (index < blueprint.radii.size()
+                    ? blueprint.radii[index] : 0.15f) * scale;
+                const float radius = std::clamp(physical_radius, 7.0f, 18.0f);
+                const Vec2 center = screen(index);
+                occupied_annotations.push_back({ center.x - radius - 3.0f,
+                    center.y - radius - 3.0f, radius * 2.0f + 6.0f,
+                    radius * 2.0f + 6.0f });
+            }
+            auto place_blueprint_label = [&](Vec2 anchor, std::string_view label,
+                float text_scale, Color color, bool prefer_left = false,
+                int row_offset = 0)
+            {
+                const Vec2 measured = font::measure_text(label, font_size(text_scale));
+                const float row = static_cast<float>(row_offset)
+                    * (measured.y + 3.0f);
+                const std::array<Vec2, 6> offsets = prefer_left
+                    ? std::array<Vec2, 6>{ Vec2{ -measured.x - 10.0f, -measured.y - 5.0f - row },
+                        Vec2{ -measured.x - 10.0f, 7.0f + row },
+                        Vec2{ 10.0f, -measured.y - 5.0f - row },
+                        Vec2{ 10.0f, 7.0f + row },
+                        Vec2{ -measured.x * 0.5f, -measured.y - 18.0f - row },
+                        Vec2{ -measured.x * 0.5f, 18.0f + row } }
+                    : std::array<Vec2, 6>{ Vec2{ 10.0f, -measured.y - 5.0f - row },
+                        Vec2{ 10.0f, 7.0f + row },
+                        Vec2{ -measured.x - 10.0f, -measured.y - 5.0f - row },
+                        Vec2{ -measured.x - 10.0f, 7.0f + row },
+                        Vec2{ -measured.x * 0.5f, -measured.y - 18.0f - row },
+                        Vec2{ -measured.x * 0.5f, 18.0f + row } };
+                for (const Vec2 offset : offsets)
+                {
+                    const Vec2 position = anchor + offset;
+                    const ui_layout::Box bounds{ position.x - 2.0f,
+                        position.y - 2.0f, measured.x + 4.0f,
+                        measured.y + 4.0f };
+                    const bool contained = bounds.x >= viewport.position.x + 4.0f
+                        && bounds.y >= viewport.position.y + 4.0f
+                        && bounds.x + bounds.width
+                            <= viewport.position.x + viewport.size.x - 4.0f
+                        && bounds.y + bounds.height
+                            <= viewport.position.y + viewport.size.y - 4.0f;
+                    if (!contained || std::ranges::any_of(occupied_annotations,
+                        [&](const ui_layout::Box& occupied)
+                        {
+                            return ui_layout::overlaps(bounds, occupied);
+                        }))
+                        continue;
+                    add_text(canvas, position, label, text_scale, color);
+                    occupied_annotations.push_back(bounds);
+                    return true;
+                }
+                return false;
+            };
+            for (std::size_t index = 0; index < blueprint.nodes.size(); ++index)
+            {
+                const float physical_radius = (index < blueprint.radii.size()
+                    ? blueprint.radii[index] : 0.15f) * scale;
+                const float radius = std::clamp(physical_radius, 7.0f, 18.0f);
                 Color color = index == blueprint.head_node ? body_light : body;
                 if (blueprint.is_support_seed(index))
                     color = leg;
                 canvas.circle(screen(index), radius, color, 24);
-                canvas.circle(screen(index), 7.0f,
+                canvas.circle(screen(index), index == static_cast<std::size_t>(selected_node)
+                    ? 5.0f : 3.0f,
                     index == static_cast<std::size_t>(selected_node) ? accent : white, 18);
-                add_text(canvas, screen(index) + Vec2{ 10.0f, -8.0f }, std::to_string(index), 1.05f, white);
-                std::string_view foot_label{};
-                if (index == blueprint.left_contact_node) foot_label = "L HEEL";
-                else if (index == blueprint.right_contact_node) foot_label = "R HEEL";
-                else if (blueprint.additional_left_contact_nodes.size() >= 1u
-                    && index == blueprint.additional_left_contact_nodes[0]) foot_label = "L BALL";
-                else if (blueprint.additional_left_contact_nodes.size() >= 2u
-                    && index == blueprint.additional_left_contact_nodes[1]) foot_label = "L TOE";
-                else if (blueprint.additional_right_contact_nodes.size() >= 1u
-                    && index == blueprint.additional_right_contact_nodes[0]) foot_label = "R BALL";
-                else if (blueprint.additional_right_contact_nodes.size() >= 2u
-                    && index == blueprint.additional_right_contact_nodes[1]) foot_label = "R TOE";
-                if (!foot_label.empty())
-                    add_text(canvas, screen(index) + Vec2{ 10.0f, 10.0f }, foot_label, 0.82f, yellow);
-            }
+                if (structure_labels || index == static_cast<std::size_t>(selected_node))
+                    static_cast<void>(place_blueprint_label(screen(index),
+                        std::to_string(index), 0.68f, white));
 
+                std::string_view foot_label{};
+                int contact_row = 0;
+                bool left_contact = false;
+                if (index == blueprint.left_contact_node)
+                {
+                    foot_label = "L HEEL";
+                    left_contact = true;
+                }
+                else if (index == blueprint.right_contact_node)
+                    foot_label = "R HEEL";
+                else if (blueprint.additional_left_contact_nodes.size() >= 1u
+                    && index == blueprint.additional_left_contact_nodes[0])
+                {
+                    foot_label = "L BALL";
+                    contact_row = 1;
+                    left_contact = true;
+                }
+                else if (blueprint.additional_left_contact_nodes.size() >= 2u
+                    && index == blueprint.additional_left_contact_nodes[1])
+                {
+                    foot_label = "L TOE";
+                    contact_row = 2;
+                    left_contact = true;
+                }
+                else if (blueprint.additional_right_contact_nodes.size() >= 1u
+                    && index == blueprint.additional_right_contact_nodes[0])
+                {
+                    foot_label = "R BALL";
+                    contact_row = 1;
+                }
+                else if (blueprint.additional_right_contact_nodes.size() >= 2u
+                    && index == blueprint.additional_right_contact_nodes[1])
+                {
+                    foot_label = "R TOE";
+                    contact_row = 2;
+                }
+                if (!foot_label.empty())
+                    static_cast<void>(place_blueprint_label(screen(index), foot_label,
+                        0.62f, yellow, left_contact, contact_row));
+            }
             const sim::MotorConstraint& motor = blueprint.motors[static_cast<std::size_t>(selected_motor)];
             if (motor.enabled && motor.a < blueprint.nodes.size() && motor.pivot < blueprint.nodes.size()
                 && motor.c < blueprint.nodes.size())
@@ -2458,26 +2501,101 @@ namespace runner
                 {
                     const float t = static_cast<float>(segment) / 32.0f;
                     const float angle = lerp(motor.minimum_angle, motor.maximum_angle, t);
-                    arc.push_back(world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                        viewport, blueprint_camera, scale));
+                    arc.push_back(project(pivot_world + rotate(reference, angle) * arm_length));
                 }
                 canvas.polyline(arc, 4.0f, accent);
                 const Vec2 pivot_screen = screen(motor.pivot);
                 auto ray = [&](float angle, Color color, float width)
                 {
                     canvas.line(pivot_screen,
-                        world_to_screen(pivot_world + rotate(reference, angle) * arm_length,
-                            viewport, blueprint_camera, scale), width, color);
+                        project(pivot_world + rotate(reference, angle) * arm_length), width, color);
                 };
                 ray(motor.minimum_angle, danger, 2.5f);
                 ray(motor.maximum_angle, danger, 2.5f);
                 ray(motor.neutral_angle, white, 3.0f);
                 ray(sim::motor_target_angle(motor, joint_test_input), yellow, 4.0f);
-                add_text(canvas, screen(motor.a) + Vec2{ 8.0f, -15.0f }, "A / PARENT", 1.05f, accent);
-                add_text(canvas, pivot_screen + Vec2{ 8.0f, -15.0f }, "PIVOT", 1.05f, white);
-                add_text(canvas, screen(motor.c) + Vec2{ 8.0f, -15.0f }, "C / DRIVEN", 1.05f, yellow);
-            }
+                static_cast<void>(place_blueprint_label(screen(motor.a),
+                    rig_panel_page == RigPanelPage::test ? "A" : "A PARENT",
+                    0.72f, accent, true));
+                static_cast<void>(place_blueprint_label(pivot_screen,
+                    rig_panel_page == RigPanelPage::test ? "P" : "PIVOT",
+                    0.72f, white));
+                static_cast<void>(place_blueprint_label(screen(motor.c),
+                    rig_panel_page == RigPanelPage::test ? "C" : "C DRIVEN",
+                    0.72f, yellow));            }
 
+            if (rig_panel_page == RigPanelPage::test
+                && editor_weapon_class != sim::WeaponClass::none)
+            {
+                std::size_t hand = preview.size();
+                float best_reach = -std::numeric_limits<float>::infinity();
+                for (std::size_t motor_index = 0;
+                    motor_index < blueprint.active_motor_count; ++motor_index)
+                {
+                    const sim::MotorConstraint& candidate = blueprint.motors[motor_index];
+                    if (!candidate.enabled || blueprint.support_branch_mask(candidate) != 0u
+                        || candidate.c >= preview.size())
+                        continue;
+                    bool has_distal_manipulator{};
+                    for (std::size_t other_index = 0;
+                        other_index < blueprint.active_motor_count; ++other_index)
+                    {
+                        const sim::MotorConstraint& other = blueprint.motors[other_index];
+                        if (other.enabled && blueprint.support_branch_mask(other) == 0u
+                            && other.pivot == candidate.c)
+                        {
+                            has_distal_manipulator = true;
+                            break;
+                        }
+                    }
+                    if (has_distal_manipulator)
+                        continue;
+                    const float reach = blueprint.torso_node < preview.size()
+                        ? preview[candidate.c].x - preview[blueprint.torso_node].x
+                        : preview[candidate.c].x;
+                    if (reach > best_reach)
+                    {
+                        hand = candidate.c;
+                        best_reach = reach;
+                    }
+                }
+                if (hand < preview.size())
+                {
+                    const Vec2 anchor = preview_screen(hand);
+                    const float weapon_length = std::clamp(scale
+                        * (editor_weapon_class == sim::WeaponClass::sidearm ? 0.58f
+                            : editor_weapon_class == sim::WeaponClass::carbine ? 0.92f
+                            : 1.10f), 54.0f, 126.0f);
+                    const float weapon_thickness = std::clamp(
+                        weapon_length * 0.34f, 24.0f, 42.0f);
+                    if (optional_art_enabled && optional_weapon_art.loaded())
+                        draw_oriented_pixel_art(canvas, optional_weapon_art,
+                            anchor - Vec2{ weapon_length * 0.12f, 0.0f },
+                            anchor + Vec2{ weapon_length * 0.88f, 0.0f },
+                            weapon_thickness, 0.98f);
+                    else
+                        canvas.line(anchor, anchor + Vec2{ weapon_length, 0.0f },
+                            6.0f, accent);
+                    const float target_x = std::clamp(
+                        anchor.x + editor_target_distance * scale,
+                        viewport.position.x + 46.0f,
+                        viewport.position.x + viewport.size.x - 46.0f);
+                    const Vec2 target{ target_x, anchor.y };
+                    canvas.line(anchor + Vec2{ weapon_length * 0.70f, 0.0f },
+                        target, 1.5f, with_alpha(accent, 0.34f));
+                    canvas.circle(target, 18.0f, rgb(0x183746), 20);
+                    canvas.circle(target, 10.0f, danger, 18);
+                    canvas.circle(target, 4.0f, white, 14);
+                    add_text_fit(canvas,
+                        { viewport.position.x + viewport.size.x - 360.0f,
+                          viewport.position.y + 44.0f },
+                        std::format("{} FIXED-STEP PREVIEW   SHOTS {}   HITS {}",
+                            sim::weapon_class_name(editor_weapon_class),
+                            trainer.preview().shots_fired(),
+                            trainer.preview().target_hits()),
+                        0.72f, accent, 342.0f, 0.60f);
+                }
+            }
             const bool over_joint_lab = false;
             if (input.left_pressed && input.alt
                 && contains(viewport, input.mouse) && !over_joint_lab)
@@ -2525,7 +2643,7 @@ namespace runner
                 }
                 if (input.shift && hit < 0 && blueprint.nodes.size() < 128)
                 {
-                    blueprint.nodes.push_back(screen_to_world(input.mouse, viewport, blueprint_camera, scale));
+                    blueprint.nodes.push_back(unproject(input.mouse));
                     blueprint.radii.push_back(0.16f);
                     selected_node = static_cast<int>(blueprint.nodes.size() - 1);
                     rig_preset = RigPreset::custom;
@@ -2553,7 +2671,7 @@ namespace runner
             }
             if (dragging_node && input.left_down && !over_joint_lab && selected_node >= 0
                 && static_cast<std::size_t>(selected_node) < blueprint.nodes.size())
-                blueprint.nodes[static_cast<std::size_t>(selected_node)] = screen_to_world(input.mouse, viewport, blueprint_camera, scale);
+                blueprint.nodes[static_cast<std::size_t>(selected_node)] = unproject(input.mouse);
             if (dragging_node && input.left_released)
             {
                 dragging_node = false;
@@ -2966,9 +3084,9 @@ namespace runner
             {
                 add_text(canvas, cursor, "JOINT AND TRACTION TESTS", 1.02f, accent);
                 cursor.y += 28.0f;
-                const Rect test_card{ cursor, { usable, 205.0f } };
+                const Rect test_card{ cursor, { usable, 225.0f } };
                 draw_joint_lab(test_card, input);
-                cursor.y += 220.0f;
+                cursor.y += 240.0f;
                 add_text(canvas, cursor, "EQUIPMENT TEST AUTHORING", 0.92f, accent);
                 cursor.y += 25.0f;
                 const float weapon_width = (usable - 18.0f) * 0.25f;
@@ -2983,12 +3101,20 @@ namespace runner
                             { weapon_width, 32.0f } },
                         sim::weapon_class_name(weapon), input,
                         editor_weapon_class == weapon))
+                    {
                         editor_weapon_class = weapon;
+                        trainer.configure_preview_equipment(
+                            editor_weapon_class, editor_target_distance);
+                    }
                 }
                 cursor.y += 43.0f;
+                const float previous_target_distance = editor_target_distance;
                 editor_target_distance = slider({ cursor, { usable, 36.0f } },
                     "TARGET DISTANCE", editor_target_distance, 3.0f, 24.0f,
                     input, " M");
+                if (std::abs(editor_target_distance - previous_target_distance) > 1.0e-4f)
+                    trainer.configure_preview_equipment(
+                        editor_weapon_class, editor_target_distance);
                 cursor.y += 49.0f;
                 add_wrapped_text(canvas, cursor,
                     "GAIT, handling class, and target distance are side-view authoring checks. Test controls never change the saved training policy.",
@@ -3128,6 +3254,7 @@ namespace runner
             }
             else
             {
+                trainer.step_preview(dt);
                 const ui_layout::Box layout_side =
                     ui_layout::rig_lab_panel_box(layout_content);
                 const ui_layout::Box layout_world =
@@ -3143,7 +3270,7 @@ namespace runner
                 draw_blueprint(world, input);
                 canvas.pop_clip();
                 add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
-                    "SIDE VIEW  |  DRAG NODE  |  SHIFT ADD  |  CTRL CONNECT  |  ALT SELECT BONE",
+                    "SIDE VIEW   DRAG NODE   SHIFT ADD   CTRL CONNECT   ALT SELECT BONE",
                     0.80f, muted, world.size.x - 36.0f, 0.68f);
                 add_rounded_rect(canvas, world, 11.0f, ui_render::transparent_fill, border, 1.0f);
             }

@@ -20,6 +20,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md
         docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md
         docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md
+        docs/RUNNER_V0733_GRANULAR_FACING_RIGLAB.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
@@ -68,7 +69,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.32 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.33 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -95,6 +96,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0730_SUSTAINED_WALK_RECOVERY.md"
         "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md"
         "RUNNER_V0732_SHUTTLE_FACING_HANDS.md"
+        "RUNNER_V0733_GRANULAR_FACING_RIGLAB.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -182,7 +184,16 @@ foreach(reference IN ITEMS
         "WALK-FACING-GAIT-381"
         "WALK-HAND-ART-382"
         "WALK-SHUTTLE-COURSE-383"
-        "WALK-RELEASE-384")
+        "WALK-RELEASE-384"
+        "WALK-LIMB-FACING-385"
+        "WALK-HAND-SCALE-386"
+        "WALK-GRANULAR-SKY-387"
+        "WALK-RELEASE-388"
+        "WALK-MATERIAL-TRUTH-389"
+        "WALK-WEAPON-RUNTIME-390"
+        "WALK-PROPORTION-GAIT-391"
+        "WALK-RIGLAB-LAYOUT-392"
+        "WALK-RIGLAB-WORLD-393")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -243,7 +254,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3201u"
+        "training_semantics_version = 0x0007'3302u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -301,7 +312,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0732-shuttle-autosave.eppo"
+        "runner-v0733-granular-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -536,7 +547,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
-        "'E', 'P', 'P', 'O', '3', '2'"
+        "'E', 'P', 'P', 'O', '3', '3'"
+        "v0732_checkpoint_magic"
         "v0731_checkpoint_magic"
         "v0730_checkpoint_magic"
         "data.lesson_update"
@@ -578,7 +590,7 @@ if(cold_start_workflow_pos EQUAL -1)
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-walk-eye" walk_eye_workflow_pos)
 if(walk_eye_workflow_pos EQUAL -1)
-    message(FATAL_ERROR "Release workflow does not run the v0.7.32 raw-policy walk-eye diagnostic")
+    message(FATAL_ERROR "Release workflow does not run the raw-policy walk-eye diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
@@ -614,4 +626,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.32 repository hygiene passed")
+message(STATUS "Runner v0.7.33 repository hygiene passed")

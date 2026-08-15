@@ -20,7 +20,7 @@ namespace runner::sim
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
     inline constexpr std::size_t observation_count = 60;
-    inline constexpr float foundational_gait_cadence_hz = 1.20f;
+    inline constexpr float foundational_gait_cadence_hz = 1.51f;
 
     enum class ShuttlePhase : std::uint8_t
     {
@@ -57,8 +57,8 @@ namespace runner::sim
     inline constexpr float shuttle_right_boundary = 10.0f;
     inline constexpr float shuttle_brake_seconds = 0.65f;
     inline constexpr float shuttle_brake_speed = 0.22f;
-    inline constexpr float shuttle_backup_distance = 0.30f;
-    inline constexpr float shuttle_backup_timeout_seconds = 1.50f;
+    inline constexpr float shuttle_backup_distance = 0.12f;
+    inline constexpr float shuttle_backup_timeout_seconds = 0.75f;
     inline constexpr float shuttle_turn_seconds = 0.32f;
 
     [[nodiscard]] inline bool shuttle_dynamic_course_ready(
@@ -456,7 +456,26 @@ namespace runner::sim
         return ab_c * ab_d < -epsilon && cd_a * cd_b < -epsilon;
     }
 
+    inline constexpr float forward_gait_quality_grace_seconds = 0.50f;
+
+    [[nodiscard]] inline bool measure_forward_gait_faults(
+        ShuttlePhase phase, float elapsed_seconds) noexcept
+    {
+        return phase == ShuttlePhase::traverse
+            && std::isfinite(elapsed_seconds)
+            && elapsed_seconds >= forward_gait_quality_grace_seconds;
+    }
+
     inline constexpr float sustained_scissor_limit_seconds = 0.34f;
+
+    [[nodiscard]] inline float contiguous_condition_seconds(bool active,
+        float prior_seconds, float dt) noexcept
+    {
+        if (!active || !std::isfinite(prior_seconds) || !std::isfinite(dt)
+            || prior_seconds < 0.0f || dt <= 0.0f)
+            return 0.0f;
+        return prior_seconds + dt;
+    }
 
     [[nodiscard]] inline bool awkward_paired_passing_pose(
         float knee_span, float foot_span, float leg_length) noexcept
@@ -467,6 +486,15 @@ namespace runner::sim
         const float knee_ratio = std::abs(knee_span) / leg_length;
         const float foot_ratio = std::abs(foot_span) / leg_length;
         return knee_ratio > 0.52f && foot_ratio < 0.12f;
+    }
+
+
+    [[nodiscard]] inline bool pathological_lower_leg_crossing(
+        bool strict_crossing, bool left_swinging, bool right_swinging,
+        bool awkward_pose) noexcept
+    {
+        const bool single_support_pass = left_swinging != right_swinging;
+        return awkward_pose || (strict_crossing && !single_support_pass);
     }
 
     [[nodiscard]] inline float lower_leg_scissor_shaping_penalty(
@@ -1070,6 +1098,7 @@ namespace runner::sim
     enum class MaterialKind : std::uint8_t
     {
         sand,
+        dirt,
         rock,
         debris
     };
@@ -1478,6 +1507,7 @@ namespace runner::sim
             return equipment_transition_count_;
         }
         [[nodiscard]] Vec2 equipment_mount_position() const noexcept;
+        [[nodiscard]] Vec2 equipment_display_position() const noexcept;
         [[nodiscard]] std::uint32_t hand_ledge_contacts() const noexcept
         {
             return hand_ledge_contacts_;
@@ -1564,6 +1594,22 @@ namespace runner::sim
         [[nodiscard]] float incoming_time_to_impact() const noexcept { return incoming_time_to_impact_; }
         [[nodiscard]] float incoming_material_density() const noexcept { return incoming_material_density_; }
         [[nodiscard]] std::uint32_t material_event_count() const noexcept { return material_event_sequence_; }
+        [[nodiscard]] bool granular_hazard_active() const noexcept
+        {
+            return granular_hazard_hold_seconds_ > 0.0f
+                || std::ranges::any_of(material_particles_,
+                    [](const MaterialParticle& particle) { return particle.active; })
+                || (granular_block_present_ && !granular_block_safe_);
+        }
+        [[nodiscard]] bool granular_hazard_safe() const noexcept
+        {
+            return material_event_sequence_ > 0u && !granular_hazard_active()
+                && granular_hazard_safe_seconds_ >= 0.75f;
+        }
+        [[nodiscard]] bool granular_block_present() const noexcept
+        {
+            return granular_block_present_;
+        }
         [[nodiscard]] std::uint8_t obstruction_mask() const noexcept { return obstruction_mask_; }
         [[nodiscard]] float course_speed() const noexcept
         {
@@ -1707,6 +1753,8 @@ namespace runner::sim
         void apply_water_forces(float dt) noexcept;
         void apply_support_pressure(float dt) noexcept;
         void update_materials(float dt) noexcept;
+        void clear_dynamic_materials() noexcept;
+        void append_dynamic_material_features();
         void update_material_metrics(float dt) noexcept;
         void rebuild_course_features() noexcept;
         void update_shuttle(float root_x, float root_speed, float dt) noexcept;
@@ -1899,6 +1947,12 @@ namespace runner::sim
         std::uint32_t recovery_successes_{};
         float next_material_event_seconds_{ 9.0f };
         std::uint32_t material_event_sequence_{};
+        CourseFeature granular_block_{};
+        bool granular_block_present_{};
+        bool granular_block_safe_{};
+        float granular_block_settled_seconds_{};
+        float granular_hazard_hold_seconds_{};
+        float granular_hazard_safe_seconds_{};
         float terrain_firmness_{ 1.0f };
         float terrain_looseness_{};
         float water_depth_{};

@@ -195,6 +195,12 @@ namespace runner::rl
         live_.reset_preview(seed);
     }
 
+    void AutonomousTrainer::configure_preview_equipment(
+        sim::WeaponClass weapon, float target_distance)
+    {
+        live_.configure_preview_equipment(weapon, target_distance);
+    }
+
     bool AutonomousTrainer::restore_best_policy() noexcept
     {
         if (!cached_has_best_)
