@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3302u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3401u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -1800,6 +1800,8 @@ namespace runner::rl
             return active_output_count_;
         }
         void neutralize_action_slot(std::size_t slot) noexcept;
+        void clear_action_slot_state(std::vector<float>& state,
+            std::size_t slot) const noexcept;
         [[nodiscard]] float mean_exploration() const noexcept;
         [[nodiscard]] float log_probability(
             std::span<const float, output_size> action,
@@ -1884,6 +1886,9 @@ namespace runner::rl
         void neutralize_action_slot(std::size_t slot) noexcept
         {
             policy_.neutralize_action_slot(slot);
+            preview_policy_.neutralize_action_slot(slot);
+            policy_.clear_action_slot_state(adam_.first_moment, slot);
+            policy_.clear_action_slot_state(adam_.second_moment, slot);
         }
         void set_cpu_mode(int mode) noexcept;
         [[nodiscard]] int cpu_mode() const noexcept { return cpu_mode_; }
@@ -1895,6 +1900,8 @@ namespace runner::rl
             const std::filesystem::path& path, std::string& error);
         [[nodiscard]] static bool read_checkpoint_data(const std::filesystem::path& path,
             CheckpointData& data, std::string& error);
+        [[nodiscard]] static CheckpointData retarget_checkpoint_for_rig(
+            CheckpointData data, std::uint64_t rig_signature) noexcept;
         [[nodiscard]] bool apply_checkpoint_data(CheckpointData data, std::string& error,
             bool transfer_only = false);
         [[nodiscard]] bool import_lifetime_ledger(const TrainingMetrics& lifetime,

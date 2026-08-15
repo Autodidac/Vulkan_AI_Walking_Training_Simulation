@@ -148,6 +148,18 @@ namespace runner::rl
         gradients_[layout_.log_std + slot] = 0.0f;
     }
 
+    void PolicyNetwork::clear_action_slot_state(std::vector<float>& state,
+        std::size_t slot) const noexcept
+    {
+        if (slot >= output_size || state.size() != parameters_.size())
+            return;
+        const std::size_t actor_base = layout_.actor_w + slot * hidden_size;
+        std::fill(state.begin() + static_cast<std::ptrdiff_t>(actor_base),
+            state.begin() + static_cast<std::ptrdiff_t>(actor_base + hidden_size), 0.0f);
+        state[layout_.actor_b + slot] = 0.0f;
+        state[layout_.log_std + slot] = 0.0f;
+    }
+
     float PolicyNetwork::mean_exploration() const noexcept
     {
         const auto values = standard_deviation();

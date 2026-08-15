@@ -12,7 +12,8 @@ namespace runner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '4', '\0', '\1' };
+        constexpr std::array<char, 8> v0733_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
         constexpr std::array<char, 8> v0732_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '2', '\0', '\1' };
         constexpr std::array<char, 8> v0731_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '1', '\0', '\1' };
         constexpr std::array<char, 8> v0730_checkpoint_magic{ 'E', 'P', 'P', 'O', '2', '9', '\0', '\1' };
@@ -388,11 +389,12 @@ namespace runner::rl
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
+        const bool v0733 = magic == v0733_checkpoint_magic;
         const bool v0732 = magic == v0732_checkpoint_magic;
         const bool v0731 = magic == v0731_checkpoint_magic;
         const bool v0730 = magic == v0730_checkpoint_magic;
         const bool v0727 = magic == v0727_checkpoint_magic;
-        const bool legacy_magic = v0732 || v0731 || v0730 || v0727;
+        const bool legacy_magic = v0733 || v0732 || v0731 || v0730 || v0727;
         const bool legacy_layout = v0730 || v0727;
         if (!input || (magic != checkpoint_magic && !legacy_magic)
             || !read_value(input, data.training_semantics)
@@ -421,6 +423,48 @@ namespace runner::rl
             data.lesson_update = 0u;
         error.clear();
         return true;
+    }
+
+    PpoTrainer::CheckpointData PpoTrainer::retarget_checkpoint_for_rig(
+        CheckpointData data, std::uint64_t rig_signature) noexcept
+    {
+        data.rig_signature = rig_signature;
+        data.best_parameters.clear();
+        data.metrics.evaluation_reward = 0.0f;
+        data.metrics.evaluation_distance = 0.0f;
+        data.metrics.evaluation_speed = 0.0f;
+        data.metrics.evaluation_score = -std::numeric_limits<float>::infinity();
+        data.metrics.evaluation_survival = 0.0f;
+        data.metrics.evaluation_collisions = 0.0f;
+        data.metrics.evaluation_airborne_ratio = 0.0f;
+        data.metrics.evaluation_stride_events = 0.0f;
+        data.metrics.evaluation_duck_seconds = 0.0f;
+        data.metrics.evaluation_powered_jumps = 0.0f;
+        data.metrics.evaluation_jump_landings = 0.0f;
+        data.metrics.evaluation_spin_turns = 0.0f;
+        data.metrics.evaluation_spin_landings = 0.0f;
+        data.metrics.evaluation_obstacles_passed = 0.0f;
+        data.metrics.evaluation_stable_stance = 0.0f;
+        data.metrics.evaluation_longest_stance = 0.0f;
+        data.metrics.evaluation_duck_recoveries = 0.0f;
+        data.metrics.evaluation_max_joint_speed = 0.0f;
+        data.metrics.evaluation_hand_contacts = 0.0f;
+        data.metrics.evaluation_climb_transfers = 0.0f;
+        data.metrics.evaluation_climbs = 0.0f;
+        data.metrics.evaluation_descents = 0.0f;
+        data.metrics.evaluation_shots = 0.0f;
+        data.metrics.evaluation_target_hits = 0.0f;
+        data.metrics.evaluation_equipment_transitions = 0.0f;
+        data.metrics.evaluation_quality_key = 0u;
+        data.metrics.evaluation_rejection_mask = 0u;
+        data.metrics.evaluation_invalid_runs = 0u;
+        data.metrics.evaluation_invalid_reason = sim::InvalidMotion::none;
+        data.metrics.evaluation_valid = false;
+        data.metrics.best_evaluation_distance = -std::numeric_limits<float>::infinity();
+        data.metrics.best_evaluation_score = -std::numeric_limits<float>::infinity();
+        data.metrics.best_quality_key = 0u;
+        data.metrics.best_update = 0u;
+        return data;
     }
 
     bool PpoTrainer::apply_checkpoint_data(CheckpointData data, std::string& error,

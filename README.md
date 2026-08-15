@@ -1,5 +1,13 @@
 # Runner
 
+## v0.7.34 curriculum-safe rig optimization
+
+- Stops accepted control and morphology candidates from replacing the main trainer with a four-update nursery ledger.
+- Defers rig candidates until measured lesson work and finite teacher handoffs are complete, and pauses them during a valid mastery-confirmation streak: Stand is immutable, Crouch reaches update 200, and Walk reaches its topology-scoped raw-policy boundary.
+- Retargets compatible policy/Adam/lesson/lifetime state to a candidate while invalidating only evidence measured on the previous physical rig.
+- Preserves monotonically increasing all-time updates, steps, episodes, resets, distance, time, and evaluations through accepted candidate adaptation and checkpoint resume.
+- Advances training semantics to `0x0007'3401`, checkpoint magic to `EPPO34`, and local files to `runner-v0734-curriculum-*`; v0.7.33 contributes validated lifetime totals only.
+
 ## v0.7.33 granular hazards, complete facing, and readable Rig Lab
 
 - Mirrors the complete assembled side-view presentation across both travel directions: torso, helmet, arms, legs, boots, supplied-sheet hands, near/far layering, skeleton, and equipment.

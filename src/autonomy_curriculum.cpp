@@ -163,7 +163,10 @@ namespace runner::rl
         {
             advance_stage_locked();
         }
-        else if (stage_ != sim::CourseStage::balance && metrics.evaluation_count % 4 == 0)
+        else if (rig_optimization_ready(stage_, fresh_updates,
+            fresh_episodes, fresh_evaluations, worker_.blueprint(),
+            mastery_streak_)
+            && metrics.evaluation_count % 4 == 0)
         {
             attempt_rig_evolution_locked();
         }
@@ -722,9 +725,11 @@ namespace runner::rl
 
         sim::CreatureBlueprint candidate = std::move(mutation.blueprint);
         PpoTrainer nursery(candidate, 16, false);
-        PpoTrainer::CheckpointData transfer = champion_checkpoint;
+        PpoTrainer::CheckpointData transfer =
+            PpoTrainer::retarget_checkpoint_for_rig(
+                champion_checkpoint, candidate.signature());
         std::string transfer_error{};
-        if (!nursery.apply_checkpoint_data(std::move(transfer), transfer_error, true))
+        if (!nursery.apply_checkpoint_data(std::move(transfer), transfer_error, false))
         {
             ++rejected_rig_changes_;
             worker_message_ = std::format(
@@ -737,7 +742,6 @@ namespace runner::rl
             if ((mutation.activated_motor_mask & (1u << slot)) != 0u)
                 nursery.neutralize_action_slot(slot);
         }
-        nursery.set_course(stage_, difficulty_, false);
         nursery.set_exploration(std::max(0.10f, worker_.exploration()));
         constexpr int nursery_updates = 4;
         for (int update = 0; update < nursery_updates; ++update)

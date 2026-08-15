@@ -85,6 +85,23 @@ namespace runner::rl
                 required_mastery_confirmations(stage));
     }
 
+    [[nodiscard]] inline bool rig_optimization_ready(
+        sim::CourseStage stage, std::uint64_t fresh_updates,
+        std::uint64_t fresh_episodes, std::uint64_t fresh_evaluations,
+        const sim::CreatureBlueprint& blueprint, int mastery_streak) noexcept
+    {
+        if (mastery_streak != 0 || stage == sim::CourseStage::balance
+            || !stage_fresh_work_complete(stage, fresh_updates,
+                fresh_episodes, fresh_evaluations))
+            return false;
+        if (stage == sim::CourseStage::duck_press)
+            return fresh_updates >= crouch_teacher_handoff_update;
+        if (stage == sim::CourseStage::uneven)
+            return fresh_updates
+                >= foundational_walk_teacher_handoff_update(blueprint);
+        return true;
+    }
+
     [[nodiscard]] inline bool nursery_policy_reset_allowed(
         sim::CourseStage stage, std::uint64_t fresh_updates,
         std::uint64_t fresh_evaluations) noexcept

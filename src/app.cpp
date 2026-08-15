@@ -377,9 +377,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0733-granular-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0733-granular-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0733-granular-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0734-curriculum-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0734-curriculum-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0734-curriculum-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {

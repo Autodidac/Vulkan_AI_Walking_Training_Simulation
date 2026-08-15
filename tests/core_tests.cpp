@@ -2431,7 +2431,7 @@ int main()
         "canonical rig switch erased the all-time training ledger");
 
     rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
-    legacy.training_semantics = rl::training_semantics_version - 1u;
+    legacy.training_semantics = 0x0007'3302u;
     legacy.first_moment.clear();
     legacy.second_moment.clear();
     legacy.best_parameters.clear();
@@ -2453,32 +2453,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0733-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0734-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0733-granular-autosave.eppo";
+        / "runner-v0734-curriculum-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0733-granular-evolved.rig";
+        / "runner-v0734-curriculum-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0733-granular-autonomy.state";
-    const std::filesystem::path v0732_autosave = lifetime_import_directory
-        / "runner-v0732-shuttle-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0732_autosave, error),
+        / "runner-v0734-curriculum-autonomy.state";
+    const std::filesystem::path v0733_autosave = lifetime_import_directory
+        / "runner-v0733-granular-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0733_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0732_magic{
-        'E', 'P', 'P', 'O', '3', '2', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0732_autosave, v0732_magic),
-        "failed to mark the fallback fixture as an EPPO32 checkpoint");
+    constexpr std::array<char, 8> v0733_magic{
+        'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0733_autosave, v0733_magic),
+        "failed to mark the fallback fixture as an EPPO33 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.32 LIFETIME LEDGER")
+                && import_message.find("V0.7.33 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.32 fallback autosave was not selected before a new save");
+            "v0.7.33 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

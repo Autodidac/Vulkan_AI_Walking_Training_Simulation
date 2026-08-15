@@ -21,11 +21,13 @@ foreach(required IN ITEMS
         docs/RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md
         docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md
         docs/RUNNER_V0733_GRANULAR_FACING_RIGLAB.md
+        docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
         tests/v0731_crouch_learning_tests.cpp
         tests/v0732_shuttle_facing_tests.cpp
+        tests/v0734_curriculum_rig_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
@@ -69,7 +71,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.33 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.34 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -80,6 +82,8 @@ foreach(reference IN ITEMS
         "RunnerV0731CrouchLearningTests"
         "Runner.V0731CrouchLearning"
         "RunnerV0732ShuttleFacingTests"
+        "RunnerV0734CurriculumRigTests"
+        "Runner.V0734CurriculumRig"
         "Runner.V0730ReferenceFrame"
         "COMMAND RunnerV0730ColdStartTests --references"
         "COMMAND RunnerV0730ColdStartTests --learner"
@@ -97,6 +101,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0731_ACTIVE_TERRAIN_CURRICULUM_ART.md"
         "RUNNER_V0732_SHUTTLE_FACING_HANDS.md"
         "RUNNER_V0733_GRANULAR_FACING_RIGLAB.md"
+        "RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -193,7 +198,12 @@ foreach(reference IN ITEMS
         "WALK-WEAPON-RUNTIME-390"
         "WALK-PROPORTION-GAIT-391"
         "WALK-RIGLAB-LAYOUT-392"
-        "WALK-RIGLAB-WORLD-393")
+        "WALK-RIGLAB-WORLD-393"
+        "WALK-FACING-IK-394"
+        "WALK-STRICT-HUMANOID-395"
+        "WALK-CROUCH-RIG-RESET-396"
+        "WALK-RIG-LEDGER-397"
+        "WALK-RELEASE-398")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -231,7 +241,9 @@ foreach(reference IN ITEMS
         "optimization_mode_"
         "constexpr std::size_t agents = 6"
         "environment.step(raw_action)"
-        "rig_complexity_cost(candidate)")
+        "rig_complexity_cost(candidate)"
+        "rig_optimization_ready"
+        "retarget_checkpoint_for_rig")
     string(FIND "${curriculum_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Explicit rig optimization routing missing: ${reference}")
@@ -254,7 +266,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3302u"
+        "training_semantics_version = 0x0007'3401u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -312,7 +324,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0733-granular-autosave.eppo"
+        "runner-v0734-curriculum-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -547,7 +559,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
-        "'E', 'P', 'P', 'O', '3', '3'"
+        "'E', 'P', 'P', 'O', '3', '4'"
+        "v0733_checkpoint_magic"
         "v0732_checkpoint_magic"
         "v0731_checkpoint_magic"
         "v0730_checkpoint_magic"
@@ -626,4 +639,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.33 repository hygiene passed")
+message(STATUS "Runner v0.7.34 repository hygiene passed")

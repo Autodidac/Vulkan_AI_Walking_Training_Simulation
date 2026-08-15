@@ -1,3 +1,11 @@
+## 0.7.34
+
+- Deferred automatic rig candidates until the active lesson completes measured work and its finite teacher handoff, and paused them during valid mastery-confirmation streaks, preventing Static Crouch from restarting below update 200 or losing consecutive confirmations.
+- Replaced weight-only four-update nursery publication with a rig-retargeted checkpoint that preserves policy, Adam state, lesson age, stage, and the complete cumulative ledger.
+- Invalidated prior-rig evaluation/champion evidence on candidate retarget while retaining six-seed raw-policy qualification, complexity cost, improvement margin, neutral new actions, and exact rollback.
+- Added exact Crouch/Walk boundary, incomplete-work, cadence-independent, high-ledger monotonicity, candidate adaptation, rig-signature, and checkpoint-round-trip coverage.
+- Advanced training semantics to `0x0007'3401`, checkpoint magic to `EPPO34`, and automatic files to `runner-v0734-curriculum-*`, with lifetime-only fallback from v0.7.33.
+
 ## 0.7.33
 
 - Applied one facing transform to the complete articulated presentation, including limbs, boots, supplied-sheet hands, layering, skeleton, and equipment, with arbitrary-pose and both-direction coverage.
