@@ -1,3 +1,13 @@
+## 0.7.35
+
+- Made every modular-armor pixel bound scale with view pixels-per-meter, preserving the full-size 42 px/m appearance while eliminating chibi PIP heads, boots, hands, limbs, torso, and equipment.
+- Shortened and lowered the helmet fit, moved the authored humanoid hands beside the pelvis without changing arm reach, and removed the per-branch sprite inversion that turned the rear hand and limb art backward or upside down.
+- Added direction-aware sustained backward-brace evidence for supported paired-leg traversal; backing, braking, turning, unsupported motion, and normal transient stride lean do not accumulate it.
+- Integrated backward-brace duration into shaping, candidate retention, strict stage qualification, evaluation telemetry, rejection explanations, and Advanced preview/test diagnostics.
+- Replaced `DISCARDED` with truthful `PRIOR LINEAGE` telemetry and clarified incremental stage-safe candidates versus full lesson mastery.
+- Added deterministic positive, negative, adversarial, exact-boundary, source-audit, and 20/60/240 Hz coverage.
+- Advanced training semantics to `0x0007'3501`, checkpoint magic to `EPPO35`, and automatic files to `runner-v0735-posture-*`, with lifetime-only fallback from v0.7.34.
+
 ## 0.7.34
 
 - Deferred automatic rig candidates until the active lesson completes measured work and its finite teacher handoff, and paused them during valid mastery-confirmation streaks, preventing Static Crouch from restarting below update 200 or losing consecutive confirmations.

@@ -1,3 +1,13 @@
+## v0.7.35 proportional PIP and posture truth
+
+- Keeps the supplied side-view modular armor at one normalized silhouette across the full preview, live-training PIP, and every zoom level by scaling every armor safety bound with pixels-per-meter.
+- Shortens and lowers the helmet fit, starts the authored humanoid hands beside the pelvis without changing arm reach, and applies only the whole-rig facing mirror so the rear arm/hand art cannot invert independently.
+- Measures sustained torso bracing opposite commanded travel during supported paired-leg traversal, excludes backup/brake/turn phases, penalizes it during learning, rejects it from incremental and strict retention after 0.80 simulation seconds, and exposes preview/test duration in Advanced diagnostics.
+- Renames ambiguous `DISCARDED` updates to `PRIOR LINEAGE`, so a manual fresh-controller start truthfully shows cumulative rig work beside the active policy age without implying lost all-time statistics.
+- Labels incremental successes `STAGE-SAFE CANDIDATE` rather than a passed lesson; full goals and repeated mastery tests remain authoritative.
+- Advances training semantics to `0x0007'3501`, checkpoint magic to `EPPO35`, and local files to `runner-v0735-posture-*`; v0.7.34 contributes validated lifetime totals only.
+- Adds deterministic proportional-art, both-direction brace, exact-boundary, adversarial, lineage, source-audit, and 20/60/240 Hz tests. See `docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md`.
+
 # Runner
 
 ## v0.7.34 curriculum-safe rig optimization

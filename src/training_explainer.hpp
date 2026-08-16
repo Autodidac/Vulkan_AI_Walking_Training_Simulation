@@ -137,11 +137,11 @@ namespace runner::telemetry
             return { state, Tone::information, "TESTING CURRENT POLICY",
                 "Training pauses briefly while the current controller is checked on repeatable test seeds." };
         case LearningState::valid_attempt_found:
-            return { state, Tone::success, "VALID ATTEMPT FOUND",
-                "The latest test passed the current safety and skill checks. Repeat confirmations are still required." };
+            return { state, Tone::success, "STAGE-SAFE CANDIDATE",
+                "The latest test produced an incremental safe checkpoint. Full goal and repeat confirmations still determine mastery." };
         case LearningState::improving_best_result:
-            return { state, Tone::success, "IMPROVING BEST RESULT",
-                "A better valid controller was retained. Training continues from that result instead of discarding it." };
+            return { state, Tone::success, "SAFER CANDIDATE RETAINED",
+                "A better stage-safe checkpoint was retained. Training continues from that result while full mastery tests remain." };
         case LearningState::retrying_after_failed_test:
             return { state, Tone::caution, "RETRYING AFTER A FAILED TEST",
                 "The latest test missed a requirement. The attempt was rejected, but saved training totals were not lost." };
@@ -173,7 +173,7 @@ namespace runner::telemetry
         if (metrics.evaluation_count == 0u)
             return "LATEST TEST: WAITING FOR FIRST TEST";
         return metrics.evaluation_valid
-            ? "LATEST TEST: PASSED"
+            ? "LATEST TEST: STAGE-SAFE"
             : "LATEST TEST: NOT YET PASSED";
     }
 
@@ -222,6 +222,10 @@ namespace runner::telemetry
             return "It spun too much instead of holding a controlled stance.";
         if ((mask & rl::evidence_bit(Failure::invalid_crouch_posture)) != 0u)
             return "It bent at the hips instead of making a real supported crouch.";
+        if ((mask & rl::evidence_bit(Failure::backward_brace)) != 0u)
+            return "Its torso stayed braced opposite the travel direction instead of balancing through the stride.";
+        if ((mask & rl::evidence_bit(Failure::lower_leg_scissor)) != 0u)
+            return "Its lower legs stayed crossed through the passing phase for too long.";
         if ((mask & rl::evidence_bit(Failure::lateral_crab_gait)) != 0u)
             return "Its legs did not cross in a natural forward walking pattern.";
         if ((mask & rl::evidence_bit(Failure::no_stable_stance)) != 0u)
@@ -243,7 +247,7 @@ namespace runner::telemetry
         if (metrics.evaluation_count == 0u)
             return "No full test has finished yet. Training can still be making normal progress.";
         if (metrics.evaluation_valid)
-            return "This attempt met the current safety and skill checks.";
+            return "This attempt met the incremental stage-safety checks; full goal and repeat confirmations still determine mastery.";
         return rejection_reason(metrics.evaluation_rejection_mask, stage);
     }
 
@@ -303,9 +307,16 @@ namespace runner::telemetry
         return std::isfinite(score);
     }
 
+    [[nodiscard]] constexpr std::uint64_t prior_policy_lineage_updates(
+        const rl::TrainingMetrics& metrics) noexcept
+    {
+        return metrics.total_updates >= metrics.update
+            ? metrics.total_updates - metrics.update : 0u;
+    }
+
     [[nodiscard]] constexpr std::string_view total_updates_help() noexcept
     {
-        return "RIG UPDATES = completed optimizer cycles for the selected rig; this count never resets during ordinary episodes, required tests, or same-rig retries. POLICY AGE = cycles retained by the current policy lineage. DISCARDED = cycles lost only to an explicit policy restart.";
+        return "RIG UPDATES = completed optimizer cycles for the selected rig; this count never resets during ordinary episodes or required tests. POLICY AGE = cycles in the active controller lineage. PRIOR LINEAGE = older cycles still kept in rig/all-time totals after an explicit fresh start, rig switch, or compatible lifetime import.";
     }
 
     [[nodiscard]] constexpr std::string_view attempts_help() noexcept

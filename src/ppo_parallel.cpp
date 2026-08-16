@@ -44,6 +44,7 @@ namespace runner::rl
             float longest_stance{};
             float duck_recoveries{};
             float maximum_joint_speed{};
+            float maximum_backward_brace_seconds{};
             float hand_contacts{};
             float climb_transfers{};
             float climbs{};
@@ -261,6 +262,9 @@ namespace runner::rl
                             totals.equipment_transitions += static_cast<float>(environment.equipment_transitions());
                             totals.maximum_joint_speed = std::max(
                                 totals.maximum_joint_speed, environment.maximum_joint_speed());
+                            totals.maximum_backward_brace_seconds = std::max(
+                                totals.maximum_backward_brace_seconds,
+                                environment.maximum_backward_brace_seconds());
                         }
                     }
                     evaluation_totals[worker_index] = totals;
@@ -449,6 +453,9 @@ namespace runner::rl
             totals.equipment_transitions += local.equipment_transitions;
             totals.maximum_joint_speed = std::max(
                 totals.maximum_joint_speed, local.maximum_joint_speed);
+            totals.maximum_backward_brace_seconds = std::max(
+                totals.maximum_backward_brace_seconds,
+                local.maximum_backward_brace_seconds);
             totals.minimum_quality = std::min(totals.minimum_quality, local.minimum_quality);
             totals.rejection_mask |= local.rejection_mask;
             if (totals.invalid_reason == sim::InvalidMotion::none
@@ -482,6 +489,8 @@ namespace runner::rl
         metrics_.evaluation_longest_stance = totals.longest_stance * inverse_agents;
         metrics_.evaluation_duck_recoveries = totals.duck_recoveries * inverse_agents;
         metrics_.evaluation_max_joint_speed = totals.maximum_joint_speed;
+        metrics_.evaluation_max_backward_brace_seconds =
+            totals.maximum_backward_brace_seconds;
         metrics_.evaluation_hand_contacts = totals.hand_contacts * inverse_agents;
         metrics_.evaluation_climb_transfers = totals.climb_transfers * inverse_agents;
         metrics_.evaluation_climbs = totals.climbs * inverse_agents;

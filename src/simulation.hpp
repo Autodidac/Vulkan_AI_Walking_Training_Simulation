@@ -467,6 +467,24 @@ namespace runner::sim
     }
 
     inline constexpr float sustained_scissor_limit_seconds = 0.34f;
+    inline constexpr float backward_brace_activation_ratio = 0.24f;
+    inline constexpr float sustained_backward_brace_limit_seconds = 0.80f;
+
+    [[nodiscard]] inline float directional_backward_brace_ratio(
+        Vec2 authored_axis, Vec2 current_axis, float travel_direction) noexcept
+    {
+        const float authored_length = length(authored_axis);
+        const float current_length = length(current_axis);
+        if (!std::isfinite(authored_length) || !std::isfinite(current_length)
+            || !std::isfinite(travel_direction) || authored_length <= 1.0e-5f
+            || current_length <= 1.0e-5f || std::abs(travel_direction) < 0.5f)
+            return 0.0f;
+        const Vec2 authored = authored_axis / authored_length;
+        const Vec2 current = current_axis / current_length;
+        const Vec2 authored_forward{ authored.y, -authored.x };
+        const float direction = travel_direction < 0.0f ? -1.0f : 1.0f;
+        return std::max(0.0f, -dot(current - authored, authored_forward * direction));
+    }
 
     [[nodiscard]] inline float contiguous_condition_seconds(bool active,
         float prior_seconds, float dt) noexcept
@@ -1713,6 +1731,18 @@ namespace runner::sim
         {
             return maximum_lower_leg_scissor_seconds_;
         }
+        [[nodiscard]] float backward_brace_ratio() const noexcept
+        {
+            return backward_brace_ratio_;
+        }
+        [[nodiscard]] float backward_brace_seconds() const noexcept
+        {
+            return backward_brace_seconds_;
+        }
+        [[nodiscard]] float maximum_backward_brace_seconds() const noexcept
+        {
+            return maximum_backward_brace_seconds_;
+        }
         [[nodiscard]] float posture_failure_seconds() const noexcept
         {
             return posture_failure_seconds_;
@@ -1907,6 +1937,9 @@ namespace runner::sim
         bool lower_leg_scissored_this_step_{};
         float lower_leg_scissor_seconds_{};
         float maximum_lower_leg_scissor_seconds_{};
+        float backward_brace_ratio_{};
+        float backward_brace_seconds_{};
+        float maximum_backward_brace_seconds_{};
         std::uint32_t heel_strike_count_{};
         std::uint32_t toe_off_count_{};
         FootContactPhase left_foot_phase_{ FootContactPhase::airborne };

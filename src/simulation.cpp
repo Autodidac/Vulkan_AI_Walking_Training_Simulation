@@ -241,14 +241,14 @@ namespace runner::sim
             { -0.00999999046f, 4.7700f },
             { 0.13f, 1.425f }, { -0.14f, 0.25f },
             { 0.21f, 1.425f }, { 0.14f, 0.25f },
-            // Preserve the accepted v0.7.32 arm reach while restoring the
-            // torso/head share and shortening the overlong support chains.
+            // Preserve the accepted arm reach with a side-view rest pose whose
+            // hands begin beside the pelvis instead of extended like a T-pose.
             { -0.278820232f, 3.77415042f },
-            { -0.392027751f, 3.54773550f },
-            { -0.890742854f, 3.34018832f },
+            { -0.348820232f, 3.53089261f },
+            { -0.298820232f, 2.99310279f },
             { 0.239952326f, 3.77415042f },
-            { 0.353159845f, 3.54773550f },
-            { 0.851874948f, 3.34018832f }
+            { 0.309952326f, 3.53089261f },
+            { 0.259952326f, 2.99310279f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -1955,6 +1955,9 @@ namespace runner::sim
         lower_leg_scissored_this_step_ = false;
         lower_leg_scissor_seconds_ = 0.0f;
         maximum_lower_leg_scissor_seconds_ = 0.0f;
+        backward_brace_ratio_ = 0.0f;
+        backward_brace_seconds_ = 0.0f;
+        maximum_backward_brace_seconds_ = 0.0f;
         heel_strike_count_ = 0u;
         toe_off_count_ = 0u;
         left_foot_phase_ = FootContactPhase::airborne;
@@ -3735,6 +3738,29 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             lower_leg_scissored_this_step_, lower_leg_scissor_seconds_, dt);
         maximum_lower_leg_scissor_seconds_ = std::max(
             maximum_lower_leg_scissor_seconds_, lower_leg_scissor_seconds_);
+
+        backward_brace_ratio_ = 0.0f;
+        const bool measure_backward_brace = measure_forward_gait_faults(
+                shuttle_state_.phase, elapsed_seconds_)
+            && stage_requires_forward_gait(course_stage_)
+            && blueprint_.paired_leg_chains() && !non_foot_grounded_
+            && (left || right) && valid_node(blueprint_.root_node)
+            && valid_node(blueprint_.torso_node);
+        if (measure_backward_brace)
+        {
+            const Vec2 authored_axis = blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node];
+            const Vec2 current_axis = particles_[blueprint_.torso_node].position
+                - particles_[blueprint_.root_node].position;
+            backward_brace_ratio_ = directional_backward_brace_ratio(
+                authored_axis, current_axis, locomotion_direction());
+        }
+        backward_brace_seconds_ = contiguous_condition_seconds(
+            measure_backward_brace
+                && backward_brace_ratio_ > backward_brace_activation_ratio,
+            backward_brace_seconds_, dt);
+        maximum_backward_brace_seconds_ = std::max(
+            maximum_backward_brace_seconds_, backward_brace_seconds_);
         if (left_swinging && left_swing_seconds_ <= 0.0f)
         {
             left_swing_started_behind_ = left_center < right_center - 0.035f;
@@ -4928,7 +4954,10 @@ step_not_qualified:
         }
         }
 
-        last_reward_ += recovery_reward - uncontrolled_spin_penalty;
+        const float backward_brace_penalty = reward_requires_locomotion
+            ? std::max(0.0f, backward_brace_ratio_ - 0.08f) * 0.14f : 0.0f;
+        last_reward_ += recovery_reward - uncontrolled_spin_penalty
+            - backward_brace_penalty;
         // Static crouch qualification explicitly requires grounded support,
         // a real press hold, feet-only ground contact, integrity, and recovery.
         // Do not let a flight reason recorded by the generic locomotion gate

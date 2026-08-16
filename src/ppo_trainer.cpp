@@ -343,6 +343,7 @@ namespace runner::rl
         metrics_.evaluation_longest_stance = 0.0f;
         metrics_.evaluation_duck_recoveries = 0.0f;
         metrics_.evaluation_max_joint_speed = 0.0f;
+        metrics_.evaluation_max_backward_brace_seconds = 0.0f;
         metrics_.evaluation_hand_contacts = 0.0f;
         metrics_.evaluation_climb_transfers = 0.0f;
         metrics_.evaluation_climbs = 0.0f;

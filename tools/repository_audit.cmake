@@ -22,12 +22,14 @@ foreach(required IN ITEMS
         docs/RUNNER_V0732_SHUTTLE_FACING_HANDS.md
         docs/RUNNER_V0733_GRANULAR_FACING_RIGLAB.md
         docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md
+        docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
         tests/v0731_crouch_learning_tests.cpp
         tests/v0732_shuttle_facing_tests.cpp
         tests/v0734_curriculum_rig_tests.cpp
+        tests/v0735_pip_posture_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
@@ -71,7 +73,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.34 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.35 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -84,6 +86,8 @@ foreach(reference IN ITEMS
         "RunnerV0732ShuttleFacingTests"
         "RunnerV0734CurriculumRigTests"
         "Runner.V0734CurriculumRig"
+        "RunnerV0735PipPostureTests"
+        "Runner.V0735PipPosture"
         "Runner.V0730ReferenceFrame"
         "COMMAND RunnerV0730ColdStartTests --references"
         "COMMAND RunnerV0730ColdStartTests --learner"
@@ -102,6 +106,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0732_SHUTTLE_FACING_HANDS.md"
         "RUNNER_V0733_GRANULAR_FACING_RIGLAB.md"
         "RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md"
+        "RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -203,7 +208,11 @@ foreach(reference IN ITEMS
         "WALK-STRICT-HUMANOID-395"
         "WALK-CROUCH-RIG-RESET-396"
         "WALK-RIG-LEDGER-397"
-        "WALK-RELEASE-398")
+        "WALK-RELEASE-398"
+        "WALK-PIP-PROPORTIONS-399"
+        "WALK-BACKWARD-BRACE-400"
+        "WALK-LINEAGE-TRUTH-401"
+        "WALK-RELEASE-402")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -266,7 +275,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3401u"
+        "training_semantics_version = 0x0007'3501u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -274,6 +283,7 @@ foreach(reference IN ITEMS
         "foundational_walk_teacher_handoff_update"
         "guided_rollout_imitation_weight"
         "strict_evaluation_quality_bit"
+        "MotionEvidenceFailure::backward_brace"
         "incremental_locomotion_candidate")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -324,7 +334,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0734-curriculum-autosave.eppo"
+        "runner-v0735-posture-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -342,7 +352,10 @@ foreach(reference IN ITEMS
         "MORPHOLOGY EVOLVE"
         "set_rig_optimization_mode"
         "optional_thigh_art"
-        "optional_shin_art")
+        "optional_shin_art"
+        "presentation_pixel_scale(scale)"
+        "PRIOR LINEAGE"
+        "BACKWARD BRACE PREVIEW")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "v0.7.28 application contract missing: ${reference}")
@@ -639,4 +652,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.34 repository hygiene passed")
+message(STATUS "Runner v0.7.35 repository hygiene passed")

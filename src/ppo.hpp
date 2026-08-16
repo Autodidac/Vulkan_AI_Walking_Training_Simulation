@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3401u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3501u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -1133,6 +1133,7 @@ namespace runner::rl
         float evaluation_longest_stance{};
         float evaluation_duck_recoveries{};
         float evaluation_max_joint_speed{};
+        float evaluation_max_backward_brace_seconds{};
         float evaluation_hand_contacts{};
         float evaluation_climb_transfers{};
         float evaluation_climbs{};
@@ -1243,7 +1244,8 @@ namespace runner::rl
         excessive_rotation = 1u << 8u,
         invalid_crouch_posture = 1u << 9u,
         lateral_crab_gait = 1u << 10u,
-        lower_leg_scissor = 1u << 11u
+        lower_leg_scissor = 1u << 11u,
+        backward_brace = 1u << 12u
     };
 
     struct StageMotionQualification
@@ -1281,6 +1283,7 @@ namespace runner::rl
         append(MotionEvidenceFailure::invalid_crouch_posture, "INVALID CROUCH");
         append(MotionEvidenceFailure::lateral_crab_gait, "LATERAL GAIT");
         append(MotionEvidenceFailure::lower_leg_scissor, "LOWER-LEG SCISSOR");
+        append(MotionEvidenceFailure::backward_brace, "BACKWARD BRACE");
         return result.empty() ? "STAGE VALID" : result;
     }
 
@@ -1299,6 +1302,8 @@ namespace runner::rl
             return "HIP HINGE - NOT A CROUCH";
         if ((mask & evidence_bit(MotionEvidenceFailure::lower_leg_scissor)) != 0u)
             return "LOWER LEGS SCISSOR FOR TOO LONG";
+        if ((mask & evidence_bit(MotionEvidenceFailure::backward_brace)) != 0u)
+            return "TORSO BRACED AGAINST TRAVEL";
         if ((mask & evidence_bit(MotionEvidenceFailure::lateral_crab_gait)) != 0u)
             return "CRAB WALK - NO SAGITTAL CROSSING";
         if ((mask & evidence_bit(MotionEvidenceFailure::no_stable_stance)) != 0u)
@@ -1337,6 +1342,11 @@ namespace runner::rl
             rejection |= evidence_bit(MotionEvidenceFailure::invalid_motion);
         if (environment.non_foot_grounded())
             rejection |= evidence_bit(MotionEvidenceFailure::body_contact);
+        if (sim::stage_requires_forward_gait(stage)
+            && environment.blueprint().paired_leg_chains()
+            && environment.maximum_backward_brace_seconds()
+                > sim::sustained_backward_brace_limit_seconds)
+            rejection |= evidence_bit(MotionEvidenceFailure::backward_brace);
 
         switch (stage)
         {
@@ -1679,6 +1689,8 @@ namespace runner::rl
     {
         return environment.maximum_lower_leg_scissor_seconds()
                 <= sim::sustained_scissor_limit_seconds
+            && environment.maximum_backward_brace_seconds()
+                <= sim::sustained_backward_brace_limit_seconds
             && incremental_locomotion_candidate(stage,
                 environment.valid_motion(), environment.body_integrity_valid(),
                 environment.non_foot_grounded(),

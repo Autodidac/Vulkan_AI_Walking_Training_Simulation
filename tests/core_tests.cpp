@@ -1757,8 +1757,12 @@ int main()
             && std::abs(humanoid.nodes[0].y - 2.6000f) < 0.00001f
             && std::abs(humanoid.nodes[1].y - 4.0500f) < 0.00001f
             && std::abs(humanoid.nodes[2].y - 4.7700f) < 0.00001f
-            && std::abs(humanoid.nodes[9].x + 0.890742854f) < 0.00001f
-            && std::abs(humanoid.nodes[12].x - 0.851874948f) < 0.00001f,
+            && std::abs(humanoid.nodes[9].x + 0.298820232f) < 0.00001f
+            && std::abs(humanoid.nodes[12].x - 0.259952326f) < 0.00001f
+            && humanoid.nodes[9].y > humanoid.nodes[0].y
+            && humanoid.nodes[9].y < humanoid.nodes[1].y
+            && humanoid.nodes[12].y > humanoid.nodes[0].y
+            && humanoid.nodes[12].y < humanoid.nodes[1].y,
         "supplied compact humanoid calibration not applied");
     require(humanoid.bones.size() == 15u,
         "humanoid legs or articulated arms are not structurally connected");
@@ -2431,7 +2435,7 @@ int main()
         "canonical rig switch erased the all-time training ledger");
 
     rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
-    legacy.training_semantics = 0x0007'3302u;
+    legacy.training_semantics = 0x0007'3401u;
     legacy.first_moment.clear();
     legacy.second_moment.clear();
     legacy.best_parameters.clear();
@@ -2453,32 +2457,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0734-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0735-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0734-curriculum-autosave.eppo";
+        / "runner-v0735-posture-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0734-curriculum-evolved.rig";
+        / "runner-v0735-posture-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0734-curriculum-autonomy.state";
-    const std::filesystem::path v0733_autosave = lifetime_import_directory
-        / "runner-v0733-granular-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0733_autosave, error),
+        / "runner-v0735-posture-autonomy.state";
+    const std::filesystem::path v0734_autosave = lifetime_import_directory
+        / "runner-v0734-curriculum-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0734_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0733_magic{
-        'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0733_autosave, v0733_magic),
-        "failed to mark the fallback fixture as an EPPO33 checkpoint");
+    constexpr std::array<char, 8> v0734_magic{
+        'E', 'P', 'P', 'O', '3', '4', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0734_autosave, v0734_magic),
+        "failed to mark the fallback fixture as an EPPO34 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.33 LIFETIME LEDGER")
+                && import_message.find("V0.7.34 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.33 fallback autosave was not selected before a new save");
+            "v0.7.34 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

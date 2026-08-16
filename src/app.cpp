@@ -377,9 +377,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0734-curriculum-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0734-curriculum-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0734-curriculum-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0735-posture-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0735-posture-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0735-posture-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -967,7 +967,10 @@ namespace runner
                         mount - direction * 0.12f, viewport, camera, scale);
                     const Vec2 ending = world_to_screen(
                         mount + direction * 0.68f, viewport, camera, scale);
-                    const float thickness = std::clamp(scale * 0.42f, 24.0f, 42.0f);
+                    const float art_pixel_scale = art::presentation_pixel_scale(scale);
+                    const float thickness = std::clamp(scale * 0.42f,
+                        art::scaled_pixels(24.0f, art_pixel_scale),
+                        art::scaled_pixels(42.0f, art_pixel_scale));
                     draw_oriented_pixel_art(canvas, optional_weapon_art,
                         beginning, ending, thickness, alpha,
                         environment.facing_direction() < 0.0f);
@@ -986,6 +989,7 @@ namespace runner
         {
             const auto& particles = environment.particles();
             const auto& rig = environment.blueprint();
+            const float art_pixel_scale = art::presentation_pixel_scale(scale);
             if (particles.empty())
                 return;
             const bool mirrored_facing = environment.facing_direction() < 0.0f;
@@ -1053,12 +1057,13 @@ namespace runner
                 return index < presentation_side.size()
                     ? presentation_side[index] : 0;
             };
-            float assembly_torso_span = 48.0f;
+            float assembly_torso_span = art::scaled_pixels(48.0f, art_pixel_scale);
             float assembly_shoulder_span = 0.0f;
             if (rig.root_node < particles.size() && rig.torso_node < particles.size())
             {
                 assembly_torso_span = std::max(
-                    12.0f, length(point(rig.torso_node) - point(rig.root_node)));
+                    art::scaled_pixels(12.0f, art_pixel_scale),
+                    length(point(rig.torso_node) - point(rig.root_node)));
                 float minimum_shoulder = std::numeric_limits<float>::infinity();
                 float maximum_shoulder = -std::numeric_limits<float>::infinity();
                 const Vec2 assembly_axis = normalized(
@@ -1082,7 +1087,7 @@ namespace runner
                     assembly_shoulder_span = maximum_shoulder - minimum_shoulder;
             }
             const float assembled_art_scale = art::assembled_armor_scale(
-                assembly_torso_span, assembly_shoulder_span);
+                assembly_torso_span, assembly_shoulder_span, art_pixel_scale);
             auto draw_body_segments = [&](int pass)
             {
                 for (const sim::DistanceConstraint& bone : rig.bones)
@@ -1162,7 +1167,8 @@ namespace runner
                         {
                             if (optional_foot_art.loaded())
                             {
-                                const float width = std::max(42.0f,
+                                const float width = std::max(
+                                    art::scaled_pixels(42.0f, art_pixel_scale),
                                     scale * 0.78f * assembled_art_scale);
                                 const float height = width
                                     * static_cast<float>(optional_foot_art.height)
@@ -1263,14 +1269,17 @@ namespace runner
                         : (has_distal_motor ? 0.72f : 0.62f);
                     const float thickness = std::clamp(
                         span * thickness_ratio * assembled_art_scale,
-                        23.0f, 74.0f);
+                        art::scaled_pixels(23.0f, art_pixel_scale),
+                        art::scaled_pixels(74.0f, art_pixel_scale));
                     const float authored_joint_overlap = std::max(
-                        art::skin_envelope_dimensions(span, 0.0f).joint_overlap,
+                        art::skin_envelope_dimensions(
+                            span, 0.0f, art_pixel_scale).joint_overlap,
                         thickness * (support_mask != 0u ? 0.36f : 0.55f));
                     beginning = beginning - axis * authored_joint_overlap;
                     ending = ending + axis * authored_joint_overlap;
-                    const bool transverse_mirror = art::presented_transverse_mirror(
-                        side < 0, environment.facing_direction());
+                    const bool transverse_mirror =
+                        art::presented_limb_transverse_mirror(
+                            environment.facing_direction());
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
                         thickness, near || side == 0 ? 0.98f : 0.56f,
                         transverse_mirror);
@@ -1279,7 +1288,8 @@ namespace runner
                     {
                         const art::HandArtDimensions hand =
                             art::hand_art_dimensions(thickness,
-                                optional_hand_art.width, optional_hand_art.height);
+                                optional_hand_art.width, optional_hand_art.height,
+                                art_pixel_scale);
                         draw_oriented_pixel_art(canvas, optional_hand_art,
                             terminal_joint - axis * hand.wrist_overlap,
                             terminal_joint + axis * (hand.length
@@ -1308,7 +1318,8 @@ namespace runner
                 const Vec2 torso = point(rig.torso_node);
                 const Vec2 body_axis = normalized(torso - root, { 0.0f, -1.0f });
                 const Vec2 body_right{ -body_axis.y, body_axis.x };
-                const float torso_length = std::max(24.0f, length(torso - root));
+                const float torso_length = std::max(
+                    art::scaled_pixels(24.0f, art_pixel_scale), length(torso - root));
 
                 float minimum_shoulder = std::numeric_limits<float>::infinity();
                 float maximum_shoulder = -std::numeric_limits<float>::infinity();
@@ -1329,7 +1340,8 @@ namespace runner
                     && maximum_shoulder > minimum_shoulder
                     ? maximum_shoulder - minimum_shoulder : 0.0f;
                 const art::SkinEnvelopeDimensions envelope =
-                    art::skin_envelope_dimensions(torso_length, authored_shoulder_span);
+                    art::skin_envelope_dimensions(
+                        torso_length, authored_shoulder_span, art_pixel_scale);
 
                 const Vec2 chest_bottom = root + body_axis * (torso_length * 0.16f);
                 const Vec2 chest_top = torso - body_axis * (torso_length * 0.08f);
@@ -1339,7 +1351,8 @@ namespace runner
                     const Vec2 center = (chest_bottom + chest_top) * 0.5f;
                     const float height = std::clamp(
                         torso_length * 1.05f * assembled_art_scale,
-                        60.0f, 172.0f);
+                        art::scaled_pixels(60.0f, art_pixel_scale),
+                        art::scaled_pixels(172.0f, art_pixel_scale));
                     const float source_width = height
                         * static_cast<float>(optional_torso_art.width)
                         / static_cast<float>(optional_torso_art.height);
@@ -1358,16 +1371,22 @@ namespace runner
             if (optional_art_enabled && optional_helmet_art.loaded()
                 && rig.head_node < particles.size())
             {
-                const Vec2 center = point(rig.head_node);
+                const Vec2 head_node_center = point(rig.head_node);
                 Vec2 head_axis{ 0.0f, -1.0f };
                 if (rig.torso_node < particles.size())
-                    head_axis = normalized(center - point(rig.torso_node), head_axis);
+                    head_axis = normalized(
+                        head_node_center - point(rig.torso_node), head_axis);
                 else if (rig.root_node < particles.size())
-                    head_axis = normalized(center - point(rig.root_node), head_axis);
+                    head_axis = normalized(
+                        head_node_center - point(rig.root_node), head_axis);
                 const Vec2 head_right{ -head_axis.y, head_axis.x };
-                const float height = std::max(46.0f,
-                    particles[rig.head_node].radius * scale * 2.55f
-                        * assembled_art_scale);
+                const art::HelmetArtDimensions helmet =
+                    art::helmet_art_dimensions(
+                        particles[rig.head_node].radius * scale,
+                        assembled_art_scale, art_pixel_scale);
+                const Vec2 center = head_node_center
+                    - head_axis * helmet.downward_offset;
+                const float height = helmet.height;
                 const float width = height
                     * static_cast<float>(optional_helmet_art.width)
                     / static_cast<float>(optional_helmet_art.height);
@@ -1507,10 +1526,9 @@ namespace runner
                 : course_eye_test
                     ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
                     : std::format(
-                    "RIG UPDATES {}  POLICY AGE {}  DISCARDED {}  DIST {:.1f} M  STEPS {}",
+                    "RIG UPDATES {}  POLICY AGE {}  PRIOR LINEAGE {}  DIST {:.1f} M  STEPS {}",
                     trainer.metrics().total_updates, trainer.metrics().update,
-                    trainer.metrics().total_updates >= trainer.metrics().update
-                        ? trainer.metrics().total_updates - trainer.metrics().update : 0u,
+                    telemetry::prior_policy_lineage_updates(trainer.metrics()),
                     environment.distance_travelled(), environment.gait_cycles());
             add_text_fit(canvas, rect.position + Vec2{ 12.0f, rect.size.y - 23.0f },
                 pip_metrics, 0.70f, state_color, rect.size.x - 24.0f, 0.64f);
@@ -1958,6 +1976,14 @@ namespace runner
                     usable_width, 0.54f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
+                    std::format("BACKWARD BRACE PREVIEW {:.3f} S   TEST {:.3f} S",
+                        debug_environment.maximum_backward_brace_seconds(),
+                        metrics.evaluation_max_backward_brace_seconds),
+                    0.68f, metrics.evaluation_max_backward_brace_seconds
+                            > sim::sustained_backward_brace_limit_seconds
+                        ? yellow : muted, usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
                     std::format("POLICY LOSS {}   VALUE LOSS {}",
                         raw_number(metrics.policy_loss), raw_number(metrics.value_loss)),
                     0.70f, muted, usable_width, 0.56f);
@@ -2124,11 +2150,10 @@ namespace runner
                         walk_eye_test_proof.teacher_authority,
                         6u - walk_eye_test_proof.retained_invalid_runs)
                     : std::format(
-                        "MOTION {}   RIG UPDATES {}   POLICY AGE {}   DISCARDED {}",
+                        "MOTION {}   RIG UPDATES {}   POLICY AGE {}   PRIOR LINEAGE {}",
                         sim::invalid_motion_name(environment.invalid_reason()),
                         trainer.metrics().total_updates, trainer.metrics().update,
-                        trainer.metrics().total_updates >= trainer.metrics().update
-                            ? trainer.metrics().total_updates - trainer.metrics().update : 0u),
+                        telemetry::prior_policy_lineage_updates(trainer.metrics())),
                 0.80f, environment.valid_motion() ? accent : danger, text_width);
             line.y += 21.0f;
             const std::uint64_t preview_restarts = trainer.preview_reset_count();

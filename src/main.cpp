@@ -164,6 +164,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0732_SHUTTLE_FACING_HANDS.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0733_GRANULAR_FACING_RIGLAB.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0735_PIP_POSTURE_TRUTH.md",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
