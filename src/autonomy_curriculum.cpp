@@ -20,6 +20,7 @@ namespace runner::rl
             return strict_balance_mastery(metrics);
         case sim::CourseStage::duck_press:
             return strict_duck_press_mastery(metrics);
+        case sim::CourseStage::shuttle:
         case sim::CourseStage::uneven:
             return metrics.evaluation_distance >= walk_mastery_distance
                 && metrics.evaluation_stride_events >= walk_mastery_stride_events
@@ -201,7 +202,7 @@ namespace runner::rl
         degradation_streak_ = 0;
         if (stage_ != sim::CourseStage::combat_course)
         {
-            stage_ = static_cast<sim::CourseStage>(static_cast<std::uint8_t>(stage_) + 1u);
+            stage_ = sim::next_course_stage(stage_);
             difficulty_ = 0.30f;
             worker_message_ = std::format("SKILL LOCKED - ADVANCING TO {}",
                 sim::course_stage_name(stage_));

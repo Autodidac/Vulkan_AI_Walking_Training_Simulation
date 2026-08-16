@@ -1349,19 +1349,26 @@ int main()
         && sim::course_stage_name(sim::CourseStage::duck_press)
             == "2. STATIC CROUCH / HOLD / RECOVER"
         && sim::course_stage_name(sim::CourseStage::uneven) == "3. WALK / RUN"
+        && sim::course_stage_name(sim::CourseStage::shuttle)
+            == "4. BACK / TURN / RETURN"
         && sim::course_stage_name(sim::CourseStage::crouch_walk)
-            == "4. CROUCH WALK / UNEVEN AVOID"
-        && sim::course_stage_name(sim::CourseStage::ramps) == "5. JUMP / LAND"
-        && sim::course_stage_name(sim::CourseStage::hurdles) == "6. MOVING LOW BAR / HURDLE"
-        && sim::course_stage_name(sim::CourseStage::duck_bars) == "7. CONTROLLED FLIPS"
-        && sim::course_stage_name(sim::CourseStage::moving_hazards) == "8. MIXED GOAL COURSE"
-        && static_cast<std::uint8_t>(sim::CourseStage::balance)
-            < static_cast<std::uint8_t>(sim::CourseStage::duck_press)
-        && static_cast<std::uint8_t>(sim::CourseStage::duck_press)
-            < static_cast<std::uint8_t>(sim::CourseStage::uneven)
-        && static_cast<std::uint8_t>(sim::CourseStage::uneven)
-            < static_cast<std::uint8_t>(sim::CourseStage::crouch_walk),
-        "stand, static crouch, walk/run, and crouch-walk prerequisites are misordered");
+            == "5. CROUCH WALK / UNEVEN AVOID"
+        && sim::course_stage_name(sim::CourseStage::ramps) == "6. JUMP / LAND"
+        && sim::course_stage_name(sim::CourseStage::hurdles)
+            == "7. MOVING LOW BAR / HURDLE"
+        && sim::course_stage_name(sim::CourseStage::duck_bars)
+            == "8. CONTROLLED FLIPS"
+        && sim::course_stage_name(sim::CourseStage::moving_hazards)
+            == "9. MIXED GOAL COURSE"
+        && sim::course_stage_curriculum_index(sim::CourseStage::balance)
+            < sim::course_stage_curriculum_index(sim::CourseStage::duck_press)
+        && sim::course_stage_curriculum_index(sim::CourseStage::duck_press)
+            < sim::course_stage_curriculum_index(sim::CourseStage::uneven)
+        && sim::course_stage_curriculum_index(sim::CourseStage::uneven)
+            < sim::course_stage_curriculum_index(sim::CourseStage::shuttle)
+        && sim::course_stage_curriculum_index(sim::CourseStage::shuttle)
+            < sim::course_stage_curriculum_index(sim::CourseStage::crouch_walk),
+        "stand, crouch, walk, shuttle, and crouch-walk curriculum is misordered");
     require(!sim::stage_skill_evidence(sim::CourseStage::duck_press, 0u, 0.6f, 0u, 0.0f, 0u, 0u),
         "duck lesson completes without moving crouch evidence");
     require(sim::stage_skill_evidence(sim::CourseStage::crouch_walk, 8u, 3.0f, 0u, 0.0f, 0u, 4u),
@@ -1511,15 +1518,19 @@ int main()
         rl::solve_two_link_sagittal(1.0f, 1.0f, { 0.20f, -1.6f }, -1.0f);
     const rl::TwoLinkSagittalSolution mirrored_right_knee =
         rl::solve_two_link_sagittal(1.0f, 1.0f, { -0.20f, -1.6f }, -1.0f);
-    const Vec2 arm_forward = rl::sagittal_arm_target(1.5f, pi * 0.5f);
-    const Vec2 arm_backward = rl::sagittal_arm_target(1.5f, pi * 1.5f);
+    const Vec2 authored_hand { 0.12f, -1.45f };
+    const Vec2 arm_forward = rl::authored_opposed_swing_target(
+        authored_hand, pi * 0.5f, 0.405f, 0.0f, 1.0f);
+    const Vec2 arm_backward = rl::authored_opposed_swing_target(
+        authored_hand, pi * 1.5f, 0.405f, 0.0f, 1.0f);
     require(left_knee.valid && right_knee.valid
             && mirrored_left_knee.valid && mirrored_right_knee.valid
             && left_knee.upper.x > 0.0f && right_knee.upper.x > 0.0f
             && mirrored_left_knee.upper.x < 0.0f
             && mirrored_right_knee.upper.x < 0.0f,
         "paired knees do not share and mirror one facing-relative bend side");
-    require(arm_forward.x > 0.38f && arm_backward.x < -0.38f
+    require(arm_forward.x > authored_hand.x + 0.38f
+            && arm_backward.x < authored_hand.x - 0.38f
             && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
             && arm_forward.y < -1.20f
             && !rl::solve_two_link_sagittal(0.0f, 1.0f,
@@ -1756,9 +1767,9 @@ int main()
     require(std::abs(humanoid.nodes[0].x - 0.0015322268f) < 0.00001f
             && std::abs(humanoid.nodes[0].y - 2.6000f) < 0.00001f
             && std::abs(humanoid.nodes[1].y - 4.0500f) < 0.00001f
-            && std::abs(humanoid.nodes[2].y - 4.7700f) < 0.00001f
-            && std::abs(humanoid.nodes[9].x + 0.298820232f) < 0.00001f
-            && std::abs(humanoid.nodes[12].x - 0.259952326f) < 0.00001f
+            && std::abs(humanoid.nodes[2].y - 4.52000046f) < 0.00001f
+            && std::abs(humanoid.nodes[9].x - 0.118830621f) < 0.00001f
+            && std::abs(humanoid.nodes[12].x - 0.259952337f) < 0.00001f
             && humanoid.nodes[9].y > humanoid.nodes[0].y
             && humanoid.nodes[9].y < humanoid.nodes[1].y
             && humanoid.nodes[12].y > humanoid.nodes[0].y
@@ -2435,7 +2446,7 @@ int main()
         "canonical rig switch erased the all-time training ledger");
 
     rl::PpoTrainer::CheckpointData legacy = trainer.checkpoint_data();
-    legacy.training_semantics = 0x0007'3401u;
+    legacy.training_semantics = 0x0007'3501u;
     legacy.first_moment.clear();
     legacy.second_moment.clear();
     legacy.best_parameters.clear();
@@ -2457,32 +2468,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0735-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0736-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0735-posture-autosave.eppo";
+        / "runner-v0736-authored-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0735-posture-evolved.rig";
+        / "runner-v0736-authored-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0735-posture-autonomy.state";
-    const std::filesystem::path v0734_autosave = lifetime_import_directory
-        / "runner-v0734-curriculum-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0734_autosave, error),
+        / "runner-v0736-authored-autonomy.state";
+    const std::filesystem::path v0735_autosave = lifetime_import_directory
+        / "runner-v0735-posture-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0735_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0734_magic{
-        'E', 'P', 'P', 'O', '3', '4', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0734_autosave, v0734_magic),
-        "failed to mark the fallback fixture as an EPPO34 checkpoint");
+    constexpr std::array<char, 8> v0735_magic{
+        'E', 'P', 'P', 'O', '3', '5', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0735_autosave, v0735_magic),
+        "failed to mark the fallback fixture as an EPPO35 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.34 LIFETIME LEDGER")
+                && import_message.find("V0.7.35 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.34 fallback autosave was not selected before a new save");
+            "v0.7.35 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

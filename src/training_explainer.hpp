@@ -188,6 +188,8 @@ namespace runner::telemetry
             return "It needs a real crouch, hold, and recovery back to standing.";
         case sim::CourseStage::uneven:
             return "It needs more real alternating steps with natural leg crossing.";
+        case sim::CourseStage::shuttle:
+            return "It needs a controlled backup, whole-body turn, and supported return traversal.";
         case sim::CourseStage::crouch_walk:
             return "It needs more controlled crouched steps while staying low.";
         case sim::CourseStage::ramps:
@@ -262,6 +264,8 @@ namespace runner::telemetry
             return "Crouch under pressure, hold it, then stand back up on valid supports.";
         case sim::CourseStage::uneven:
             return "Walk at least 18 m with a 14-step multi-seed average, useful speed, and controlled balance.";
+        case sim::CourseStage::shuttle:
+            return "Back up under control, turn the whole rig, and walk at least 18 m across both directions.";
         case sim::CourseStage::crouch_walk:
             return "Stay crouched for 3.5 seconds, take 8 stride events, pass 4 obstacles, and recover upright.";
         case sim::CourseStage::ramps:

@@ -22,7 +22,7 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 17\n";
+            output << "RUNAUTONOMY 18\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << ' '
                 << static_cast<int>(optimization_mode) << '\n';
@@ -62,14 +62,17 @@ namespace runner::rl
             int loaded_rollback{};
             int mode_value = static_cast<int>(RigOptimizationMode::control_optimize);
             input >> magic >> version;
-            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17))
+            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17 && version != 18))
                 return;
             input >> stage_value >> loaded_difficulty >> loaded_generation
                 >> loaded_accepted >> loaded_rejected >> loaded_rollback;
-            if (version == 17)
+            if (version >= 17)
                 input >> mode_value;
+            const int stage_limit = version >= 18
+                ? static_cast<int>(sim::course_stage_count)
+                : static_cast<int>(sim::CourseStage::shuttle);
             if (!input || stage_value < 0
-                || stage_value >= static_cast<int>(sim::course_stage_count)
+                || stage_value >= stage_limit
                 || !(loaded_difficulty >= 0.10f && loaded_difficulty <= 1.0f)
                 || loaded_rollback < 0
                 || (mode_value != static_cast<int>(RigOptimizationMode::control_optimize)

@@ -377,9 +377,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0735-posture-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0735-posture-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0735-posture-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0736-authored-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0736-authored-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0736-authored-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1722,6 +1722,7 @@ namespace runner
                         metrics.evaluation_duck_recoveries,
                         metrics.evaluation_survival);
                     break;
+                case sim::CourseStage::shuttle:
                 case sim::CourseStage::uneven:
                     evidence = std::format(
                         "CURRENT EVIDENCE: DISTANCE {}   STRIDE EVENTS {:.0f}   SURVIVAL {:.1f} S",
@@ -1842,7 +1843,9 @@ namespace runner
                             rig_start_collisions),
                         ui_layout::lifetime_delta(metrics.total_obstacles_passed,
                             rig_start_obstacles),
-                        static_cast<unsigned>(rig_best_stage) + 1u),
+                        static_cast<unsigned>(
+                            sim::course_stage_curriculum_index(
+                                static_cast<sim::CourseStage>(rig_best_stage))) + 1u),
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 28.0f;
 

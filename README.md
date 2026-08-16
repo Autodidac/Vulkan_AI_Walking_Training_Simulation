@@ -1,3 +1,12 @@
+## v0.7.36 authored gait and bounded runtime
+
+- Promotes the supplied edited humanoid rig as the canonical rest shape and keeps both complete arm chains layered beside the body at startup.
+- Drives topology-discovered arms in a small opposed counter-swing around authored hand endpoints while retaining the proven opposed, flexed, single-direction leg cycle for all canonical, edited, and evolved rigs.
+- Moves backup/turn/return into its own stable-ground lesson after Walk; Walk no longer reverses direction or reshuffles its course on ordinary retries.
+- Preserves the active sand/dirt/water/hole field through episode retries while explicit course boundaries still create deterministic new terrain.
+- Gives sidearm, carbine, and launcher distinct engagement ranges, aim tolerances, cooldowns, and hit goals enforced by both teacher and simulation, stopping held-trigger fire after the goal.
+- Advances training semantics to `0x0007'3601`, checkpoint magic to `EPPO36`, and local files to `runner-v0736-authored-*`; v0.7.35 contributes validated lifetime totals only.
+- Adds deterministic supplied-rig, topology, rest-pose, range-boundary, aim, goal-stop, terrain-lifecycle, repeated-seed, and adversarial coverage. See `docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md`.
 ## v0.7.35 proportional PIP and posture truth
 
 - Keeps the supplied side-view modular armor at one normalized silhouette across the full preview, live-training PIP, and every zoom level by scaling every armor safety bound with pixels-per-meter.

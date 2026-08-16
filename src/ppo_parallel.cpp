@@ -562,6 +562,7 @@ namespace runner::rl
                     + metrics_.evaluation_powered_jumps * 0.15f
                     - metrics_.evaluation_airborne_ratio * 0.10f;
                 break;
+            case sim::CourseStage::shuttle:
             case sim::CourseStage::uneven:
                 metrics_.evaluation_score = metrics_.evaluation_reward
                     + metrics_.evaluation_distance * 0.70f

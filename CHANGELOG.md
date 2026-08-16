@@ -1,3 +1,12 @@
+## 0.7.36
+
+- Promoted the user's edited v0.7.35 humanoid graph to canonical rest and changed arm teaching to a topology-discovered, authored-endpoint opposed swing that returns exactly beside the body.
+- Preserved the proven anatomy-scaled opposed leg cycle and bounded non-support discovery/policy motion without reducing support-branch authority on non-biped, edited, or evolved rigs.
+- Added a dedicated stable-ground Back / Turn / Return lesson between Walk and Crouch Walk while preserving all v0.7.35 persisted numeric stage IDs.
+- Preserved one deterministic deformable material field across ordinary episode retries; explicit course/rig boundaries still replace it, while transient falling hazards reset safely.
+- Added simulation-authoritative per-weapon minimum/maximum range, aim tolerance, cooldown, unsafe-hazard gating, and hit-goal shutdown, shared by the policy teacher.
+- Promoted training semantics to `0x0007'3601`, checkpoint magic to `EPPO36`, and automatic files to `runner-v0736-authored-*`, with lifetime-only fallback from v0.7.35.
+- Added deterministic exact-rig, authored-rest, all-topology, positive/negative/adversarial weapon-boundary, goal-stop, repeated-retry terrain, and curriculum-order coverage.
 ## 0.7.35
 
 - Made every modular-armor pixel bound scale with view pixels-per-meter, preserving the full-size 42 px/m appearance while eliminating chibi PIP heads, boots, hands, limbs, torso, and equipment.

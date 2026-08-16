@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3501u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3601u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -169,6 +169,15 @@ namespace runner::rl
                 }
             }
         }
+        // Support discovery may use the full authored range. Manipulator
+        // discovery stays near its authored rest so exploration cannot teach
+        // a balancing T-pose before locomotion begins.
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        for (std::size_t index = 0; index < active; ++index)
+        {
+            if (!motor_drives_support_branch(rig, rig.motors[index]))
+                probe.action[index] = clamp(probe.action[index], -0.18f, 0.18f);
+        }
         probe.weight = 0.88f;
         return probe;
     }
@@ -307,8 +316,9 @@ namespace runner::rl
         }
         if (manipulator_chain_count == 2u)
         {
-            const float arm_pair_strength = stage == sim::CourseStage::uneven
-                ? 0.06f : sim::stage_allows_controlled_flips(stage)
+            const float arm_pair_strength = (stage == sim::CourseStage::uneven
+                    || stage == sim::CourseStage::shuttle)
+                ? 0.18f : sim::stage_allows_controlled_flips(stage)
                     ? 0.24f : 0.10f;
             const std::size_t left_shoulder = shoulder_indices[0];
             const std::size_t right_shoulder = shoulder_indices[1];
@@ -549,17 +559,23 @@ namespace runner::rl
         return { upper, target - upper, true };
     }
 
-    [[nodiscard]] inline Vec2 sagittal_arm_target(float chain_length,
-        float phase, float direction = 1.0f) noexcept
+    [[nodiscard]] inline Vec2 authored_opposed_swing_target(
+        Vec2 authored_endpoint, float phase, float horizontal_amplitude,
+        float vertical_lift, float direction = 1.0f) noexcept
     {
-        if (!std::isfinite(chain_length) || !std::isfinite(phase)
-            || !std::isfinite(direction) || chain_length <= 0.01f)
-            return {};
-        const float bounded_length = clamp(chain_length, 0.01f, 5.0f);
+        if (!std::isfinite(authored_endpoint.x)
+            || !std::isfinite(authored_endpoint.y)
+            || !std::isfinite(phase)
+            || !std::isfinite(horizontal_amplitude)
+            || !std::isfinite(vertical_lift)
+            || !std::isfinite(direction))
+            return authored_endpoint;
         const float swing = std::sin(phase);
-        return { bounded_length * 0.27f * swing
-                * clamp(direction, -1.0f, 1.0f),
-            -bounded_length * (0.84f - 0.025f * std::abs(swing)) };
+        authored_endpoint.x += clamp(horizontal_amplitude, 0.0f, 2.0f)
+            * swing * clamp(direction, -1.0f, 1.0f);
+        authored_endpoint.y += clamp(vertical_lift, 0.0f, 2.0f)
+            * std::max(0.0f, -std::cos(phase));
+        return authored_endpoint;
     }
 
     [[nodiscard]] inline float sagittal_step_x(float step_length,
@@ -629,7 +645,7 @@ namespace runner::rl
                 phase += 2.0f * pi;
             float progress{};
             float x{};
-            float y{ -parameters.leg_height };
+            float lift{};
             if (phase < pi)
             {
                 progress = phase / pi;
@@ -639,7 +655,7 @@ namespace runner::rl
             {
                 progress = (phase - pi) / pi;
                 x = sagittal_step_x(parameters.step_length, progress, true);
-                y += parameters.swing_lift * std::sin(progress * pi);
+                lift = parameters.swing_lift * std::sin(progress * pi);
             }
             x *= parameters.direction;
             const std::size_t hip_index = left ? 0u : 2u;
@@ -650,9 +666,10 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            constexpr float bend_direction = 1.0f;
+            const Vec2 target{ x, -parameters.leg_height + lift };
+            const float bend_direction = environment.facing_direction();
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, { x, y }, bend_direction);
+                upper_length, lower_length, target, bend_direction);
             if (!solution.valid)
                 return;
             const Vec2 hip_reference = rig.nodes[hip.a] - rig.nodes[hip.pivot];
@@ -715,10 +732,15 @@ namespace runner::rl
             const float lower_length = length(
                 rig.nodes[elbow.c] - rig.nodes[elbow.pivot]);
             const float arm_phase = phase + ((chain & 1u) == 0u ? pi : 0.0f);
-            const Vec2 target = sagittal_arm_target(upper_length + lower_length,
-                arm_phase, parameters.direction);
+            const Vec2 authored_endpoint = rig.nodes[elbow.c]
+                - rig.nodes[shoulder.pivot];
+            const Vec2 target = authored_opposed_swing_target(
+                authored_endpoint, arm_phase,
+                (upper_length + lower_length) * 0.12f, 0.0f,
+                parameters.direction);
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, target, -1.0f);
+                upper_length, lower_length, target,
+                -environment.facing_direction());
             if (!solution.valid)
                 continue;
             const Vec2 shoulder_reference = rig.nodes[shoulder.a]
@@ -825,7 +847,8 @@ namespace runner::rl
         }
 
         const bool foundational_walk = environment.course_stage()
-            == sim::CourseStage::uneven;
+                == sim::CourseStage::uneven
+            || environment.course_stage() == sim::CourseStage::shuttle;
         BipedGaitParameters biped_parameters = foundational_walk
             ? anatomy_scaled_foundational_gait(rig)
             : BipedGaitParameters{
@@ -950,7 +973,8 @@ namespace runner::rl
     {
         if (stage == sim::CourseStage::duck_press)
             return crouch_teacher_authority(lesson_update);
-        if (stage == sim::CourseStage::uneven)
+        if (stage == sim::CourseStage::uneven
+            || stage == sim::CourseStage::shuttle)
             return foundational_walk_teacher_authority(lesson_update, blueprint);
         return 1.0f;
     }
@@ -1007,9 +1031,19 @@ namespace runner::rl
             policy_action[sim::anatomy_action_count] = 0.72f;
             policy_action[sim::anatomy_action_count + 1u] = clamp(
                 local_desired_angle / (pi * 0.42f), -1.0f, 1.0f);
+            const sim::WeaponProfile profile =
+                sim::weapon_profile(environment.weapon_class());
+            const float distance = length(delta);
+            const bool engagement_window =
+                distance >= profile.minimum_engagement_distance
+                && distance <= profile.maximum_engagement_distance
+                && environment.target_hits() < environment.equipment_hit_goal()
+                && !(environment.granular_hazard_active()
+                    && !environment.granular_hazard_safe());
             policy_action[sim::anatomy_action_count + 2u] =
                 environment.equipment_state() == sim::EquipmentState::ready
-                    && std::abs(aim_error) < 0.10f
+                    && engagement_window
+                    && std::abs(aim_error) <= profile.aim_tolerance
                     && environment.equipment_cooldown() <= 0.0f
                 ? 1.0f : -1.0f;
         };
@@ -1028,7 +1062,8 @@ namespace runner::rl
                 0.0f);
             neutralize_non_support(0.995f * authority);
         }
-        else if (stage == sim::CourseStage::uneven)
+        else if (stage == sim::CourseStage::uneven
+            || stage == sim::CourseStage::shuttle)
         {
             const auto teacher = walking_teacher_action(environment);
             const float authority = clamp(lesson_authority, 0.0f, 1.0f);
@@ -1074,9 +1109,17 @@ namespace runner::rl
                 policy_action[index] = 0.0f;
         }
         if ((stage == sim::CourseStage::duck_press
-                || stage == sim::CourseStage::uneven)
+                || stage == sim::CourseStage::uneven
+                || stage == sim::CourseStage::shuttle)
             && lesson_authority <= 0.0f)
+        {
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                if (!support_motor(index))
+                    policy_action[index] = clamp(policy_action[index], -0.32f, 0.32f);
+            }
             return policy_action;
+        }
         if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
         {
             for (std::size_t index = 0; index < active; ++index)
@@ -1085,7 +1128,21 @@ namespace runner::rl
                     policy_action[index] *= 0.08f;
             }
         }
-        return bilateral_joint_synergy_action(environment, policy_action, stage);
+        policy_action = bilateral_joint_synergy_action(
+            environment, policy_action, stage);
+        if (rig.paired_leg_chains()
+            && (stage == sim::CourseStage::balance
+                || sim::stage_requires_forward_gait(stage))
+            && !sim::stage_allows_controlled_flips(stage))
+        {
+            const float limit = stage == sim::CourseStage::balance ? 0.24f : 0.36f;
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                if (!support_motor(index))
+                    policy_action[index] = clamp(policy_action[index], -limit, limit);
+            }
+        }
+        return policy_action;
     }
 
     struct TrainingMetrics
@@ -1384,6 +1441,7 @@ namespace runner::rl
             // velocity while the rig remains intact, feet-only, held, and
             // recovered. Those stronger stage facts are authoritative here.
             break;
+        case sim::CourseStage::shuttle:
         case sim::CourseStage::uneven:
             // A continuous gait transfers support faster than a standing hold.
             // Accept sustained alternating support as the dynamic counterpart
@@ -1416,6 +1474,9 @@ namespace runner::rl
             if (environment.distance_travelled() < 1.0f
                 || environment.elapsed_seconds() < 2.0f)
                 rejection |= evidence_bit(MotionEvidenceFailure::missing_progress);
+            if (stage == sim::CourseStage::shuttle
+                && environment.completed_shuttle_turns() < 1u)
+                rejection |= evidence_bit(MotionEvidenceFailure::missing_skill);
             break;
         case sim::CourseStage::crouch_walk:
             if (environment.longest_stable_stance_seconds() < 1.25f)
@@ -1540,6 +1601,7 @@ namespace runner::rl
                 quality_bucket(environment.elapsed_seconds()));
             break;
         case sim::CourseStage::uneven:
+        case sim::CourseStage::shuttle:
         case sim::CourseStage::hurdles:
         case sim::CourseStage::moving_hazards:
             quality = pack_quality(

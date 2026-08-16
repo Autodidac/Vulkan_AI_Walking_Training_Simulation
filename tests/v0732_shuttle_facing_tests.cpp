@@ -23,11 +23,11 @@ struct EnvironmentTestAccess {
         e.distance_travelled_=distance;e.shuttle_distance_travelled_=distance;
     }
     static void rebuild(Environment& e) noexcept { e.rebuild_course_features(); }
-    static void configure_facing_target(Environment& e,float facing) noexcept {
+    static void configure_facing_target(Environment& e,float facing,float distance=4.0f) noexcept {
         ShuttleState state{};state.facing_direction=facing;state.locomotion_direction=facing;
         state.completed_turns=2u;e.shuttle_state_=state;
         const Vec2 mount=e.equipment_mount_position();
-        e.equipment_target_.active=true;e.equipment_target_.position={mount.x+facing*4.0f,mount.y};
+        e.equipment_target_.active=true;e.equipment_target_.position={mount.x+facing*distance,mount.y};
         e.equipment_target_.radius=0.42f;
     }
     static void drive_equipment(Environment& e,int steps) noexcept {
@@ -135,17 +135,19 @@ int main(){
  const auto mb=rl::solve_two_link_sagittal(1.0f,1.0f,{-0.25f,-1.6f},-1.0f);
  require(ka.valid&&kb.valid&&ka.upper.x>0.0f&&kb.upper.x>0.0f
   &&ma.valid&&mb.valid&&ma.upper.x<0.0f&&mb.upper.x<0.0f,"same-facing knees");
- const runner::Vec2 lead=rl::sagittal_arm_target(1.5f,runner::pi*0.5f,1.0f);
- const runner::Vec2 trail=rl::sagittal_arm_target(1.5f,runner::pi*1.5f,1.0f);
- const runner::Vec2 mirror=rl::sagittal_arm_target(1.5f,runner::pi*0.5f,-1.0f);
- require(lead.x>0.38f&&trail.x<-0.38f&&mirror.x<-0.38f
-  &&lead.y<0.0f&&trail.y<0.0f,"phase-opposed arm gait");
+ const runner::Vec2 authored_hand{0.12f,-1.45f};
+ const runner::Vec2 lead=rl::authored_opposed_swing_target(authored_hand,runner::pi*0.5f,0.405f,0.0f,1.0f);
+ const runner::Vec2 trail=rl::authored_opposed_swing_target(authored_hand,runner::pi*1.5f,0.405f,0.0f,1.0f);
+ const runner::Vec2 mirror=rl::authored_opposed_swing_target(authored_hand,runner::pi*0.5f,0.405f,0.0f,-1.0f);
+ require(lead.x>authored_hand.x+0.38f&&trail.x<authored_hand.x-0.38f
+  &&mirror.x<authored_hand.x-0.38f&&lead.y==authored_hand.y&&trail.y==authored_hand.y,
+  "authored-rest phase-opposed arm gait");
  require(rl::crouch_teacher_authority(181u)>0.10f
   &&rl::crouch_teacher_authority(rl::crouch_teacher_handoff_update-1u)>0.0f
   &&rl::crouch_teacher_authority(rl::crouch_teacher_handoff_update)==0.0f,"crouch handoff");
 
  sim::Environment outbound{sim::CreatureBlueprint::humanoid(),0x7320u};
- outbound.set_course(sim::CourseStage::uneven,0.30f);outbound.set_course_motion_enabled(false);
+ outbound.set_course(sim::CourseStage::shuttle,0.30f);outbound.set_course_motion_enabled(false);
  require(outbound.shuttle_enabled()&&outbound.course_features().empty(),"early obstacles");
  require(!sim::shuttle_dynamic_course_ready(1u,14u,2.0f)
   &&!sim::shuttle_dynamic_course_ready(2u,13u,2.0f)
@@ -161,7 +163,7 @@ int main(){
   &&outbound.course_features()[1].center.x<outbound.course_features()[0].center.x,"return features");
  const std::vector<float> expected=fingerprint(outbound);
  sim::Environment repeated{sim::CreatureBlueprint::humanoid(),0x7320u};
- repeated.set_course(sim::CourseStage::uneven,0.30f);repeated.set_course_motion_enabled(false);
+ repeated.set_course(sim::CourseStage::shuttle,0.30f);repeated.set_course_motion_enabled(false);
  sim::EnvironmentTestAccess::ready(repeated,14u,2.0f);
  sim::EnvironmentTestAccess::shuttle(repeated,returning);
  sim::EnvironmentTestAccess::root_x(repeated,9.5f);sim::EnvironmentTestAccess::rebuild(repeated);
@@ -177,7 +179,7 @@ int main(){
   &sim::CreatureBlueprint::humanoid,&sim::CreatureBlueprint::quadruped,&sim::CreatureBlueprint::crawler4,
   &sim::CreatureBlueprint::hexapod,&sim::CreatureBlueprint::monoped};
  for(std::size_t i=0;i<factories.size();++i){sim::Environment e{factories[i](),0x732100u+i};
-  e.set_course(sim::CourseStage::uneven,0.30f);e.set_course_motion_enabled(false);
+  e.set_course(sim::CourseStage::shuttle,0.30f);e.set_course_motion_enabled(false);
   require(e.shuttle_enabled()&&e.facing_direction()==1.0f&&e.locomotion_direction()==1.0f,"all-rig shuttle");}
 
  sim::Environment physical{sim::CreatureBlueprint::biped(),0x7323u};
@@ -197,7 +199,7 @@ int main(){
   <<" distance="<<physical.distance_travelled()<<" turns="<<physical.completed_shuttle_turns()
   <<" reason="<<sim::invalid_motion_name(physical.invalid_reason())<<'\n';
  require(physical.invalid_reason()==sim::InvalidMotion::none
-  &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=18.0f,
+  &&physical.completed_shuttle_turns()==0u&&physical.distance_travelled()>=18.0f,
   "physical teacher shuttle traversal");
  const auto reverse_humanoid_probe=[](){
   sim::Environment environment{sim::CreatureBlueprint::humanoid(),0x9e3779b9u};
@@ -211,10 +213,10 @@ int main(){
  std::cout<<"humanoid reverse distance="<<reverse_first[0]<<" elapsed="<<reverse_first[1]
   <<" turns="<<reverse_first[2]<<" reason="<<reverse_first[3]<<'\n';
  require(reverse_first==reverse_repeated&&reverse_first[0]>=18.0f&&reverse_first[1]>=19.9f
-  &&reverse_first[2]>=1.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
+  &&reverse_first[2]==0.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
   "repeated reverse humanoid terrain traversal");
  sim::Environment equipment{sim::CreatureBlueprint::humanoid(),0x7322u};
- equipment.set_course(sim::CourseStage::combat_course,0.30f);
+ equipment.set_course(sim::CourseStage::shuttle,0.30f);
  equipment.set_course_motion_enabled(false);
  equipment.configure_equipment(sim::WeaponClass::sidearm,4.0f);
  sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
@@ -230,7 +232,7 @@ int main(){
  require(equipment.shots_fired()>0u&&equipment.target_hits()>0u,
   "right-facing fixed-step equipment did not fire and hit");
  equipment.configure_equipment(sim::WeaponClass::carbine,4.0f);
- sim::EnvironmentTestAccess::configure_facing_target(equipment,-1.0f);
+ sim::EnvironmentTestAccess::configure_facing_target(equipment,-1.0f,6.0f);
  sim::EnvironmentTestAccess::drive_equipment(equipment,1);
  require(std::abs(std::abs(equipment.equipment_aim_angle())-runner::pi)<0.05f,
   "left-facing equipment did not initially aim along mirrored facing");

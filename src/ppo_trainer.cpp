@@ -73,7 +73,8 @@ namespace runner::rl
                 return update < 1200u ? 0.36f : 0.10f;
             if (!sim::stage_requires_forward_gait(stage))
                 return 0.0f;
-            if (stage == sim::CourseStage::uneven)
+            if (stage == sim::CourseStage::uneven
+                || stage == sim::CourseStage::shuttle)
                 return 0.62f * foundational_walk_teacher_authority(
                     update, blueprint);
             if (update < 1200u)
@@ -593,7 +594,8 @@ namespace runner::rl
         const bool lesson_handoff =
             (course_stage_ == sim::CourseStage::duck_press
                 && lesson_update_ == crouch_teacher_handoff_update)
-            || (course_stage_ == sim::CourseStage::uneven
+            || ((course_stage_ == sim::CourseStage::uneven
+                    || course_stage_ == sim::CourseStage::shuttle)
                 && lesson_update_
                     == foundational_walk_teacher_handoff_update(blueprint_));
         if (lesson_handoff)
@@ -874,7 +876,9 @@ namespace runner::rl
                 action[sim::equipment_state_action] = 1.0f;
                 action[sim::equipment_aim_action] = clamp(
                     local_angle / (pi * 0.42f), -1.0f, 1.0f);
-                action[sim::equipment_trigger_action] = 1.0f;
+                action[sim::equipment_trigger_action] =
+                    preview_.target_hits() < preview_.equipment_hit_goal()
+                        ? 1.0f : -1.0f;
             }
             const sim::StepResult result = preview_.step(action,
                 static_cast<float>(fixed_step));

@@ -238,17 +238,17 @@ namespace runner::sim
         result.nodes = {
             { 0.0015322268f, 2.6000f },
             { -0.0194339529f, 4.0500f },
-            { -0.00999999046f, 4.7700f },
+            { -0.02538634f, 4.52000046f },
             { 0.13f, 1.425f }, { -0.14f, 0.25f },
             { 0.21f, 1.425f }, { 0.14f, 0.25f },
-            // Preserve the accepted arm reach with a side-view rest pose whose
-            // hands begin beside the pelvis instead of extended like a T-pose.
-            { -0.278820232f, 3.77415042f },
-            { -0.348820232f, 3.53089261f },
-            { -0.298820232f, 2.99310279f },
-            { 0.239952326f, 3.77415042f },
-            { 0.309952326f, 3.53089261f },
-            { 0.259952326f, 2.99310279f }
+            // Exact v0.7.36 user-authored side-view rest: both arms are
+            // layered beside the torso/pelvis instead of starting in a T-pose.
+            { -0.0670530051f, 3.79976225f },
+            { 0.141518429f, 3.54380989f },
+            { 0.118830621f, 3.02000022f },
+            { -0.0194339603f, 3.81166697f },
+            { 0.309952319f, 3.53089261f },
+            { 0.259952337f, 2.99310279f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
@@ -824,6 +824,7 @@ namespace runner::sim
     {
         blueprint_ = blueprint;
         blueprint_.rebuild_rest_lengths();
+        course_layout_initialized_ = false;
         reset(random_state_);
     }
 
@@ -831,6 +832,7 @@ namespace runner::sim
     {
         course_stage_ = stage;
         course_difficulty_ = clamp(difficulty, 0.10f, 1.0f);
+        course_layout_initialized_ = false;
         reset(random_state_);
     }
 
@@ -922,6 +924,37 @@ namespace runner::sim
             return dropped_equipment_position_;
         return equipment_mount_position();
     }
+
+    std::uint32_t Environment::equipment_hit_goal() const noexcept
+    {
+        if (course_stage_ == CourseStage::equipment_targets)
+            return 3u;
+        if (course_stage_ == CourseStage::combat_course)
+            return 2u;
+        return weapon_class_ == WeaponClass::none ? 0u : 1u;
+    }
+
+    bool Environment::equipment_engagement_ready() const noexcept
+    {
+        if (weapon_class_ == WeaponClass::none
+            || equipment_state_ != EquipmentState::ready
+            || !equipment_target_.active
+            || target_hits_ >= equipment_hit_goal()
+            || equipment_cooldown_seconds_ > 0.0f
+            || (granular_hazard_active() && !granular_hazard_safe()))
+            return false;
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        const Vec2 delta = equipment_target_.position - equipment_mount_position();
+        const float distance = length(delta);
+        if (!std::isfinite(distance)
+            || distance < profile.minimum_engagement_distance
+            || distance > profile.maximum_engagement_distance)
+            return false;
+        const float desired = std::atan2(delta.y, delta.x);
+        const float aim_error = std::abs(wrap_angle(desired - equipment_aim_angle_));
+        return std::isfinite(aim_error) && aim_error <= profile.aim_tolerance;
+    }
+
     void Environment::reset_equipment() noexcept
     {
         equipment_projectiles_.clear();
@@ -948,9 +981,13 @@ namespace runner::sim
         equipment_target_ = {};
         if (weapon_class_ == WeaponClass::none)
             return;
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        const float range_fraction = 0.25f
+            + static_cast<float>((random_state_ >> 8u) % 3u) * 0.25f;
         const float target_distance = equipment_override_
             ? configured_target_distance_
-            : 6.0f + static_cast<float>((random_state_ >> 8u) % 3u) * 4.0f;
+            : lerp(profile.minimum_engagement_distance,
+                profile.maximum_engagement_distance, range_fraction);
         const float root_x = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         equipment_target_.position.x = root_x + target_distance * facing_direction();
@@ -1017,9 +1054,8 @@ namespace runner::sim
         }
 
         const WeaponProfile profile = weapon_profile(weapon_class_);
-        if (equipment_state_ == EquipmentState::ready
-            && actions[equipment_trigger_action] > 0.45f
-            && equipment_cooldown_seconds_ <= 0.0f)
+        if (actions[equipment_trigger_action] > 0.45f
+            && equipment_engagement_ready())
         {
             const Vec2 muzzle = equipment_mount_position();
             const Vec2 direction{
@@ -1050,11 +1086,18 @@ namespace runner::sim
                 ++target_hits_;
                 target_hit_this_step_ = true;
                 ++equipment_target_.sequence;
+                if (target_hits_ >= equipment_hit_goal())
+                {
+                    equipment_target_.active = false;
+                    continue;
+                }
                 const float root_x = valid_node(blueprint_.root_node)
                     ? particles_[blueprint_.root_node].position.x : 0.0f;
-                const float distance = 6.0f
+                const float range_fraction = 0.20f
                     + static_cast<float>((equipment_target_.sequence
-                        + static_cast<std::uint32_t>(random_state_)) % 4u) * 3.0f;
+                        + static_cast<std::uint32_t>(random_state_)) % 4u) * 0.20f;
+                const float distance = lerp(profile.minimum_engagement_distance,
+                    profile.maximum_engagement_distance, range_fraction);
                 equipment_target_.position.x = root_x + distance * facing_direction();
                 equipment_target_.position.y =
                     ground_height_at(equipment_target_.position.x)
@@ -1513,6 +1556,7 @@ namespace runner::sim
         // or turning, so completed challenges never linger behind the rig.
         if (course_stage_ != CourseStage::duck_press
             && course_stage_ != CourseStage::uneven
+            && course_stage_ != CourseStage::shuttle
             && course_stage_ != CourseStage::crouch_walk
             && course_stage_ != CourseStage::hurdles
             && course_stage_ != CourseStage::moving_hazards
@@ -1530,7 +1574,7 @@ namespace runner::sim
                 shuttle_state_.completed_turns, gait_cycles(),
                 longest_stable_stance_seconds_);
             if (shuttle_state_.phase != ShuttlePhase::traverse
-                || (course_stage_ == CourseStage::uneven && !dynamic_ready))
+                || (course_stage_ == CourseStage::shuttle && !dynamic_ready))
                 return;
 
             if (course_stage_ == CourseStage::moving_hazards
@@ -1548,7 +1592,7 @@ namespace runner::sim
                     continue;
                 const float ground = ground_height_at(x);
                 CourseFeatureKind kind = CourseFeatureKind::rock;
-                if (course_stage_ == CourseStage::uneven)
+                if (course_stage_ == CourseStage::shuttle)
                     kind = slot == 0u ? CourseFeatureKind::rock
                         : CourseFeatureKind::hurdle;
                 else if (course_stage_ == CourseStage::crouch_walk)
@@ -1842,7 +1886,19 @@ namespace runner::sim
             particles_.push_back({ position, position, inverse_mass, radius, false });
         }
 
-        terrain_.reset(random_state_ ^ 0xa5a5a5a5a5a5a5a5ULL, course_difficulty_);
+        if (!course_layout_initialized_)
+        {
+            const std::uint64_t stage_bits =
+                static_cast<std::uint64_t>(static_cast<std::uint8_t>(course_stage_)) << 48u;
+            const std::uint64_t difficulty_bits = static_cast<std::uint64_t>(
+                std::lround(course_difficulty_ * 1000.0f)) << 24u;
+            course_layout_seed_ = random_state_ ^ 0xa5a5a5a5a5a5a5a5ULL
+                ^ stage_bits ^ difficulty_bits;
+            if (course_layout_seed_ == 0u)
+                course_layout_seed_ = 1u;
+            terrain_.reset(course_layout_seed_, course_difficulty_);
+            course_layout_initialized_ = true;
+        }
         float vertical_shift = -std::numeric_limits<float>::infinity();
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
@@ -2053,6 +2109,7 @@ namespace runner::sim
     {
         static_cast<void>(dt);
         const bool upright_walking_stage = course_stage_ == CourseStage::uneven
+            || course_stage_ == CourseStage::shuttle
             || course_stage_ == CourseStage::hurdles
             || course_stage_ == CourseStage::moving_hazards;
         if (!upright_walking_stage
@@ -4860,6 +4917,7 @@ step_not_qualified:
                 - std::abs(forward_speed_) * 0.0020f
                 - action_energy * 0.0008f - body_contact_penalty;
             break;
+        case CourseStage::shuttle:
         case CourseStage::uneven:
             last_reward_ = forward_gait_reward + std::max(0.0f, upright) * 0.012f
                 + contact * 0.0006f + swing_reward + run_reward + real_step_reward
@@ -5071,7 +5129,7 @@ step_not_qualified:
         }
         result[34] = airborne_ratio();
         result[35] = clamp(static_cast<float>(alternating_steps_) / 10.0f, 0.0f, 2.0f);
-        result[36] = static_cast<float>(course_stage_)
+        result[36] = static_cast<float>(course_stage_curriculum_index(course_stage_))
             / static_cast<float>(course_stage_count - 1);
         result[37] = course_difficulty_;
         const float gait_phase = elapsed_seconds_ * 2.0f * pi

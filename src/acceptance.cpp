@@ -449,26 +449,33 @@ namespace runner::acceptance
                 ? "monoped uses its dedicated single-leg gait path"
                 : "monoped is still forced through alternating biped semantics");
 
-        const bool curriculum_order = sim::course_stage_count == 11u
+        const bool curriculum_order = sim::course_stage_count == 12u
             && sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
             && sim::course_stage_name(sim::CourseStage::duck_press)
                 == "2. STATIC CROUCH / HOLD / RECOVER"
             && sim::course_stage_name(sim::CourseStage::uneven) == "3. WALK / RUN"
+            && sim::course_stage_name(sim::CourseStage::shuttle)
+                == "4. BACK / TURN / RETURN"
+            && sim::next_course_stage(sim::CourseStage::uneven)
+                == sim::CourseStage::shuttle
+            && sim::next_course_stage(sim::CourseStage::shuttle)
+                == sim::CourseStage::crouch_walk
+            && static_cast<std::uint8_t>(sim::CourseStage::crouch_walk) == 3u
             && sim::course_stage_name(sim::CourseStage::crouch_walk)
-                == "4. CROUCH WALK / UNEVEN AVOID"
-            && sim::course_stage_name(sim::CourseStage::ramps) == "5. JUMP / LAND"
+                == "5. CROUCH WALK / UNEVEN AVOID"
+            && sim::course_stage_name(sim::CourseStage::ramps) == "6. JUMP / LAND"
             && sim::course_stage_name(sim::CourseStage::hurdles)
-                == "6. MOVING LOW BAR / HURDLE"
+                == "7. MOVING LOW BAR / HURDLE"
             && sim::course_stage_name(sim::CourseStage::duck_bars)
-                == "7. CONTROLLED FLIPS"
+                == "8. CONTROLLED FLIPS"
             && sim::course_stage_name(sim::CourseStage::moving_hazards)
-                == "8. MIXED GOAL COURSE"
+                == "9. MIXED GOAL COURSE"
             && sim::course_stage_name(sim::CourseStage::climb_descent)
-                == "9. CLIMB / BACKWARD DESCENT"
+                == "10. CLIMB / BACKWARD DESCENT"
             && sim::course_stage_name(sim::CourseStage::equipment_targets)
-                == "10. EQUIPMENT / TARGETS"
+                == "11. EQUIPMENT / TARGETS"
             && sim::course_stage_name(sim::CourseStage::combat_course)
-                == "11. MOVE / AIM / FIRE"
+                == "12. MOVE / AIM / FIRE"
             && sim::stage_skill_evidence(sim::CourseStage::balance,
                 0u, 0.0f, 0u, 0.0f, 0u, 0u)
             && !sim::stage_skill_evidence(sim::CourseStage::uneven,

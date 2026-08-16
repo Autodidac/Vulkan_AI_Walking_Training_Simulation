@@ -308,6 +308,7 @@ namespace runner::diagnostics
         const sim::CreatureBlueprint rig = sim::CreatureBlueprint::humanoid();
         constexpr std::array stages{
             sim::CourseStage::uneven,
+            sim::CourseStage::shuttle,
             sim::CourseStage::moving_hazards,
             sim::CourseStage::climb_descent,
             sim::CourseStage::equipment_targets,

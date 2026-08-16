@@ -58,6 +58,7 @@ namespace runner::rl
         case sim::CourseStage::balance: return 80u;
         case sim::CourseStage::duck_press: return crouch_teacher_handoff_update;
         case sim::CourseStage::uneven: return 420u;
+        case sim::CourseStage::shuttle: return 300u;
         case sim::CourseStage::crouch_walk: return 360u;
         default: return 240u;
         }
@@ -71,6 +72,7 @@ namespace runner::rl
         case sim::CourseStage::balance: return 3u;
         case sim::CourseStage::duck_press: return 4u;
         case sim::CourseStage::uneven: return 8u;
+        case sim::CourseStage::shuttle: return 6u;
         default: return 5u;
         }
     }
@@ -96,7 +98,8 @@ namespace runner::rl
             return false;
         if (stage == sim::CourseStage::duck_press)
             return fresh_updates >= crouch_teacher_handoff_update;
-        if (stage == sim::CourseStage::uneven)
+        if (stage == sim::CourseStage::uneven
+            || stage == sim::CourseStage::shuttle)
             return fresh_updates
                 >= foundational_walk_teacher_handoff_update(blueprint);
         return true;

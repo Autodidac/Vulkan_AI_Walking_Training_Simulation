@@ -141,10 +141,54 @@ namespace runner::sim
         moving_hazards,
         climb_descent,
         equipment_targets,
-        combat_course
+        combat_course,
+        // Appended to preserve every persisted v0.7.35 numeric stage id.
+        shuttle
     };
 
-    inline constexpr std::size_t course_stage_count = 11;
+    inline constexpr std::size_t course_stage_count = 12;
+
+    [[nodiscard]] inline constexpr std::size_t course_stage_curriculum_index(
+        CourseStage stage) noexcept
+    {
+        switch (stage)
+        {
+        case CourseStage::balance: return 0u;
+        case CourseStage::duck_press: return 1u;
+        case CourseStage::uneven: return 2u;
+        case CourseStage::shuttle: return 3u;
+        case CourseStage::crouch_walk: return 4u;
+        case CourseStage::ramps: return 5u;
+        case CourseStage::hurdles: return 6u;
+        case CourseStage::duck_bars: return 7u;
+        case CourseStage::moving_hazards: return 8u;
+        case CourseStage::climb_descent: return 9u;
+        case CourseStage::equipment_targets: return 10u;
+        case CourseStage::combat_course: return 11u;
+        }
+        return 0u;
+    }
+
+    [[nodiscard]] inline constexpr CourseStage next_course_stage(
+        CourseStage stage) noexcept
+    {
+        switch (stage)
+        {
+        case CourseStage::balance: return CourseStage::duck_press;
+        case CourseStage::duck_press: return CourseStage::uneven;
+        case CourseStage::uneven: return CourseStage::shuttle;
+        case CourseStage::shuttle: return CourseStage::crouch_walk;
+        case CourseStage::crouch_walk: return CourseStage::ramps;
+        case CourseStage::ramps: return CourseStage::hurdles;
+        case CourseStage::hurdles: return CourseStage::duck_bars;
+        case CourseStage::duck_bars: return CourseStage::moving_hazards;
+        case CourseStage::moving_hazards: return CourseStage::climb_descent;
+        case CourseStage::climb_descent: return CourseStage::equipment_targets;
+        case CourseStage::equipment_targets: return CourseStage::combat_course;
+        case CourseStage::combat_course: return CourseStage::combat_course;
+        }
+        return CourseStage::balance;
+    }
 
     [[nodiscard]] inline bool stage_uses_deformable_terrain(CourseStage stage) noexcept
     {
@@ -204,6 +248,7 @@ namespace runner::sim
     [[nodiscard]] inline bool stage_requires_forward_gait(CourseStage stage) noexcept
     {
         return stage == CourseStage::uneven
+            || stage == CourseStage::shuttle
             || stage == CourseStage::crouch_walk
             || stage == CourseStage::hurdles
             || stage == CourseStage::moving_hazards
@@ -264,6 +309,8 @@ namespace runner::sim
             return duck_seconds >= 0.75f && obstacles_passed >= 1u;
         case CourseStage::uneven:
             return alternating_steps >= 10u;
+        case CourseStage::shuttle:
+            return alternating_steps >= 12u;
         case CourseStage::crouch_walk:
             return alternating_steps >= 8u && duck_seconds >= 2.0f
                 && obstacles_passed >= 3u;
@@ -292,14 +339,15 @@ namespace runner::sim
         case CourseStage::balance: return "1. STAND";
         case CourseStage::duck_press: return "2. STATIC CROUCH / HOLD / RECOVER";
         case CourseStage::uneven: return "3. WALK / RUN";
-        case CourseStage::crouch_walk: return "4. CROUCH WALK / UNEVEN AVOID";
-        case CourseStage::ramps: return "5. JUMP / LAND";
-        case CourseStage::hurdles: return "6. MOVING LOW BAR / HURDLE";
-        case CourseStage::duck_bars: return "7. CONTROLLED FLIPS";
-        case CourseStage::moving_hazards: return "8. MIXED GOAL COURSE";
-        case CourseStage::climb_descent: return "9. CLIMB / BACKWARD DESCENT";
-        case CourseStage::equipment_targets: return "10. EQUIPMENT / TARGETS";
-        case CourseStage::combat_course: return "11. MOVE / AIM / FIRE";
+        case CourseStage::shuttle: return "4. BACK / TURN / RETURN";
+        case CourseStage::crouch_walk: return "5. CROUCH WALK / UNEVEN AVOID";
+        case CourseStage::ramps: return "6. JUMP / LAND";
+        case CourseStage::hurdles: return "7. MOVING LOW BAR / HURDLE";
+        case CourseStage::duck_bars: return "8. CONTROLLED FLIPS";
+        case CourseStage::moving_hazards: return "9. MIXED GOAL COURSE";
+        case CourseStage::climb_descent: return "10. CLIMB / BACKWARD DESCENT";
+        case CourseStage::equipment_targets: return "11. EQUIPMENT / TARGETS";
+        case CourseStage::combat_course: return "12. MOVE / AIM / FIRE";
         }
         return "UNKNOWN";
     }
@@ -1182,15 +1230,21 @@ namespace runner::sim
         float projectile_radius{};
         float gravity{};
         float recoil{};
+        float minimum_engagement_distance{};
+        float maximum_engagement_distance{};
+        float aim_tolerance{};
     };
 
     [[nodiscard]] inline WeaponProfile weapon_profile(WeaponClass weapon) noexcept
     {
         switch (weapon)
         {
-        case WeaponClass::sidearm: return { 12.0f, 0.42f, 0.065f, 0.0f, 0.12f };
-        case WeaponClass::carbine: return { 17.0f, 0.20f, 0.050f, 0.0f, 0.08f };
-        case WeaponClass::launcher: return { 8.5f, 0.90f, 0.110f, 4.5f, 0.20f };
+        case WeaponClass::sidearm:
+            return { 12.0f, 0.42f, 0.065f, 0.0f, 0.12f, 2.5f, 10.0f, 0.12f };
+        case WeaponClass::carbine:
+            return { 17.0f, 0.20f, 0.050f, 0.0f, 0.08f, 5.0f, 18.0f, 0.09f };
+        case WeaponClass::launcher:
+            return { 8.5f, 0.90f, 0.110f, 4.5f, 0.20f, 7.0f, 24.0f, 0.14f };
         case WeaponClass::none: break;
         }
         return {};
@@ -1520,6 +1574,8 @@ namespace runner::sim
         }
         [[nodiscard]] std::uint32_t shots_fired() const noexcept { return shots_fired_; }
         [[nodiscard]] std::uint32_t target_hits() const noexcept { return target_hits_; }
+        [[nodiscard]] std::uint32_t equipment_hit_goal() const noexcept;
+        [[nodiscard]] bool equipment_engagement_ready() const noexcept;
         [[nodiscard]] std::uint32_t equipment_transitions() const noexcept
         {
             return equipment_transition_count_;
@@ -1551,8 +1607,7 @@ namespace runner::sim
         }
         [[nodiscard]] bool shuttle_enabled() const noexcept
         {
-            return !course_motion_enabled_ && stage_requires_forward_gait(course_stage_)
-                && course_stage_ != CourseStage::climb_descent;
+            return course_stage_ == CourseStage::shuttle;
         }
         [[nodiscard]] ShuttlePhase shuttle_phase() const noexcept
         {
@@ -1854,6 +1909,8 @@ namespace runner::sim
         float ledge_left_edge_{};
         float previous_root_height_{};
         std::uint64_t random_state_{ 1 };
+        std::uint64_t course_layout_seed_{ 1 };
+        bool course_layout_initialized_{};
         std::array<float, anatomy_action_count> previous_angles_{};
         std::array<float, anatomy_action_count> angular_velocities_{};
         std::array<float, anatomy_action_count> previous_applied_actions_{};
