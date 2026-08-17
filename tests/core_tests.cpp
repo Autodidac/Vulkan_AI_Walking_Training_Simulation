@@ -1538,8 +1538,13 @@ int main()
         "arm teacher is not a bounded fore/aft sagittal chain target");
     require(sim::foundational_gait_cadence_hz == 1.51f
             && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.51f
-            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.51f,
-        "foundational biped teacher and observed clocks diverged");
+            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.51f
+            && sim::authored_foundational_gait_cadence_hz(quadruped_walk) == 1.30f
+            && sim::authored_foundational_gait_cadence_hz(
+                sim::CreatureBlueprint::crawler4()) == 1.44f
+            && sim::authored_foundational_gait_cadence_hz(
+                sim::CreatureBlueprint::hexapod()) == 0.78f,
+        "foundational teacher and observed topology clocks diverged");
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
         "cross-platform Walk mastery aggregate drifted");
@@ -2226,6 +2231,20 @@ int main()
                 strict_quality, 1.0f, true),
         "partial invalid gait can overwrite a strict-valid retained controller");
 
+    const std::uint64_t quadruped_handoff =
+        rl::foundational_walk_teacher_handoff_update(quadruped_walk);
+    require(!rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                60'000u, quadruped_handoff - 1u, quadruped_walk)
+            && rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                60'000u, quadruped_handoff, quadruped_walk)
+            && !rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                0u, quadruped_handoff, quadruped_walk)
+            && !rl::policy_candidate_retainable(sim::CourseStage::hurdles,
+                60'000u, quadruped_handoff, quadruped_walk)
+            && rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                strict_quality, quadruped_handoff - 1u, quadruped_walk),
+        "post-handoff consolidation retention leaks assistance or weakens strict mastery");
+
     const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
     const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
     const sim::CreatureBlueprint hexapod = sim::CreatureBlueprint::hexapod();
@@ -2468,32 +2487,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0736-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0737-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0736-authored-autosave.eppo";
+        / "runner-v0737-hybrid-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0736-authored-evolved.rig";
+        / "runner-v0737-hybrid-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0736-authored-autonomy.state";
-    const std::filesystem::path v0735_autosave = lifetime_import_directory
-        / "runner-v0735-posture-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0735_autosave, error),
+        / "runner-v0737-hybrid-autonomy.state";
+    const std::filesystem::path v0736_autosave = lifetime_import_directory
+        / "runner-v0736-authored-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0736_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0735_magic{
-        'E', 'P', 'P', 'O', '3', '5', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0735_autosave, v0735_magic),
-        "failed to mark the fallback fixture as an EPPO35 checkpoint");
+    constexpr std::array<char, 8> v0736_magic{
+        'E', 'P', 'P', 'O', '3', '6', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0736_autosave, v0736_magic),
+        "failed to mark the fallback fixture as an EPPO36 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.35 LIFETIME LEDGER")
+                && import_message.find("V0.7.36 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.35 fallback autosave was not selected before a new save");
+            "v0.7.36 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

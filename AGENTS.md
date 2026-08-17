@@ -21,6 +21,7 @@ For release work, run:
 - every feature-specific diagnostic, including `--diagnose-camera`;
 - installed and independently extracted `run.bat` from an unrelated working directory;
 - ZIP checksum and per-file manifest audit;
+- exact-commit source ZIP checksum, tracked-file manifest, independent extraction, and byte audit;
 - published-asset re-download and byte comparison.
 
 A compile is not completion. Visible packaged-runtime evidence can reopen an automated pass.

@@ -377,9 +377,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0736-authored-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0736-authored-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0736-authored-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0737-hybrid-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0737-hybrid-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0737-hybrid-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -735,14 +735,29 @@ namespace runner
 
                 // The visible material band is clipped to the exact sampled
                 // collision surface. Raw fine-cell bottoms never render.
-                const float band_depth = 0.92f;
+                const float band_depth = 0.30f;
                 const Vec2 band_a = world_to_screen(
                     { x, ground_a - band_depth }, viewport, camera, scale);
                 const Vec2 band_b = world_to_screen(
                     { next_x, ground_b - band_depth }, viewport, camera, scale);
-                const Color band_color = material_color(
-                    environment.terrain_surface_material_at(
-                        x + surface_step * 0.5f));
+                Color band_color{ 0.0f, 0.0f, 0.0f, 0.0f };
+                float color_weight = 0.0f;
+                for (int offset = -3; offset <= 3; ++offset)
+                {
+                    const float weight = static_cast<float>(4 - std::abs(offset));
+                    const Color sample_color = material_color(
+                        environment.terrain_surface_material_at(
+                            x + surface_step * (0.5f + static_cast<float>(offset))));
+                    band_color.r += sample_color.r * weight;
+                    band_color.g += sample_color.g * weight;
+                    band_color.b += sample_color.b * weight;
+                    band_color.a += sample_color.a * weight;
+                    color_weight += weight;
+                }
+                band_color.r /= color_weight;
+                band_color.g /= color_weight;
+                band_color.b /= color_weight;
+                band_color.a /= color_weight;
                 canvas.triangle(surface_a, surface_b, band_b, band_color);
                 canvas.triangle(surface_a, band_b, band_a, band_color);
             }
@@ -774,16 +789,17 @@ namespace runner
 
             if (environment.course_stage() >= sim::CourseStage::uneven)
             {
-                bool first_region = true;
-                sim::TerrainRegion previous_region = sim::TerrainRegion::firm;
+                const float region_step = 0.35f;
+                float run_begin = left;
+                sim::TerrainRegion run_region = environment.terrain_region_at(left);
                 int region_lane = 0;
-                for (float x = left; x <= right; x += 0.45f)
+                float previous_label_right = viewport.position.x - 100.0f;
+                auto draw_region_label = [&](float begin, float end,
+                    sim::TerrainRegion region)
                 {
-                    const sim::TerrainRegion region = environment.terrain_region_at(x);
-                    if (!first_region && region == previous_region)
-                        continue;
-                    first_region = false;
-                    previous_region = region;
+                    if (end - begin < 2.0f)
+                        return;
+                    const float x = 0.5f * (begin + end);
                     const Vec2 anchor = world_to_screen(
                         { x, environment.ground_height_at(x) + 0.42f
                             + static_cast<float>(region_lane % 2) * 0.26f },
@@ -792,7 +808,8 @@ namespace runner
                         { 174.0f, 21.0f } };
                     if (label.position.x >= viewport.position.x + 2.0f
                         && label.position.x + label.size.x
-                            <= viewport.position.x + viewport.size.x - 2.0f)
+                            <= viewport.position.x + viewport.size.x - 2.0f
+                        && label.position.x >= previous_label_right + 8.0f)
                     {
                         add_rounded_rect(canvas, label, 3.0f, rgb(0x101820, 0.86f),
                             region == sim::TerrainRegion::shallow_water ? accent : yellow, 1.0f);
@@ -800,9 +817,20 @@ namespace runner
                             sim::terrain_region_name(region), 0.66f,
                             region == sim::TerrainRegion::shallow_water ? accent : yellow,
                             label.size.x - 10.0f, 0.56f);
+                        previous_label_right = label.position.x + label.size.x;
+                        ++region_lane;
                     }
-                    ++region_lane;
+                };
+                for (float x = left + region_step; x <= right; x += region_step)
+                {
+                    const sim::TerrainRegion region = environment.terrain_region_at(x);
+                    if (region == run_region)
+                        continue;
+                    draw_region_label(run_begin, x, run_region);
+                    run_begin = x;
+                    run_region = region;
                 }
+                draw_region_label(run_begin, right, run_region);
             }
         }
 

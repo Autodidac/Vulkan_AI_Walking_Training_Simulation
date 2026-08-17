@@ -3,7 +3,7 @@ if(NOT DEFINED RUNNER_SOURCE_DIR)
 endif()
 
 foreach(required IN ITEMS
-        AGENTS.md CHANGELOG.md missioncache.md README.md
+        .gitattributes AGENTS.md CHANGELOG.md missioncache.md README.md
         docs/SANDHYBRID_INTEGRATION_BRIDGE.md
         docs/RUNNER_V0718_RUNTIME_RECOVERY.md
         docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
@@ -24,6 +24,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md
         docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md
         docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md
+        docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
@@ -32,10 +33,13 @@ foreach(required IN ITEMS
         tests/v0734_curriculum_rig_tests.cpp
         tests/v0735_pip_posture_tests.cpp
         tests/v0736_authored_runtime_tests.cpp
+        tests/v0737_locomotion_terrain_tests.cpp
         tests/v0728_course_completion_tests.cpp
         tests/v0729_modular_art_tests.cpp
         src/course_completion_diagnostic.cpp
         src/course_completion_diagnostic.hpp
+        src/hybrid_brain_diagnostic.cpp
+        src/hybrid_brain_diagnostic.hpp
         assets/optional/runner_armor_concepts/runtime/foot_side.ppm
         assets/optional/runner_armor_concepts/runtime/forearm_side.ppm
         assets/optional/runner_armor_concepts/runtime/hand_side.ppm
@@ -75,7 +79,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.36 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.37 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -92,6 +96,10 @@ foreach(reference IN ITEMS
         "Runner.V0735PipPosture"
         "RunnerV0736AuthoredRuntimeTests"
         "Runner.V0736AuthoredRuntime"
+        "RunnerV0737LocomotionTerrainTests"
+        "Runner.V0737LocomotionTerrain"
+        "Runner.HybridBrainDiagnostic"
+        "src/hybrid_brain_diagnostic.cpp"
         "Runner.V0730ReferenceFrame"
         "COMMAND RunnerV0730ColdStartTests --references"
         "COMMAND RunnerV0730ColdStartTests --learner"
@@ -112,6 +120,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md"
         "RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         "RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
+        "RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -223,7 +232,12 @@ foreach(reference IN ITEMS
         "WALK-ENGAGEMENT-FIRE-405"
         "WALK-SHUTTLE-LESSON-406"
         "WALK-TERRAIN-LIFECYCLE-407"
-        "WALK-RELEASE-408")
+        "WALK-RELEASE-408"
+        "WALK-FORWARD-POSTURE-409"
+        "WALK-MULTISUPPORT-PROGRESS-410"
+        "WALK-GRANULAR-COHERENCE-411"
+        "WALK-HYBRID-RUNTIME-BRAIN-413"
+        "WALK-RELEASE-412")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -272,8 +286,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 18"
-        "version != 16 && version != 17 && version != 18"
+        "RUNAUTONOMY 19"
+        "version != 16 && version != 17 && version != 18 && version != 19"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -286,7 +300,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3601u"
+        "training_semantics_version = 0x0007'3701u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -295,7 +309,10 @@ foreach(reference IN ITEMS
         "guided_rollout_imitation_weight"
         "strict_evaluation_quality_bit"
         "MotionEvidenceFailure::backward_brace"
-        "incremental_locomotion_candidate")
+        "incremental_locomotion_candidate"
+        "multi_support_two_link_teacher_action"
+        "multi_support_progress_truth"
+        "runtime_safety_authority")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Training semantics contract missing: ${reference}")
@@ -345,7 +362,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0736-authored-autosave.eppo"
+        "runner-v0737-hybrid-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -438,6 +455,10 @@ endif()
 string(FIND "${main_text}" "--walk-eye-test" walk_eye_test_pos)
 if(walk_eye_test_pos EQUAL -1)
     message(FATAL_ERROR "v0.7.30 packaged retained-walk eye-test launch contract missing")
+endif()
+string(FIND "${main_text}" "--diagnose-hybrid-brain" hybrid_brain_diagnostic_pos)
+if(hybrid_brain_diagnostic_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.37 packaged hybrid-brain diagnostic launch contract missing")
 endif()
 string(FIND "${main_text}" "application.prepare_walk_eye_test(error)" walk_eye_prepare_pos)
 string(FIND "${main_text}" "SDL_CreateWindow(" window_create_pos)
@@ -583,6 +604,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
+        "'E', 'P', 'P', 'O', '3', '7'"
+        "v0736_checkpoint_magic"
         "'E', 'P', 'P', 'O', '3', '6'"
         "v0735_checkpoint_magic"
         "'E', 'P', 'P', 'O', '3', '4'"
@@ -635,6 +658,27 @@ string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.28 course diagnostic")
 endif()
+string(FIND "${release_workflow_text}" "--diagnose-hybrid-brain" hybrid_workflow_pos)
+if(hybrid_workflow_pos EQUAL -1)
+    message(FATAL_ERROR "Release workflow does not run the v0.7.37 hybrid-brain diagnostic")
+endif()
+foreach(reference IN ITEMS
+        "git archive --format=zip"
+        "Runner-$tag-source.zip"
+        "Runner-$tag-source.manifest.sha256"
+        "release-assets/*"
+        "Source tracked-file count mismatch"
+        "$sourceArchive $sourceChecksum $sourceManifest")
+    string(FIND "${release_workflow_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Release workflow source-archive audit contract missing: ${reference}")
+    endif()
+endforeach()
+file(READ "${RUNNER_SOURCE_DIR}/.gitattributes" gitattributes_text)
+string(FIND "${gitattributes_text}" "release-assets export-ignore" release_assets_export_ignore_pos)
+if(release_assets_export_ignore_pos EQUAL -1)
+    message(FATAL_ERROR "Exact-commit source archives can include prior release binaries")
+endif()
 file(GLOB release_notes "${RUNNER_SOURCE_DIR}/RELEASE_NOTES*.md")
 if(release_notes)
     message(FATAL_ERROR "Per-release note files remain; CHANGELOG.md is canonical")
@@ -665,4 +709,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.36 repository hygiene passed")
+message(STATUS "Runner v0.7.37 repository hygiene passed")

@@ -2490,8 +2490,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
     void Environment::stabilize_balance_posture() noexcept
     {
         const bool balance_lesson = course_stage_ == CourseStage::balance;
-        const bool locomotion_core_guide = course_stage_ == CourseStage::uneven
-            && blueprint_.paired_leg_chains();
+        const bool locomotion_core_guide = stage_requires_forward_gait(course_stage_)
+            && course_stage_ != CourseStage::crouch_walk
+            && !blueprint_.horizontal_body_plan();
         if ((!balance_lesson && !locomotion_core_guide)
             || !valid_node(blueprint_.root_node)
             || !valid_node(blueprint_.torso_node)
@@ -2506,7 +2507,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             const Vec2 current_body = particles_[blueprint_.torso_node].position - root;
             if (length(rest_body) > 1.0e-5f && length(current_body) > 1.0e-5f)
             {
-                const float body_rotation = signed_angle(rest_body, current_body);
+                const Vec2 desired_body = normalized(
+                    { 0.08f * locomotion_direction(), 1.0f }, { 0.0f, 1.0f })
+                    * length(rest_body);
+                const float body_rotation = signed_angle(desired_body, current_body);
                 bool appendaged_biped = false;
                 for (std::size_t index = 0;
                     index < blueprint_.active_motor_count; ++index)
@@ -3194,8 +3198,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             return 0.0f;
         const Vec2 current = particles_[blueprint_.torso_node].position
             - particles_[blueprint_.root_node].position;
-        const Vec2 desired = blueprint_.nodes[blueprint_.torso_node]
+        const Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
             - blueprint_.nodes[blueprint_.root_node];
+        const Vec2 desired = blueprint_.horizontal_body_plan()
+            ? authored : Vec2{ 0.0f, std::max(0.01f, length(authored)) };
         return signed_angle(desired, current);
     }
 
@@ -3602,9 +3608,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const Vec2 current = normalized(
             particles_[blueprint_.torso_node].position - particles_[blueprint_.root_node].position,
             { 0.0f, 1.0f });
-        const Vec2 desired = normalized(
-            blueprint_.nodes[blueprint_.torso_node] - blueprint_.nodes[blueprint_.root_node],
-            { 0.0f, 1.0f });
+        const Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
+            - blueprint_.nodes[blueprint_.root_node];
+        const Vec2 desired = blueprint_.horizontal_body_plan()
+            ? normalized(authored, { 1.0f, 0.0f }) : Vec2{ 0.0f, 1.0f };
         return clamp(dot(current, desired), -1.0f, 1.0f);
     }
 
@@ -3800,7 +3807,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const bool measure_backward_brace = measure_forward_gait_faults(
                 shuttle_state_.phase, elapsed_seconds_)
             && stage_requires_forward_gait(course_stage_)
-            && blueprint_.paired_leg_chains() && !non_foot_grounded_
+            && !blueprint_.horizontal_body_plan() && !non_foot_grounded_
             && (left || right) && valid_node(blueprint_.root_node)
             && valid_node(blueprint_.torso_node);
         if (measure_backward_brace)
@@ -4610,6 +4617,8 @@ step_not_qualified:
         motion_signals.near_rise = ground_height_at(pelvis_position.x + 0.65f * step_lookahead_direction) - local_ground;
         motion_signals.mid_rise = ground_height_at(pelvis_position.x + 1.50f * step_lookahead_direction) - local_ground;
         motion_signals.far_rise = ground_height_at(pelvis_position.x + 3.00f * step_lookahead_direction) - local_ground;
+        motion_signals.left_escape_rise = ground_height_at(pelvis_position.x - 0.85f) - local_ground;
+        motion_signals.right_escape_rise = ground_height_at(pelvis_position.x + 0.85f) - local_ground;
         motion_signals.slope = terrain_.slope_at(
             terrain_sample_x(pelvis_position.x, course_progress()))
             * step_lookahead_direction;
@@ -4628,6 +4637,8 @@ step_not_qualified:
             && shuttle_state_.phase == ShuttlePhase::turning;
         motion_signals.dynamic_hazard_active = granular_hazard_active();
         motion_signals.dynamic_hazard_safe = granular_hazard_safe();
+        motion_signals.zero_progress_seconds = zero_progress_seconds_;
+        motion_signals.hazard_stall_seconds = hazard_stall_seconds_;
         for (const CourseFeature& feature : course_features_)
         {
             const bool granular_block = feature.marker_sequence >= 50'000;
@@ -5013,7 +5024,7 @@ step_not_qualified:
         }
 
         const float backward_brace_penalty = reward_requires_locomotion
-            ? std::max(0.0f, backward_brace_ratio_ - 0.08f) * 0.14f : 0.0f;
+            ? std::max(0.0f, backward_brace_ratio_ - 0.04f) * 0.32f : 0.0f;
         last_reward_ += recovery_reward - uncontrolled_spin_penalty
             - backward_brace_penalty;
         // Static crouch qualification explicitly requires grounded support,

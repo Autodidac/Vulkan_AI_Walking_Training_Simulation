@@ -89,10 +89,12 @@ namespace runner::diagnostics
                 >= rl::foundational_walk_teacher_handoff_update(blueprint)
             && std::isfinite(result.retained_probe_distance)
             && std::isfinite(result.retained_probe_stride_events)
-            && result.retained_probe_distance
-                >= (paired_legs ? rl::walk_mastery_distance : 1.0f)
-            && result.retained_probe_stride_events
-                >= (paired_legs ? rl::walk_mastery_stride_events : 12.0f)
+            && result.retained_probe_distance >= (paired_legs
+                ? rl::walk_mastery_distance
+                : rl::multi_support_release_distance(blueprint))
+            && result.retained_probe_stride_events >= (paired_legs
+                ? rl::walk_mastery_stride_events
+                : rl::multi_support_release_stride_events(blueprint))
             && result.retained_probe_rejection_mask == 0u
             && result.retained_probe_invalid_runs == 0u
             && result.retained_probe_invalid_reason == sim::InvalidMotion::none

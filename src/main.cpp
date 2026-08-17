@@ -1,5 +1,6 @@
 #include "acceptance.hpp"
 #include "course_completion_diagnostic.hpp"
+#include "hybrid_brain_diagnostic.hpp"
 #include "app.hpp"
 #include "pixel_art.hpp"
 #include "renderer.hpp"
@@ -86,6 +87,13 @@ namespace
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--diagnose-course";
     }
+    [[nodiscard]] bool wants_hybrid_brain_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-hybrid-brain";
+    }
 
     [[nodiscard]] bool wants_art_diagnostic(int argc, char** argv) noexcept
     {
@@ -166,6 +174,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0735_PIP_POSTURE_TRUTH.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
@@ -471,6 +480,24 @@ int main(int argc, char** argv)
         std::printf("Runner %s rig-training diagnostic: %s\n",
             RUNNER_VERSION, report.passed ? "passed" : "failed");
         return report.passed ? 0 : 1;
+    }
+
+    if (wants_hybrid_brain_diagnostic(argc, argv))
+    {
+        const runner::diagnostics::HybridBrainReport report =
+            runner::diagnostics::run_hybrid_brain_diagnostic();
+        std::printf(
+            "Runner %s hybrid-brain diagnostic: %s; hole=%s falling=%s "
+            "harmless=%s blocked=%s bounds=%s topologies=%s cadence=%s\n",
+            RUNNER_VERSION, report.passed() ? "passed" : "failed",
+            report.hole_escape ? "passed" : "failed",
+            report.falling_dodge ? "passed" : "failed",
+            report.harmless_object ? "passed" : "failed",
+            report.blocked_exit ? "passed" : "failed",
+            report.policy_bounds ? "passed" : "failed",
+            report.multi_topology ? "passed" : "failed",
+            report.frame_independent ? "passed" : "failed");
+        return report.passed() ? 0 : 1;
     }
 
 if (wants_camera_diagnostic(argc, argv))

@@ -12,7 +12,8 @@ namespace runner::rl
 {
     namespace
     {
-        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '6', '\0', '\1' };
+        constexpr std::array<char, 8> checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '7', '\0', '\1' };
+        constexpr std::array<char, 8> v0736_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '6', '\0', '\1' };
         constexpr std::array<char, 8> v0735_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '5', '\0', '\1' };
         constexpr std::array<char, 8> v0734_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '4', '\0', '\1' };
         constexpr std::array<char, 8> v0733_checkpoint_magic{ 'E', 'P', 'P', 'O', '3', '3', '\0', '\1' };
@@ -391,6 +392,7 @@ namespace runner::rl
         std::array<char, 8> magic{};
         input.read(magic.data(), static_cast<std::streamsize>(magic.size()));
         std::uint8_t stage{};
+        const bool v0736 = magic == v0736_checkpoint_magic;
         const bool v0735 = magic == v0735_checkpoint_magic;
         const bool v0734 = magic == v0734_checkpoint_magic;
         const bool v0733 = magic == v0733_checkpoint_magic;
@@ -398,7 +400,7 @@ namespace runner::rl
         const bool v0731 = magic == v0731_checkpoint_magic;
         const bool v0730 = magic == v0730_checkpoint_magic;
         const bool v0727 = magic == v0727_checkpoint_magic;
-        const bool legacy_magic = v0735 || v0734 || v0733 || v0732 || v0731 || v0730 || v0727;
+        const bool legacy_magic = v0736 || v0735 || v0734 || v0733 || v0732 || v0731 || v0730 || v0727;
         const bool legacy_layout = v0730 || v0727;
         if (!input || (magic != checkpoint_magic && !legacy_magic)
             || !read_value(input, data.training_semantics)
@@ -416,8 +418,8 @@ namespace runner::rl
             || !read_vector(input, data.best_parameters, 2'000'000)
             || !read_vector(input, data.reward_history, 10'000)
             || !read_vector(input, data.speed_history, 10'000)
-            || stage >= (v0727 ? 8u : legacy_magic ? 11u
-                : sim::course_stage_count)
+            || stage >= (v0727 ? 8u : v0736 ? sim::course_stage_count
+                : legacy_magic ? 11u : sim::course_stage_count)
             || data.difficulty < 0.10f || data.difficulty > 1.0f)
         {
             error = "Invalid or truncated Runner checkpoint.";

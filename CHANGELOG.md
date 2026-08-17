@@ -1,3 +1,13 @@
+## 0.7.37
+
+- Replaced backward-authored forward bracing with ground-relative upright posture truth across teacher, reward, retention, preview, and diagnostics.
+- Added topology-derived diagonal endpoint gait for quadruped/crawler rigs and restored physical opposing-tripod stance propulsion for the one-link hexapod; multi-support release now requires useful distance and rejects stationary contact cycling.
+- Added a deterministic fixed-step runtime brain around learned weights for falling-object prediction, unsafe-granular holds, stuck/hole detection, escape-direction choice, recovery escalation, and bounded policy safety authority.
+- Reworked active-course region generation and rendering into a continuous authoritative material field with long seeded regions, faded boundaries, shallow blended material bands, and culled non-overlapping labels.
+- Added `--diagnose-hybrid-brain` plus repeated-seed, adversarial, topology, physical-distance, terrain-continuity, and 20/60/240 Hz coverage.
+- Promoted training semantics to `0x0007'3701`, checkpoint magic to `EPPO37`, autonomy state to `RUNAUTONOMY 19`, and automatic files to `runner-v0737-hybrid-*`, with lifetime-only fallback from v0.7.36.
+- Added an exact-commit source release ZIP with its own SHA-256 checksum, tracked-file manifest, export exclusions, and independent extraction audit beside the Windows runtime package.
+
 ## 0.7.36
 
 - Promoted the user's edited v0.7.35 humanoid graph to canonical rest and changed arm teaching to a topology-discovered, authored-endpoint opposed swing that returns exactly beside the body.

@@ -34,6 +34,8 @@ namespace runner::rl
         std::vector<ImitationSample> best_trajectory{};
         float best_score = -std::numeric_limits<float>::infinity();
         std::uint64_t best_quality = 0u;
+        const bool strict_source =
+            strict_evaluation_quality(metrics_.best_quality_key);
 
         for (std::size_t agent = 0; agent < candidate_agents; ++agent)
         {
@@ -66,8 +68,19 @@ namespace runner::rl
 
             const StageMotionQualification qualification =
                 stage_motion_qualification(course_stage_, environment);
-            if (!qualification.valid)
+            const bool incremental_source = !strict_source
+                && incremental_locomotion_candidate(course_stage_, environment);
+            if (!qualification.valid && !incremental_source)
                 continue;
+
+            const std::uint64_t trajectory_quality = qualification.valid
+                ? strict_evaluation_quality_bit | qualification.quality_key
+                : pack_quality(
+                    quality_bucket(environment.distance_travelled()),
+                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                        environment.gait_cycles(), 65535u)),
+                    quality_bucket(environment.elapsed_seconds()),
+                    quality_bucket(environment.primary_support_span_ratio()));
 
             const float score = reward + environment.distance_travelled() * 0.75f
                 + environment.elapsed_seconds() * 0.025f
@@ -79,10 +92,10 @@ namespace runner::rl
                 - environment.collision_count() * 0.10f
                 - environment.airborne_ratio() * 0.20f;
             if (!trajectory.empty()
-                && (qualification.quality_key > best_quality
-                    || (qualification.quality_key == best_quality && score > best_score)))
+                && (trajectory_quality > best_quality
+                    || (trajectory_quality == best_quality && score > best_score)))
             {
-                best_quality = qualification.quality_key;
+                best_quality = trajectory_quality;
                 best_score = score;
                 best_trajectory = std::move(trajectory);
             }

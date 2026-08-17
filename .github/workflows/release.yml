@@ -63,7 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $runner = "build/windows-release/Release/Runner.exe"
-          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course")) {
+          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course", "--diagnose-hybrid-brain")) {
             & $runner $argument
             if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
           }
@@ -86,6 +86,20 @@ jobs:
           Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
           (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
             Set-Content -Encoding ascii "$archive.sha256"
+          $sourceRootName = "Runner-$tag-source"
+          $sourceArchive = "$sourceRootName.zip"
+          git archive --format=zip --prefix="$sourceRootName/" --output=$sourceArchive HEAD
+          if ($LASTEXITCODE -ne 0) { throw "git archive failed with exit code $LASTEXITCODE" }
+          (Get-FileHash $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content -Encoding ascii "$sourceArchive.sha256"
+          $sourceManifestRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-source-manifest"
+          if (Test-Path -LiteralPath $sourceManifestRoot) { Remove-Item -LiteralPath $sourceManifestRoot -Recurse -Force }
+          Expand-Archive $sourceArchive -DestinationPath $sourceManifestRoot
+          $extractedSource = Join-Path $sourceManifestRoot $sourceRootName
+          Get-ChildItem $extractedSource -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($sourceManifestRoot, $_.FullName).Replace('\', '/')
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
+          } | Set-Content -Encoding ascii "$sourceRootName.manifest.sha256"
       - name: Audit installed and independently extracted launchers
         shell: pwsh
         run: |
@@ -96,7 +110,7 @@ jobs:
           $auditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-independent"
           New-Item -ItemType Directory -Force $auditRoot | Out-Null
           function Invoke-RunnerAudit([string] $launcher) {
-            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course")) {
+            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course", "--diagnose-hybrid-brain")) {
               & $launcher $argument
               if ($LASTEXITCODE -ne 0) { throw "$launcher $argument failed with exit code $LASTEXITCODE" }
             }
@@ -120,6 +134,36 @@ jobs:
             $actual = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actual -ne $hash) { throw "Manifest mismatch: $relative" }
           }
+          $runtimeChecksum = (Get-Content "$archive.sha256").Trim()
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeChecksum) {
+            throw "Runtime archive checksum mismatch"
+          }
+          $sourceRootName = "Runner-$tag-source"
+          $sourceArchive = Join-Path $PWD "$sourceRootName.zip"
+          $sourceManifest = Join-Path $PWD "$sourceRootName.manifest.sha256"
+          $sourceChecksum = (Get-Content "$sourceArchive.sha256").Trim()
+          if ((Get-FileHash $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $sourceChecksum) {
+            throw "Source archive checksum mismatch"
+          }
+          $sourceAuditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-source-independent"
+          if (Test-Path -LiteralPath $sourceAuditRoot) { Remove-Item -LiteralPath $sourceAuditRoot -Recurse -Force }
+          Expand-Archive $sourceArchive -DestinationPath $sourceAuditRoot
+          $sourceTree = Join-Path $sourceAuditRoot $sourceRootName
+          $expectedSourceFiles = @(git ls-files | Where-Object { $_ -notlike 'release-assets/*' } | ForEach-Object { "$sourceRootName/$($_.Replace('\', '/'))" })
+          $actualSourceFiles = @(Get-ChildItem $sourceTree -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($sourceAuditRoot, $_.FullName).Replace('\', '/') })
+          if ($actualSourceFiles.Count -ne $expectedSourceFiles.Count) { throw "Source tracked-file count mismatch" }
+          foreach ($relative in $expectedSourceFiles) {
+            if ($relative -notin $actualSourceFiles) { throw "Tracked source missing from archive: $relative" }
+          }
+          $sourceManifestEntries = @(Get-Content $sourceManifest)
+          if ($sourceManifestEntries.Count -ne $actualSourceFiles.Count) { throw "Source manifest file count mismatch" }
+          $sourceManifestEntries | ForEach-Object {
+            $hash, $relative = $_ -split '  ', 2
+            $target = Join-Path $sourceAuditRoot $relative
+            if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Source manifest file missing: $relative" }
+            $actual = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $hash) { throw "Source manifest mismatch: $relative" }
+          }
       - name: Publish and re-download exact assets
         shell: pwsh
         env:
@@ -130,13 +174,16 @@ jobs:
           $archive = "Runner-$tag-windows-x64.zip"
           $checksum = "$archive.sha256"
           $manifest = "Runner-$tag-windows-x64.manifest.sha256"
+          $sourceArchive = "Runner-$tag-source.zip"
+          $sourceChecksum = "$sourceArchive.sha256"
+          $sourceManifest = "Runner-$tag-source.manifest.sha256"
           $sourceSha = (git rev-parse HEAD).Trim()
-          gh release create $tag $archive $checksum $manifest `
+          gh release create $tag $archive $checksum $manifest $sourceArchive $sourceChecksum $sourceManifest `
             --target $sourceSha --title "Runner $tag" --generate-notes --draft
           $download = Join-Path $env:RUNNER_TEMP "runner-$tag-download"
           New-Item -ItemType Directory -Force $download | Out-Null
           gh release download $tag --dir $download
-          foreach ($asset in @($archive, $checksum, $manifest)) {
+          foreach ($asset in @($archive, $checksum, $manifest, $sourceArchive, $sourceChecksum, $sourceManifest)) {
             $local = (Get-FileHash $asset -Algorithm SHA256).Hash
             $remote = (Get-FileHash (Join-Path $download $asset) -Algorithm SHA256).Hash
             if ($local -ne $remote) { throw "Published asset byte mismatch: $asset" }

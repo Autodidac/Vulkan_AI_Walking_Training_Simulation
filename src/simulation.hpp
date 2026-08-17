@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -527,11 +528,12 @@ namespace runner::sim
             || !std::isfinite(travel_direction) || authored_length <= 1.0e-5f
             || current_length <= 1.0e-5f || std::abs(travel_direction) < 0.5f)
             return 0.0f;
-        const Vec2 authored = authored_axis / authored_length;
         const Vec2 current = current_axis / current_length;
-        const Vec2 authored_forward{ authored.y, -authored.x };
         const float direction = travel_direction < 0.0f ? -1.0f : 1.0f;
-        return std::max(0.0f, -dot(current - authored, authored_forward * direction));
+        // Authored geometry determines segment length and neutral joint shape,
+        // but it may not waive ground-relative posture truth. An edited rest
+        // axis that already leans backward must still be trained upright.
+        return std::max(0.0f, -current.x * direction);
     }
 
     [[nodiscard]] inline float contiguous_condition_seconds(bool active,
@@ -1436,6 +1438,65 @@ namespace runner::sim
             }
             return mask;
         }
+        [[nodiscard]] float support_branch_center_x(
+            const MotorConstraint& motor) const noexcept
+        {
+            if (!motor.enabled || motor.pivot >= nodes.size()
+                || motor.c >= nodes.size() || nodes.size() > 128u)
+                return std::numeric_limits<float>::quiet_NaN();
+            std::array<bool, 128> visited{};
+            std::array<std::uint16_t, 128> stack{};
+            std::size_t stack_size = 0u;
+            visited[motor.pivot] = true;
+            visited[motor.c] = true;
+            stack[stack_size++] = motor.c;
+            float support_x = 0.0f;
+            std::size_t support_count = 0u;
+            while (stack_size > 0u)
+            {
+                const std::uint16_t current = stack[--stack_size];
+                if (is_support_seed(current))
+                {
+                    support_x += nodes[current].x;
+                    ++support_count;
+                }
+                for (const DistanceConstraint& bone : bones)
+                {
+                    if (bone.stiffness < 0.20f)
+                        continue;
+                    std::uint16_t next = std::numeric_limits<std::uint16_t>::max();
+                    if (bone.a == current)
+                        next = bone.b;
+                    else if (bone.b == current)
+                        next = bone.a;
+                    if (next < nodes.size() && !visited[next])
+                    {
+                        visited[next] = true;
+                        stack[stack_size++] = next;
+                    }
+                }
+            }
+            return support_count > 0u
+                ? support_x / static_cast<float>(support_count)
+                : std::numeric_limits<float>::quiet_NaN();
+        }
+        [[nodiscard]] std::size_t support_branch_longitudinal_band(
+            const MotorConstraint& motor) const noexcept
+        {
+            const float center_x = support_branch_center_x(motor);
+            if (!std::isfinite(center_x))
+                return 0u;
+            std::size_t preceding_supports = 0u;
+            for (std::size_t node = 0; node < nodes.size(); ++node)
+            {
+                if (is_support_seed(node) && nodes[node].x < center_x - 0.02f)
+                    ++preceding_supports;
+            }
+            // Side-view multi-support rigs author near/far supports in pairs.
+            // Counting longitudinal pairs yields diagonal four-leg and tripod
+            // six-leg phases without relying on action-slot numbering.
+            return preceding_supports / 2u;
+        }
         [[nodiscard]] std::uint8_t node_support_mask(std::size_t node) const noexcept
         {
             std::uint8_t mask = is_left_support_seed(node) ? 0x1u : 0u;
@@ -1505,7 +1566,7 @@ namespace runner::sim
         if (blueprint.paired_leg_chains())
             return foundational_gait_cadence_hz;
         if (blueprint.support_seed_count() >= 6u)
-            return 0.96f;
+            return 0.78f;
         float support_height = std::numeric_limits<float>::infinity();
         for (std::size_t node = 0; node < blueprint.nodes.size(); ++node)
         {
@@ -1516,7 +1577,7 @@ namespace runner::sim
         const float root_clearance = blueprint.root_node < blueprint.nodes.size()
                 && std::isfinite(support_height)
             ? blueprint.nodes[blueprint.root_node].y - support_height : 2.0f;
-        return root_clearance >= 1.65f ? 1.08f : 1.44f;
+        return root_clearance >= 1.65f ? 1.30f : 1.44f;
     }
 
     struct StepResult

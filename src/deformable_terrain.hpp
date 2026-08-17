@@ -635,7 +635,10 @@ namespace runner::sim
                 + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
             const float sixth_boundary = fifth_boundary + 5.0f
                 + unit_hash(seed_ ^ 0x60f7u) * 2.0f;
-            const bool return_pad = local > period - 5.0f;
+            const float tail_end = period - 5.0f;
+            const float tail_split = std::lerp(sixth_boundary, tail_end,
+                0.42f + unit_hash(seed_ ^ 0x70a8u) * 0.16f);
+            const bool return_pad = local > tail_end;
             const float distance_from_launch = std::min(local, period - local);
             const bool launch_pad = distance_from_launch <= launch_pad_half_width;
 
@@ -681,11 +684,14 @@ namespace runner::sim
             }
             else if (!return_pad && local >= sixth_boundary)
             {
-                region = ((static_cast<std::uint64_t>(std::floor(local / 4.0f))
-                    + seed_) & 1u) == 0u
+                const bool sand_first = (mix(seed_ ^ 0x80b9u) & 1u) == 0u;
+                const bool first_tail = local < tail_split;
+                region = (first_tail == sand_first)
                     ? TerrainRegion::dry_sand : TerrainRegion::firm;
                 material = region == TerrainRegion::dry_sand
                     ? sandhybrid::Material::sand : sandhybrid::Material::dirt;
+                region_begin = first_tail ? sixth_boundary : tail_split;
+                region_end = first_tail ? tail_split : tail_end;
             }
             if (region == TerrainRegion::waterlogged
                 || region == TerrainRegion::shallow_water)
@@ -713,7 +719,7 @@ namespace runner::sim
                 * fine_cell_spacing * (region == TerrainRegion::firm ? 0.12f
                     : region == TerrainRegion::hole ? 0.16f
                     : 0.18f + difficulty_ * 0.20f)
-                * smooth_transition;
+                * smooth_transition * region_fade;
 
             if (region == TerrainRegion::hole)
             {

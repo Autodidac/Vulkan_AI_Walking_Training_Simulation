@@ -513,13 +513,22 @@ namespace runner::rl
         if (sim::stage_requires_forward_gait(course_stage_)
             && totals.candidate_runs > 0u && totals.candidate_strides >= 1.0f)
         {
-            incremental_quality = pack_quality(
-                static_cast<std::uint16_t>(std::min<float>(
-                    totals.candidate_strides, 65535.0f)),
-                static_cast<std::uint16_t>(std::min<std::uint32_t>(
-                    totals.candidate_runs, 65535u)),
-                quality_bucket(totals.candidate_distance),
-                quality_bucket(totals.candidate_survival));
+            const bool paired = blueprint_.paired_leg_chains();
+            incremental_quality = paired
+                ? pack_quality(
+                    static_cast<std::uint16_t>(std::min<float>(
+                        totals.candidate_strides, 65535.0f)),
+                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                        totals.candidate_runs, 65535u)),
+                    quality_bucket(totals.candidate_distance),
+                    quality_bucket(totals.candidate_survival))
+                : pack_quality(
+                    quality_bucket(totals.candidate_distance),
+                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                        totals.candidate_runs, 65535u)),
+                    static_cast<std::uint16_t>(std::min<float>(
+                        totals.candidate_strides, 65535.0f)),
+                    quality_bucket(totals.candidate_survival));
         }
         metrics_.evaluation_quality_key = sim::stage_requires_forward_gait(course_stage_)
             ? (incremental_quality & ~strict_evaluation_quality_bit)
@@ -633,7 +642,7 @@ namespace runner::rl
         // accumulating from partial walkers between bounded curriculum
         // rollback decisions.
         if (policy_candidate_retainable(course_stage_,
-                metrics_.evaluation_quality_key)
+                metrics_.evaluation_quality_key, lesson_update_, blueprint_)
             && policy_candidate_better(metrics_.evaluation_quality_key,
                 metrics_.evaluation_score, metrics_.best_quality_key,
                 metrics_.best_evaluation_score, has_best))

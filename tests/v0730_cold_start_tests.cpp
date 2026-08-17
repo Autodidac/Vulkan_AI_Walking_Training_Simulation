@@ -37,8 +37,10 @@ namespace
             runner::rl::strict_evaluation_quality_bit | 1u;
         result.retained_update =
             runner::rl::foundational_walk_teacher_handoff_update(quadruped);
-        result.retained_probe_distance = 1.0f;
-        result.retained_probe_stride_events = 12.0f;
+        result.retained_probe_distance =
+            runner::rl::multi_support_release_distance(quadruped);
+        result.retained_probe_stride_events =
+            runner::rl::multi_support_release_stride_events(quadruped);
         require(runner::diagnostics::retained_policy_release_eligible(
                 result, quadruped),
             "fresh strict replay was rejected by historical quality metadata");
@@ -257,10 +259,12 @@ namespace
             bool all_sustained = true;
             bool all_walked = true;
             const bool paired_legs = test.rig.paired_leg_chains();
-            const float minimum_distance = paired_legs ? 18.0f : 1.0f;
+            const float minimum_distance = paired_legs ? 18.0f
+                : runner::rl::multi_support_release_distance(test.rig);
             const std::uint32_t minimum_strides = paired_legs
                 ? (runner::rl::rig_has_manipulator_motors(test.rig) ? 14u : 16u)
-                : 3u;
+                : static_cast<std::uint32_t>(
+                    runner::rl::multi_support_release_stride_events(test.rig));
             for (const std::uint64_t seed : seeds)
             {
                 const TeacherOutcome outcome = run_teacher(test.rig, seed);

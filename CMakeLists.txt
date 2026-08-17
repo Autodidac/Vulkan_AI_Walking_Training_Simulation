@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.36 LANGUAGES CXX)
+project(Runner VERSION 0.7.37 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -53,6 +53,7 @@ add_library(RunnerCore STATIC
     src/ppo_parallel.cpp
     src/rig_training_diagnostic.cpp
     src/course_completion_diagnostic.cpp
+    src/hybrid_brain_diagnostic.cpp
     src/self_imitation.cpp
     src/training_checkpoint.cpp
     src/autonomy_runtime.cpp
@@ -169,6 +170,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -203,6 +205,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0734_CURRICULUM_SAFE_RIG_OPTIMIZATION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
@@ -445,6 +448,17 @@ if(RUNNER_BUILD_TESTS)
         COMMAND RunnerV0736AuthoredRuntimeTests)
     set_tests_properties(Runner.V0736AuthoredRuntime PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerV0737LocomotionTerrainTests
+        tests/v0737_locomotion_terrain_tests.cpp)
+    target_link_libraries(RunnerV0737LocomotionTerrainTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0737LocomotionTerrainTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0737LocomotionTerrainTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0737LocomotionTerrainTests)
+    add_test(NAME Runner.V0737LocomotionTerrain
+        COMMAND RunnerV0737LocomotionTerrainTests)
+    set_tests_properties(Runner.V0737LocomotionTerrain PROPERTIES TIMEOUT 180)
+
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)
     target_compile_features(RunnerLiveAcceptanceTests PRIVATE cxx_std_23)
@@ -481,5 +495,7 @@ if(RUNNER_BUILD_TESTS)
         set_tests_properties(Runner.ArtDiagnostic PROPERTIES TIMEOUT 30)
         add_test(NAME Runner.UiDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-ui)
         set_tests_properties(Runner.UiDiagnostic PROPERTIES TIMEOUT 30)
+        add_test(NAME Runner.HybridBrainDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-hybrid-brain)
+        set_tests_properties(Runner.HybridBrainDiagnostic PROPERTIES TIMEOUT 180)
     endif()
 endif()

@@ -13,7 +13,8 @@ namespace runner::locomotion
         run,
         recover,
         crawl,
-        flee
+        flee,
+        escape
     };
 
     struct Signals
@@ -27,6 +28,8 @@ namespace runner::locomotion
         float near_rise{};
         float mid_rise{};
         float far_rise{};
+        float left_escape_rise{};
+        float right_escape_rise{};
         float slope{};
         float forward_speed{};
         bool recovering{};
@@ -42,6 +45,8 @@ namespace runner::locomotion
         bool turning{};
         bool dynamic_hazard_active{};
         bool dynamic_hazard_safe{};
+        float zero_progress_seconds{};
+        float hazard_stall_seconds{};
     };
 
     struct Plan
@@ -115,9 +120,24 @@ namespace runner::locomotion
     {
         if (std::abs(signals.free_space_direction) >= 0.5f)
             return signals.free_space_direction < 0.0f ? -1.0f : 1.0f;
+        if (signals.left_escape_rise + 0.06f < signals.right_escape_rise)
+            return -1.0f;
+        if (signals.right_escape_rise + 0.06f < signals.left_escape_rise)
+            return 1.0f;
         if (std::abs(signals.incoming_velocity_x) >= 0.05f)
             return signals.incoming_velocity_x > 0.0f ? -1.0f : 1.0f;
-        return 1.0f;
+        return signals.requested_direction < 0.0f ? 1.0f : -1.0f;
+    }
+
+    [[nodiscard]] inline bool stuck_escape_required(const Signals& signals) noexcept
+    {
+        const bool stalled = signals.zero_progress_seconds >= 0.60f
+            || signals.hazard_stall_seconds >= 0.60f;
+        const bool constrained = signals.burial_depth >= 0.04f
+            || signals.obstruction_mask != 0u
+            || (signals.left_escape_rise >= 0.12f
+                && signals.right_escape_rise >= 0.12f);
+        return stalled && constrained;
     }
 
     [[nodiscard]] inline bool emergency_crawl_allowed(const Signals& signals,
@@ -137,7 +157,8 @@ namespace runner::locomotion
         result.terrain_demand = terrain_demand(signals);
         result.direction = std::abs(signals.requested_direction) >= 0.5f
             ? (signals.requested_direction < 0.0f ? -1.0f : 1.0f) : 0.0f;
-        if (signals.turning || result.direction == 0.0f)
+        const bool threat = urgent_threat(signals);
+        if ((signals.turning || result.direction == 0.0f) && !threat)
         {
             result.intent = Intent::hold;
             result.direction = 0.0f;
@@ -150,7 +171,6 @@ namespace runner::locomotion
             return result;
         }
 
-        const bool threat = urgent_threat(signals);
         if (signals.dynamic_hazard_active && !threat)
         {
             result.intent = Intent::hold;
@@ -164,7 +184,17 @@ namespace runner::locomotion
             return result;
         }
         if (threat)
+        {
+            result.intent = Intent::flee;
             result.direction = escape_direction(signals);
+            result.target_speed = 1.35f + result.balance_reserve * 1.35f;
+            result.cadence_hz = 1.25f + result.balance_reserve * 0.45f;
+            result.stride_scale = 0.78f;
+            result.swing_lift = 0.72f;
+            result.stance_extension = 0.72f;
+            result.brake = signals.forward_speed * result.direction < -0.25f;
+            return result;
+        }
         result.step_up = signals.near_rise >= 0.14f
             && signals.near_rise <= 1.20f;
         result.emergency_crawl = emergency_crawl_allowed(signals,
@@ -179,6 +209,20 @@ namespace runner::locomotion
             result.stride_scale = 0.30f;
             result.swing_lift = 0.22f;
             result.stance_extension = 0.20f;
+            result.brake = false;
+            return result;
+        }
+
+        if (stuck_escape_required(signals) && result.balance_reserve >= 0.18f)
+        {
+            result.intent = Intent::escape;
+            result.direction = escape_direction(signals);
+            result.target_speed = 0.42f;
+            result.cadence_hz = 0.82f;
+            result.stride_scale = 0.52f;
+            result.swing_lift = 0.85f;
+            result.stance_extension = 0.72f;
+            result.step_up = true;
             result.brake = false;
             return result;
         }
@@ -205,18 +249,6 @@ namespace runner::locomotion
                 0.55f, 0.95f);
             result.stance_extension = 0.78f;
             result.brake = std::abs(signals.forward_speed) > result.target_speed * 1.30f;
-            return result;
-        }
-
-        if (threat)
-        {
-            result.intent = Intent::flee;
-            result.target_speed = 1.35f + result.balance_reserve * 1.35f;
-            result.cadence_hz = 1.25f + result.balance_reserve * 0.45f;
-            result.stride_scale = 0.78f;
-            result.swing_lift = 0.72f;
-            result.stance_extension = 0.72f;
-            result.brake = signals.forward_speed * result.direction < -0.25f;
             return result;
         }
 
