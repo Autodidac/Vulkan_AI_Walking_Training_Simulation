@@ -446,9 +446,13 @@ int main()
             && policy.find("manipulator_chain_count == 2u")
                 != std::string::npos,
         "policy assistance still assigns manipulator roles by motor slot");
-    require(parallel.find("const auto action = raw_action;")
-                != std::string::npos,
-        "mastery evaluation still applies lesson assistance to the policy");
+    require(parallel.find("const auto action = effective_policy_action(")
+                != std::string::npos
+            && parallel.find("environment, raw_action, current_stage, 0.0f)")
+                != std::string::npos
+            && parallel.find("const auto action = raw_action;")
+                == std::string::npos,
+        "mastery evaluation does not use the zero-authority production controller");
 
     const std::string generator = read_text(
         root / "tools" / "generate_runner_armor_assets.py");

@@ -193,9 +193,12 @@ namespace runner::rl
                             {
                                 const auto raw_action = local.deterministic_action(
                                     environment.observation());
-                                // Mastery evaluates the raw policy. All lesson
-                                // assists belong only to training rollouts/preview.
-                                const auto action = raw_action;
+                                // Mastery and preview must exercise the same shipped
+                                // controller. Zero authority removes curriculum
+                                // teaching while retaining production safety and
+                                // topology coordination around the learned policy.
+                                const auto action = effective_policy_action(
+                                    environment, raw_action, current_stage, 0.0f);
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;

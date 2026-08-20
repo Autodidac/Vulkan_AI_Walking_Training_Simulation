@@ -175,6 +175,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0735_PIP_POSTURE_TRUTH.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0738_TURN_TOPOLOGY_STATS.md",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",

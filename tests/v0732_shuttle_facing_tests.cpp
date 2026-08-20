@@ -123,10 +123,18 @@ int main(){
   &&held.cadence_hz==0.0f,"turn gait suppression");
 
  signals.turning=false;signals.near_rise=0.0f;signals.gait_cycles=8u;
- signals.dynamic_hazard_active=true;const loco::Plan hazard_hold=loco::plan(signals);
+ signals.dynamic_hazard_active=true;signals.dynamic_hazard_safe=false;
+ const loco::Plan hazard_hold=loco::plan(signals);
  require(hazard_hold.intent==loco::Intent::hold&&hazard_hold.direction==0.0f
-  &&hazard_hold.brake,"active granular hazard was traversed before safe");
- signals.dynamic_hazard_active=false;signals.dynamic_hazard_safe=true;
+  &&hazard_hold.brake,"unsafe active granular hazard was traversed");
+ signals.dynamic_hazard_safe=true;
+ const loco::Plan safe_active=loco::plan(signals);
+ require(safe_active.intent==loco::Intent::walk&&safe_active.direction==-1.0f
+  &&!safe_active.brake,"safe active granular terrain suppressed traversal");
+ for(int repeat=0;repeat<4;++repeat)
+  require(loco::plan(signals).intent==loco::Intent::walk,
+   "safe active granular plan was not deterministic");
+ signals.dynamic_hazard_active=false;
  require(loco::plan(signals).intent==loco::Intent::walk,
   "settled granular terrain did not resume traversal");
  const auto ka=rl::solve_two_link_sagittal(1.0f,1.0f,{-0.25f,-1.6f},1.0f);
@@ -183,28 +191,21 @@ int main(){
   require(e.shuttle_enabled()&&e.facing_direction()==1.0f&&e.locomotion_direction()==1.0f,"all-rig shuttle");}
 
  sim::Environment physical{sim::CreatureBlueprint::biped(),0x7323u};
- physical.set_course(sim::CourseStage::uneven,0.30f);physical.set_course_motion_enabled(false);
+ physical.set_course(sim::CourseStage::shuttle,0.30f);physical.set_course_motion_enabled(false);
  sim::ShuttlePhase prior_phase=physical.shuttle_phase();
  sim::StepResult physical_result{};
  for(int step=0;step<2400;++step){
   physical_result=physical.step(rl::walking_teacher_action(physical));
-  if(physical.shuttle_phase()!=prior_phase){
-   std::cout<<"physical shuttle phase="<<sim::shuttle_phase_name(physical.shuttle_phase())
-    <<" x="<<physical.particles()[physical.blueprint().root_node].position.x
-    <<" distance="<<physical.distance_travelled()<<'\n';
-   prior_phase=physical.shuttle_phase();}
+  if(physical.shuttle_phase()!=prior_phase)
+   prior_phase=physical.shuttle_phase();
   if(physical_result.terminated)break;}
- std::cout<<"physical shuttle final phase="<<sim::shuttle_phase_name(physical.shuttle_phase())
-  <<" x="<<physical.particles()[physical.blueprint().root_node].position.x
-  <<" distance="<<physical.distance_travelled()<<" turns="<<physical.completed_shuttle_turns()
-  <<" reason="<<sim::invalid_motion_name(physical.invalid_reason())<<'\n';
  require(physical.invalid_reason()==sim::InvalidMotion::none
-  &&physical.completed_shuttle_turns()==0u&&physical.distance_travelled()>=18.0f,
+  &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f,
   "physical teacher shuttle traversal");
  const auto reverse_humanoid_probe=[](){
   sim::Environment environment{sim::CreatureBlueprint::humanoid(),0x9e3779b9u};
-  environment.set_course(sim::CourseStage::uneven,0.30f);environment.set_course_motion_enabled(false);
-  for(int step=0;step<1200;++step){
+  environment.set_course(sim::CourseStage::shuttle,0.30f);environment.set_course_motion_enabled(false);
+  for(int step=0;step<2400;++step){
    if(environment.step(rl::walking_teacher_action(environment)).terminated)break;}
   return std::array<float,4>{environment.distance_travelled(),environment.elapsed_seconds(),
    static_cast<float>(environment.completed_shuttle_turns()),static_cast<float>(environment.invalid_reason())};};
@@ -212,8 +213,8 @@ int main(){
  const std::array<float,4> reverse_repeated=reverse_humanoid_probe();
  std::cout<<"humanoid reverse distance="<<reverse_first[0]<<" elapsed="<<reverse_first[1]
   <<" turns="<<reverse_first[2]<<" reason="<<reverse_first[3]<<'\n';
- require(reverse_first==reverse_repeated&&reverse_first[0]>=18.0f&&reverse_first[1]>=19.9f
-  &&reverse_first[2]==0.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
+ require(reverse_first==reverse_repeated&&reverse_first[0]>=12.0f&&reverse_first[1]>=19.9f
+  &&reverse_first[2]>=1.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
   "repeated reverse humanoid terrain traversal");
  sim::Environment equipment{sim::CreatureBlueprint::humanoid(),0x7322u};
  equipment.set_course(sim::CourseStage::shuttle,0.30f);

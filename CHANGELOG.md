@@ -1,3 +1,12 @@
+## 0.7.38
+
+- Preserved articulated shuttle poses at direction changes and derived knee/elbow bend direction from authored chain topology, eliminating lesson-4 branch flips and backward-braced collapse.
+- Added non-singular monoped rest geometry, physical plant/air transfer evidence, topology-neutral support cycles, and an authored avian two-leg gait without contradictory root braces.
+- Shipped monoped and avian learned weights with a topology-scoped support reflex: authored timing and recovery bound the fragile support manifold while the policy supplies residual locomotion; preview and retained evaluation execute the same composite with zero curriculum-teacher authority.
+- Split the default Totals page into selected-rig selection, all-rig app-session, and selected-rig lifetime scopes with explicit wall/agent-sim time and support-cycle labels.
+- Promoted training semantics to 0x0007'3801, checkpoint magic to EPPO38, autonomy state to RUNAUTONOMY 20, and automatic files to runner-v0738-topology-*, with lifetime-only fallback from v0.7.37.
+- Added deterministic positive, negative, adversarial, repeated-seed, physical shuttle, counter-saturation, and scoped-accumulator coverage; the production cold learner now requires strict zero-authority retained controllers for all seven rigs, including monoped and chicken.
+
 ## 0.7.37
 
 - Replaced backward-authored forward bracing with ground-relative upright posture truth across teacher, reward, retention, preview, and diagnostics.

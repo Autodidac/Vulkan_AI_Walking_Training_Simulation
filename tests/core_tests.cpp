@@ -112,6 +112,12 @@ namespace runner::sim
             environment.duck_obstacle_weight_ = pressure;
         }
 
+        static void set_shuttle_state(Environment& environment,
+            ShuttleState state) noexcept
+        {
+            environment.shuttle_state_ = state;
+        }
+
         static bool hip_hinge_is_rejected(Environment& environment) noexcept
         {
             environment.set_course(CourseStage::duck_press, 0.50f);
@@ -791,6 +797,62 @@ int main()
     require(ui_layout::lifetime_delta(120u, 20u) == 100u
             && ui_layout::lifetime_delta(20u, 120u) == 0u,
         "rig lifetime counters can underflow");
+    const ui_layout::TrainingTotals first_rig_current{
+        120u, 1'200u, 900u, 300u, 1'200u, 480u, 12u, 7u, 9u, 3u,
+        1'200.0, 123.5
+    };
+    const ui_layout::TrainingTotals first_rig_start{
+        20u, 200u, 150u, 50u, 200u, 80u, 2u, 1u, 4u, 1u,
+        200.0, 23.5
+    };
+    const ui_layout::TrainingTotals first_rig_delta =
+        ui_layout::training_totals_delta(first_rig_current, first_rig_start);
+    require(first_rig_delta.optimizer_updates == 100u
+            && first_rig_delta.completed_agent_runs == 1'000u
+            && first_rig_delta.support_gait_cycles == 400u
+            && first_rig_delta.episode_restarts == 1'000u
+            && first_rig_delta.passed_stage_checks == 750u
+            && first_rig_delta.failed_stage_checks == 250u
+            && std::abs(first_rig_delta.agent_sim_seconds - 1'000.0) < 0.001
+            && std::abs(first_rig_delta.agent_distance - 100.0) < 0.001
+            && ui_layout::training_totals_consistent(first_rig_delta),
+        "selected-rig session delta mixes scopes, result classes, or display units");
+    const ui_layout::TrainingTotals reset_current{
+        2u, 3u, 1u, 2u, 3u, 4u, 0u, 0u, 0u, 0u, 5.0, 6.0
+    };
+    const ui_layout::TrainingTotals reset_delta =
+        ui_layout::training_totals_delta(reset_current, first_rig_current);
+    require(reset_delta.optimizer_updates == 0u
+            && reset_delta.completed_agent_runs == 0u
+            && reset_delta.agent_sim_seconds == 0.0
+            && reset_delta.agent_distance == 0.0,
+        "fresh-controller counter reset inflated app-session totals");
+    ui_layout::TrainingTotals session_totals{};
+    ui_layout::accumulate_training_totals(session_totals, first_rig_delta);
+    ui_layout::accumulate_training_totals(session_totals,
+        ui_layout::TrainingTotals{ 5u, 50u, 40u, 10u, 50u, 20u, 1u, 2u, 3u, 1u,
+            50.0, 8.0 });
+    require(session_totals.optimizer_updates == 105u
+            && session_totals.completed_agent_runs == 1'050u
+            && session_totals.support_gait_cycles == 420u
+            && session_totals.passed_stage_checks == 790u
+            && session_totals.failed_stage_checks == 260u
+            && std::abs(session_totals.agent_sim_seconds - 1'050.0) < 0.001
+            && std::abs(session_totals.agent_distance - 108.0) < 0.001
+            && ui_layout::training_totals_consistent(session_totals)
+            && !ui_layout::training_totals_consistent(
+                ui_layout::TrainingTotals{ 0u, 2u, 1u, 0u }),
+        "all-rig app-session totals overwrite, double-count, or hide result classes");
+    require(ui_layout::training_totals_scope_headings[0]
+                == "SELECTED RIG - THIS SELECTION"
+            && ui_layout::training_totals_scope_headings[1]
+                == "THIS APP SESSION - ALL RIGS"
+            && ui_layout::training_totals_scope_headings[2]
+                == "SELECTED RIG - LIFETIME"
+            && ui_layout::totals_wall_time_label == "WALL TIME"
+            && ui_layout::totals_agent_sim_time_label == "AGENT-SIM TIME"
+            && ui_layout::totals_support_cycles_label == "SUPPORT GAIT CYCLES",
+        "default totals page scope headings or unit labels are ambiguous");
     require(std::abs(sim::accepted_forward_odometer_progress(0.10f, 1.0f / 60.0f)
                 - 0.10f) < 0.0001f
             && sim::accepted_forward_odometer_progress(-0.01f, 1.0f / 60.0f) == 0.0f
@@ -1024,6 +1086,18 @@ int main()
             && sim::qualifies_supported_step(
                 -1, 1, 0.30f, 0.08f, 0.08f, 0.12f),
         "five-frame lifted swing boundary is not enforced as a physical step");
+    require(sim::qualifies_monoped_support_transfer(
+                -1, 1, 0.30f, 0.05f, 0.06f, 0.05f),
+        "real monoped heel-toe airborne transfer was rejected");
+    require(!sim::qualifies_monoped_support_transfer(
+                -1, 1, 0.30f, 0.02f, 0.06f, 0.05f)
+            && !sim::qualifies_monoped_support_transfer(
+                -1, 1, 0.30f, 0.05f, 0.02f, 0.05f)
+            && !sim::qualifies_monoped_support_transfer(
+                -1, 1, 0.30f, 0.05f, 0.06f, 0.01f)
+            && !sim::qualifies_monoped_support_transfer(
+                -1, -1, 0.30f, 0.05f, 0.06f, 0.05f),
+        "monoped transfer accepts twitch, planted, low-clearance, or same-edge contact");
     require(!sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
             0.16f, 0.12f, false, true)
             && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
@@ -1587,6 +1661,52 @@ int main()
             && rl::lesson_teacher_authority(
                 900u, sim::CourseStage::uneven, quadruped_walk) == 0.0f,
         "multi-support consolidation is not finite or survives as action authority");
+    const sim::CreatureBlueprint monoped_walk = sim::CreatureBlueprint::monoped();
+    const sim::CreatureBlueprint chicken_walk = sim::CreatureBlueprint::chicken();
+    const auto monoped_reflex = rl::topology_runtime_reflex_authority(
+        monoped_walk, sim::CourseStage::uneven);
+    const auto chicken_reflex = rl::topology_runtime_reflex_authority(
+        chicken_walk, sim::CourseStage::shuttle);
+    const auto ordinary_reflex = rl::topology_runtime_reflex_authority(
+        humanoid_walk, sim::CourseStage::uneven);
+    const auto out_of_scope_reflex = rl::topology_runtime_reflex_authority(
+        monoped_walk, sim::CourseStage::balance);
+    require(monoped_reflex.support == 0.92f && monoped_reflex.body == 0.82f
+            && chicken_reflex.support == 0.88f && chicken_reflex.body == 0.50f
+            && ordinary_reflex.support == 0.0f && ordinary_reflex.body == 0.0f
+            && out_of_scope_reflex.support == 0.0f
+            && out_of_scope_reflex.body == 0.0f,
+        "fragile topology code brain is not bounded to its rig and walking stages");
+    require(rl::guided_rollout_imitation_weight(
+                900u, sim::CourseStage::uneven, &monoped_walk) == 48.0f
+            && rl::guided_rollout_imitation_weight(
+                1050u, sim::CourseStage::uneven, &chicken_walk) == 28.0f
+            && rl::guided_rollout_imitation_weight(
+                1200u, sim::CourseStage::uneven, &monoped_walk) == 0.0f
+            && rl::lesson_teacher_authority(
+                900u, sim::CourseStage::uneven, chicken_walk) == 0.0f,
+        "fragile support topology does not consolidate without teacher authority");
+    {
+        rl::PpoTrainer monoped_prior{ monoped_walk, 8u, false };
+        monoped_prior.set_course(sim::CourseStage::uneven, 0.30f, false);
+        rl::PpoTrainer chicken_prior{ chicken_walk, 8u, false };
+        chicken_prior.set_course(sim::CourseStage::uneven, 0.30f, false);
+        rl::PpoTrainer biped_prior{ humanoid_walk, 8u, false };
+        biped_prior.set_course(sim::CourseStage::uneven, 0.30f, false);
+        const std::size_t monoped_samples =
+            monoped_prior.foundational_teacher_sample_count();
+        const std::size_t chicken_samples =
+            chicken_prior.foundational_teacher_sample_count();
+        require(monoped_samples >= 512u && chicken_samples >= 512u,
+            "fragile rigs cannot build clean planted teacher-trajectory priors");
+        require(biped_prior.foundational_teacher_sample_count() == 0u,
+            "clean fragile-topology prior is applied to ordinary paired rigs");
+        chicken_prior.set_course(sim::CourseStage::uneven, 0.30f, false);
+        require(chicken_prior.foundational_teacher_sample_count()
+                == chicken_samples,
+            "repeated-seed teacher-prior construction is not deterministic");
+    }
+
     require(rl::crouch_teacher_authority(
                 rl::crouch_teacher_fade_begin_update - 1u) == 1.0f
             && rl::crouch_teacher_authority(
@@ -1612,11 +1732,17 @@ int main()
     const auto zero_authority_crouch = rl::effective_policy_action(
         raw_crouch_environment, raw_crouch_action,
         sim::CourseStage::duck_press, 0.0f);
-    require(std::equal(raw_crouch_action.begin(),
-            raw_crouch_action.begin()
-                + static_cast<std::ptrdiff_t>(humanoid_walk.active_motor_count),
-            zero_authority_crouch.begin()),
-        "zero-authority crouch still reshapes raw anatomy policy outputs");
+    bool zero_authority_safety_shaped = false;
+    for (std::size_t index = 0; index < humanoid_walk.active_motor_count; ++index)
+    {
+        if (!rl::motor_drives_support_branch(
+                humanoid_walk, humanoid_walk.motors[index])
+            && std::abs(zero_authority_crouch[index])
+                < std::abs(raw_crouch_action[index]))
+            zero_authority_safety_shaped = true;
+    }
+    require(zero_authority_safety_shaped,
+        "zero-authority policy bypasses topology-neutral startup safety shaping");
 
     require(!rl::nursery_policy_reset_allowed(
                 sim::CourseStage::uneven, 100000u, 120u)
@@ -1711,6 +1837,14 @@ int main()
     require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
             0.02f, 6u, 0u, true),
         "a recent physical multi-support transfer is rejected during its planted phase");
+    require(!sim::foot_pivot_rolling_motion(0.22f, true, true, 0.01f, 0.02f,
+            0.02f, 2u, 0u, false, 1u),
+        "one physical monoped foot is misclassified as two-foot skating");
+    require(sim::unsupported_locomotion_penalty(true, false, 0.80f) > 0.10f
+            && sim::unsupported_locomotion_penalty(true, false, 0.10f) == 0.0f
+            && sim::unsupported_locomotion_penalty(true, true, 2.0f) == 0.0f
+            && sim::unsupported_locomotion_penalty(false, false, 2.0f) == 0.0f,
+        "sustained flight shaping rejects normal transfer or powered airtime");
     require(sim::course_zone_is_flat(24.0f) && sim::course_zone_is_flat(48.0f),
         "long flat sand-sim patrol zones are missing");
     require(!sim::course_zone_is_flat(32.0f) && !sim::course_zone_is_flat(40.0f),
@@ -1930,13 +2064,29 @@ int main()
     {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
-        static_assert(sim::observation_count == 60);
-        require(observation.size() == 60u,
-            "anatomy, material, water, and equipment observation layout is not sixty floats");
+        static_assert(sim::observation_count == 62);
+        require(observation.size() == 62u,
+            "anatomy, shuttle, material, water, and equipment observation layout is not sixty-two floats");
         require(observation[20] == 0.0f && observation[21] == 0.0f,
             "contact channels overlap motor channels at reset");
         require(std::isfinite(observation[18]) && std::isfinite(observation[19]),
             "right-arm angular velocity channels are missing");
+
+        observation_environment.set_course(sim::CourseStage::shuttle, 0.30f);
+        sim::EnvironmentTestAccess::set_shuttle_state(observation_environment,
+            sim::ShuttleState{ sim::ShuttlePhase::backing, 1.0f, -1.0f });
+        const auto backing_observation = observation_environment.observation();
+        require(backing_observation[43] == -1.0f
+                && backing_observation[44] == 1.0f
+                && std::abs(backing_observation[45] - 2.0f / 3.0f) < 0.0001f,
+            "policy cannot distinguish backing from forward traversal by facing and shuttle phase");
+        sim::EnvironmentTestAccess::set_shuttle_state(observation_environment,
+            sim::ShuttleState{ sim::ShuttlePhase::traverse, -1.0f, -1.0f });
+        const auto returned_observation = observation_environment.observation();
+        require(returned_observation[43] == -1.0f
+                && returned_observation[44] == -1.0f
+                && returned_observation[45] == 0.0f,
+            "post-turn traversal is observationally aliased with pre-turn backing");
     }
 
     {
@@ -2231,6 +2381,22 @@ int main()
                 strict_quality, 1.0f, true),
         "partial invalid gait can overwrite a strict-valid retained controller");
 
+    const std::uint64_t farther_shuttle =
+        rl::shuttle_motion_quality(1u, 19.0f, 40u, 30.0f);
+    const std::uint64_t busy_short_shuttle =
+        rl::shuttle_motion_quality(1u, 17.0f, 96u, 40.0f);
+    require(farther_shuttle > busy_short_shuttle,
+        "busy support cycling can outrank farther physical shuttle traversal");
+    require(rl::shuttle_motion_quality(2u, 12.0f, 30u, 28.0f)
+            > farther_shuttle,
+        "an additional completed shuttle turn does not dominate one-turn evidence");
+    require(rl::shuttle_motion_quality(1u, -10.0f, 65535u, 60.0f)
+            < rl::shuttle_motion_quality(1u, 1.0f, 1u, 1.0f),
+        "negative displacement or inflated cadence can defeat real shuttle progress");
+    require(rl::shuttle_motion_quality(1u, 19.0f, 40u, 30.0f)
+            == farther_shuttle,
+        "shuttle quality ordering is not deterministic across repeated inputs");
+
     const std::uint64_t quadruped_handoff =
         rl::foundational_walk_teacher_handoff_update(quadruped_walk);
     require(!rl::policy_candidate_retainable(sim::CourseStage::uneven,
@@ -2242,8 +2408,18 @@ int main()
             && !rl::policy_candidate_retainable(sim::CourseStage::hurdles,
                 60'000u, quadruped_handoff, quadruped_walk)
             && rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                strict_quality, quadruped_handoff - 1u, quadruped_walk)
+            && !rl::policy_candidate_retainable(sim::CourseStage::shuttle,
+                60'000u, quadruped_handoff, quadruped_walk)
+            && !rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                60'000u, rl::foundational_walk_teacher_handoff_update(monoped_walk),
+                monoped_walk)
+            && !rl::policy_candidate_retainable(sim::CourseStage::uneven,
+                60'000u, rl::foundational_walk_teacher_handoff_update(chicken_walk),
+                chicken_walk)
+            && rl::policy_candidate_retainable(sim::CourseStage::shuttle,
                 strict_quality, quadruped_handoff - 1u, quadruped_walk),
-        "post-handoff consolidation retention leaks assistance or weakens strict mastery");
+        "partial shuttle or fragile-rig evidence can replace a strict retained controller");
 
     const sim::CreatureBlueprint quadruped = sim::CreatureBlueprint::quadruped();
     const sim::CreatureBlueprint crawler4 = sim::CreatureBlueprint::crawler4();
@@ -2487,32 +2663,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0737-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0738-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0737-hybrid-autosave.eppo";
+        / "runner-v0738-topology-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0737-hybrid-evolved.rig";
+        / "runner-v0738-topology-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0737-hybrid-autonomy.state";
-    const std::filesystem::path v0736_autosave = lifetime_import_directory
-        / "runner-v0736-authored-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0736_autosave, error),
+        / "runner-v0738-topology-autonomy.state";
+    const std::filesystem::path v0737_autosave = lifetime_import_directory
+        / "runner-v0737-hybrid-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0737_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0736_magic{
-        'E', 'P', 'P', 'O', '3', '6', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0736_autosave, v0736_magic),
-        "failed to mark the fallback fixture as an EPPO36 checkpoint");
+    constexpr std::array<char, 8> v0737_magic{
+        'E', 'P', 'P', 'O', '3', '7', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0737_autosave, v0737_magic),
+        "failed to mark the fallback fixture as an EPPO37 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.36 LIFETIME LEDGER")
+                && import_message.find("V0.7.37 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.36 fallback autosave was not selected before a new save");
+            "v0.7.37 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

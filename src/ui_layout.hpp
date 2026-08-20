@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace runner::ui_layout
 {
@@ -49,6 +50,15 @@ namespace runner::ui_layout
 
     enum class DistanceUnits { metric, imperial };
 
+    inline constexpr std::array<std::string_view, 3> training_totals_scope_headings{
+        "SELECTED RIG - THIS SELECTION",
+        "THIS APP SESSION - ALL RIGS",
+        "SELECTED RIG - LIFETIME"
+    };
+    inline constexpr std::string_view totals_wall_time_label = "WALL TIME";
+    inline constexpr std::string_view totals_agent_sim_time_label = "AGENT-SIM TIME";
+    inline constexpr std::string_view totals_support_cycles_label = "SUPPORT GAIT CYCLES";
+
     [[nodiscard]] constexpr Box top_bar_box(float window_width) noexcept
     {
         return { 0.0f, 0.0f, std::max(0.0f, window_width), top_bar_height };
@@ -64,6 +74,71 @@ namespace runner::ui_layout
         std::uint64_t total, std::uint64_t start) noexcept
     {
         return total >= start ? total - start : 0u;
+    }
+
+    [[nodiscard]] constexpr double lifetime_delta_value(
+        double total, double start) noexcept
+    {
+        return total >= start ? total - start : 0.0;
+    }
+
+    struct TrainingTotals
+    {
+        std::uint64_t optimizer_updates{};
+        std::uint64_t completed_agent_runs{};
+        std::uint64_t passed_stage_checks{};
+        std::uint64_t failed_stage_checks{};
+        std::uint64_t episode_restarts{};
+        std::uint64_t support_gait_cycles{};
+        std::uint64_t falls{};
+        std::uint64_t collisions{};
+        std::uint64_t features_cleared{};
+        std::uint64_t rollbacks{};
+        double agent_sim_seconds{};
+        double agent_distance{};
+    };
+
+    [[nodiscard]] constexpr bool training_totals_consistent(
+        const TrainingTotals& totals) noexcept
+    {
+        return totals.completed_agent_runs
+            == totals.passed_stage_checks + totals.failed_stage_checks;
+    }
+
+    [[nodiscard]] constexpr TrainingTotals training_totals_delta(
+        const TrainingTotals& current, const TrainingTotals& start) noexcept
+    {
+        return {
+            lifetime_delta(current.optimizer_updates, start.optimizer_updates),
+            lifetime_delta(current.completed_agent_runs, start.completed_agent_runs),
+            lifetime_delta(current.passed_stage_checks, start.passed_stage_checks),
+            lifetime_delta(current.failed_stage_checks, start.failed_stage_checks),
+            lifetime_delta(current.episode_restarts, start.episode_restarts),
+            lifetime_delta(current.support_gait_cycles, start.support_gait_cycles),
+            lifetime_delta(current.falls, start.falls),
+            lifetime_delta(current.collisions, start.collisions),
+            lifetime_delta(current.features_cleared, start.features_cleared),
+            lifetime_delta(current.rollbacks, start.rollbacks),
+            lifetime_delta_value(current.agent_sim_seconds, start.agent_sim_seconds),
+            lifetime_delta_value(current.agent_distance, start.agent_distance)
+        };
+    }
+
+    constexpr void accumulate_training_totals(
+        TrainingTotals& destination, const TrainingTotals& delta) noexcept
+    {
+        destination.optimizer_updates += delta.optimizer_updates;
+        destination.completed_agent_runs += delta.completed_agent_runs;
+        destination.passed_stage_checks += delta.passed_stage_checks;
+        destination.failed_stage_checks += delta.failed_stage_checks;
+        destination.episode_restarts += delta.episode_restarts;
+        destination.support_gait_cycles += delta.support_gait_cycles;
+        destination.falls += delta.falls;
+        destination.collisions += delta.collisions;
+        destination.features_cleared += delta.features_cleared;
+        destination.rollbacks += delta.rollbacks;
+        destination.agent_sim_seconds += delta.agent_sim_seconds;
+        destination.agent_distance += delta.agent_distance;
     }
 
     [[nodiscard]] constexpr bool overlaps(Box a, Box b) noexcept

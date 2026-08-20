@@ -25,6 +25,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md
         docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md
         docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md
+        docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
@@ -79,7 +80,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.37 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.38 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -121,6 +122,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         "RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
         "RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
+        "RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -142,6 +144,10 @@ foreach(reference IN ITEMS
         "WALK-STATE-304"
         "WALK-REGRESSION-305"
         "WALK-RELEASE-306"
+        "WALK-SHUTTLE-POSTURE-414"
+        "WALK-SINGLE-AND-AVIAN-SUPPORT-415"
+        "WALK-SCOPED-STATS-416"
+        "WALK-RELEASE-417"
         "WALK-COMPACT-ARMOR-307"
         "WALK-STANCE-EXTENSION-308"
         "WALK-CHAIN-IK-309"
@@ -286,8 +292,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 19"
-        "version != 16 && version != 17 && version != 18 && version != 19"
+        "RUNAUTONOMY 20"
+        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -300,7 +306,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'3701u"
+        "training_semantics_version = 0x0007'3801u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -327,7 +333,7 @@ foreach(reference IN ITEMS
         "foundational_walk_teacher_handoff_update")
     string(FIND "${trainer_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.31 learner contract missing: ${reference}")
+        message(FATAL_ERROR "Foundational learner contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -340,7 +346,7 @@ foreach(reference IN ITEMS
         "TerrainRegion::hole")
     string(FIND "${terrain_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.31 active-terrain contract missing: ${reference}")
+        message(FATAL_ERROR "Active-terrain contract missing: ${reference}")
     endif()
 endforeach()
 
@@ -362,7 +368,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0737-hybrid-autosave.eppo"
+        "runner-v0738-topology-autosave.eppo"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -576,13 +582,24 @@ foreach(reference IN ITEMS
         "result.teacher_authority == 0.0f"
         "trainer.best_policy_parameters()"
         "RigCase{ \"humanoid\", sim::CreatureBlueprint::humanoid() }"
+        "RigCase{ \"monoped\", sim::CreatureBlueprint::monoped() }"
+        "RigCase{ \"chicken\", sim::CreatureBlueprint::chicken() }"
+        "release_distance(cases[index].blueprint)"
+        "release_gait_cycles(cases[index].blueprint)"
         "WalkEyeTestProof run_walk_eye_test_proof"
         "left_air != right_air")
     string(FIND "${rig_training_diagnostic_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.31 cold-start acceptance contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.38 seven-rig cold-start acceptance contract missing: ${reference}")
     endif()
 endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/rig_training_diagnostic.hpp" rig_training_diagnostic_header_text)
+string(FIND "${rig_training_diagnostic_header_text}"
+    "std::array<RigTrainingResult, 7>" seven_rig_report_pos)
+if(seven_rig_report_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.38 production rig-training report does not contain all seven canonical rigs")
+endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/course_completion_diagnostic.cpp" course_diagnostic_text)
 foreach(reference IN ITEMS
@@ -648,7 +665,7 @@ if(art_workflow_pos EQUAL -1)
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-rig-training" cold_start_workflow_pos)
 if(cold_start_workflow_pos EQUAL -1)
-    message(FATAL_ERROR "Release workflow does not run the v0.7.31 cold-start diagnostic")
+    message(FATAL_ERROR "Release workflow does not run the v0.7.38 seven-rig cold-start diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-walk-eye" walk_eye_workflow_pos)
 if(walk_eye_workflow_pos EQUAL -1)
@@ -709,4 +726,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.37 repository hygiene passed")
+message(STATUS "Runner v0.7.38 repository hygiene passed")

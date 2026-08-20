@@ -20,7 +20,7 @@ namespace runner::sim
     inline constexpr std::size_t equipment_action_count = 3;
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
-    inline constexpr std::size_t observation_count = 60;
+    inline constexpr std::size_t observation_count = 62;
     inline constexpr float foundational_gait_cadence_hz = 1.51f;
 
     enum class ShuttlePhase : std::uint8_t
@@ -77,6 +77,7 @@ namespace runner::sim
             return state;
         if (state.phase == ShuttlePhase::traverse)
         {
+            state.phase_seconds += dt;
             const bool at_boundary = state.facing_direction > 0.0f
                 ? root_x >= shuttle_right_boundary
                 : root_x <= shuttle_left_boundary;
@@ -630,15 +631,27 @@ namespace runner::sim
         float maximum_foot_clearance, float torso_turn_speed,
         std::size_t authored_support_count = 2u,
         std::size_t meaningfully_lifted_supports = 0u,
-        bool recent_authored_support_transfer = false) noexcept
+        bool recent_authored_support_transfer = false,
+        std::size_t independent_support_clusters = 2u) noexcept
     {
         return left_supported && right_supported
+            && independent_support_clusters >= 2u
             && std::abs(root_speed) > 0.085f
             && stance_slip_speed < 0.080f
             && maximum_foot_clearance < 0.085f
             && !recent_authored_support_transfer
             && (authored_support_count <= 2u || meaningfully_lifted_supports == 0u)
             && (std::abs(torso_turn_speed) > 0.12f || std::abs(root_speed) > 0.18f);
+    }
+
+    [[nodiscard]] inline float unsupported_locomotion_penalty(
+        bool locomotion_required, bool powered_takeoff,
+        float airborne_seconds) noexcept
+    {
+        if (!locomotion_required || powered_takeoff
+            || !std::isfinite(airborne_seconds))
+            return 0.0f;
+        return std::max(0.0f, airborne_seconds - 0.12f) * 0.16f;
     }
 
     inline constexpr float rolling_gate_activation_seconds = 1.35f;
@@ -961,6 +974,21 @@ namespace runner::sim
             && std::abs(root_displacement) >= 0.055f
             && swing_air_seconds >= 0.08f
             && swing_clearance >= 0.075f;
+    }
+
+    [[nodiscard]] inline bool qualifies_monoped_support_transfer(
+        int previous_side, int strike_side, float seconds_since_previous,
+        float root_displacement, float swing_air_seconds,
+        float swing_clearance) noexcept
+    {
+        // A monoped's two contact seeds are heel/toe edges of one compact foot.
+        // Keep the real airborne-contact and displacement contract, scaled to
+        // that authored rocker span instead of a full humanoid stride.
+        return qualifies_alternating_step(previous_side, strike_side,
+            seconds_since_previous, root_displacement)
+            && std::abs(root_displacement) >= 0.035f
+            && swing_air_seconds >= 0.05f
+            && swing_clearance >= 0.035f;
     }
 
     [[nodiscard]] inline float ground_velocity_retention(bool traction_contact,
@@ -1529,6 +1557,25 @@ namespace runner::sim
                 && motors[1].a == motors[0].pivot
                 && motors[3].a == motors[2].pivot;
         }
+        [[nodiscard]] bool avian_gait() const noexcept
+        {
+            if (!paired_leg_chains() || root_node >= nodes.size()
+                || torso_node >= nodes.size() || head_node >= nodes.size())
+                return false;
+            const float head_reach = std::abs(
+                nodes[head_node].x - nodes[torso_node].x);
+            bool rear_counterweight = false;
+            for (std::size_t node = 0; node < nodes.size(); ++node)
+            {
+                if (!is_support_seed(node)
+                    && nodes[node].x < nodes[root_node].x - 0.45f)
+                {
+                    rear_counterweight = true;
+                    break;
+                }
+            }
+            return head_reach >= 0.55f && rear_counterweight;
+        }
         [[nodiscard]] bool horizontal_body_plan() const noexcept
         {
             if (root_node >= nodes.size() || head_node >= nodes.size())
@@ -1578,6 +1625,81 @@ namespace runner::sim
                 && std::isfinite(support_height)
             ? blueprint.nodes[blueprint.root_node].y - support_height : 2.0f;
         return root_clearance >= 1.65f ? 1.30f : 1.44f;
+    }
+
+    [[nodiscard]] inline bool single_support_rocker_motor(
+        const CreatureBlueprint& blueprint, std::size_t motor_index) noexcept
+    {
+        if (!blueprint.monopedal_gait()
+            || motor_index >= blueprint.active_motor_count)
+            return false;
+        const MotorConstraint& motor = blueprint.motors[motor_index];
+        for (std::size_t sibling = 0; sibling < blueprint.active_motor_count; ++sibling)
+        {
+            if (sibling == motor_index)
+                continue;
+            const MotorConstraint& candidate = blueprint.motors[sibling];
+            if (candidate.a == motor.a && candidate.pivot == motor.pivot)
+                return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] inline bool single_support_compression_motor(
+        const CreatureBlueprint& blueprint, std::size_t motor_index) noexcept
+    {
+        if (!blueprint.monopedal_gait()
+            || motor_index >= blueprint.active_motor_count)
+            return false;
+        const MotorConstraint& motor = blueprint.motors[motor_index];
+        for (std::size_t rocker = 0; rocker < blueprint.active_motor_count; ++rocker)
+        {
+            if (single_support_rocker_motor(blueprint, rocker)
+                && motor.c == blueprint.motors[rocker].pivot)
+                return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] inline float single_support_motor_action_limit(
+        const CreatureBlueprint& blueprint, std::size_t motor_index) noexcept
+    {
+        if (!blueprint.monopedal_gait())
+            return 1.0f;
+        if (single_support_rocker_motor(blueprint, motor_index))
+            return 0.27f;
+        if (single_support_compression_motor(blueprint, motor_index))
+            return 0.59f;
+        return 0.34f;
+    }
+
+    [[nodiscard]] inline float single_support_motor_slew_rate(
+        const CreatureBlueprint& blueprint, std::size_t motor_index) noexcept
+    {
+        if (!blueprint.monopedal_gait())
+            return std::numeric_limits<float>::infinity();
+        if (single_support_rocker_motor(blueprint, motor_index))
+            return 30.00f;
+        if (single_support_compression_motor(blueprint, motor_index))
+            return 30.00f;
+        return 30.00f;
+    }
+
+    [[nodiscard]] inline float conditioned_single_support_motor_action(
+        const CreatureBlueprint& blueprint, std::size_t motor_index,
+        float previous_action, float desired_action, float dt) noexcept
+    {
+        const float limit = single_support_motor_action_limit(blueprint, motor_index);
+        const float limited = clamp(desired_action, -limit, limit);
+        if (desired_action == limited)
+            return desired_action;
+        const float slew_rate = single_support_motor_slew_rate(blueprint, motor_index);
+        if (!std::isfinite(slew_rate))
+            return limited;
+        const float bounded_dt = clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
+        const float maximum_delta = slew_rate * bounded_dt;
+        return previous_action
+            + clamp(limited - previous_action, -maximum_delta, maximum_delta);
     }
 
     struct StepResult
@@ -1685,6 +1807,10 @@ namespace runner::sim
         [[nodiscard]] std::uint32_t completed_shuttle_turns() const noexcept
         {
             return shuttle_state_.completed_turns;
+        }
+        [[nodiscard]] float shuttle_phase_seconds() const noexcept
+        {
+            return shuttle_state_.phase_seconds;
         }
         [[nodiscard]] float elapsed_seconds() const noexcept { return elapsed_seconds_; }
         [[nodiscard]] float distance_travelled() const noexcept { return distance_travelled_; }
@@ -1841,6 +1967,7 @@ namespace runner::sim
             return duck_recovery_count_;
         }
         [[nodiscard]] float maximum_joint_speed() const noexcept { return maximum_joint_speed_; }
+        [[nodiscard]] float maximum_speed_kmh() const noexcept { return maximum_speed_kmh_; }
         [[nodiscard]] float maximum_upper_body_motor_deviation() const noexcept;
         [[nodiscard]] float primary_support_span_ratio() const noexcept;
         [[nodiscard]] float maximum_lower_leg_scissor_seconds() const noexcept
@@ -1903,6 +2030,7 @@ namespace runner::sim
         void append_dynamic_material_features();
         void update_material_metrics(float dt) noexcept;
         void rebuild_course_features() noexcept;
+        void mirror_rig_about_root() noexcept;
         void update_shuttle(float root_x, float root_speed, float dt) noexcept;
         void reset_equipment() noexcept;
         void update_equipment(std::span<const float, action_count> actions,
@@ -2064,6 +2192,7 @@ namespace runner::sim
         FootContactPhase right_foot_phase_{ FootContactPhase::airborne };
         float action_change_energy_{};
         bool alternating_step_this_step_{};
+        bool single_leg_cycle_this_step_{};
         bool limb_crossing_this_step_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};

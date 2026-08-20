@@ -330,6 +330,6 @@ namespace runner::telemetry
 
     [[nodiscard]] constexpr std::string_view reset_help() noexcept
     {
-        return "RESETS restart an episode or weak policy; ROLLBACKS restore a better retained controller. Rig totals stay for the selected rig and clear when a different rig is selected.";
+        return "WORKER RESTARTS occur once after every completed worker run. ROLLBACKS restore a better retained controller. selected rig totals reset on selection; lifetime totals remain rig-scoped.";
     }
 }

@@ -64,8 +64,10 @@ int main()
         Signals immature = stable_flat();
         immature.gait_cycles = 3u;
         const auto immature_plan = runner::locomotion::plan(immature);
-        require(immature_plan.intent != Intent::run,
-            "running must be unavailable before gait is established");
+        require(immature_plan.intent == Intent::walk
+                && immature_plan.cadence_hz > 0.0f
+                && immature_plan.stride_scale > 0.0f,
+            "cold-start rig must receive a cautious gait instead of deadlocking");
 
         Signals mature = stable_flat();
         mature.gait_cycles = 14u;

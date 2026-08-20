@@ -17,6 +17,70 @@ namespace runner::rl
         metrics_.imitation_source_score = -std::numeric_limits<float>::infinity();
     }
 
+    void PpoTrainer::clear_foundational_teacher_prior() noexcept
+    {
+        foundational_teacher_prior_.clear();
+    }
+
+    void PpoTrainer::refresh_foundational_teacher_prior()
+    {
+        clear_foundational_teacher_prior();
+        const bool fragile_support_topology = blueprint_.monopedal_gait()
+            || blueprint_.avian_gait();
+        if (course_stage_ != sim::CourseStage::uneven
+            || !fragile_support_topology)
+            return;
+
+        constexpr std::size_t candidate_agents = 6u;
+        constexpr std::size_t samples_per_agent = 256u;
+        constexpr int maximum_steps = 1200;
+        const float required_distance = blueprint_.monopedal_gait() ? 5.0f : 10.0f;
+        const std::uint32_t required_cycles = blueprint_.monopedal_gait() ? 8u : 14u;
+        foundational_teacher_prior_.reserve(candidate_agents * samples_per_agent);
+
+        for (std::size_t agent = 0; agent < candidate_agents; ++agent)
+        {
+            sim::Environment environment{ blueprint_, 0x7380u + agent * 4099u };
+            environment.set_course(course_stage_, course_difficulty_);
+            environment.set_course_motion_enabled(false);
+            std::vector<ImitationSample> trajectory{};
+            trajectory.reserve(static_cast<std::size_t>(maximum_steps));
+            for (int step = 0; step < maximum_steps; ++step)
+            {
+                ImitationSample sample{};
+                sample.observation = environment.observation();
+                sample.action = walking_teacher_action(environment);
+                const sim::StepResult result = environment.step(sample.action);
+                const bool clean_demonstration_frame = environment.valid_motion()
+                    && !environment.non_foot_grounded()
+                    && environment.uprightness() > 0.62f
+                    && environment.body_rolling_seconds() < 0.08f
+                    && environment.foot_pivot_rolling_seconds() < 0.08f;
+                if (clean_demonstration_frame)
+                    trajectory.push_back(sample);
+                if (result.terminated)
+                    break;
+            }
+
+            const bool complete_clean_teacher = environment.valid_motion()
+                && environment.elapsed_seconds() >= 19.9f
+                && environment.distance_travelled() >= required_distance
+                && environment.gait_cycles() >= required_cycles;
+            if (!complete_clean_teacher || trajectory.empty())
+                continue;
+
+            const std::size_t stride = std::max<std::size_t>(1u,
+                (trajectory.size() + samples_per_agent - 1u) / samples_per_agent);
+            std::size_t retained{};
+            for (std::size_t index = 0;
+                index < trajectory.size() && retained < samples_per_agent;
+                index += stride, ++retained)
+            {
+                foundational_teacher_prior_.push_back(trajectory[index]);
+            }
+        }
+    }
+
     void PpoTrainer::refresh_self_imitation_prior()
     {
         if (best_parameters_.size() != policy_.parameter_count())

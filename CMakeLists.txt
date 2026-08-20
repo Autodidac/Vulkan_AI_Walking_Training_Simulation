@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.37 LANGUAGES CXX)
+project(Runner VERSION 0.7.38 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -171,6 +171,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -206,6 +207,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0736_AUTHORED_GAIT_RUNTIME.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()

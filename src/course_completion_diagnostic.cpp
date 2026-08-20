@@ -240,7 +240,7 @@ namespace runner::diagnostics
         const auto observation = observed.observation();
         report.observation_truth = observation.size() == sim::observation_count
             && std::ranges::all_of(observation, [](float value) { return std::isfinite(value); })
-            && observation[52] >= 0.0f && observation[52] <= 1.0f;
+            && observation[54] >= 0.0f && observation[54] <= 1.0f;
 
         sim::Environment climb{ sim::CreatureBlueprint::humanoid(), 0x728400u };
         climb.set_course(sim::CourseStage::climb_descent, 0.65f);

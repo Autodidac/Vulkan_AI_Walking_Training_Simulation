@@ -22,7 +22,7 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 19\n";
+            output << "RUNAUTONOMY 20\n";
             output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << ' '
                 << static_cast<int>(optimization_mode) << '\n';
@@ -62,7 +62,7 @@ namespace runner::rl
             int loaded_rollback{};
             int mode_value = static_cast<int>(RigOptimizationMode::control_optimize);
             input >> magic >> version;
-            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17 && version != 18 && version != 19))
+            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17 && version != 18 && version != 19 && version != 20))
                 return;
             input >> stage_value >> loaded_difficulty >> loaded_generation
                 >> loaded_accepted >> loaded_rejected >> loaded_rollback;
@@ -121,7 +121,7 @@ namespace runner::rl
                     static_cast<std::uint16_t>(stage_eligible ? 3u
                         : environment.body_integrity_valid() ? 2u : 1u),
                     static_cast<std::uint16_t>(std::min<std::uint32_t>(
-                        environment.alternating_steps(), 65535u)),
+                        environment.gait_cycles(), 65535u)),
                     quality_bucket(environment.crouch_walk_distance(), 100.0f),
                     quality_bucket(environment.elapsed_seconds(), 10.0f));
             const float tiebreak = environment.crouch_walk_distance() * 20.0f

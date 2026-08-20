@@ -41,11 +41,23 @@ namespace runner::diagnostics
         sim::InvalidMotion preview_reset_reason{ sim::InvalidMotion::none };
         std::size_t rollout_workers{};
         bool rollout_course_motion_enabled{};
+        std::uint64_t shuttle_lesson_updates{};
+        float shuttle_teacher_authority{};
+        bool shuttle_retained_policy{};
+        std::uint64_t shuttle_retained_update{};
+        std::uint64_t shuttle_retained_quality{};
+        float shuttle_probe_distance{};
+        float shuttle_probe_stride_events{};
+        float shuttle_probe_turns{};
+        std::uint32_t shuttle_probe_rejection_mask{};
+        std::uint32_t shuttle_probe_invalid_runs{};
+        sim::InvalidMotion shuttle_probe_invalid_reason{
+            sim::InvalidMotion::none };
     };
 
     struct RigTrainingReport
     {
-        std::array<RigTrainingResult, 5> rigs{};
+        std::array<RigTrainingResult, 7> rigs{};
         std::uint64_t updates{};
         bool passed{};
     };
@@ -70,6 +82,9 @@ namespace runner::diagnostics
         float teacher_authority{};
         bool passed{};
     };
+    [[nodiscard]] RigTrainingResult run_rig_training_case(
+        std::string_view name, const sim::CreatureBlueprint& blueprint,
+        std::uint64_t updates = 1200u);
     [[nodiscard]] RigTrainingReport run_rig_training_diagnostic(
         std::uint64_t updates = 1200u);
     [[nodiscard]] WalkEyeTestProof run_walk_eye_test_proof(

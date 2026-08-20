@@ -171,7 +171,7 @@ namespace runner::locomotion
             return result;
         }
 
-        if (signals.dynamic_hazard_active && !threat)
+        if (signals.dynamic_hazard_active && !signals.dynamic_hazard_safe && !threat)
         {
             result.intent = Intent::hold;
             result.direction = 0.0f;
@@ -267,7 +267,7 @@ namespace runner::locomotion
         }
         else
         {
-            result.intent = gait_established ? Intent::walk : Intent::hold;
+            result.intent = Intent::walk;
             result.target_speed = gait_established
                 ? 0.82f + result.balance_reserve * 0.35f
                 : 0.42f + result.balance_reserve * 0.22f;

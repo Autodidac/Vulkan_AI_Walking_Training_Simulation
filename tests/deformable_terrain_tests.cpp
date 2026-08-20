@@ -460,7 +460,7 @@ int main()
         "render/world terrain transform disagrees with collision sampling");
     for(int frame=0;frame<240;++frame) static_cast<void>(environment.step(idle));
     require(environment.material_event_count()==0u,"material pressure spawned before real safe-runway progress");
-    const auto observation=environment.observation(); static_assert(observation.size()==60u);
+    const auto observation=environment.observation(); static_assert(observation.size()==sim::observation_count);
     for(std::size_t i=40;i<observation.size();++i) require(std::isfinite(observation[i]),"non-finite material observation");
     require(environment.terrain_firmness_at(0.0f)>=0.0f && environment.terrain_firmness_at(0.0f)<=1.0f,"firmness out of range");
     require(environment.burial_depth()>=0.0f,"negative burial depth");

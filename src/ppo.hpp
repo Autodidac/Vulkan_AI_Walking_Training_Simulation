@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3701u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3801u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -32,7 +32,7 @@ namespace runner::rl
     {
         constexpr std::size_t joint_angle_begin = 4;
         constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::anatomy_action_count;
-        static_assert(sim::observation_count == 60);
+        static_assert(sim::observation_count == 62);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
         const sim::CreatureBlueprint& rig = environment.blueprint();
@@ -185,6 +185,12 @@ namespace runner::rl
     [[nodiscard]] inline float motor_action_for_target_angle(
         const sim::MotorConstraint& motor, float target_angle) noexcept
     {
+        // signed_angle() is canonicalized to [-pi, pi], while an authored
+        // neutral and its calibrated travel interval may legitimately straddle
+        // that branch cut. Unwrap the target around the authored neutral before
+        // clamping so equivalent +pi/-pi poses do not become full-scale torque.
+        target_angle = motor.neutral_angle
+            + wrap_angle(target_angle - motor.neutral_angle);
         target_angle = clamp(target_angle, motor.minimum_angle, motor.maximum_angle);
         if (target_angle < motor.neutral_angle)
         {
@@ -468,6 +474,17 @@ namespace runner::rl
         return locomotion::plan(locomotion_signals(environment));
     }
 
+    [[nodiscard]] inline float locomotion_gait_seconds(
+        const sim::Environment& environment) noexcept
+    {
+        // A turn is a new control frame. Restart the deterministic gait clock
+        // at each shuttle phase so a learned good stance is not asked to resume
+        // at an arbitrary point in the opposite-direction cycle.
+        return environment.shuttle_enabled()
+            ? environment.shuttle_phase_seconds()
+            : environment.elapsed_seconds();
+    }
+
     struct MultiSupportTeacherParameters
     {
         float cadence_hz{};
@@ -530,7 +547,7 @@ namespace runner::rl
         const locomotion::Plan movement = current_locomotion_plan(environment);
         const float gait_authority = rig.support_seed_count() >= 6u
             ? 1.0f : multi_support_gait_authority(movement);
-        const float phase = environment.elapsed_seconds() * 2.0f * pi
+        const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t index = 0; index < rig.active_motor_count; ++index)
         {
@@ -638,7 +655,7 @@ namespace runner::rl
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
         const float gait_authority = multi_support_gait_authority(movement);
-        const float base_phase = environment.elapsed_seconds() * 2.0f * pi
+        const float base_phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t proximal_index = 0;
             proximal_index < rig.active_motor_count; ++proximal_index)
@@ -710,6 +727,7 @@ namespace runner::rl
         float swing_lift{ 0.50f };
         float leg_height{ 2.30f };
         float direction{ 1.0f };
+        float phase_offset{};
     };
 
     [[nodiscard]] inline BipedGaitParameters anatomy_scaled_foundational_gait(
@@ -781,7 +799,13 @@ namespace runner::rl
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
             const Vec2 target{ x, -parameters.leg_height + lift };
-            const float bend_direction = environment.facing_direction();
+            const Vec2 authored_upper = rig.nodes[hip.c]
+                - rig.nodes[hip.pivot];
+            const Vec2 authored_lower = rig.nodes[knee.c]
+                - rig.nodes[knee.pivot];
+            const float authored_cross = authored_upper.x * authored_lower.y
+                - authored_upper.y * authored_lower.x;
+            const float bend_direction = authored_cross >= 0.0f ? -1.0f : 1.0f;
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
                 upper_length, lower_length, target, bend_direction);
             if (!solution.valid)
@@ -793,8 +817,8 @@ namespace runner::rl
             action[hip_index] = motor_action_for_target_angle(hip, hip_target);
             action[knee_index] = motor_action_for_target_angle(knee, knee_target);
         };
-        const float phase = environment.elapsed_seconds() * 2.0f * pi
-            * parameters.cadence_hz;
+        const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
+            * parameters.cadence_hz + parameters.phase_offset;
         solve_leg(true, phase);
         solve_leg(false, phase + pi);
         std::array<std::size_t, sim::anatomy_action_count> shoulder_motors{};
@@ -852,9 +876,15 @@ namespace runner::rl
                 authored_endpoint, arm_phase,
                 (upper_length + lower_length) * 0.12f, 0.0f,
                 parameters.direction);
+            const Vec2 authored_upper = rig.nodes[shoulder.c]
+                - rig.nodes[shoulder.pivot];
+            const Vec2 authored_lower = rig.nodes[elbow.c]
+                - rig.nodes[elbow.pivot];
+            const float authored_cross = authored_upper.x * authored_lower.y
+                - authored_upper.y * authored_lower.x;
+            const float bend_direction = authored_cross >= 0.0f ? -1.0f : 1.0f;
             const TwoLinkSagittalSolution solution = solve_two_link_sagittal(
-                upper_length, lower_length, target,
-                -environment.facing_direction());
+                upper_length, lower_length, target, bend_direction);
             if (!solution.valid)
                 continue;
             const Vec2 shoulder_reference = rig.nodes[shoulder.a]
@@ -867,14 +897,119 @@ namespace runner::rl
         return bilateral_joint_synergy_action(environment, action,
             environment.course_stage());
     }
+
+    [[nodiscard]] inline std::array<float, sim::action_count>
+    avian_gait_teacher_action(const sim::Environment& environment,
+        float direction, float cadence_hz) noexcept
+    {
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        if (!rig.avian_gait() || rig.active_motor_count < 4u)
+            return balance_teacher_action(environment);
+
+        float total_chain_length{};
+        std::size_t valid_chains{};
+        for (const std::size_t hip_index : { 0u, 2u })
+        {
+            const sim::MotorConstraint& hip = rig.motors[hip_index];
+            const sim::MotorConstraint& knee = rig.motors[hip_index + 1u];
+            if (hip.pivot >= rig.nodes.size() || hip.c >= rig.nodes.size()
+                || knee.pivot >= rig.nodes.size() || knee.c >= rig.nodes.size())
+                continue;
+            total_chain_length += length(
+                rig.nodes[hip.c] - rig.nodes[hip.pivot])
+                + length(rig.nodes[knee.c] - rig.nodes[knee.pivot]);
+            ++valid_chains;
+        }
+        if (valid_chains == 0u)
+            return balance_teacher_action(environment);
+
+        const float chain_length = total_chain_length
+            / static_cast<float>(valid_chains);
+        // Avian legs use the same physical plant/swing IK contract as paired
+        // legs, but every dimension comes from their short authored chains.
+        // Reusing humanoid minimums made the feet cross the entire body and
+        // flung the trunk; preserving an authored rest endpoint as the stride
+        // centre instead produced a double-support shuffle.
+        BipedGaitParameters parameters{};
+        parameters.cadence_hz = clamp(cadence_hz, 0.56f, 0.68f);
+        parameters.step_length = chain_length * 0.085f;
+        parameters.swing_lift = chain_length * 0.17f;
+        parameters.leg_height = chain_length * 0.95f;
+        parameters.direction = direction < 0.0f ? -1.0f : 1.0f;
+        // The authored chicken rests with its first support behind the root and
+        // its second support ahead. Match that physical stance on the first
+        // sample instead of commanding both legs through an immediate crossing.
+        parameters.phase_offset = pi;
+        return biped_gait_teacher_action(environment, parameters);
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count>
+    monoped_gait_teacher_action(const sim::Environment& environment,
+        float direction, float cadence_hz) noexcept
+    {
+        auto action = balance_teacher_action(environment);
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        if (!rig.monopedal_gait() || rig.active_motor_count < 4u)
+            return action;
+
+        const sim::MotorConstraint& hip = rig.motors[0];
+        const sim::MotorConstraint& knee = rig.motors[1];
+        if (hip.a >= rig.nodes.size() || hip.pivot >= rig.nodes.size()
+            || hip.c >= rig.nodes.size()
+            || knee.pivot >= rig.nodes.size() || knee.c >= rig.nodes.size())
+            return action;
+
+        const float gait_seconds = locomotion_gait_seconds(environment);
+        const float phase = gait_seconds * 2.0f * pi * cadence_hz;
+        const float cycle = std::sin(phase);
+        const float compression = std::max(0.0f, cycle);
+        const float extension = std::max(0.0f, -cycle);
+        const float startup = clamp((gait_seconds - 0.30f) / 0.45f, 0.0f, 1.0f);
+
+        // A monoped is not a degenerate biped. Drive small offsets around its
+        // calibrated authored stance so both foot plates begin planted and the
+        // single knee compresses before it extends. Solving a new two-link pose
+        // at t=0 changed the IK branch immediately and pole-vaulted the body.
+        const float hip_target = rig.rest_joint_angle(0u)
+            + startup * direction * 0.180f * cycle;
+        const float knee_target = rig.rest_joint_angle(1u)
+            + startup * (0.48f * compression - 0.180f * extension);
+        action[0] = motor_action_for_target_angle(hip, hip_target);
+        action[1] = motor_action_for_target_angle(knee, knee_target);
+
+        // The paired plates are the heel/toe of one physical foot, not two
+        // independent legs. A visible rocker transfer must unload one plate
+        // before the opposite edge can establish the next supported hop.
+        const float rocker = startup * direction * cycle * 0.140f;
+        action[2] = motor_action_for_target_angle(rig.motors[2],
+            rig.rest_joint_angle(2u) + rocker);
+        action[3] = motor_action_for_target_angle(rig.motors[3],
+            rig.rest_joint_angle(3u) - rocker);
+        return action;
+    }
+
     [[nodiscard]] inline std::array<float, sim::action_count> walking_teacher_action(
         const sim::Environment& environment) noexcept
     {
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        if (movement.intent == locomotion::Intent::hold)
+        {
+            // Braking and turning are explicit support-transfer holds. A zero-
+            // direction gait still cycles its knees and destabilizes a policy
+            // that already walks correctly, so preserve the authored stance
+            // until the shuttle state requests backing or forward traversal.
+            return action;
+        }
+        if (rig.avian_gait())
+            return avian_gait_teacher_action(environment,
+                movement.direction, movement.cadence_hz);
         if (!rig.paired_leg_chains())
         {
+            if (rig.monopedal_gait())
+                return monoped_gait_teacher_action(environment,
+                    movement.direction, movement.cadence_hz);
             if (rig.support_seed_count() < 4u)
                 return action;
             float rest_support_height = std::numeric_limits<float>::infinity();
@@ -903,7 +1038,7 @@ namespace runner::rl
                 : multi_support_teacher_action(environment, multi_parameters);
         }
 
-        const float phase = environment.elapsed_seconds() * 2.0f * pi
+        const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * movement.cadence_hz;
         const float swing = std::sin(phase);
         const float directed_swing = swing * movement.direction;
@@ -978,10 +1113,13 @@ namespace runner::rl
         biped_parameters.direction = movement.direction;
         if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
         {
-            // Preload the supported stance before turning. The shuttle state
-            // bounds this phase; commanding another swing here can place one
-            // articulated foot across the other on a rough boundary cell.
-            return balance_teacher_action(environment);
+            // Backing is a real locomotion skill. Keep the learned opposed
+            // gait, but shorten and slow it so the rig can unload its leading
+            // support before the explicit turn instead of reaching the
+            // boundary by sustained backward bracing.
+            biped_parameters.cadence_hz *= 0.72f;
+            biped_parameters.step_length *= 0.52f;
+            biped_parameters.swing_lift *= 0.62f;
         }
 
         return biped_gait_teacher_action(environment, biped_parameters);
@@ -1032,7 +1170,7 @@ namespace runner::rl
     [[nodiscard]] inline std::uint64_t foundational_walk_teacher_handoff_update(
         const sim::CreatureBlueprint& blueprint) noexcept
     {
-        if (!blueprint.paired_leg_chains())
+        if (!blueprint.paired_leg_chains() || blueprint.avian_gait())
             return 900u;
         return rig_has_manipulator_motors(blueprint) ? 900u : 500u;
     }
@@ -1042,7 +1180,8 @@ namespace runner::rl
     {
         const std::uint64_t handoff =
             foundational_walk_teacher_handoff_update(blueprint);
-        const std::uint64_t fade_begin = !blueprint.paired_leg_chains()
+        const std::uint64_t fade_begin = (!blueprint.paired_leg_chains()
+                || blueprint.avian_gait())
             ? 600u : rig_has_manipulator_motors(blueprint) ? 600u : 300u;
         if (update < fade_begin)
             return 1.0f;
@@ -1092,6 +1231,26 @@ namespace runner::rl
             || stage == sim::CourseStage::shuttle)
             return foundational_walk_teacher_authority(lesson_update, blueprint);
         return 1.0f;
+    }
+
+    struct TopologyReflexAuthority
+    {
+        float support{};
+        float body{};
+    };
+
+    [[nodiscard]] inline TopologyReflexAuthority topology_runtime_reflex_authority(
+        const sim::CreatureBlueprint& rig, sim::CourseStage stage) noexcept
+    {
+        if (stage != sim::CourseStage::uneven
+            && stage != sim::CourseStage::shuttle)
+            return {};
+
+        if (rig.monopedal_gait())
+            return { 0.92f, 0.82f };
+        if (rig.avian_gait())
+            return { 0.88f, 0.50f };
+        return {};
     }
 
     struct RuntimeSafetyAuthority
@@ -1200,8 +1359,13 @@ namespace runner::rl
         {
             const auto teacher = walking_teacher_action(environment);
             const float authority = clamp(lesson_authority, 0.0f, 1.0f);
-            const float support_assist = 0.995f * authority;
-            const float body_assist = 0.995f * authority;
+            // Fragile authored body plans ship a deterministic support reflex as
+            // their code brain. Learned weights still control the bounded
+            // residual, while lesson authority remains curriculum-only.
+            const TopologyReflexAuthority reflex =
+                topology_runtime_reflex_authority(rig, stage);
+            const float support_assist = std::max(0.995f * authority, reflex.support);
+            const float body_assist = std::max(0.995f * authority, reflex.body);
             blend_teacher(teacher, support_assist, body_assist);
         }
         else if (stage == sim::CourseStage::crouch_walk)
@@ -1269,7 +1433,6 @@ namespace runner::rl
                 if (!support_motor(index))
                     policy_action[index] = clamp(policy_action[index], -0.32f, 0.32f);
             }
-            return policy_action;
         }
         if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
         {
@@ -1395,7 +1558,11 @@ namespace runner::rl
                     foundational_walk_teacher_handoff_update(*blueprint);
                 const float progress = static_cast<float>(update - handoff)
                     / static_cast<float>(foundational_walk_consolidation_updates);
-                return lerp(16.0f, 0.0f, progress);
+                const bool fragile_support_topology = blueprint->monopedal_gait()
+                    || blueprint->avian_gait();
+                return fragile_support_topology
+                    ? lerp(48.0f, 8.0f, progress)
+                    : lerp(16.0f, 0.0f, progress);
             }
             return 0.0f;
         }
@@ -1540,6 +1707,19 @@ namespace runner::rl
             | (static_cast<std::uint64_t>(secondary) << 32u)
             | (static_cast<std::uint64_t>(tertiary) << 16u)
             | static_cast<std::uint64_t>(quaternary);
+    }
+
+    [[nodiscard]] inline std::uint64_t shuttle_motion_quality(
+        std::uint32_t completed_turns, float distance,
+        std::uint32_t support_cycles, float elapsed_seconds) noexcept
+    {
+        return pack_quality(
+            static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                completed_turns, 65535u)),
+            quality_bucket(std::max(0.0f, distance)),
+            static_cast<std::uint16_t>(std::min<std::uint32_t>(
+                support_cycles, 65535u)),
+            quality_bucket(elapsed_seconds));
     }
 
     [[nodiscard]] inline StageMotionQualification stage_motion_qualification(
@@ -1752,8 +1932,16 @@ namespace runner::rl
                 quality_bucket(environment.stable_stance_seconds()),
                 quality_bucket(environment.elapsed_seconds()));
             break;
-        case sim::CourseStage::uneven:
         case sim::CourseStage::shuttle:
+            quality = shuttle_motion_quality(
+                environment.completed_shuttle_turns(),
+                environment.distance_travelled(),
+                environment.blueprint().paired_leg_chains()
+                    ? environment.alternating_steps()
+                    : environment.gait_cycles(),
+                environment.elapsed_seconds());
+            break;
+        case sim::CourseStage::uneven:
         case sim::CourseStage::hurdles:
         case sim::CourseStage::moving_hazards:
             if (environment.blueprint().paired_leg_chains())
@@ -1951,8 +2139,9 @@ namespace runner::rl
         if (policy_candidate_retainable(stage, quality))
             return true;
         if (quality == 0u
-            || (stage != sim::CourseStage::uneven
-                && stage != sim::CourseStage::shuttle))
+            || stage != sim::CourseStage::uneven
+            || blueprint.monopedal_gait()
+            || blueprint.avian_gait())
             return false;
         const std::uint64_t handoff =
             foundational_walk_teacher_handoff_update(blueprint);
@@ -2219,6 +2408,10 @@ namespace runner::rl
         {
             return self_imitation_prior_.size();
         }
+        [[nodiscard]] std::size_t foundational_teacher_sample_count() const noexcept
+        {
+            return foundational_teacher_prior_.size();
+        }
 
     private:
         struct Transition
@@ -2278,6 +2471,8 @@ namespace runner::rl
         void refresh_self_imitation_prior();
         void clear_self_imitation_prior() noexcept;
         void apply_self_imitation_prior();
+        void refresh_foundational_teacher_prior();
+        void clear_foundational_teacher_prior() noexcept;
         void reset_training_state(bool clear_best = true,
             bool clear_totals = false) noexcept;
         void apply_adam(float learning_rate, float gradient_scale);
@@ -2316,6 +2511,7 @@ namespace runner::rl
         std::vector<float> speed_history_{};
         std::vector<float> best_parameters_{};
         std::vector<ImitationSample> self_imitation_prior_{};
+        std::vector<ImitationSample> foundational_teacher_prior_{};
         float self_imitation_source_score_{ -std::numeric_limits<float>::infinity() };
         TrainingMetrics metrics_{};
         ControllerState controller_state_{ ControllerState::fresh };

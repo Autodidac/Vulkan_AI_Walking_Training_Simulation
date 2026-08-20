@@ -285,6 +285,7 @@ namespace runner::rl
         preview_accumulator_seconds_ = 0.0;
         if (!changed)
             return;
+        refresh_foundational_teacher_prior();
 
         if (preserve_policy)
         {
@@ -322,6 +323,7 @@ namespace runner::rl
         preview_.set_course(course_stage_, course_difficulty_);
         preview_.set_course_motion_enabled(false);
         preview_accumulator_seconds_ = 0.0;
+        refresh_foundational_teacher_prior();
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
         std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
         for (auto& action : rollout_previous_actions_)
@@ -749,37 +751,60 @@ namespace runner::rl
         }
         const float guided_weight = guided_rollout_imitation_weight(
             lesson_update_, course_stage_, &blueprint_);
-        if (guided_weight > 0.0f && !rollout_.empty())
+        const bool fragile_support_topology = blueprint_.monopedal_gait()
+            || blueprint_.avian_gait();
+        const bool use_clean_foundational_prior =
+            course_stage_ == sim::CourseStage::uneven
+            && fragile_support_topology
+            && !foundational_teacher_prior_.empty();
+        const std::size_t guided_source_count = use_clean_foundational_prior
+            ? foundational_teacher_prior_.size() : rollout_.size();
+        if (guided_weight > 0.0f && guided_source_count > 0u)
         {
             constexpr std::size_t guided_passes = 4u;
             constexpr std::size_t guided_samples_per_pass = 1024u;
             constexpr float guided_gradient_limit = 1.0f;
             constexpr float guided_learning_rate = 1.0e-3f;
             const std::size_t guided_count = std::min(
-                guided_samples_per_pass, rollout_.size());
+                guided_samples_per_pass, guided_source_count);
             const std::size_t guided_stride = std::max<std::size_t>(
-                1u, rollout_.size() / guided_count);
+                1u, guided_source_count / guided_count);
             for (std::size_t pass = 0; pass < guided_passes; ++pass)
             {
                 policy_.zero_gradients();
                 float guided_loss{};
-                std::size_t accumulated{};
-                const std::size_t offset = pass * guided_stride / guided_passes;
-                for (std::size_t cursor = offset;
-                    cursor < rollout_.size() && accumulated < guided_count;
-                    cursor += guided_stride, ++accumulated)
+                const std::size_t offset = static_cast<std::size_t>(
+                    (lesson_update_ * 131u
+                        + pass * guided_source_count / guided_passes)
+                    % guided_source_count);
+                for (std::size_t sample_index = 0;
+                    sample_index < guided_count; ++sample_index)
                 {
-                    const Transition& demonstration = rollout_[cursor];
-                    policy_.accumulate_imitation_gradient(
-                        demonstration.observation,
-                        demonstration.guided_action,
-                        guided_weight,
-                        guided_loss);
+                    const std::size_t cursor =
+                        (offset + sample_index * guided_stride)
+                        % guided_source_count;
+                    if (use_clean_foundational_prior)
+                    {
+                        const ImitationSample& demonstration =
+                            foundational_teacher_prior_[cursor];
+                        policy_.accumulate_imitation_gradient(
+                            demonstration.observation,
+                            demonstration.action,
+                            guided_weight,
+                            guided_loss);
+                    }
+                    else
+                    {
+                        const Transition& demonstration = rollout_[cursor];
+                        policy_.accumulate_imitation_gradient(
+                            demonstration.observation,
+                            demonstration.guided_action,
+                            guided_weight,
+                            guided_loss);
+                    }
                 }
-                if (accumulated == 0u)
-                    continue;
                 const float inverse_guided = 1.0f
-                    / static_cast<float>(accumulated);
+                    / static_cast<float>(guided_count);
                 float guided_norm_squared{};
                 for (const float gradient : policy_.gradients())
                 {
@@ -805,7 +830,8 @@ namespace runner::rl
             && (!sim::stage_requires_forward_gait(course_stage_)
                 || lesson_teacher_authority(
                     lesson_update_, course_stage_, blueprint_) >= 0.999f
-                || consolidating_foundational_walk))
+                || (consolidating_foundational_walk
+                    && !fragile_support_topology)))
         {
             const float anchor = consolidating_foundational_walk
                 ? 0.012f : metrics_.update < 1500u ? 0.004f : 0.010f;

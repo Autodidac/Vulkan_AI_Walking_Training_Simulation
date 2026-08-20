@@ -317,39 +317,25 @@ namespace runner
         ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::imperial };
         float session_runtime_seconds{};
         float rig_lifetime_seconds{};
+        struct SessionRigSample
+        {
+            std::uint64_t signature{};
+            ui_layout::TrainingTotals latest{};
+        };
+
         std::uint64_t tracked_rig_signature{};
-        std::uint64_t rig_start_update{};
-        std::uint64_t rig_start_environment_steps{};
+        std::uint64_t rig_start_total_updates{};
         std::uint64_t rig_start_episodes{};
         std::uint64_t rig_start_valid_episodes{};
         std::uint64_t rig_start_invalid_episodes{};
         std::uint64_t rig_start_steps{};
         std::uint64_t rig_start_falls{};
         std::uint64_t rig_start_collisions{};
-        std::uint64_t rig_start_jumps{};
-        std::uint64_t rig_start_landings{};
-        std::uint64_t rig_start_flips{};
         std::uint64_t rig_start_obstacles{};
         double rig_start_distance{};
-        double rig_start_training_seconds{};
-        std::uint64_t rig_start_accepted_rigs{};
-        std::uint64_t rig_start_rejected_rigs{};
-        std::uint64_t rig_start_rollbacks{};
-        std::uint64_t session_start_environment_steps{};
-        std::uint64_t session_start_episodes{};
-        std::uint64_t session_start_invalid_episodes{};
-        std::uint64_t session_start_resets{};
-        std::uint64_t session_start_collisions{};
-        std::uint64_t session_start_jumps{};
-        std::uint64_t session_start_flips{};
-        std::uint64_t session_start_obstacles{};
-        double session_start_distance{};
-        double session_start_training_seconds{};
-        std::uint64_t session_start_accepted_rigs{};
-        std::uint64_t session_start_rejected_rigs{};
-        std::uint64_t session_start_rollbacks{};
         std::uint8_t rig_best_stage{};
-        bool session_stats_initialized{};
+        ui_layout::TrainingTotals session_totals{};
+        std::vector<SessionRigSample> session_rig_samples{};
         bool rig_edit_pending{};
         std::string rig_edit_reason{};
         float joint_test_input{};
@@ -377,9 +363,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0737-hybrid-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0737-hybrid-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0737-hybrid-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0738-topology-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0738-topology-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0738-topology-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -422,6 +408,26 @@ namespace runner
             const std::uint64_t minutes = (total / 60u) % 60u;
             const std::uint64_t remaining = total % 60u;
             return std::format("{:02}:{:02}:{:02}", hours, minutes, remaining);
+        }
+
+        [[nodiscard]] static ui_layout::TrainingTotals training_totals_from(
+            const rl::TrainingMetrics& metrics,
+            const rl::AutonomyStatus& autonomy) noexcept
+        {
+            return {
+                metrics.total_updates,
+                metrics.total_episodes,
+                metrics.total_valid_episodes,
+                metrics.total_invalid_episodes,
+                metrics.total_resets,
+                metrics.total_alternating_steps,
+                metrics.total_falls,
+                metrics.total_collisions,
+                metrics.total_obstacles_passed,
+                static_cast<std::uint64_t>(std::max(0, autonomy.rollback_count)),
+                metrics.total_training_seconds,
+                metrics.total_distance
+            };
         }
 
         [[nodiscard]] static bool blueprint_connected(
@@ -1251,6 +1257,9 @@ namespace runner
                 for (std::size_t motor_index = 0;
                     motor_index < rig.active_motor_count; ++motor_index)
                 {
+                    if (rig.monopedal_gait() && motor_index >= 2u)
+                        continue;
+
                     const sim::MotorConstraint& motor = rig.motors[motor_index];
                     if (!motor.enabled || motor.pivot >= particles.size()
                         || motor.c >= particles.size())
@@ -1278,7 +1287,9 @@ namespace runner
                             break;
                         }
                     }
-                    const art::PixelArt& sprite = support_mask != 0u
+                    const art::PixelArt& sprite = rig.monopedal_gait()
+                        ? (motor_index == 0u ? optional_thigh_art : optional_shin_art)
+                        : support_mask != 0u
                         ? (has_distal_motor ? optional_thigh_art : optional_shin_art)
                         : (has_distal_motor ? optional_upper_arm_art : optional_forearm_art);
                     if (!sprite.loaded())
@@ -1839,16 +1850,17 @@ namespace runner
                 add_rounded_rect(canvas,
                     { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 365.0f } },
                     8.0f, panel_alt, border, 1.0f);
-                add_text(canvas, cursor, "THIS RIG SELECTION", 1.05f, accent);
+                add_text(canvas, cursor, ui_layout::training_totals_scope_headings[0], 1.05f, accent);
                 cursor.y += 25.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("RUNNING TIME {}   LEARNING UPDATES {}",
+                    std::format("WALL TIME {}   OPTIMIZER UPDATES {}",
                         format_duration(rig_lifetime_seconds),
-                        ui_layout::lifetime_delta(metrics.update, rig_start_update)),
+                        ui_layout::lifetime_delta(
+                            metrics.total_updates, rig_start_total_updates)),
                     0.76f, white, usable_width, 0.64f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("SIMULATED RUNS {}   PASSED STAGE CHECKS {}   FAILED STAGE CHECKS {}",
+                    std::format("COMPLETED AGENT RUNS {}   PASSED STAGE CHECKS {}   FAILED STAGE CHECKS {}",
                         ui_layout::lifetime_delta(metrics.total_episodes, rig_start_episodes),
                         ui_layout::lifetime_delta(metrics.total_valid_episodes,
                             rig_start_valid_episodes),
@@ -1857,7 +1869,7 @@ namespace runner
                     0.74f, white, usable_width, 0.60f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("AGENT-EQUIVALENT DISTANCE {}   STEPS {}   FALLS {}",
+                    std::format("AGENT-EQUIVALENT DISTANCE {}   SUPPORT GAIT CYCLES {}   FALLS {}",
                         format_distance(static_cast<float>(std::max(0.0,
                             metrics.total_distance - rig_start_distance))),
                         ui_layout::lifetime_delta(metrics.total_alternating_steps,
@@ -1877,48 +1889,44 @@ namespace runner
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 28.0f;
 
-                add_text(canvas, cursor, "THIS SESSION", 1.05f, accent);
+                add_text(canvas, cursor, ui_layout::training_totals_scope_headings[1], 1.05f, accent);
                 cursor.y += 25.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("RUN TIME {}   TRAINING TIME {}",
+                    std::format("WALL TIME {}   AGENT-SIM TIME {}",
                         format_duration(session_runtime_seconds),
-                        format_duration(static_cast<float>(std::max(0.0,
-                            metrics.total_training_seconds - session_start_training_seconds)))),
+                        format_duration(static_cast<float>(
+                            session_totals.agent_sim_seconds))),
                     0.74f, white, usable_width, 0.60f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("SIMULATED RUNS {}   RESETS {}   ROLLBACKS {}",
-                        ui_layout::lifetime_delta(metrics.total_episodes,
-                            session_start_episodes),
-                        ui_layout::lifetime_delta(metrics.total_resets,
-                            session_start_resets),
-                        ui_layout::lifetime_delta(autonomy.rollback_count,
-                            session_start_rollbacks)),
+                    std::format("COMPLETED AGENT RUNS {}   PASSED {}   FAILED {}",
+                        session_totals.completed_agent_runs,
+                        session_totals.passed_stage_checks,
+                        session_totals.failed_stage_checks),
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("AGENT-EQUIVALENT DISTANCE {}   COLLISIONS {}   FEATURES CLEARED {}",
-                        format_distance(static_cast<float>(std::max(0.0,
-                            metrics.total_distance - session_start_distance))),
-                        ui_layout::lifetime_delta(metrics.total_collisions,
-                            session_start_collisions),
-                        ui_layout::lifetime_delta(metrics.total_obstacles_passed,
-                            session_start_obstacles)),
+                    std::format("AGENT-EQUIVALENT DISTANCE {}   SUPPORT GAIT CYCLES {}   FALLS {}",
+                        format_distance(static_cast<float>(
+                            session_totals.agent_distance)),
+                        session_totals.support_gait_cycles,
+                        session_totals.falls),
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 28.0f;
 
-                add_text(canvas, cursor, "ALL TIME - ALL RIGS", 1.05f, accent);
+                add_text(canvas, cursor, ui_layout::training_totals_scope_headings[2], 1.05f, accent);
                 cursor.y += 25.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("TOTAL RIG UPDATES {}   SIMULATED RUNS {}   PASSED STAGE CHECKS {}",
+                    std::format("TOTAL OPTIMIZER UPDATES {}   COMPLETED AGENT RUNS {}   PASSED {}   FAILED {}",
                         metrics.total_updates, metrics.total_episodes,
-                        metrics.total_valid_episodes),
+                        metrics.total_valid_episodes,
+                        metrics.total_invalid_episodes),
                     0.76f, white, usable_width, 0.62f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("AGENT-EQUIVALENT DISTANCE {}   RESETS {}   ROLLBACKS {}",
+                    std::format("AGENT-EQUIVALENT DISTANCE {}   SUPPORT GAIT CYCLES {}   FALLS {}",
                         format_distance(static_cast<float>(metrics.total_distance)),
-                        metrics.total_resets, autonomy.rollback_count),
+                        metrics.total_alternating_steps, metrics.total_falls),
                     0.72f, white, usable_width, 0.58f);
                 cursor.y += 26.0f;
                 cursor.y += add_wrapped_text(canvas, cursor,
@@ -2161,8 +2169,8 @@ namespace runner
                 0.92f, environment.valid_motion() ? green : danger, text_width);
             line.y += 24.0f;
             add_text_fit(canvas, line,
-                std::format("REAL STEPS {}   LEG CROSSINGS {}   HEEL STRIKES {}   TOE LIFTS {}",
-                    environment.alternating_steps(), environment.limb_crossings(),
+                std::format("SUPPORT GAIT CYCLES {}   LEG CROSSINGS {}   HEEL STRIKES {}   TOE LIFTS {}",
+                    environment.gait_cycles(), environment.limb_crossings(),
                     environment.heel_strikes(), environment.toe_offs()),
                 0.84f, environment.recovering() ? yellow : muted, text_width);
             line.y += 23.0f;
@@ -3233,45 +3241,39 @@ namespace runner
             session_runtime_seconds += std::max(0.0f, dt);
             const rl::TrainingMetrics& current_metrics = trainer.metrics();
             const rl::AutonomyStatus& current_autonomy = trainer.autonomy_status();
-            if (!session_stats_initialized)
-            {
-                session_stats_initialized = true;
-                session_start_environment_steps = current_metrics.total_environment_steps;
-                session_start_episodes = current_metrics.total_episodes;
-                session_start_invalid_episodes = current_metrics.total_invalid_episodes;
-                session_start_resets = current_metrics.total_resets;
-                session_start_collisions = current_metrics.total_collisions;
-                session_start_jumps = current_metrics.total_powered_jumps;
-                session_start_flips = current_metrics.total_landed_flips;
-                session_start_obstacles = current_metrics.total_obstacles_passed;
-                session_start_distance = current_metrics.total_distance;
-                session_start_training_seconds = current_metrics.total_training_seconds;
-                session_start_accepted_rigs = current_autonomy.accepted_rig_changes;
-                session_start_rejected_rigs = current_autonomy.rejected_rig_changes;
-                session_start_rollbacks = current_autonomy.rollback_count;
-            }
             const std::uint64_t current_signature = trainer.rig_signature();
+            const ui_layout::TrainingTotals current_totals =
+                training_totals_from(current_metrics, current_autonomy);
+            const auto session_sample = std::find_if(
+                session_rig_samples.begin(), session_rig_samples.end(),
+                [current_signature](const SessionRigSample& sample)
+                {
+                    return sample.signature == current_signature;
+                });
+            if (session_sample == session_rig_samples.end())
+            {
+                session_rig_samples.push_back({ current_signature, current_totals });
+            }
+            else
+            {
+                ui_layout::accumulate_training_totals(session_totals,
+                    ui_layout::training_totals_delta(
+                        current_totals, session_sample->latest));
+                session_sample->latest = current_totals;
+            }
             if (tracked_rig_signature == 0u || tracked_rig_signature != current_signature)
             {
                 tracked_rig_signature = current_signature;
                 rig_lifetime_seconds = 0.0f;
-                rig_start_update = current_metrics.update;
-                rig_start_environment_steps = current_metrics.environment_steps;
+                rig_start_total_updates = current_metrics.total_updates;
                 rig_start_episodes = current_metrics.total_episodes;
                 rig_start_valid_episodes = current_metrics.total_valid_episodes;
                 rig_start_invalid_episodes = current_metrics.total_invalid_episodes;
                 rig_start_steps = current_metrics.total_alternating_steps;
                 rig_start_falls = current_metrics.total_falls;
                 rig_start_collisions = current_metrics.total_collisions;
-                rig_start_jumps = current_metrics.total_powered_jumps;
-                rig_start_landings = current_metrics.total_landed_jumps;
-                rig_start_flips = current_metrics.total_landed_flips;
                 rig_start_obstacles = current_metrics.total_obstacles_passed;
                 rig_start_distance = current_metrics.total_distance;
-                rig_start_training_seconds = current_metrics.total_training_seconds;
-                rig_start_accepted_rigs = current_autonomy.accepted_rig_changes;
-                rig_start_rejected_rigs = current_autonomy.rejected_rig_changes;
-                rig_start_rollbacks = current_autonomy.rollback_count;
                 rig_best_stage = static_cast<std::uint8_t>(current_autonomy.stage);
             }
             else
