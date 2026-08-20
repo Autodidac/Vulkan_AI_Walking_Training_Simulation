@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3801u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'3901u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -971,16 +971,16 @@ namespace runner::rl
         // single knee compresses before it extends. Solving a new two-link pose
         // at t=0 changed the IK branch immediately and pole-vaulted the body.
         const float hip_target = rig.rest_joint_angle(0u)
-            + startup * direction * 0.180f * cycle;
+            + startup * direction * 0.175f * cycle;
         const float knee_target = rig.rest_joint_angle(1u)
-            + startup * (0.48f * compression - 0.180f * extension);
+            + startup * (0.46f * compression - 0.180f * extension);
         action[0] = motor_action_for_target_angle(hip, hip_target);
         action[1] = motor_action_for_target_angle(knee, knee_target);
 
         // The paired plates are the heel/toe of one physical foot, not two
         // independent legs. A visible rocker transfer must unload one plate
         // before the opposite edge can establish the next supported hop.
-        const float rocker = startup * direction * cycle * 0.140f;
+        const float rocker = startup * direction * cycle * 0.145f;
         action[2] = motor_action_for_target_angle(rig.motors[2],
             rig.rest_joint_angle(2u) + rocker);
         action[3] = motor_action_for_target_angle(rig.motors[3],
@@ -1250,6 +1250,17 @@ namespace runner::rl
             return { 0.92f, 0.82f };
         if (rig.avian_gait())
             return { 0.88f, 0.50f };
+        // Back / Turn / Return is a hybrid code-brain skill for every body
+        // plan. Once the learned policy is past curriculum handoff it still
+        // needs a persistent, faced-direction support clock; otherwise a
+        // forward-specialized residual can brace against the return command.
+        if (stage == sim::CourseStage::shuttle)
+        {
+            if (rig.paired_leg_chains())
+                return { 0.90f, 0.72f };
+            if (rig.support_seed_count() >= 4u)
+                return { 0.90f, 0.60f };
+        }
         return {};
     }
 

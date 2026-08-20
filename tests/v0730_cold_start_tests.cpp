@@ -14,7 +14,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "Runner v0.7.38 rig-training failure: " << message << '\n';
+        std::cerr << "Runner v0.7.39 rig-training failure: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -483,7 +483,7 @@ int main(int argc, char** argv)
     const bool run_monoped = mode == "--learner-monoped";
     if (!run_references && !run_learner && !run_monoped)
     {
-        std::cerr << "Unknown v0.7.38 test mode: " << mode << '\n';
+        std::cerr << "Unknown v0.7.39 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
     verify_retained_release_gate_contract();
@@ -494,7 +494,7 @@ int main(int argc, char** argv)
         verify_frame_independent_preview();
         if (!run_learner)
         {
-            std::cout << "Runner v0.7.38 seven-rig reference gait and frame-independence checks passed\n";
+            std::cout << "Runner v0.7.39 seven-rig reference gait and frame-independence checks passed\n";
             return EXIT_SUCCESS;
         }
     }
@@ -543,10 +543,10 @@ int main(int argc, char** argv)
                 rig, monoped);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.38 monoped training diagnostic failed\n";
+            std::cerr << "Runner v0.7.39 monoped training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.38 monoped training checks passed\n";
+        std::cout << "Runner v0.7.39 monoped training checks passed\n";
         return EXIT_SUCCESS;
     }
 
@@ -602,12 +602,12 @@ int main(int argc, char** argv)
     }
     if (!report.passed)
     {
-        std::cerr << "Runner v0.7.38 seven-rig training diagnostic failed\n";
+        std::cerr << "Runner v0.7.39 seven-rig training diagnostic failed\n";
         return EXIT_FAILURE;
     }
     if (run_references)
-        std::cout << "Runner v0.7.38 seven-rig training and frame-independence checks passed\n";
+        std::cout << "Runner v0.7.39 seven-rig training and frame-independence checks passed\n";
     else
-        std::cout << "Runner v0.7.38 seven-rig training checks passed\n";
+        std::cout << "Runner v0.7.39 seven-rig training checks passed\n";
     return EXIT_SUCCESS;
 }

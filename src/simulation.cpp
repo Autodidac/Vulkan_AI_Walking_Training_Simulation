@@ -1275,16 +1275,7 @@ namespace runner::sim
             const float spawn_x = root_x + direction * ahead;
             const float spawn_ground = ground_height_at(spawn_x);
             granular_hazard_safe_seconds_ = 0.0f;
-            if (selector == 2u)
-            {
-                const float removed = terrain_.excavate(
-                    terrain_sample_x(spawn_x, course_progress()),
-                    0.34f + course_difficulty_ * 0.38f,
-                    0.52f + course_difficulty_ * 0.38f);
-                if (removed > 0.0f)
-                    granular_hazard_hold_seconds_ = 0.90f;
-            }
-            else if (selector == 3u)
+            if (selector == 3u)
             {
                 const float half_width = 0.25f + course_difficulty_ * 0.15f;
                 const float half_height = 0.20f + course_difficulty_ * 0.12f;
@@ -1300,22 +1291,27 @@ namespace runner::sim
             }
             else
             {
-                const MaterialKind kind = selector == 0u
-                    ? MaterialKind::sand : MaterialKind::dirt;
-                const std::size_t burst_count = 8u
-                    + static_cast<std::size_t>(std::lround(course_difficulty_ * 6.0f));
+                const bool cascade = selector == 2u;
+                const std::size_t burst_count = (cascade ? 14u : 8u)
+                    + static_cast<std::size_t>(std::lround(course_difficulty_
+                        * (cascade ? 8.0f : 6.0f)));
                 if (material_particles_.size() + burst_count > 96u)
                     material_particles_.clear();
                 for (std::size_t index = 0; index < burst_count; ++index)
                 {
+                    const MaterialKind kind = selector == 0u
+                        || (cascade && (index & 1u) == 0u)
+                        ? MaterialKind::sand : MaterialKind::dirt;
                     const float spread = (static_cast<float>(index)
-                        - static_cast<float>(burst_count - 1u) * 0.5f) * 0.12f;
+                        - static_cast<float>(burst_count - 1u) * 0.5f)
+                        * (cascade ? 0.15f : 0.12f);
                     material_particles_.push_back({ kind,
-                        { spawn_x + spread, spawn_ground + 3.6f
-                            + random_unit() * 1.8f },
-                        { -direction * (0.10f + random_unit() * 0.35f),
+                        { spawn_x + spread, spawn_ground + (cascade ? 4.4f : 3.6f)
+                            + random_unit() * (cascade ? 2.2f : 1.8f) },
+                        { -direction * (0.10f + random_unit()
+                            * (cascade ? 0.50f : 0.35f)),
                             -0.10f - random_unit() * 0.35f },
-                        0.052f + random_unit() * 0.030f,
+                        0.052f + random_unit() * (cascade ? 0.040f : 0.030f),
                         kind == MaterialKind::sand ? 0.42f : 0.60f, true });
                 }
             }

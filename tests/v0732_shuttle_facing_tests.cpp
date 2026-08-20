@@ -155,7 +155,10 @@ int main(){
   &&rl::crouch_teacher_authority(rl::crouch_teacher_handoff_update)==0.0f,"crouch handoff");
 
  sim::Environment outbound{sim::CreatureBlueprint::humanoid(),0x7320u};
- outbound.set_course(sim::CourseStage::shuttle,0.30f);outbound.set_course_motion_enabled(false);
+ outbound.set_course(sim::CourseStage::shuttle,0.30f);outbound.set_course_motion_enabled(true);
+ require(outbound.course_speed()==0.0f&&outbound.course_progress()==0.0f,
+  "shuttle lesson inherited a moving course frame");
+ outbound.set_course_motion_enabled(false);
  require(outbound.shuttle_enabled()&&outbound.course_features().empty(),"early obstacles");
  require(!sim::shuttle_dynamic_course_ready(1u,14u,2.0f)
   &&!sim::shuttle_dynamic_course_ready(2u,13u,2.0f)
@@ -189,6 +192,33 @@ int main(){
  for(std::size_t i=0;i<factories.size();++i){sim::Environment e{factories[i](),0x732100u+i};
   e.set_course(sim::CourseStage::shuttle,0.30f);e.set_course_motion_enabled(false);
   require(e.shuttle_enabled()&&e.facing_direction()==1.0f&&e.locomotion_direction()==1.0f,"all-rig shuttle");}
+ const auto humanoid_reflex=rl::topology_runtime_reflex_authority(
+  sim::CreatureBlueprint::humanoid(),sim::CourseStage::shuttle);
+ const auto quadruped_reflex=rl::topology_runtime_reflex_authority(
+  sim::CreatureBlueprint::quadruped(),sim::CourseStage::shuttle);
+ require(humanoid_reflex.support>=0.90f&&humanoid_reflex.body>=0.70f
+  &&quadruped_reflex.support>=0.90f&&quadruped_reflex.body>=0.58f,
+  "post-handoff shuttle omitted the topology direction reflex");
+ sim::Environment post_handoff{sim::CreatureBlueprint::humanoid(),0x739419u};
+ post_handoff.set_course(sim::CourseStage::shuttle,0.30f);
+ post_handoff.set_course_motion_enabled(true);
+ sim::ShuttleState post_handoff_return{};
+ post_handoff_return.facing_direction=-1.0f;
+ post_handoff_return.locomotion_direction=-1.0f;
+ post_handoff_return.completed_turns=1u;
+ sim::EnvironmentTestAccess::shuttle(post_handoff,post_handoff_return);
+ sim::EnvironmentTestAccess::root_x(post_handoff,6.0f);
+ const float return_origin=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
+ std::array<float,sim::action_count> forward_specialized{};
+ forward_specialized.fill(0.85f);
+ for(int step=0;step<300;++step){
+  const auto action=rl::effective_policy_action(post_handoff,forward_specialized,
+   sim::CourseStage::shuttle,0.0f);
+  if(post_handoff.step(action).terminated)break;}
+ const float return_x=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
+ require(post_handoff.invalid_reason()==sim::InvalidMotion::none
+  &&return_x<return_origin-1.0f&&post_handoff.course_progress()==0.0f,
+  "post-handoff forward residual resisted self-propelled return travel");
 
  sim::Environment physical{sim::CreatureBlueprint::biped(),0x7323u};
  physical.set_course(sim::CourseStage::shuttle,0.30f);physical.set_course_motion_enabled(false);

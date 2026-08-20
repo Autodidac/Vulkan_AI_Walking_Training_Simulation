@@ -1,3 +1,11 @@
+## 0.7.39
+
+- Replaced pressure-driven terrain deformation with immutable authored fine cells and one read-only collision/render surface connected between their centers; standing and walking no longer change any terrain cell underneath a rig.
+- Isolated runtime granular overlays from authored geometry: only explicitly dropped sand/dirt cells fall, stack, promote/demote macro tiles, and permit explicit removal.
+- Removed inherited course motion from Back / Turn / Return and added a shuttle-only topology reflex so reverse traversal is support-driven after the rig flips instead of being dragged through a stationary brace.
+- Calibrated the monoped clean-prior transfer at a 0.175-radian hip stroke, 0.145-radian foot rocker, and reduced 0.46 knee compression; both MSVC and GCC 14 pass the unchanged all-seven reference gates.
+- Added exact coarse/fine terrain immutability, explicit deposit/removal, mixed falling cascade, moving-course adversarial shuttle, and repeated-seed regression coverage.
+- Promoted training semantics to 0x0007'3901, checkpoint magic to EPPO39, autonomy state to RUNAUTONOMY 21, and automatic files to runner-v0739-static-cells-*, with lifetime-only fallback from v0.7.38.
 ## 0.7.38
 
 - Preserved articulated shuttle poses at direction changes and derived knee/elbow bend direction from authored chain topology, eliminating lesson-4 branch flips and backward-braced collapse.

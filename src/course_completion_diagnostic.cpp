@@ -175,17 +175,58 @@ namespace runner::diagnostics
         beginner_sand.reset(0x73130u, 0.30f);
         full_hazard_sand.reset(0x73130u, 1.0f);
         constexpr float active_sample_x = 3.5f;
-        const float beginner_height = beginner_sand.height_at(active_sample_x);
-        const float full_hazard_height = full_hazard_sand.height_at(active_sample_x);
-        beginner_sand.apply_pressure(active_sample_x, 2.4f, 0.65f, 1.0f / 60.0f);
-        full_hazard_sand.apply_pressure(active_sample_x, 2.4f, 0.65f,
-            1.0f / 60.0f);
-        const float beginner_deformation = beginner_height
-            - beginner_sand.height_at(active_sample_x);
-        const float full_hazard_deformation = full_hazard_height
-            - full_hazard_sand.height_at(active_sample_x);
-        report.active_terrain = beginner_deformation > 0.0f
-            && full_hazard_deformation > beginner_deformation;
+        const auto beginner_cells = beginner_sand.cells();
+        const auto beginner_fine_cells = beginner_sand.fine_cells();
+        const auto full_hazard_cells = full_hazard_sand.cells();
+        const auto full_hazard_fine_cells = full_hazard_sand.fine_cells();
+        const auto unchanged = [](const sim::DeformableTerrain& subject,
+            const auto& cells, const auto& fine_cells) noexcept
+        {
+            for (std::size_t index = 0; index < cells.size(); ++index)
+            {
+                const auto& before = cells[index];
+                const auto& after = subject.cells()[index];
+                if (before.height != after.height
+                    || before.rest_height != after.rest_height
+                    || before.firmness != after.firmness
+                    || before.loose_fraction != after.loose_fraction
+                    || before.water_surface != after.water_surface
+                    || before.water_depth != after.water_depth
+                    || before.surface_material != after.surface_material
+                    || before.region != after.region)
+                    return false;
+            }
+            for (std::size_t index = 0; index < fine_cells.size(); ++index)
+            {
+                const auto& before = fine_cells[index];
+                const auto& after = subject.fine_cells()[index];
+                if (before.material_id != after.material_id
+                    || before.flags != after.flags || before.fill != after.fill)
+                    return false;
+            }
+            return true;
+        };
+        for (int iteration = 0; iteration < 600; ++iteration)
+        {
+            beginner_sand.apply_pressure(active_sample_x, 2.4f, 0.65f,
+                1.0f / 60.0f);
+            full_hazard_sand.apply_pressure(active_sample_x, 2.4f, 0.65f,
+                1.0f / 60.0f);
+            beginner_sand.step(1.0f / 60.0f);
+            full_hazard_sand.step(1.0f / 60.0f);
+        }
+        const bool authored_cells_immutable = unchanged(beginner_sand,
+                beginner_cells, beginner_fine_cells)
+            && unchanged(full_hazard_sand,
+                full_hazard_cells, full_hazard_fine_cells);
+        const float deposited_volume = full_hazard_sand.total_height_volume();
+        full_hazard_sand.deposit(active_sample_x, 0.12f, 0.18f,
+            sandhybrid::Material::sand);
+        for (int iteration = 0; iteration < 240; ++iteration)
+            full_hazard_sand.step(1.0f / 60.0f);
+        const bool explicit_cells_settled = full_hazard_sand.total_height_volume()
+            > deposited_volume + 0.119f;
+        report.active_terrain = authored_cells_immutable && explicit_cells_settled;
 
         sim::DeformableTerrain launch{};
         launch.reset(0x73131u, 1.0f);

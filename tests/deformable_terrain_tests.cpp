@@ -195,21 +195,47 @@ int main()
     require(saw_distinct_middle_order,
         "terrain material-band order is fixed across seeds");
 
-    sim::DeformableTerrain beginner_sand{}, full_hazard_sand{};
-    beginner_sand.reset(0x73130u, 0.30f);
-    full_hazard_sand.reset(0x73130u, 1.0f);
-    const float beginner_height = beginner_sand.height_at(3.5f);
-    const float full_hazard_height = full_hazard_sand.height_at(3.5f);
-    beginner_sand.apply_pressure(3.5f, 2.4f, 0.65f, 1.0f / 60.0f);
-    full_hazard_sand.apply_pressure(3.5f, 2.4f, 0.65f, 1.0f / 60.0f);
-    const float beginner_deformation = beginner_height
-        - beginner_sand.height_at(3.5f);
-    const float full_hazard_deformation = full_hazard_height
-        - full_hazard_sand.height_at(3.5f);
-    require(beginner_deformation > 0.0f,
-        "30-percent curriculum sand is cosmetic instead of active");
-    require(full_hazard_deformation > beginner_deformation,
-        "full-difficulty active sand is not more hazardous than its foundation");
+    const auto same_terrain = [](const sim::DeformableTerrain& subject,
+        const auto& cells, const auto& fine_cells)
+    {
+        for (std::size_t index = 0; index < cells.size(); ++index)
+        {
+            const auto& before = cells[index];
+            const auto& after = subject.cells()[index];
+            if (before.height != after.height || before.rest_height != after.rest_height
+                || before.firmness != after.firmness
+                || before.loose_fraction != after.loose_fraction
+                || before.water_surface != after.water_surface
+                || before.water_depth != after.water_depth
+                || before.surface_material != after.surface_material
+                || before.region != after.region)
+                return false;
+        }
+        for (std::size_t index = 0; index < fine_cells.size(); ++index)
+        {
+            const auto& before = fine_cells[index];
+            const auto& after = subject.fine_cells()[index];
+            if (before.material_id != after.material_id || before.flags != after.flags
+                || before.fill != after.fill)
+                return false;
+        }
+        return true;
+    };
+    for (const float difficulty : { 0.30f, 1.0f })
+    {
+        sim::DeformableTerrain immutable_sand{};
+        immutable_sand.reset(0x73130u, difficulty);
+        const auto authored_cells = immutable_sand.cells();
+        const auto authored_fine_cells = immutable_sand.fine_cells();
+        for (int step = 0; step < 600; ++step)
+        {
+            for (const float sample : { 3.5f, 7.25f, 12.0f, 18.0f })
+                immutable_sand.apply_pressure(sample, 4.0f, 5.0f, 1.0f / 20.0f);
+            immutable_sand.step(1.0f / 20.0f);
+        }
+        require(same_terrain(immutable_sand, authored_cells, authored_fine_cells),
+            "authored macro/fine cells changed under repeated contact pressure");
+    }
 
     sim::DeformableTerrain protected_launch{};
     protected_launch.reset(0xA731u, 0.95f);
@@ -257,22 +283,14 @@ int main()
     }
 
     constexpr float x=3.5f;
-    const float pressure_center = std::round(x / sim::DeformableTerrain::fine_cell_spacing)
-        * sim::DeformableTerrain::fine_cell_spacing;
-    const float adjacent_left = first.height_at(
-        pressure_center - sim::DeformableTerrain::fine_cell_spacing);
-    const float adjacent_right = first.height_at(
-        pressure_center + sim::DeformableTerrain::fine_cell_spacing);
-    const float volume=first.total_height_volume(), height=first.height_at(x), firmness=first.firmness_at(x);
-    first.apply_pressure(x,2.4f,0.65f,1.0f/60.0f);
-    require(first.height_at(x)<height,"pressure did not compact sand");
-    require(first.firmness_at(x)>firmness,"pressure did not firm sand");
-    require(std::abs(first.total_height_volume()-volume)<2.0e-5f,"pressure did not conserve volume");
-    require(first.height_at(pressure_center - sim::DeformableTerrain::fine_cell_spacing)
-                <= adjacent_left + 1.0e-5f
-            && first.height_at(pressure_center + sim::DeformableTerrain::fine_cell_spacing)
-                <= adjacent_right + 1.0e-5f,
-        "foot pressure raised an immediate adjacent trip lip");
+    const auto immutable_cells = first.cells();
+    const auto immutable_fine_cells = first.fine_cells();
+    const float volume=first.total_height_volume();
+    for(int i=0;i<240;++i){first.apply_pressure(x,4.0f,5.0f,1.0f/20.0f);first.step(1.0f/20.0f);}
+    require(same_terrain(first,immutable_cells,immutable_fine_cells),
+        "foot contact changed immutable authored pixel cells");
+    require(std::abs(first.total_height_volume()-volume)<2.0e-5f,
+        "immutable contact path changed terrain volume");
     const float deposited=first.total_height_volume(); first.deposit(18.0f,0.12f,0.20f);
     require(std::abs((first.total_height_volume()-deposited)-0.12f)<2.0e-4f,"deposit lost volume");
     const float slope=first.maximum_neighbor_delta();
@@ -313,17 +331,20 @@ int main()
     excavated_a.reset(0x733002u, 0.85f);
     excavated_b.reset(0x733002u, 0.85f);
     constexpr float excavation_x = 3.5f;
-    const float excavation_height = excavated_a.height_at(excavation_x);
+    const auto excavation_cells = excavated_a.cells();
+    const auto excavation_fine_cells = excavated_a.fine_cells();
+    require(excavated_a.excavate(excavation_x, 2.00f, 0.35f) == 0.0f
+            && same_terrain(excavated_a, excavation_cells, excavation_fine_cells),
+        "excavation modified immutable authored course cells");
+    excavated_a.deposit(excavation_x, 0.35f, 0.18f);
+    excavated_b.deposit(excavation_x, 0.35f, 0.18f);
     const float removed_a = excavated_a.excavate(excavation_x, 2.00f, 0.35f);
     const float removed_b = excavated_b.excavate(excavation_x, 2.00f, 0.35f);
-    require(removed_a > 0.20f && std::abs(removed_a - removed_b) < 1.0e-7f,
-        "seeded excavation failed or was nondeterministic");
-    require(excavated_a.height_at(excavation_x) < excavation_height - 0.15f
-            && excavated_a.region_at(excavation_x) == sim::TerrainRegion::hole,
-        "excavation did not form a collision-visible hole");
+    require(removed_a > 0.0f && std::abs(removed_a - removed_b) < 1.0e-7f,
+        "explicit dropped-cell excavation failed or was nondeterministic");
     require(std::abs(excavated_a.height_at(excavation_x)
             - excavated_b.height_at(excavation_x)) < 1.0e-7f,
-        "repeated-seed excavation changed the resulting surface");
+        "repeated-seed dropped-cell excavation changed the resulting surface");
     require(excavated_a.excavate(0.0f, 1.0f, 0.5f) == 0.0f
             && excavated_a.excavate(std::numeric_limits<float>::quiet_NaN(),
                 1.0f, 0.5f) == 0.0f,
@@ -366,11 +387,17 @@ int main()
     sim::EnvironmentTestAccess::prepare_granular_event(granular, 2u);
     require(granular.material_event_count() == 3u
             && granular.granular_hazard_active()
-            && granular.material_particles().empty(),
-        "excavation event did not expose an unsafe formation window");
-    sim::EnvironmentTestAccess::tick_granular(granular, 120);
+            && !granular.material_particles().empty()
+            && std::ranges::any_of(granular.material_particles(),
+                [](const sim::MaterialParticle& particle)
+                { return particle.kind == sim::MaterialKind::sand; })
+            && std::ranges::any_of(granular.material_particles(),
+                [](const sim::MaterialParticle& particle)
+                { return particle.kind == sim::MaterialKind::dirt; }),
+        "falling-cell cascade did not expose an unsafe mixed-material window");
+    sim::EnvironmentTestAccess::tick_granular(granular, 240);
     require(granular.granular_hazard_safe(),
-        "excavated terrain never transitioned to the safe traversal state");
+        "falling-cell cascade never settled into safe traversable terrain");
     sim::EnvironmentTestAccess::prepare_granular_event(granular, 3u);
     require(granular.granular_block_present()
             && granular.granular_hazard_active()
@@ -405,7 +432,7 @@ int main()
         }
         return result;
     };
-    for (const std::uint32_t sequence : { 0u, 3u })
+    for (const std::uint32_t sequence : { 0u, 2u, 3u })
     {
         sim::Environment at_20(sim::CreatureBlueprint::humanoid(), 0x733333u);
         sim::Environment at_60(sim::CreatureBlueprint::humanoid(), 0x733333u);

@@ -1877,6 +1877,7 @@ namespace runner::sim
                 return 0.0f;
             if (course_stage_ == CourseStage::balance
                 || course_stage_ == CourseStage::duck_press
+                || course_stage_ == CourseStage::shuttle
                 || course_stage_ == CourseStage::ramps
                 || course_stage_ == CourseStage::duck_bars
                 || course_stage_ == CourseStage::climb_descent

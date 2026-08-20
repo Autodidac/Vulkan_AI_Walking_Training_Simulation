@@ -363,9 +363,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0738-topology-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0738-topology-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0738-topology-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0739-static-cells-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0739-static-cells-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0739-static-cells-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {

@@ -257,7 +257,7 @@ int main()
             int mode = -1;
             input >> magic >> version >> stage >> difficulty >> generation
                 >> accepted >> rejected >> rollbacks >> mode;
-            return input && magic == "RUNAUTONOMY" && version == 20 ? mode : -1;
+            return input && magic == "RUNAUTONOMY" && version == 21 ? mode : -1;
         };
 
         {
@@ -311,9 +311,9 @@ int main()
 
         {
             std::ofstream malformed(state, std::ios::trunc);
-            malformed << "RUNAUTONOMY 20\n0 0.25 0 0 0 0 255\n";
+            malformed << "RUNAUTONOMY 21\n0 0.25 0 0 0 0 255\n";
             require(static_cast<bool>(malformed),
-                "could not author adversarial version-19 state");
+                "could not author adversarial current-version state");
         }
         {
             runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };

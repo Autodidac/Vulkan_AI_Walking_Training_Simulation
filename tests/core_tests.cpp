@@ -2663,32 +2663,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0738-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0739-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0738-topology-autosave.eppo";
+        / "runner-v0739-static-cells-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0738-topology-evolved.rig";
+        / "runner-v0739-static-cells-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0738-topology-autonomy.state";
-    const std::filesystem::path v0737_autosave = lifetime_import_directory
-        / "runner-v0737-hybrid-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0737_autosave, error),
+        / "runner-v0739-static-cells-autonomy.state";
+    const std::filesystem::path v0738_autosave = lifetime_import_directory
+        / "runner-v0738-topology-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0738_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0737_magic{
-        'E', 'P', 'P', 'O', '3', '7', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0737_autosave, v0737_magic),
-        "failed to mark the fallback fixture as an EPPO37 checkpoint");
+    constexpr std::array<char, 8> v0738_magic{
+        'E', 'P', 'P', 'O', '3', '8', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0738_autosave, v0738_magic),
+        "failed to mark the fallback fixture as an EPPO38 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.37 LIFETIME LEDGER")
+                && import_message.find("V0.7.38 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.37 fallback autosave was not selected before a new save");
+            "v0.7.38 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)
