@@ -30,6 +30,9 @@ namespace runner::rl
             {
                 const std::array legacy_candidates{
                     std::pair{ checkpoint.parent_path()
+                        / "runner-v0740-physical-facing-autosave.eppo",
+                        std::string{ "V0.7.40" } },
+                    std::pair{ checkpoint.parent_path()
                         / "runner-v0739-static-cells-autosave.eppo",
                         std::string{ "V0.7.39" } },
                     std::pair{ checkpoint.parent_path()
@@ -74,7 +77,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.40 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.41 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -256,7 +259,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.40 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.41 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

@@ -191,10 +191,9 @@ int main(){
  outbound.set_course(sim::CourseStage::balance,0.25f);
  require(outbound.course_features().empty()&&!outbound.shuttle_enabled(),"lesson cleanup");
 
- constexpr std::array factories{&sim::CreatureBlueprint::chicken,&sim::CreatureBlueprint::biped,
-  &sim::CreatureBlueprint::humanoid,&sim::CreatureBlueprint::quadruped,&sim::CreatureBlueprint::crawler4,
-  &sim::CreatureBlueprint::hexapod,&sim::CreatureBlueprint::monoped};
- for(std::size_t i=0;i<factories.size();++i){sim::Environment e{factories[i](),0x732100u+i};
+ constexpr std::array factories{&sim::CreatureBlueprint::humanoid,
+  &sim::CreatureBlueprint::chicken,&sim::CreatureBlueprint::crawler4,
+  &sim::CreatureBlueprint::hexapod}; for(std::size_t i=0;i<factories.size();++i){sim::Environment e{factories[i](),0x732100u+i};
   e.set_course(sim::CourseStage::shuttle,0.30f);e.set_course_motion_enabled(false);
   require(e.shuttle_enabled()&&e.facing_direction()==1.0f&&e.locomotion_direction()==1.0f,"all-rig shuttle");}
  sim::Environment reflected{sim::CreatureBlueprint::humanoid(),0x740419u};
@@ -280,10 +279,10 @@ int main(){
   "return acceptance cannot distinguish forward posture from backpedal bracing");
  const auto humanoid_reflex=rl::topology_runtime_reflex_authority(
   sim::CreatureBlueprint::humanoid(),sim::CourseStage::shuttle);
- const auto quadruped_reflex=rl::topology_runtime_reflex_authority(
-  sim::CreatureBlueprint::quadruped(),sim::CourseStage::shuttle);
+ const auto dog_reflex=rl::topology_runtime_reflex_authority(
+  sim::CreatureBlueprint::crawler4(),sim::CourseStage::shuttle);
  require(humanoid_reflex.support>=0.90f&&humanoid_reflex.body>=0.70f
-  &&quadruped_reflex.support>=0.90f&&quadruped_reflex.body>=0.58f,
+  &&dog_reflex.support>=0.90f&&dog_reflex.body>=0.58f,
   "post-handoff shuttle omitted the topology direction reflex");
  sim::Environment post_handoff{sim::CreatureBlueprint::humanoid(),0x739419u};
  post_handoff.set_course(sim::CourseStage::shuttle,0.30f);
@@ -309,7 +308,7 @@ int main(){
    <=sim::sustained_backward_brace_limit_seconds,
   "post-handoff return moved left while backpedaling or without a real gait");
 
- sim::Environment physical{sim::CreatureBlueprint::biped(),0x7323u};
+ sim::Environment physical{sim::CreatureBlueprint::humanoid(),0x7323u};
  physical.set_course(sim::CourseStage::shuttle,0.30f);physical.set_course_motion_enabled(false);
  sim::ShuttlePhase prior_phase=physical.shuttle_phase();
  sim::StepResult physical_result{};

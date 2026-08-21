@@ -21,7 +21,7 @@ namespace runner::sim
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
     inline constexpr std::size_t observation_count = 62;
-    inline constexpr float foundational_gait_cadence_hz = 1.51f;
+    inline constexpr float foundational_gait_cadence_hz = 1.24f;
 
     enum class ShuttlePhase : std::uint8_t
     {
@@ -555,6 +555,78 @@ namespace runner::sim
         const float knee_ratio = std::abs(knee_span) / leg_length;
         const float foot_ratio = std::abs(foot_span) / leg_length;
         return knee_ratio > 0.52f && foot_ratio < 0.12f;
+    }
+
+    struct CasualGaitEvidence
+    {
+        float quality{};
+        float support_ratio{};
+        float clearance_ratio{};
+        bool relaxed{};
+        bool tiny_shuffle{};
+        bool high_march{};
+        bool overstride{};
+        bool cadence_fault{};
+        bool backward_brace{};
+    };
+
+    [[nodiscard]] inline float bounded_casual_window(float value,
+        float outer_low, float inner_low, float inner_high,
+        float outer_high) noexcept
+    {
+        if (!std::isfinite(value) || value <= outer_low || value >= outer_high
+            || !(outer_low < inner_low && inner_low <= inner_high
+                && inner_high < outer_high))
+            return 0.0f;
+        if (value >= inner_low && value <= inner_high)
+            return 1.0f;
+        if (value < inner_low)
+            return clamp((value - outer_low) / (inner_low - outer_low),
+                0.0f, 1.0f);
+        return clamp((outer_high - value) / (outer_high - inner_high),
+            0.0f, 1.0f);
+    }
+
+    [[nodiscard]] inline CasualGaitEvidence casual_gait_evidence(
+        float authored_leg_length, float support_separation,
+        float swing_clearance, float step_cadence_hz,
+        float backward_brace_ratio) noexcept
+    {
+        CasualGaitEvidence evidence{};
+        if (!std::isfinite(authored_leg_length)
+            || !std::isfinite(support_separation)
+            || !std::isfinite(swing_clearance)
+            || !std::isfinite(step_cadence_hz)
+            || !std::isfinite(backward_brace_ratio)
+            || authored_leg_length <= 0.01f || support_separation < 0.0f
+            || swing_clearance < 0.0f || step_cadence_hz < 0.0f)
+            return evidence;
+
+        evidence.support_ratio = support_separation / authored_leg_length;
+        evidence.clearance_ratio = swing_clearance / authored_leg_length;
+        evidence.tiny_shuffle = evidence.support_ratio < 0.08f;
+        evidence.overstride = evidence.support_ratio > 0.62f;
+        evidence.high_march = evidence.clearance_ratio > 0.26f;
+        evidence.cadence_fault = step_cadence_hz < 0.60f
+            || step_cadence_hz > 3.20f;
+        evidence.backward_brace = backward_brace_ratio
+            > backward_brace_activation_ratio;
+
+        const float stance_quality = bounded_casual_window(
+            evidence.support_ratio, 0.08f, 0.16f, 0.44f, 0.62f);
+        const float clearance_quality = bounded_casual_window(
+            evidence.clearance_ratio, 0.025f, 0.055f, 0.17f, 0.26f);
+        const float cadence_quality = bounded_casual_window(
+            step_cadence_hz, 0.60f, 0.95f, 2.40f, 3.20f);
+        const float posture_quality = 1.0f - clamp((backward_brace_ratio - 0.04f)
+            / 0.20f, 0.0f, 1.0f);
+        evidence.quality = std::min(std::min(stance_quality, clearance_quality),
+            std::min(cadence_quality, posture_quality));
+        evidence.relaxed = evidence.quality >= 0.75f
+            && !evidence.tiny_shuffle && !evidence.high_march
+            && !evidence.overstride && !evidence.cadence_fault
+            && !evidence.backward_brace;
+        return evidence;
     }
 
 
@@ -1576,6 +1648,37 @@ namespace runner::sim
             }
             return head_reach >= 0.55f && rear_counterweight;
         }
+        [[nodiscard]] bool paired_manipulator_chains() const noexcept
+        {
+            std::size_t chains{};
+            for (std::size_t proximal_index = 0;
+                proximal_index < active_motor_count; ++proximal_index)
+            {
+                const MotorConstraint& proximal = motors[proximal_index];
+                if (!proximal.enabled || proximal.pivot >= nodes.size()
+                    || proximal.c >= nodes.size()
+                    || support_branch_mask(proximal) != 0u)
+                    continue;
+                for (std::size_t distal_index = 0;
+                    distal_index < active_motor_count; ++distal_index)
+                {
+                    const MotorConstraint& distal = motors[distal_index];
+                    if (distal_index == proximal_index || !distal.enabled
+                        || distal.pivot != proximal.c
+                        || distal.c >= nodes.size()
+                        || support_branch_mask(distal) != 0u)
+                        continue;
+                    ++chains;
+                    break;
+                }
+            }
+            return chains >= 2u;
+        }
+        [[nodiscard]] bool human_casual_gait_plan() const noexcept
+        {
+            return paired_leg_chains() && !avian_gait()
+                && !horizontal_body_plan() && paired_manipulator_chains();
+        }
         [[nodiscard]] bool horizontal_body_plan() const noexcept
         {
             if (root_node >= nodes.size() || head_node >= nodes.size())
@@ -1613,7 +1716,7 @@ namespace runner::sim
         if (blueprint.paired_leg_chains())
             return foundational_gait_cadence_hz;
         if (blueprint.support_seed_count() >= 6u)
-            return 0.78f;
+            return 0.90f;
         float support_height = std::numeric_limits<float>::infinity();
         for (std::size_t node = 0; node < blueprint.nodes.size(); ++node)
         {

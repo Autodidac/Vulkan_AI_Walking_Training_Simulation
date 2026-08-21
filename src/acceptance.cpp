@@ -26,20 +26,15 @@ namespace runner::acceptance
             CreatureBlueprint blueprint{};
         };
 
-        [[nodiscard]] std::array<NamedBlueprint, 8> all_presets()
+        [[nodiscard]] std::array<NamedBlueprint, 4> production_rigs()
         {
             return {
-                NamedBlueprint{ "scaffold", CreatureBlueprint::scaffold() },
+                NamedBlueprint{ "human", CreatureBlueprint::humanoid() },
                 NamedBlueprint{ "chicken", CreatureBlueprint::chicken() },
-                NamedBlueprint{ "biped", CreatureBlueprint::biped() },
-                NamedBlueprint{ "humanoid", CreatureBlueprint::humanoid() },
-                NamedBlueprint{ "quadruped", CreatureBlueprint::quadruped() },
-                NamedBlueprint{ "crawler4", CreatureBlueprint::crawler4() },
-                NamedBlueprint{ "hexapod", CreatureBlueprint::hexapod() },
-                NamedBlueprint{ "monoped", CreatureBlueprint::monoped() }
+                NamedBlueprint{ "dog", CreatureBlueprint::crawler4() },
+                NamedBlueprint{ "hexapod", CreatureBlueprint::hexapod() }
             };
         }
-
         void add_case(Report& report, std::string name, bool passed, std::string detail)
         {
             report.cases.push_back({ std::move(name), passed, std::move(detail) });
@@ -313,7 +308,7 @@ namespace runner::acceptance
     Report run_live_acceptance_matrix()
     {
         Report report{};
-        const auto presets = all_presets();
+        const auto presets = production_rigs();
 
         bool blueprints_valid = true;
         std::string invalid_blueprints{};
@@ -331,7 +326,7 @@ namespace runner::acceptance
             invalid_blueprints += preset.name;
         }
         add_case(report, "preset-blueprint-integrity", blueprints_valid,
-            blueprints_valid ? "all seven authored presets are valid"
+            blueprints_valid ? "all four production rigs are valid"
                              : "invalid presets: " + invalid_blueprints);
 
         bool finite_soak = true;
@@ -440,15 +435,19 @@ namespace runner::acceptance
                 ? "finite current attempts remain renderable even before qualification"
                 : "a finite current training attempt can disappear from the PIP");
 
-        const CreatureBlueprint monoped = CreatureBlueprint::monoped();
-        const bool monoped_distinct = monoped.monopedal_gait()
-            && !humanoid.monopedal_gait()
-            && monoped.valid();
-        add_case(report, "monoped-single-leg-gait-identity", monoped_distinct,
-            monoped_distinct
-                ? "monoped uses its dedicated single-leg gait path"
-                : "monoped is still forced through alternating biped semantics");
-
+        const CreatureBlueprint chicken = CreatureBlueprint::chicken();
+        const CreatureBlueprint dog = CreatureBlueprint::crawler4();
+        const CreatureBlueprint hexapod = CreatureBlueprint::hexapod();
+        const bool production_catalog = chicken.paired_leg_chains()
+            && dog.support_seed_count() == 4u
+            && dog.active_motor_count == 8u
+            && hexapod.support_seed_count() == 6u
+            && hexapod.active_motor_count == 8u
+            && !dog.paired_leg_chains() && !hexapod.paired_leg_chains();
+        add_case(report, "production-rig-catalog", production_catalog,
+            production_catalog
+                ? "Human, Chicken, Dog, and six-knee Hexapod have distinct topology semantics"
+                : "production catalog contains duplicated or incomplete topology semantics");
         const bool curriculum_order = sim::course_stage_count == 12u
             && sim::course_stage_name(sim::CourseStage::balance) == "1. STAND"
             && sim::course_stage_name(sim::CourseStage::duck_press)

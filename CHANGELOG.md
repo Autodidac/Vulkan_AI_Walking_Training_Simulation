@@ -1,3 +1,12 @@
+## 0.7.41
+
+- Reduced the production catalog and release matrix to Human, Chicken, Dog, and Hexapod while preserving retired Biped, Quadruped, and Monoped data only for compatible `.rig` import and low-level topology regression coverage.
+- Reauthored Chicken's compact side-view body, beak, tail, and paired two-link legs; retained Dog's distinct four-support crawler plant; and gave Hexapod six real articulated knee/foot supports with an eight-motor active core plus passive middle knees.
+- Added bounded Human-only casual-gait evidence using authored leg length, physical support separation, swing clearance, cadence, and backward-brace ratio. The reward rejects tiny shuffling, exaggerated marching, overstride, cadence abuse, non-finite evidence, and backward-lean locomotion without leaking humanoid assumptions into other rigs.
+- Replaced ambiguous zero-of-eight mastery text with explicit training-work and final-check waiting, running, passed, and complete states.
+- Preserved immutable authored terrain cells; only explicit dropped granular overlay cells move, fall, stack, settle, or are removed.
+- Promoted training semantics to 0x0007'4102, checkpoint magic to EPPO41, autonomy state to RUNAUTONOMY 23, and automatic files to runner-v0741-natural-gait-*, with lifetime-only fallback from v0.7.40.
+
 ## 0.7.40
 
 - Physically reflects the articulated rig at shuttle turns and unifies motor targets, controller observations, topology reflexes, equipment aim, modular art, preview, and PIP in one facing-local frame.

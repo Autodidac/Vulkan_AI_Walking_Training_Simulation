@@ -100,8 +100,8 @@ namespace runner::art
         const float assembly = std::isfinite(assembled_scale)
             && assembled_scale > 0.0f
             ? std::clamp(assembled_scale, 0.50f, 2.0f) : 1.0f;
-        const float height = std::max(scaled_pixels(38.0f, pixel_scale),
-            radius * 2.30f * assembly);
+        const float height = std::max(scaled_pixels(28.0f, pixel_scale),
+            radius * 2.05f * assembly);
         return { height, height * 0.10f };
     }
 

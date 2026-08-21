@@ -47,19 +47,17 @@ int main()
     require(humanoid.nodes.size() >= 13 && humanoid.bones.size() >= 13,
         "humanoid arm nodes or bones are missing");
 
-    const std::array<std::pair<sim::CreatureBlueprint, std::size_t>, 6> motor_contracts{
-        std::pair{ sim::CreatureBlueprint::biped(), 4u },
+    const std::array<std::pair<sim::CreatureBlueprint, std::size_t>, 4> motor_contracts{
+        std::pair{ sim::CreatureBlueprint::humanoid(), 8u },
         std::pair{ sim::CreatureBlueprint::chicken(), 4u },
-        std::pair{ sim::CreatureBlueprint::quadruped(), 8u },
         std::pair{ sim::CreatureBlueprint::crawler4(), 8u },
-        std::pair{ sim::CreatureBlueprint::hexapod(), 6u },
-        std::pair{ sim::CreatureBlueprint::monoped(), 4u }
+        std::pair{ sim::CreatureBlueprint::hexapod(), 8u }
     };
     for (const auto& [rig, expected_motors] : motor_contracts)
     {
         require(rig.valid(), "built-in rig became invalid after policy expansion");
         require(rig.active_motor_count == expected_motors,
-            "built-in rig does not expose its authored articulated motor count");
+            "production rig does not expose its authored active motor count");
     }
 
     {
@@ -174,7 +172,7 @@ int main()
             return trainer.controller_state_name() == "RESUMED";
         }, 20s), "asynchronous checkpoint load was not applied by worker ownership");
 
-        trainer.set_blueprint(sim::CreatureBlueprint::quadruped(), false);
+        trainer.set_blueprint(sim::CreatureBlueprint::crawler4(), false);
         trainer.set_blueprint(sim::CreatureBlueprint::hexapod(), false);
         trainer.set_blueprint(humanoid, false);
         require(wait_until([&]

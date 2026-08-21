@@ -178,6 +178,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0738_TURN_TOPOLOGY_STATS.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0739_STATIC_CELLS_DIRECTION.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0740_PHYSICAL_FACING_RETURN.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
@@ -361,7 +362,7 @@ namespace
         application.frame(runner::InputState{}, 1.0f / 60.0f, 1900, 1180);
         const std::size_t course_vertices = application.vertices().size();
         const std::size_t course_bytes = application.vertices().size_bytes();
-        std::array<std::size_t, 7> rig_vertices{};
+        std::array<std::size_t, 4> rig_vertices{};
         std::size_t vertex_count = course_vertices;
         std::size_t vertex_bytes = course_bytes;
         bool all_rigs_rendered = true;
@@ -388,12 +389,12 @@ namespace
         std::printf(
             "Runner %s art diagnostic: %s; vertices=%zu bytes=%zu "
             "course_vertices=%zu fallen_vertices=%zu "
-            "rig_vertices=%zu,%zu,%zu,%zu,%zu,%zu,%zu "
+            "rig_vertices=%zu,%zu,%zu,%zu "
             "headroom_limit=%zu hard_limit=%zu",
             RUNNER_VERSION, valid ? "passed" : "failed", vertex_count,
             vertex_bytes, course_vertices, fallen_vertices,
             rig_vertices[0], rig_vertices[1], rig_vertices[2], rig_vertices[3],
-            rig_vertices[4], rig_vertices[5], rig_vertices[6], headroom_limit,
+            headroom_limit,
             runner::render::maximum_frame_vertex_bytes);
         std::putchar(10);
         return valid ? 0 : 1;

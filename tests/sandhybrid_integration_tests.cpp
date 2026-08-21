@@ -35,14 +35,14 @@ namespace
     }
 
     void require_actor_scale(const runner::sim::CreatureBlueprint& blueprint,
-        std::string_view name)
+        std::string_view name, float minimum_tiles, float maximum_tiles)
     {
         const float tiles = runner::sim::DeformableTerrain::actor_height_in_macro_tiles(
             blueprint_height(blueprint));
-        if (tiles >= 3.0f && tiles <= 5.0f)
+        if (tiles >= minimum_tiles && tiles <= maximum_tiles)
             return;
         std::cerr << name << " occupies " << tiles
-            << " macro tiles; expected 3..5\n";
+            << " macro tiles; outside its authored production scale\n";
         std::exit(EXIT_FAILURE);
     }
 }
@@ -51,8 +51,9 @@ int main()
 {
     using runner::sim::DeformableTerrain;
 
-    require(sandhybrid::library_api_version == 3u,
-        "unexpected SandHybrid library API version");
+    require(sandhybrid::library_api_version >= 3u
+            && sandhybrid::library_api_version <= 4u,
+        "unsupported SandHybrid library API version");
     require(sandhybrid::library_name == "SandHybrid",
         "wrong linked SandHybrid library identity");
     require(sandhybrid::core_library_capabilities.native_startup_owned_by_consumer,
@@ -65,9 +66,10 @@ int main()
     require(std::abs(DeformableTerrain::macro_tile_size
             - DeformableTerrain::fine_cell_spacing * 8.0f) < 1.0e-7f,
         "macro and fine-cell scale diverged");
-    require_actor_scale(runner::sim::CreatureBlueprint::chicken(), "chicken");
-    require_actor_scale(runner::sim::CreatureBlueprint::biped(), "biped");
-    require_actor_scale(runner::sim::CreatureBlueprint::humanoid(), "humanoid");
+    require_actor_scale(runner::sim::CreatureBlueprint::humanoid(), "human", 3.0f, 5.0f);
+    require_actor_scale(runner::sim::CreatureBlueprint::chicken(), "chicken", 3.0f, 5.0f);
+    require_actor_scale(runner::sim::CreatureBlueprint::crawler4(), "dog", 1.5f, 3.0f);
+    require_actor_scale(runner::sim::CreatureBlueprint::hexapod(), "hexapod", 1.5f, 3.0f);
 
     DeformableTerrain terrain{};
     terrain.reset(0x7145A11Du, 0.72f);

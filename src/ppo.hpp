@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4001u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4102u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -227,6 +227,34 @@ namespace runner::rl
         return false;
     }
 
+    [[nodiscard]] inline bool rig_has_driven_two_link_support_chains(
+        const sim::CreatureBlueprint& rig) noexcept
+    {
+        std::size_t chain_count{};
+        for (std::size_t proximal_index = 0;
+            proximal_index < rig.active_motor_count; ++proximal_index)
+        {
+            const sim::MotorConstraint& proximal = rig.motors[proximal_index];
+            const std::uint8_t support_mask = motor_support_mask(rig, proximal);
+            if (!proximal.enabled || support_mask == 0u
+                || proximal.pivot >= rig.nodes.size()
+                || proximal.c >= rig.nodes.size())
+                continue;
+            for (std::size_t distal_index = 0;
+                distal_index < rig.active_motor_count; ++distal_index)
+            {
+                const sim::MotorConstraint& distal = rig.motors[distal_index];
+                if (distal_index == proximal_index || !distal.enabled
+                    || distal.pivot != proximal.c
+                    || distal.c >= rig.nodes.size()
+                    || motor_support_mask(rig, distal) != support_mask)
+                    continue;
+                ++chain_count;
+                break;
+            }
+        }
+        return chain_count >= 2u;
+    }
     [[nodiscard]] inline std::array<float, sim::action_count> compact_support_teacher_action(
         const sim::Environment& environment, float pressure) noexcept
     {
@@ -499,8 +527,6 @@ namespace runner::rl
     {
         const std::uint8_t mask = motor_support_mask(rig, motor);
         const std::size_t side = mask == 0x2u ? 1u : 0u;
-        if (rig.support_seed_count() >= 6u)
-            return side;
         return (rig.support_branch_longitudinal_band(motor) + side) & 1u;
     }
 
@@ -658,7 +684,8 @@ namespace runner::rl
         const locomotion::Plan movement = current_locomotion_plan(environment);
         const float local_direction = movement.direction
             * environment.facing_direction();
-        const float gait_authority = multi_support_gait_authority(movement);
+        const float gait_authority = rig.support_seed_count() >= 6u
+            ? 1.0f : multi_support_gait_authority(movement);
         const float base_phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t proximal_index = 0;
@@ -727,8 +754,8 @@ namespace runner::rl
     struct BipedGaitParameters
     {
         float cadence_hz{ sim::foundational_gait_cadence_hz };
-        float step_length{ 0.50f };
-        float swing_lift{ 0.50f };
+        float step_length{ 0.72f };
+        float swing_lift{ 0.20f };
         float leg_height{ 2.30f };
         float direction{ 1.0f };
         float phase_offset{};
@@ -761,9 +788,9 @@ namespace runner::rl
             : 2.30f;
         return {
             sim::foundational_gait_cadence_hz,
-            clamp(leg_length * 0.26f, 0.50f, 0.66f),
-            clamp(leg_length * 0.25f, 0.52f, 0.68f),
-            clamp(leg_length * 0.94f, 1.90f, 2.42f),
+            clamp(leg_length * 0.34f, 0.62f, 0.82f),
+            clamp(leg_length * 0.085f, 0.16f, 0.24f),
+            clamp(leg_length * 0.93f, 1.88f, 2.40f),
             1.0f
         };
     }
@@ -878,7 +905,7 @@ namespace runner::rl
                 - rig.nodes[shoulder.pivot];
             const Vec2 target = authored_opposed_swing_target(
                 authored_endpoint, arm_phase,
-                (upper_length + lower_length) * 0.12f, 0.0f,
+                (upper_length + lower_length) * 0.15f, 0.0f,
                 parameters.direction);
             const Vec2 authored_upper = rig.nodes[shoulder.c]
                 - rig.nodes[shoulder.pivot];
@@ -935,10 +962,10 @@ namespace runner::rl
         // flung the trunk; preserving an authored rest endpoint as the stride
         // centre instead produced a double-support shuffle.
         BipedGaitParameters parameters{};
-        parameters.cadence_hz = clamp(cadence_hz, 0.56f, 0.68f);
-        parameters.step_length = chain_length * 0.085f;
-        parameters.swing_lift = chain_length * 0.17f;
-        parameters.leg_height = chain_length * 0.95f;
+        parameters.cadence_hz = clamp(cadence_hz, 0.92f, 1.22f);
+        parameters.step_length = chain_length * 0.30f;
+        parameters.swing_lift = chain_length * 0.11f;
+        parameters.leg_height = chain_length * 0.91f;
         parameters.direction = direction < 0.0f ? -1.0f : 1.0f;
         // The authored chicken rests with its first support behind the root and
         // its second support ahead. Match that physical stance on the first
@@ -1035,11 +1062,11 @@ namespace runner::rl
 
             const MultiSupportTeacherParameters multi_parameters{
                 sim::authored_foundational_gait_cadence_hz(rig),
-                six_supports ? 0.96f : (tall_four_supports ? 1.08f : 0.92f),
+                six_supports ? 1.08f : (tall_four_supports ? 1.08f : 0.92f),
                 pi * 1.5f,
-                six_supports ? 0.30f : 0.0f
+                six_supports ? 0.36f : 0.0f
             };
-            return rig.support_seed_count() == 4u
+            return rig_has_driven_two_link_support_chains(rig)
                 ? multi_support_two_link_teacher_action(environment, multi_parameters)
                 : multi_support_teacher_action(environment, multi_parameters);
         }
@@ -1123,9 +1150,9 @@ namespace runner::rl
             // gait, but shorten and slow it so the rig can unload its leading
             // support before the explicit turn instead of reaching the
             // boundary by sustained backward bracing.
-            biped_parameters.cadence_hz *= 0.72f;
-            biped_parameters.step_length *= 0.52f;
-            biped_parameters.swing_lift *= 0.62f;
+            biped_parameters.cadence_hz *= 0.84f;
+            biped_parameters.step_length *= 0.78f;
+            biped_parameters.swing_lift *= 0.82f;
         }
 
         return biped_gait_teacher_action(environment, biped_parameters);

@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
 #include <string_view>
 
 namespace
@@ -210,6 +211,29 @@ int main()
             "reset help must explain rig-scoped persistence");
     }
 
+    {
+        const auto waiting = runner::telemetry::final_check_label(
+            LearningState::starting, false, 25, 0u, 0, 8);
+        require(waiting == "TRAINING WORK 25%   FINAL CHECKS WAITING",
+            "pre-test status did not separate training work from final checks");
+        require(waiting.find("0 / 8") == std::string::npos,
+            "the pre-test UI still displayed a meaningless zero-of-eight score");
+
+        const auto running = runner::telemetry::final_check_label(
+            LearningState::testing_current_policy, true, 100, 3u, 1, 8);
+        require(running == "FINAL CHECKS RUNNING   COMPLETED 3   PASSED 1 / 8",
+            "running final-check telemetry is ambiguous");
+
+        const auto passed = runner::telemetry::final_check_label(
+            LearningState::improving_best_result, true, 100, 4u, 2, 8);
+        require(passed == "FINAL CHECKS PASSED 2 / 8   COMPLETED 4",
+            "partial final-check telemetry is ambiguous");
+
+        const auto mastered = runner::telemetry::final_check_label(
+            LearningState::lesson_mastered, true, 100, 8u, 8, 8);
+        require(mastered == "FINAL CHECKS COMPLETE 8 / 8",
+            "mastered final-check telemetry is ambiguous");
+    }
     std::cout << "Runner v0.7.21 readable telemetry tests passed\n";
     return EXIT_SUCCESS;
 }

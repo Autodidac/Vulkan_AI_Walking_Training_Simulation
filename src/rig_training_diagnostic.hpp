@@ -57,7 +57,7 @@ namespace runner::diagnostics
 
     struct RigTrainingReport
     {
-        std::array<RigTrainingResult, 7> rigs{};
+        std::array<RigTrainingResult, 4> rigs{};
         std::uint64_t updates{};
         bool passed{};
     };

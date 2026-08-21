@@ -74,6 +74,58 @@ int main()
             "backward-brace dwell changed with render cadence");
     }
 
+    const sim::CasualGaitEvidence relaxed = sim::casual_gait_evidence(
+        2.0f, 0.60f, 0.20f, 1.80f, 0.02f);
+    require(relaxed.relaxed && std::abs(relaxed.quality - 1.0f) < 1.0e-6f,
+        "a natural casual stride did not receive full physical gait quality");
+    const sim::CasualGaitEvidence tiny = sim::casual_gait_evidence(
+        2.0f, 0.10f, 0.20f, 1.80f, 0.02f);
+    require(tiny.tiny_shuffle && tiny.quality == 0.0f,
+        "a tiny shuffle received natural-stride credit");
+    const sim::CasualGaitEvidence marching = sim::casual_gait_evidence(
+        2.0f, 0.60f, 0.60f, 1.80f, 0.02f);
+    require(marching.high_march && marching.quality == 0.0f,
+        "an exaggerated high march received natural-stride credit");
+    const sim::CasualGaitEvidence overstride = sim::casual_gait_evidence(
+        2.0f, 1.30f, 0.20f, 1.80f, 0.02f);
+    require(overstride.overstride && overstride.quality == 0.0f,
+        "an over-wide stride received natural-stride credit");
+    const sim::CasualGaitEvidence frantic = sim::casual_gait_evidence(
+        2.0f, 0.60f, 0.20f, 3.50f, 0.02f);
+    require(frantic.cadence_fault && frantic.quality == 0.0f,
+        "an unnatural cadence received natural-stride credit");
+    const sim::CasualGaitEvidence braced = sim::casual_gait_evidence(
+        2.0f, 0.60f, 0.20f, 1.80f, 0.30f);
+    require(braced.backward_brace && braced.quality == 0.0f,
+        "a backward-braced march received natural-stride credit");
+    require(sim::casual_gait_evidence(std::numeric_limits<float>::quiet_NaN(),
+            0.60f, 0.20f, 1.80f, 0.02f).quality == 0.0f,
+        "non-finite gait evidence received reward");
+
+    std::array<float, 3> cadence_quality{};
+    std::size_t cadence_index = 0u;
+    for (const float hz : std::array{ 20.0f, 60.0f, 240.0f })
+    {
+        const float dt = 1.0f / hz;
+        float elapsed = 0.0f;
+        float next_step = 0.55f;
+        std::uint32_t step_events = 0u;
+        for (int frame = 0; frame < static_cast<int>(hz * 20.0f); ++frame)
+        {
+            elapsed += dt;
+            while (elapsed + 1.0e-5f >= next_step)
+            {
+                ++step_events;
+                next_step += 0.55f;
+            }
+        }
+        cadence_quality[cadence_index++] = sim::casual_gait_evidence(
+            2.0f, 0.60f, 0.20f,
+            static_cast<float>(step_events) / elapsed, 0.02f).quality;
+    }
+    require(std::abs(cadence_quality[0] - cadence_quality[1]) < 1.0e-5f
+            && std::abs(cadence_quality[1] - cadence_quality[2]) < 1.0e-5f,
+        "natural-gait evidence changed with render cadence");
     sim::CreatureBlueprint edited = sim::CreatureBlueprint::humanoid();
     edited.nodes[edited.torso_node].x = edited.nodes[edited.root_node].x - 0.35f;
     edited.nodes[edited.head_node].x = edited.nodes[edited.root_node].x - 0.42f;
@@ -96,11 +148,28 @@ int main()
             "quadruped did not derive diagonal phases from authored topology");
     }
     const sim::CreatureBlueprint hexapod = sim::CreatureBlueprint::hexapod();
-    const std::array<std::size_t, 6> hexapod_groups{ 0u, 1u, 0u, 1u, 0u, 1u };
+    const std::array<std::size_t, 8> hexapod_groups{ 0u, 0u, 1u, 1u, 0u, 0u, 1u, 1u };
     for (std::size_t index = 0; index < hexapod.active_motor_count; ++index)
         require(phase_group(hexapod, hexapod.motors[index]) == hexapod_groups[index],
             "hexapod did not derive alternating tripod phases from authored topology");
 
+    const sim::CreatureBlueprint human = sim::CreatureBlueprint::humanoid();
+    const sim::CreatureBlueprint chicken = sim::CreatureBlueprint::chicken();
+    const sim::CreatureBlueprint dog = sim::CreatureBlueprint::crawler4();
+    const sim::CreatureBlueprint biped = sim::CreatureBlueprint::biped();
+    require(human.human_casual_gait_plan(),
+        "production Human lost the natural casual-gait objective");
+    require(!chicken.human_casual_gait_plan()
+            && !dog.human_casual_gait_plan()
+            && !hexapod.human_casual_gait_plan()
+            && !biped.human_casual_gait_plan(),
+        "the Human stride objective leaked into a topology-specific rig");
+    sim::CreatureBlueprint broken_arm_human = human;
+    broken_arm_human.motors[5].enabled = false;
+    broken_arm_human.motors[7].enabled = false;
+    require(broken_arm_human.active_motor_count == human.active_motor_count
+            && !broken_arm_human.human_casual_gait_plan(),
+        "motor count replaced missing authored manipulator chains");
     require(!rl::multi_support_progress_truth(1.20f, 34u, 20.0f),
         "inflated contact cycling was accepted as multi-support progress");
     require(rl::multi_support_progress_truth(2.0f, 20u, 8.0f),

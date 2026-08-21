@@ -198,7 +198,7 @@ namespace runner::diagnostics
             trainer.maximum_worker_count(),
             course_motion_enabled
         };
-        if (name == "humanoid")
+        if (name == "human")
         {
             // Reproduce the real lesson boundary: keep the learned forward-walk
             // network, train the appended shuttle skill, then discard any
@@ -233,12 +233,9 @@ namespace runner::diagnostics
     {
         updates = std::max<std::uint64_t>(1u, updates);
         const std::array cases{
-            RigCase{ "biped", sim::CreatureBlueprint::biped() },
-            RigCase{ "humanoid", sim::CreatureBlueprint::humanoid() },
-            RigCase{ "monoped", sim::CreatureBlueprint::monoped() },
+            RigCase{ "human", sim::CreatureBlueprint::humanoid() },
             RigCase{ "chicken", sim::CreatureBlueprint::chicken() },
-            RigCase{ "quadruped", sim::CreatureBlueprint::quadruped() },
-            RigCase{ "crawler4", sim::CreatureBlueprint::crawler4() },
+            RigCase{ "dog", sim::CreatureBlueprint::crawler4() },
             RigCase{ "hexapod", sim::CreatureBlueprint::hexapod() }
         };
 
@@ -267,7 +264,7 @@ namespace runner::diagnostics
                 && result.rollout_workers == 2u
                 && retained_policy_release_eligible(
                     result, cases[index].blueprint);
-            if (cases[index].name == "humanoid")
+            if (cases[index].name == "human")
             {
                 report.passed = report.passed
                     && result.shuttle_lesson_updates >= 1200u

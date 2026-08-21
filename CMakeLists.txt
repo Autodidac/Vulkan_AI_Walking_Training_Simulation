@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.40 LANGUAGES CXX)
+project(Runner VERSION 0.7.41 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -29,19 +29,30 @@ set(RUNNER_ICON_BMP "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.bmp")
 set(RUNNER_ICON_ICO "${RUNNER_GENERATED_ASSET_DIR}/runner.ico")
 
 include(FetchContent)
-set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
-set(SANDHYBRID_BUILD_VULKAN_RUNTIME OFF CACHE BOOL "" FORCE)
-set(SANDHYBRID_WARNINGS_AS_ERRORS ON CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(runner_sandhybrid
-    GIT_REPOSITORY https://github.com/Autodidac/EpochSimEngine.git
-    GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae
-    GIT_SHALLOW FALSE
-    GIT_SUBMODULES ""
-    GIT_SUBMODULES_RECURSE FALSE)
-FetchContent_MakeAvailable(runner_sandhybrid)
+set(RUNNER_SANDHYBRID_PACKAGE_ROOT "$ENV{RUNNER_SANDHYBRID_PACKAGE_ROOT}"
+    CACHE PATH "Offline SandHybrid package root containing lib/cmake/SandHybrid.")
+set(RUNNER_SANDHYBRID_SOURCE_ID "99dd8acddfa9be1402981052b39cbf6284ed99ae")
+if(RUNNER_SANDHYBRID_PACKAGE_ROOT)
+    find_package(SandHybrid 2.5 CONFIG REQUIRED
+        PATHS "${RUNNER_SANDHYBRID_PACKAGE_ROOT}" NO_DEFAULT_PATH)
+    set(runner_sandhybrid_SOURCE_DIR "${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
+    set(RUNNER_SANDHYBRID_SOURCE_ID "package-${SandHybrid_VERSION}")
+    message(STATUS "Using offline SandHybrid package ${SandHybrid_VERSION} at ${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
+else()
+    set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
+    set(SANDHYBRID_BUILD_VULKAN_RUNTIME OFF CACHE BOOL "" FORCE)
+    set(SANDHYBRID_WARNINGS_AS_ERRORS ON CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(runner_sandhybrid
+        GIT_REPOSITORY https://github.com/Autodidac/EpochSimEngine.git
+        GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae
+        GIT_SHALLOW FALSE
+        GIT_SUBMODULES ""
+        GIT_SUBMODULES_RECURSE FALSE)
+    FetchContent_MakeAvailable(runner_sandhybrid)
+endif()
 if(NOT TARGET SandHybrid::SandHybrid)
-    message(FATAL_ERROR "Pinned SandHybrid core target was not created")
+    message(FATAL_ERROR "SandHybrid core target was not created")
 endif()
 
 add_library(RunnerCore STATIC
@@ -65,7 +76,7 @@ target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_
 target_link_libraries(RunnerCore PUBLIC Threads::Threads SandHybrid::SandHybrid)
 target_compile_features(RunnerCore PUBLIC cxx_std_23)
 target_compile_definitions(RunnerCore PUBLIC
-    RUNNER_SANDHYBRID_SOURCE_COMMIT="99dd8acddfa9be1402981052b39cbf6284ed99ae")
+    RUNNER_SANDHYBRID_SOURCE_COMMIT="${RUNNER_SANDHYBRID_SOURCE_ID}")
 set_target_properties(RunnerCore PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
 function(runner_enable_warnings target)
@@ -174,6 +185,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -212,6 +224,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()

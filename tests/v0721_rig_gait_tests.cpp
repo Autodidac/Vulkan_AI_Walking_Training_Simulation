@@ -150,6 +150,38 @@ namespace
             });
     }
 
+    bool every_support_has_two_link_chain(const CreatureBlueprint& rig)
+    {
+        for (std::size_t support = 0; support < rig.nodes.size(); ++support)
+        {
+            if (!rig.is_support_seed(support))
+                continue;
+            bool articulated = false;
+            for (const auto& lower : rig.bones)
+            {
+                const std::uint16_t knee = lower.a == support ? lower.b
+                    : lower.b == support ? lower.a : static_cast<std::uint16_t>(0xFFFFu);
+                if (knee == static_cast<std::uint16_t>(0xFFFFu) || rig.is_support_seed(knee))
+                    continue;
+                articulated = std::ranges::any_of(rig.bones,
+                    [support, knee, &rig](const auto& upper)
+                    {
+                        if (upper.a == support || upper.b == support)
+                            return false;
+                        const std::uint16_t body = upper.a == knee ? upper.b
+                            : upper.b == knee ? upper.a : static_cast<std::uint16_t>(0xFFFFu);
+                        return body != static_cast<std::uint16_t>(0xFFFFu)
+                            && !rig.is_support_seed(body);
+                    });
+                if (articulated)
+                    break;
+            }
+            if (!articulated)
+                return false;
+        }
+        return true;
+    }
+
     bool compact_side_view_biped(const CreatureBlueprint& rig)
     {
         if (!rig.paired_leg_chains())
@@ -168,60 +200,85 @@ int main()
 {
     using namespace runner;
 
-    const std::array<CreatureBlueprint, 8> presets{
-        CreatureBlueprint::scaffold(), CreatureBlueprint::chicken(),
-        CreatureBlueprint::biped(), CreatureBlueprint::humanoid(),
-        CreatureBlueprint::quadruped(), CreatureBlueprint::crawler4(),
-        CreatureBlueprint::hexapod(), CreatureBlueprint::monoped()
+    const std::array<CreatureBlueprint, 4> production_rigs{
+        CreatureBlueprint::humanoid(), CreatureBlueprint::chicken(),
+        CreatureBlueprint::crawler4(), CreatureBlueprint::hexapod()
     };
-    for (const CreatureBlueprint& rig : presets)
+    for (const CreatureBlueprint& rig : production_rigs)
     {
-        require(rig.valid(), "shipped preset is structurally invalid");
-        require(connected(rig), "shipped preset is disconnected");
-        require(unique_supports(rig), "shipped preset reuses a semantic support");
+        require(rig.valid(), "production rig is structurally invalid");
+        require(connected(rig), "production rig is disconnected");
+        require(unique_supports(rig), "production rig reuses a semantic support");
         require(motor_chains_are_real(rig),
-            "shipped preset has a fake parent-pivot-child motor chain");
+            "production rig has a fake parent-pivot-child motor chain");
         require(std::ranges::all_of(rig.nodes, [](Vec2 node)
             { return std::isfinite(node.x) && std::isfinite(node.y); }),
-            "shipped preset contains non-finite geometry");
+            "production rig contains non-finite geometry");
     }
 
-    require(compact_side_view_biped(presets[0]),
-        "scaffold is still authored as a frontal split");
-    require(compact_side_view_biped(presets[1]),
+    const std::array<CreatureBlueprint, 4> legacy_import_rigs{
+        CreatureBlueprint::scaffold(), CreatureBlueprint::biped(),
+        CreatureBlueprint::quadruped(), CreatureBlueprint::monoped()
+    };
+    for (const CreatureBlueprint& rig : legacy_import_rigs)
+    {
+        require(rig.valid() && connected(rig),
+            "legacy/import compatibility rig became unloadable");
+    }
+
+    const CreatureBlueprint& human = production_rigs[0];
+    const CreatureBlueprint& chicken = production_rigs[1];
+    const CreatureBlueprint& dog = production_rigs[2];
+    const CreatureBlueprint& hexapod = production_rigs[3];
+    require(compact_side_view_biped(human),
+        "human is still authored as a frontal split");
+    require(compact_side_view_biped(chicken),
         "chicken legs are still authored as a frontal split");
-    require(compact_side_view_biped(presets[2]),
-        "biped is still authored as a frontal split");
-    require(compact_side_view_biped(presets[3]),
-        "humanoid is still authored as a frontal split");
-
-    const CreatureBlueprint& quadruped = presets[4];
-    const CreatureBlueprint& crawler = presets[5];
-    const CreatureBlueprint& hexapod = presets[6];
-    require(quadruped.support_seed_count() == 4u
-            && quadruped.active_motor_count == 8u
-            && no_support_brace(quadruped),
-        "quadruped is not four independent articulated legs");
-    require(crawler.support_seed_count() == 4u
-            && crawler.active_motor_count == 8u
-            && no_support_brace(crawler),
-        "four-leg crawler is not four independent articulated legs");
+    require(dog.support_seed_count() == 4u
+            && dog.active_motor_count == 8u
+            && no_support_brace(dog)
+            && every_support_has_two_link_chain(dog),
+        "dog is not four independent articulated legs");
     require(hexapod.support_seed_count() == 6u
-            && hexapod.active_motor_count >= 6u
-            && no_support_brace(hexapod),
-        "hexapod is not six independent tripod-phase supports");
-    require(!quadruped.paired_leg_chains() && !crawler.paired_leg_chains()
-            && !hexapod.paired_leg_chains(),
-        "multi-support rigs were misclassified as two-leg bipeds");
-
+            && hexapod.active_motor_count == 8u
+            && no_support_brace(hexapod)
+            && every_support_has_two_link_chain(hexapod),
+        "hexapod does not have six independent knee chains");
+    require(!dog.paired_leg_chains() && !hexapod.paired_leg_chains(),
+        "multi-support production rigs were misclassified as two-leg bipeds");
+    require(rl::rig_has_driven_two_link_support_chains(dog)
+            && rl::rig_has_driven_two_link_support_chains(hexapod),
+        "authored Dog or Hexapod knee chains were not detected");
+    CreatureBlueprint motor_count_decoy = dog;
+    for (std::size_t index = 0;
+        index < motor_count_decoy.active_motor_count; ++index)
+        motor_count_decoy.motors[index].pivot = motor_count_decoy.root_node;
+    require(motor_count_decoy.active_motor_count == 8u
+            && !rl::rig_has_driven_two_link_support_chains(motor_count_decoy),
+        "eight motor slots were mistaken for authored two-link knee chains");
+    CreatureBlueprint malformed_dog = dog;
+    for (std::size_t distal_index = 0;
+        distal_index < malformed_dog.active_motor_count; ++distal_index)
+    {
+        for (std::size_t proximal_index = 0;
+            proximal_index < malformed_dog.active_motor_count; ++proximal_index)
+        {
+            if (distal_index != proximal_index
+                && malformed_dog.motors[distal_index].pivot
+                    == malformed_dog.motors[proximal_index].c)
+                malformed_dog.motors[distal_index].enabled = false;
+        }
+    }
+    require(!rl::rig_has_driven_two_link_support_chains(malformed_dog),
+        "disabled/malformed distal joints still qualified as knee chains");
     bool tuning_changed = false;
     for (std::uint64_t generation = 0; generation < 36u; ++generation)
     {
         const rl::RigMutationCandidate candidate =
-            rl::automatic_rig_tuning_candidate(presets[3], generation);
+            rl::automatic_rig_tuning_candidate(human, generation);
         require(!candidate.topology_changed && candidate.activated_motor_mask == 0u,
             "automatic tuning changed topology or activated a body part");
-        require(same_geometry(presets[3], candidate.blueprint),
+        require(same_geometry(human, candidate.blueprint),
             "automatic tuning changed limb length, nodes, supports, or topology");
         tuning_changed = tuning_changed || candidate.changed;
     }
@@ -237,11 +294,11 @@ int main()
     require(sim::completes_side_view_crossing(true, 0.20f, 0.0f, 0.12f),
         "real behind-to-ahead side-view crossing was rejected");
 
-    sim::Environment quadruped_environment{ quadruped, 0x7214u };
+    sim::Environment quadruped_environment{ dog, 0x7214u };
     quadruped_environment.set_course(sim::CourseStage::uneven, 0.40f);
     const auto gait = rl::walking_teacher_action(quadruped_environment);
     float gait_energy = 0.0f;
-    for (std::size_t index = 0; index < quadruped.active_motor_count; ++index)
+    for (std::size_t index = 0; index < dog.active_motor_count; ++index)
         gait_energy += std::abs(gait[index]);
     require(gait_energy > 0.20f,
         "multi-support walking bootstrap remained a stationary balance action");

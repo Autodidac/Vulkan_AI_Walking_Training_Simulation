@@ -162,45 +162,42 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::chicken()
     {
         CreatureBlueprint result{};
+        // A compact authored bird: a braced body and counterweight surround two
+        // real, opposed two-link legs.  The previous long horizontal truss was
+        // classified as a humanoid pair while its unsatisfiable braces locked
+        // both hips, which is why Chicken immediately cartwheeled.
         result.nodes = {
-            { 0.00f, 2.40f }, { 0.72f, 2.48f },
-            { 0.98f, 3.04f }, { 1.18f, 3.50f }, { 1.54f, 3.46f },
-            { -0.92f, 2.64f }, { -1.36f, 2.84f },
-            { 0.12f, 1.42f }, { -0.15f, 0.28f },
-            { 0.20f, 1.42f }, { 0.15f, 0.28f },
-            { 0.02f, 3.12f }
+            { 0.00f, 2.18f }, { 0.12f, 2.82f },
+            { 0.34f, 3.18f }, { 0.76f, 3.38f }, { 1.08f, 3.34f },
+            { -0.72f, 2.55f },
+            { 0.30f, 1.22f }, { -0.18f, 0.24f },
+            { 0.38f, 1.18f }, { 0.18f, 0.24f }
         };
         result.radii = {
-            0.42f, 0.38f, 0.23f, 0.28f, 0.11f,
-            0.24f, 0.13f, 0.18f, 0.14f, 0.18f, 0.14f, 0.27f
+            0.32f, 0.34f, 0.22f, 0.27f, 0.11f,
+            0.18f, 0.17f, 0.14f, 0.17f, 0.14f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
-            { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.94f },
-            { 0, 2, 0.0f, 0.94f }, { 1, 3, 0.0f, 0.94f },
-            { 0, 5, 0.0f, 0.92f }, { 5, 6, 0.0f, 0.88f },
-            { 0, 6, 0.0f, 0.86f }, { 1, 5, 0.0f, 0.82f },
-            { 0, 11, 0.0f, 0.96f }, { 1, 11, 0.0f, 0.92f },
-            { 11, 2, 0.0f, 0.92f }, { 11, 3, 0.0f, 0.90f },
-            // The hip motors rotate 7/9 around the pelvis. Rigid 11-7 and
-            // 11-9 diagonals made those motor triangles unsatisfiable and
-            // physically locked both authored legs.
-            { 0, 7, 0.0f, 1.0f }, { 7, 8, 0.0f, 1.0f },
-            { 0, 9, 0.0f, 1.0f }, { 9, 10, 0.0f, 1.0f }
+            { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.92f },
+            { 0, 2, 0.0f, 0.90f }, { 1, 3, 0.0f, 0.88f },
+            { 0, 5, 0.0f, 0.94f }, { 1, 5, 0.0f, 0.86f },
+            { 0, 6, 0.0f, 1.0f }, { 6, 7, 0.0f, 1.0f },
+            { 0, 8, 0.0f, 1.0f }, { 8, 9, 0.0f, 1.0f }
         };
         result.motors = {
-            MotorConstraint{ 11, 0, 7 }, MotorConstraint{ 0, 7, 8 },
-            MotorConstraint{ 11, 0, 9 }, MotorConstraint{ 0, 9, 10 }
+            MotorConstraint{ 1, 0, 6 }, MotorConstraint{ 0, 6, 7 },
+            MotorConstraint{ 1, 0, 8 }, MotorConstraint{ 0, 8, 9 }
         };
         result.active_motor_count = 4u;
         result.root_node = 0u;
-        result.torso_node = 11u;
+        result.torso_node = 1u;
         result.head_node = 3u;
-        result.left_contact_node = 8u;
-        result.right_contact_node = 10u;
-        add_passive_feet(result, 0.17f, 0.29f);
+        result.left_contact_node = 7u;
+        result.right_contact_node = 9u;
+        add_passive_feet(result, 0.15f, 0.25f);
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 42.0f, 62.0f, 0.052f, 0.056f);
+        calibrate_grounded_defaults(result, 38.0f, 55.0f, 0.045f, 0.052f);
         return result;
     }
 
@@ -386,37 +383,51 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::hexapod()
     {
         CreatureBlueprint result{};
+        // Six physical knee chains with a fixed eight-channel policy contract.
+        // The outer four legs are independently driven as hip/knee pairs; the
+        // middle pair remains articulated passive compliance and contributes
+        // support/contact observations.  This preserves existing checkpoints
+        // while removing the old rigid-spoke anatomy.
         result.nodes = {
             { -0.82f, 1.66f }, { 0.00f, 1.70f },
             { 0.82f, 1.68f }, { 1.46f, 1.92f },
-            { -1.02f, 0.24f }, { -0.62f, 0.24f },
-            { -0.20f, 0.24f }, { 0.20f, 0.24f },
-            { 0.62f, 0.24f }, { 1.02f, 0.24f }
+            { -1.16f, 0.92f }, { -1.34f, 0.23f },
+            { -0.58f, 0.88f }, { -0.52f, 0.23f },
+            { -0.14f, 0.84f }, { -0.18f, 0.23f },
+            { 0.14f, 0.84f }, { 0.18f, 0.23f },
+            { 0.58f, 0.88f }, { 0.52f, 0.23f },
+            { 1.16f, 0.92f }, { 1.34f, 0.23f }
         };
         result.radii = {
-            0.27f, 0.28f, 0.27f, 0.22f,
-            0.13f, 0.13f, 0.13f, 0.13f, 0.13f, 0.13f
+            0.27f, 0.29f, 0.27f, 0.22f,
+            0.15f, 0.13f, 0.15f, 0.13f,
+            0.15f, 0.13f, 0.15f, 0.13f,
+            0.15f, 0.13f, 0.15f, 0.13f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
             { 2, 3, 0.0f, 0.94f }, { 0, 2, 0.0f, 0.68f },
-            { 0, 4, 0.0f, 0.98f }, { 0, 5, 0.0f, 0.98f },
-            { 1, 6, 0.0f, 0.98f }, { 1, 7, 0.0f, 0.98f },
-            { 2, 8, 0.0f, 0.98f }, { 2, 9, 0.0f, 0.98f }
+            { 0, 4, 0.0f, 0.98f }, { 4, 5, 0.0f, 0.98f },
+            { 0, 6, 0.0f, 0.98f }, { 6, 7, 0.0f, 0.98f },
+            { 1, 8, 0.0f, 0.96f }, { 8, 9, 0.0f, 0.96f },
+            { 1, 10, 0.0f, 0.96f }, { 10, 11, 0.0f, 0.96f },
+            { 2, 12, 0.0f, 0.98f }, { 12, 13, 0.0f, 0.98f },
+            { 2, 14, 0.0f, 0.98f }, { 14, 15, 0.0f, 0.98f }
         };
         result.motors = {
-            MotorConstraint{ 1, 0, 4 }, MotorConstraint{ 1, 0, 5 },
-            MotorConstraint{ 0, 1, 6 }, MotorConstraint{ 0, 1, 7 },
-            MotorConstraint{ 1, 2, 8 }, MotorConstraint{ 1, 2, 9 }
+            MotorConstraint{ 1, 0, 4 }, MotorConstraint{ 0, 4, 5 },
+            MotorConstraint{ 1, 0, 6 }, MotorConstraint{ 0, 6, 7 },
+            MotorConstraint{ 1, 2, 12 }, MotorConstraint{ 2, 12, 13 },
+            MotorConstraint{ 1, 2, 14 }, MotorConstraint{ 2, 14, 15 }
         };
-        result.active_motor_count = 6u;
+        result.active_motor_count = 8u;
         result.root_node = 1u;
         result.torso_node = 2u;
         result.head_node = 3u;
-        result.left_contact_node = 4u;
-        result.additional_left_contact_nodes = { 6u, 8u };
-        result.right_contact_node = 5u;
-        result.additional_right_contact_nodes = { 7u, 9u };
+        result.left_contact_node = 5u;
+        result.additional_left_contact_nodes = { 9u, 13u };
+        result.right_contact_node = 7u;
+        result.additional_right_contact_nodes = { 11u, 15u };
         result.rebuild_rest_lengths();
         calibrate_obstacle_legs(result, 44.0f);
         return result;
@@ -5018,6 +5029,43 @@ step_not_qualified:
             : 0.0f;
         const bool paired_forward_gait = reward_requires_locomotion
             && blueprint_.paired_leg_chains();
+        const bool human_stride_topology = paired_forward_gait
+            && blueprint_.human_casual_gait_plan();
+        float authored_leg_length = 0.0f;
+        if (human_stride_topology)
+        {
+            for (std::size_t index = 0; index < 4u; ++index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                if (valid_node(motor.pivot) && valid_node(motor.c))
+                    authored_leg_length += length(blueprint_.nodes[motor.c]
+                        - blueprint_.nodes[motor.pivot]);
+            }
+            authored_leg_length *= 0.5f;
+        }
+        const float measured_step_cadence =
+            elapsed_seconds_ > forward_gait_quality_grace_seconds
+            ? static_cast<float>(gait_cycles())
+                / std::max(0.25f,
+                    elapsed_seconds_ - forward_gait_quality_grace_seconds)
+            : 0.0f;
+        const CasualGaitEvidence casual_gait = casual_gait_evidence(
+            authored_leg_length,
+            std::abs(contact_cluster_center_x(blueprint_.left_contact_node)
+                - contact_cluster_center_x(blueprint_.right_contact_node)),
+            swing_clearance, measured_step_cadence, backward_brace_ratio_);
+        const bool casual_gait_ready = human_stride_topology
+            && gait_cycles() >= 2u
+            && elapsed_seconds_ >= forward_gait_quality_grace_seconds + 0.50f;
+        const bool physical_step_event = alternating_step_this_step_
+            || single_leg_cycle_this_step_;
+        const float casual_gait_reward = casual_gait_ready
+            ? casual_gait.quality * 0.006f
+                + (physical_step_event ? casual_gait.quality * 0.040f : 0.0f)
+            : 0.0f;
+        const float casual_gait_penalty = casual_gait_ready
+            && physical_step_event
+            ? (1.0f - casual_gait.quality) * 0.030f : 0.0f;
         const float real_step_reward = ((alternating_step_this_step_
                 || single_leg_cycle_this_step_) ? 0.070f : 0.0f)
             + sagittal_crossing_shaping_reward(reward_requires_locomotion,
@@ -5217,7 +5265,8 @@ step_not_qualified:
             ? std::max(0.0f, backward_brace_ratio_ - 0.04f) * 0.32f : 0.0f;
         const float flight_penalty = unsupported_locomotion_penalty(
             reward_requires_locomotion, powered_takeoff_, airborne_seconds_);
-        last_reward_ += recovery_reward - uncontrolled_spin_penalty
+        last_reward_ += recovery_reward + casual_gait_reward
+            - casual_gait_penalty - uncontrolled_spin_penalty
             - backward_brace_penalty - flight_penalty;
         // Static crouch qualification explicitly requires grounded support,
         // a real press hold, feet-only ground contact, integrity, and recovery.

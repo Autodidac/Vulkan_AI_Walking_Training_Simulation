@@ -243,8 +243,8 @@ int main()
             "legacy bitmap-cell font multiplier remains in the renderer");
         require(app.find("font::make_bitmap_font_metrics") != std::string::npos,
             "renderer is not using shared logical font metrics");
-        require(app.find("TRAINING SAMPLES READY") != std::string::npos,
-            "sample-ready state is not explained in plain language");
+        require(app.find("telemetry::final_check_label") != std::string::npos,
+            "sample-ready state is not delegated to the tested plain-language final-check formatter");
         require(app.find("format_work_counter(\"RUNS\"") != std::string::npos
                 && app.find("format_work_counter(\"TESTS\"") != std::string::npos,
             "overflowing compact progress fractions were not replaced by READY states");

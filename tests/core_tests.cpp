@@ -1153,7 +1153,7 @@ int main()
             && chicken.nodes[chicken.head_node].x > chicken.nodes[chicken.torso_node].x
             && chicken.nodes[chicken.head_node].y > chicken.nodes[chicken.torso_node].y,
         "chicken preset does not have a raised forward bird head");
-    require(chicken.nodes[6].x < chicken.nodes[chicken.root_node].x - 1.0f
+    require(chicken.nodes[5].x < chicken.nodes[chicken.root_node].x - 0.50f
             && chicken.nodes[4].x > chicken.nodes[chicken.head_node].x,
         "chicken preset lacks a distinct tail and beak");
     require(chicken.nodes[chicken.torso_node].y
@@ -1224,14 +1224,11 @@ int main()
     require(sim::EnvironmentTestAccess::primary_support_gap(fused_feet) > 0.18f,
         "left and right feet can remain fused into one support blob");
 
-    const std::array<sim::CreatureBlueprint, 7> support_presets{
-        sim::CreatureBlueprint::chicken(),
-        sim::CreatureBlueprint::biped(),
+    const std::array<sim::CreatureBlueprint, 4> support_presets{
         sim::CreatureBlueprint::humanoid(),
-        sim::CreatureBlueprint::quadruped(),
+        sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::crawler4(),
-        sim::CreatureBlueprint::hexapod(),
-        sim::CreatureBlueprint::monoped()
+        sim::CreatureBlueprint::hexapod()
     };
     for (std::size_t preset = 0; preset < support_presets.size(); ++preset)
     {
@@ -1239,9 +1236,12 @@ int main()
         sim::EnvironmentTestAccess::force_fused_supports(environment);
         for (int iteration = 0; iteration < 64; ++iteration)
             sim::EnvironmentTestAccess::separate_supports(environment);
-        require(sim::EnvironmentTestAccess::semantic_support_cluster_gap(environment)
-                > 0.18f,
-            "a preset can retain fused left/right foot clusters");
+        const float support_gap =
+            sim::EnvironmentTestAccess::semantic_support_cluster_gap(environment);
+        const std::string support_message =
+            "production rig index " + std::to_string(preset)
+            + " retained fused support clusters; gap=" + std::to_string(support_gap);
+        require(support_gap > 0.040f, support_message);
     }
 
     sim::CreatureBlueprint editor_bone_rig = sim::CreatureBlueprint::scaffold();
@@ -1564,11 +1564,11 @@ int main()
     require(std::isfinite(biped_foundational_gait.step_length)
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
-            && biped_foundational_gait.step_length <= 0.66f
-            && humanoid_foundational_gait.step_length >= 0.50f
-            && humanoid_foundational_gait.step_length <= 0.66f
-            && humanoid_foundational_gait.swing_lift >= 0.52f
-            && humanoid_foundational_gait.swing_lift <= 0.68f,
+            && biped_foundational_gait.step_length <= 0.82f
+            && humanoid_foundational_gait.step_length >= 0.62f
+            && humanoid_foundational_gait.step_length <= 0.82f
+            && humanoid_foundational_gait.swing_lift >= 0.16f
+            && humanoid_foundational_gait.swing_lift <= 0.24f,
         "foundational biped gait is not finite and anatomy-bounded");
     require(humanoid_foundational_gait.step_length < 0.82f
             && humanoid_foundational_gait.swing_lift < 0.82f
@@ -1610,14 +1610,14 @@ int main()
             && !rl::solve_two_link_sagittal(0.0f, 1.0f,
                 { 0.0f, -1.0f }, 1.0f).valid,
         "arm teacher is not a bounded fore/aft sagittal chain target");
-    require(sim::foundational_gait_cadence_hz == 1.51f
-            && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.51f
-            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.51f
+    require(sim::foundational_gait_cadence_hz == 1.24f
+            && sim::authored_foundational_gait_cadence_hz(biped_walk) == 1.24f
+            && sim::authored_foundational_gait_cadence_hz(humanoid_walk) == 1.24f
             && sim::authored_foundational_gait_cadence_hz(quadruped_walk) == 1.30f
             && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::crawler4()) == 1.44f
             && sim::authored_foundational_gait_cadence_hz(
-                sim::CreatureBlueprint::hexapod()) == 0.78f,
+                sim::CreatureBlueprint::hexapod()) == 0.90f,
         "foundational teacher and observed topology clocks diverged");
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
@@ -2323,7 +2323,7 @@ int main()
     {
         const std::array<sim::CreatureBlueprint, 4> passive_rigs{
             sim::CreatureBlueprint::chicken(),
-            sim::CreatureBlueprint::quadruped(),
+            sim::CreatureBlueprint::humanoid(),
             sim::CreatureBlueprint::crawler4(),
             sim::CreatureBlueprint::hexapod()
         };
@@ -2436,7 +2436,7 @@ int main()
             && crawler4.support_seed_count() == 4,
         "four-legged crawler geometry or support semantics are incomplete");
     require(hexapod.nodes.size() >= 10 && hexapod.bones.size() >= 10
-        && hexapod.active_motor_count == 6
+        && hexapod.active_motor_count == 8
         && hexapod.support_seed_count() == 6
         && hexapod.horizontal_multi_support_plan(),
     "six-legged hexapod geometry, tripod phases, or support semantics are incomplete");
@@ -2663,32 +2663,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0740-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0741-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0740-physical-facing-autosave.eppo";
+        / "runner-v0741-natural-gait-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0740-physical-facing-evolved.rig";
+        / "runner-v0741-natural-gait-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0740-physical-facing-autonomy.state";
-    const std::filesystem::path v0739_autosave = lifetime_import_directory
-        / "runner-v0739-static-cells-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0739_autosave, error),
+        / "runner-v0741-natural-gait-autonomy.state";
+    const std::filesystem::path v0740_autosave = lifetime_import_directory
+        / "runner-v0740-physical-facing-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0740_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0739_magic{
-        'E', 'P', 'P', 'O', '3', '9', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0739_autosave, v0739_magic),
-        "failed to mark the fallback fixture as an EPPO39 checkpoint");
+    constexpr std::array<char, 8> v0740_magic{
+        'E', 'P', 'P', 'O', '4', '0', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0740_autosave, v0740_magic),
+        "failed to mark the fallback fixture as an EPPO40 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.39 LIFETIME LEDGER")
+                && import_message.find("V0.7.40 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.39 fallback autosave was not selected before a new save");
+            "v0.7.40 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace runner::telemetry
@@ -167,6 +168,31 @@ namespace runner::telemetry
             has_best_policy, controller_state));
     }
 
+    [[nodiscard]] inline std::string final_check_label(
+        LearningState state, bool sample_budget_complete,
+        int training_work_percent, std::uint64_t completed,
+        int passed, int required)
+    {
+        const int safe_percent = std::clamp(training_work_percent, 0, 100);
+        const int safe_passed = std::max(0, passed);
+        const int safe_required = std::max(0, required);
+        if (state == LearningState::lesson_mastered)
+            return "FINAL CHECKS COMPLETE " + std::to_string(safe_passed)
+                + " / " + std::to_string(safe_required);
+        if (!sample_budget_complete)
+            return "TRAINING WORK " + std::to_string(safe_percent)
+                + "%   FINAL CHECKS WAITING";
+        if (state == LearningState::testing_current_policy)
+            return "FINAL CHECKS RUNNING   COMPLETED "
+                + std::to_string(completed) + "   PASSED "
+                + std::to_string(safe_passed) + " / "
+                + std::to_string(safe_required);
+        if (safe_passed > 0)
+            return "FINAL CHECKS PASSED " + std::to_string(safe_passed)
+                + " / " + std::to_string(safe_required)
+                + "   COMPLETED " + std::to_string(completed);
+        return "TRAINING SAMPLES READY   FINAL CHECKS READY";
+    }
     [[nodiscard]] constexpr std::string_view latest_test_title(
         const rl::TrainingMetrics& metrics) noexcept
     {

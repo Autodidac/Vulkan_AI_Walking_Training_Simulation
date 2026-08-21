@@ -229,10 +229,14 @@ int main()
     require(app.find("ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::imperial };")
                 != std::string::npos,
         "fresh application presentation does not default to imperial units");
-    require(app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
-            && app.find("Scaffold stays internal")
+    require(app.find("preset(0, 0, \"HUMAN\"") != std::string::npos
+            && app.find("preset(0, 1, \"CHICKEN\"") != std::string::npos
+            && app.find("preset(1, 0, \"DOG\"") != std::string::npos
+            && app.find("preset(1, 1, \"HEXAPOD\"") != std::string::npos
+            && app.find("preset(1, 0, \"SCAFFOLD\"") == std::string::npos
+            && app.find("Four unique production rigs are exposed")
                 != std::string::npos,
-        "near-duplicate calibration scaffold is still a user-facing preset");
+        "production preset catalog is not the unique Human/Chicken/Dog/Hexapod set");
     {
         constexpr runner::Vec2 presentation_root{ 5.0f, 2.0f };
         constexpr runner::Vec2 node{ 7.5f, 4.0f };
@@ -365,7 +369,7 @@ int main()
                     ++classified_support_motors;
             }
             require(classified_support_motors > 0u,
-                "user-visible rig has no topology-classified support motor");
+                "authored compatibility rig has no topology-classified support motor");
             for (std::size_t node = 0; node < rig.nodes.size(); ++node)
             {
                 if (rig.is_support_seed(node))
@@ -373,14 +377,11 @@ int main()
                         "authored support node lost its renderer role");
             }
         }
-        const std::array<runner::sim::CreatureBlueprint, 7> exposed{
+        const std::array<runner::sim::CreatureBlueprint, 4> exposed{
             runner::sim::CreatureBlueprint::humanoid(),
-            runner::sim::CreatureBlueprint::biped(),
             runner::sim::CreatureBlueprint::chicken(),
-            runner::sim::CreatureBlueprint::quadruped(),
             runner::sim::CreatureBlueprint::crawler4(),
-            runner::sim::CreatureBlueprint::hexapod(),
-            runner::sim::CreatureBlueprint::monoped() };
+            runner::sim::CreatureBlueprint::hexapod() };
         for (std::size_t left = 0; left < exposed.size(); ++left)
             for (std::size_t right = left + 1u; right < exposed.size(); ++right)
                 require(exposed[left].signature() != exposed[right].signature(),
@@ -400,8 +401,9 @@ int main()
             }
             return (maximum_x - minimum_x) / (maximum_y - minimum_y);
         };
-        require(aspect(exposed[4]) > aspect(exposed[3]) + 0.20f,
-            "low crawler silhouette is not distinct from the quadruped");
+        require(aspect(exposed[2]) > aspect(exposed[0]) + 0.20f
+                && aspect(exposed[3]) > aspect(exposed[0]) + 0.20f,
+            "Dog or Hexapod lost its low multi-support silhouette");
     }
 
     const std::string main_source = read_text(root / "src" / "main.cpp");
@@ -418,7 +420,7 @@ int main()
             && renderer_header.find("maximum_frame_vertex_bytes")
                 != std::string::npos,
         "modular-art vertex-budget diagnostic is missing");
-    require(app.find("case 6u: rig = sim::CreatureBlueprint::hexapod()")
+    require(app.find("case 3u: rig = sim::CreatureBlueprint::hexapod()")
                 != std::string::npos
             && app.find("set_diagnostic_rigid_rotation") != std::string::npos
             && app.find("HORIZONTAL ROTATION EVIDENCE") != std::string::npos,

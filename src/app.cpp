@@ -363,22 +363,22 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0740-physical-facing-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0740-physical-facing-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0740-physical-facing-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0741-natural-gait-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0741-natural-gait-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0741-natural-gait-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
             switch (rig_preset)
             {
             case RigPreset::scaffold: return "SCAFFOLD";
-            case RigPreset::humanoid: return "HUMANOID";
-            case RigPreset::biped: return "BASIC BIPED";
-            case RigPreset::chicken: return "CHICKEN BIPED";
-            case RigPreset::quadruped: return "QUADRUPED";
-            case RigPreset::crawler4: return "FOUR-LEG CRAWLER";
-            case RigPreset::hexapod: return "SIX-LEG HEXAPOD";
-            case RigPreset::monoped: return "MONOPED";
+            case RigPreset::humanoid: return "HUMAN";
+            case RigPreset::biped: return "LEGACY BIPED";
+            case RigPreset::chicken: return "CHICKEN";
+            case RigPreset::quadruped: return "LEGACY QUADRUPED";
+            case RigPreset::crawler4: return "DOG";
+            case RigPreset::hexapod: return "HEXAPOD";
+            case RigPreset::monoped: return "LEGACY MONOPED";
             case RigPreset::custom: return "CUSTOM / EVOLVED";
             }
             return "CUSTOM / EVOLVED";
@@ -516,10 +516,10 @@ namespace runner
                     "FRONT PHASE B HIP", "FRONT PHASE B KNEE",
                     "FRONT PHASE A HIP", "FRONT PHASE A KNEE" };
             case RigPreset::hexapod:
-                return { "REAR PHASE A", "REAR PHASE B",
-                    "MIDDLE PHASE A", "MIDDLE PHASE B",
-                    "FRONT PHASE A", "FRONT PHASE B",
-                    "UNUSED 7", "UNUSED 8" };
+                return { "REAR LEFT HIP", "REAR LEFT KNEE",
+                    "REAR RIGHT HIP", "REAR RIGHT KNEE",
+                    "FRONT LEFT HIP", "FRONT LEFT KNEE",
+                    "FRONT RIGHT HIP", "FRONT RIGHT KNEE" };
             case RigPreset::monoped:
                 return { "HIP", "KNEE", "LEFT FOOT", "RIGHT FOOT",
                     "UNUSED 5", "UNUSED 6", "UNUSED 7", "UNUSED 8" };
@@ -1197,9 +1197,12 @@ namespace runner
                         {
                             if (optional_foot_art.loaded())
                             {
-                                const float width = std::max(
-                                    art::scaled_pixels(42.0f, art_pixel_scale),
-                                    scale * 0.78f * assembled_art_scale);
+                                const float support_span = length(center - proximal);
+                                const float width = std::clamp(
+                                    std::max(radius * 2.40f, support_span * 0.42f)
+                                        * assembled_art_scale,
+                                    art::scaled_pixels(20.0f, art_pixel_scale),
+                                    art::scaled_pixels(38.0f, art_pixel_scale));
                                 const float height = width
                                     * static_cast<float>(optional_foot_art.height)
                                     / static_cast<float>(optional_foot_art.width);
@@ -1408,10 +1411,12 @@ namespace runner
             {
                 const Vec2 head_node_center = point(rig.head_node);
                 Vec2 head_axis{ 0.0f, -1.0f };
-                if (rig.torso_node < particles.size())
+                const bool upright_creature_head = rig.avian_gait()
+                    || rig.horizontal_multi_support_plan();
+                if (!upright_creature_head && rig.torso_node < particles.size())
                     head_axis = normalized(
                         head_node_center - point(rig.torso_node), head_axis);
-                else if (rig.root_node < particles.size())
+                else if (!upright_creature_head && rig.root_node < particles.size())
                     head_axis = normalized(
                         head_node_center - point(rig.root_node), head_axis);
                 const Vec2 head_right{ -head_axis.y, head_axis.x };
@@ -1610,9 +1615,7 @@ namespace runner
                 accent, usable_width, 1.30f);
             cursor.y += 38.0f;
             add_text_fit(canvas, cursor,
-                std::format("DIFFICULTY {:.0f}%   MASTERY TESTS {} / {}",
-                    autonomy.difficulty * 100.0f, autonomy.mastery_streak,
-                    rl::required_mastery_confirmations(autonomy.stage)),
+                std::format("TRAINING LEVEL {:.0f}%", autonomy.difficulty * 100.0f),
                 0.98f, white, usable_width, 0.80f);
             cursor.y += 25.0f;
             add_text_fit(canvas, cursor,
@@ -1627,15 +1630,14 @@ namespace runner
                 6.0f, human_color);
             add_rounded_rect(canvas, progress_track, 6.0f, ui_render::transparent_fill, border, 1.0f);
             cursor.y += 21.0f;
-            const std::string training_work_label = progress.sample_budget_complete
-                ? std::string("TRAINING SAMPLES READY")
-                : std::format("TRAINING WORK {}%",
-                    static_cast<int>(std::lround(
-                        progress.training_work * 100.0f)));
-            add_text_fit(canvas, cursor,
-                std::format("{}   MASTERY PASSES {} / {}",
-                    training_work_label, autonomy.mastery_streak,
-                    rl::required_mastery_confirmations(autonomy.stage)),
+            const int training_work_percent = static_cast<int>(std::lround(
+                progress.training_work * 100.0f));
+            const std::string final_checks = telemetry::final_check_label(
+                human_status.state, progress.sample_budget_complete,
+                training_work_percent, autonomy.stage_fresh_evaluations,
+                autonomy.mastery_streak,
+                rl::required_mastery_confirmations(autonomy.stage));
+            add_text_fit(canvas, cursor, final_checks,
                 0.78f, human_color, usable_width, 0.64f);
             cursor.y += 20.0f;
             add_text_fit(canvas, cursor,
@@ -2848,17 +2850,14 @@ namespace runner
                         rig_preset == value))
                         use_preset(value);
                 };
-                preset(0, 0, "HUMANOID", RigPreset::humanoid);
-                preset(0, 1, "BIPED", RigPreset::biped);
-                preset(1, 0, "CHICKEN", RigPreset::chicken);
-                preset(1, 1, "MONOPED", RigPreset::monoped);
-                preset(2, 0, "QUADRUPED", RigPreset::quadruped);
-                preset(2, 1, "LOW FOUR-LEG CRAWLER", RigPreset::crawler4);
-                preset(3, 0, "HEXAPOD", RigPreset::hexapod);
-                cursor.y += 176.0f;
+                preset(0, 0, "HUMAN", RigPreset::humanoid);
+                preset(0, 1, "CHICKEN", RigPreset::chicken);
+                preset(1, 0, "DOG", RigPreset::crawler4);
+                preset(1, 1, "HEXAPOD", RigPreset::hexapod);
+                cursor.y += 94.0f;
                 add_wrapped_text(canvas, cursor,
-                    "Seven graph-distinct playable rigs are exposed; Scaffold stays internal. Choose topology-safe control tuning or bounded held-out morphology evolution for this rig.",
-                    0.73f, muted, usable, 2.0f);
+                    "Four unique production rigs are exposed. Legacy Biped, Quadruped, and Monoped files remain load-compatible; custom and evolved rigs remain supported.",
+                    0.73f, muted, usable);
                 cursor.y += 55.0f;
                 const bool morphology_mode = autonomy.optimization_mode
                     == rl::RigOptimizationMode::morphology_evolve;
@@ -3441,13 +3440,10 @@ namespace runner
         std::string_view name{};
         switch (index)
         {
-        case 0u: rig = sim::CreatureBlueprint::humanoid(); name = "HUMANOID"; break;
-        case 1u: rig = sim::CreatureBlueprint::biped(); name = "BIPED"; break;
-        case 2u: rig = sim::CreatureBlueprint::chicken(); name = "CHICKEN"; break;
-        case 3u: rig = sim::CreatureBlueprint::monoped(); name = "MONOPED"; break;
-        case 4u: rig = sim::CreatureBlueprint::quadruped(); name = "QUADRUPED"; break;
-        case 5u: rig = sim::CreatureBlueprint::crawler4(); name = "CRAWLER"; break;
-        case 6u: rig = sim::CreatureBlueprint::hexapod(); name = "HEXAPOD"; break;
+        case 0u: rig = sim::CreatureBlueprint::humanoid(); name = "HUMAN"; break;
+        case 1u: rig = sim::CreatureBlueprint::chicken(); name = "CHICKEN"; break;
+        case 2u: rig = sim::CreatureBlueprint::crawler4(); name = "DOG"; break;
+        case 3u: rig = sim::CreatureBlueprint::hexapod(); name = "HEXAPOD"; break;
         default: return false;
         }
 

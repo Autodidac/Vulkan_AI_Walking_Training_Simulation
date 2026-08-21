@@ -28,6 +28,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0738_TURN_TOPOLOGY_STATS.md
         docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md
         docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md
+        docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md
         tests/v0725_art_leg_hotfix_tests.cpp
         tests/v0726_training_truth_tests.cpp
         tests/v0730_cold_start_tests.cpp
@@ -82,7 +83,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.40 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.41 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -127,6 +128,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0738_TURN_TOPOLOGY_STATS.md"
         "RUNNER_V0739_STATIC_CELLS_DIRECTION.md"
         "RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
+        "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -299,8 +301,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 22"
-        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22"
+        "RUNAUTONOMY 23"
+        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -313,7 +315,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4001u"
+        "training_semantics_version = 0x0007'4102u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -391,7 +393,10 @@ file(READ "${RUNNER_SOURCE_DIR}/src/training_explainer.hpp" explainer_text)
 foreach(reference IN ITEMS
         "training_work"
         "result.training_work * 0.80f + result.mastery * 0.20f"
-        "PASSED STAGE CHECKS")
+        "PASSED STAGE CHECKS"
+        "FINAL CHECKS WAITING"
+        "FINAL CHECKS RUNNING"
+        "FINAL CHECKS COMPLETE")
     string(FIND "${explainer_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Truthful telemetry contract missing: ${reference}")
@@ -401,13 +406,13 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/app.cpp" app_text)
 foreach(reference IN ITEMS
         "LESSON COMPLETION"
-        "MASTERY PASSES"
+        "TRAINING LEVEL"
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0740-physical-facing-autosave.eppo"
-        "runner-v0740-physical-facing-evolved.rig"
-        "runner-v0740-physical-facing-autonomy.state"
+        "runner-v0741-natural-gait-autosave.eppo"
+        "runner-v0741-natural-gait-evolved.rig"
+        "runner-v0741-natural-gait-autonomy.state"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -518,7 +523,7 @@ endif()
 
 foreach(reference IN ITEMS
         "font::make_bitmap_font_metrics"
-        "TRAINING SAMPLES READY"
+        "telemetry::final_check_label"
         "format_work_counter")
     string(FIND "${app_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -607,7 +612,10 @@ foreach(reference IN ITEMS
         "course_motion_enabled_"
         "set_course_motion_enabled"
         "authored_foundational_gait_cadence_hz"
-        "micro_motion_window")
+        "micro_motion_window"
+        "CasualGaitEvidence"
+        "bounded_casual_window"
+        "human_casual_gait_plan")
     string(FIND "${simulation_header_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "v0.7.27 static-preview contract missing: ${reference}")
@@ -620,24 +628,25 @@ foreach(reference IN ITEMS
         "retained_probe_invalid_runs == 0u"
         "result.teacher_authority == 0.0f"
         "trainer.best_policy_parameters()"
-        "RigCase{ \"humanoid\", sim::CreatureBlueprint::humanoid() }"
-        "RigCase{ \"monoped\", sim::CreatureBlueprint::monoped() }"
+        "RigCase{ \"human\", sim::CreatureBlueprint::humanoid() }"
+        "RigCase{ \"dog\", sim::CreatureBlueprint::crawler4() }"
         "RigCase{ \"chicken\", sim::CreatureBlueprint::chicken() }"
+        "RigCase{ \"hexapod\", sim::CreatureBlueprint::hexapod() }"
         "release_distance(cases[index].blueprint)"
         "release_gait_cycles(cases[index].blueprint)"
         "WalkEyeTestProof run_walk_eye_test_proof"
         "left_air != right_air")
     string(FIND "${rig_training_diagnostic_text}" "${reference}" pos)
     if(pos EQUAL -1)
-        message(FATAL_ERROR "v0.7.40 seven-rig cold-start acceptance contract missing: ${reference}")
+        message(FATAL_ERROR "v0.7.41 four-rig cold-start acceptance contract missing: ${reference}")
     endif()
 endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/rig_training_diagnostic.hpp" rig_training_diagnostic_header_text)
 string(FIND "${rig_training_diagnostic_header_text}"
-    "std::array<RigTrainingResult, 7>" seven_rig_report_pos)
-if(seven_rig_report_pos EQUAL -1)
-    message(FATAL_ERROR "v0.7.40 production rig-training report does not contain all seven canonical rigs")
+    "std::array<RigTrainingResult, 4>" four_rig_report_pos)
+if(four_rig_report_pos EQUAL -1)
+    message(FATAL_ERROR "v0.7.41 production rig-training report does not contain exactly four canonical rigs")
 endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/course_completion_diagnostic.cpp" course_diagnostic_text)
@@ -660,6 +669,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/training_checkpoint.cpp" checkpoint_text)
 foreach(reference IN ITEMS
+        "'E', 'P', 'P', 'O', '4', '1'"
+        "v0740_checkpoint_magic"
         "'E', 'P', 'P', 'O', '4', '0'"
         "v0739_checkpoint_magic"
         "'E', 'P', 'P', 'O', '3', '9'"
@@ -709,7 +720,7 @@ if(art_workflow_pos EQUAL -1)
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-rig-training" cold_start_workflow_pos)
 if(cold_start_workflow_pos EQUAL -1)
-    message(FATAL_ERROR "Release workflow does not run the v0.7.40 seven-rig cold-start diagnostic")
+    message(FATAL_ERROR "Release workflow does not run the v0.7.41 four-rig cold-start diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-walk-eye" walk_eye_workflow_pos)
 if(walk_eye_workflow_pos EQUAL -1)
@@ -770,4 +781,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.40 repository hygiene passed")
+message(STATUS "Runner v0.7.41 repository hygiene passed")
