@@ -14,7 +14,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "Runner v0.7.41 rig-training failure: " << message << '\n';
+        std::cerr << "Runner v0.7.42 rig-training failure: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -211,6 +211,7 @@ namespace
         float looseness{};
         float maximum_scissor_seconds{};
         float root_x{};
+        float local_height_range{};
         runner::sim::ShuttlePhase phase{ runner::sim::ShuttlePhase::traverse };
         std::uint32_t turns{};
         runner::sim::InvalidMotion reason{ runner::sim::InvalidMotion::none };
@@ -232,12 +233,22 @@ namespace
                 break;
         }
         const float root_x = environment.particles()[rig.root_node].position.x;
+        float local_minimum = environment.ground_height_at(root_x);
+        float local_maximum = local_minimum;
+        for (int sample = -6; sample <= 6; ++sample)
+        {
+            const float height = environment.ground_height_at(
+                root_x + static_cast<float>(sample) * 0.25f);
+            local_minimum = std::min(local_minimum, height);
+            local_maximum = std::max(local_maximum, height);
+        }
         return { environment.distance_travelled(), environment.elapsed_seconds(),
             minimum_uprightness, environment.gait_cycles(), environment.limb_crossings(),
             environment.terrain_region_at(root_x),
             environment.terrain_firmness_at(root_x),
             environment.terrain_looseness_at(root_x),
             environment.maximum_lower_leg_scissor_seconds(), root_x,
+            local_maximum - local_minimum,
             environment.shuttle_phase(), environment.completed_shuttle_turns(),
             environment.invalid_reason() };
     }
@@ -306,6 +317,13 @@ namespace
                         << " distance=" << outcome.distance
                         << " strides=" << outcome.strides
                         << " survival=" << outcome.survival
+                        << " root_x=" << outcome.root_x
+                        << " upright_min=" << outcome.minimum_uprightness
+                        << " region=" << runner::sim::terrain_region_name(outcome.region)
+                        << " firmness=" << outcome.firmness
+                        << " looseness=" << outcome.looseness
+                        << " scissor_seconds=" << outcome.maximum_scissor_seconds
+                        << " local_height_range=" << outcome.local_height_range
                         << " reason=" << runner::sim::invalid_motion_name(outcome.reason)
                         << '\n';
                 }
@@ -377,10 +395,11 @@ int main(int argc, char** argv)
     const std::string_view mode = argc > 1 ? argv[1] : "--all";
     const bool run_references = mode == "--all" || mode == "--references";
     const bool run_learner = mode == "--all" || mode == "--learner";
+    const bool run_chicken = mode == "--learner-chicken";
     const bool run_hexapod = mode == "--learner-hexapod";
-    if (!run_references && !run_learner && !run_hexapod)
+    if (!run_references && !run_learner && !run_chicken && !run_hexapod)
     {
-        std::cerr << "Unknown v0.7.41 test mode: " << mode << '\n';
+        std::cerr << "Unknown v0.7.42 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
     verify_retained_release_gate_contract();
@@ -390,13 +409,51 @@ int main(int argc, char** argv)
         verify_frame_independent_preview();
         if (!run_learner)
         {
-            std::cout << "Runner v0.7.41 four-rig reference gait and frame-independence checks passed\n";
+            std::cout << "Runner v0.7.42 four-rig reference gait and frame-independence checks passed\n";
             return EXIT_SUCCESS;
         }
     }
     std::uint64_t updates = 1200u;
     if (argc > 2)
         updates = std::max<std::uint64_t>(1u, std::strtoull(argv[2], nullptr, 10));
+    if (run_chicken)
+    {
+        const runner::sim::CreatureBlueprint chicken =
+            runner::sim::CreatureBlueprint::chicken();
+        const runner::diagnostics::RigTrainingResult rig =
+            runner::diagnostics::run_rig_training_case(
+                "chicken", chicken, updates);
+        std::cout << rig.name
+            << ": mean=" << rig.mean_episode_distance
+            << " teacher_distance=" << rig.teacher_distance
+            << " teacher_strides=" << rig.teacher_stride_events
+            << " evaluation=" << rig.evaluation_distance
+            << " strides=" << rig.evaluation_stride_events
+            << " invalid=" << rig.evaluation_invalid_runs
+            << " evaluation_reason=" << runner::sim::invalid_motion_name(
+                rig.evaluation_invalid_reason)
+            << " retained=" << rig.retained_policy
+            << " retained_probe_distance=" << rig.retained_probe_distance
+            << " retained_probe_strides=" << rig.retained_probe_stride_events
+            << " retained_probe_invalid=" << rig.retained_probe_invalid_runs
+            << " retained_probe_reason=" << runner::sim::invalid_motion_name(
+                rig.retained_probe_invalid_reason)
+            << " preview_resets=" << rig.preview_resets
+            << " reason=" << runner::sim::invalid_motion_name(
+                rig.preview_reset_reason) << '\n';
+        const bool passed = updates >= 1200u
+            && rig.teacher_invalid_reason == runner::sim::InvalidMotion::none
+            && rig.teacher_survival >= 19.9f
+            && runner::diagnostics::retained_policy_release_eligible(
+                rig, chicken);
+        if (!passed)
+        {
+            std::cerr << "Runner v0.7.42 chicken training diagnostic failed\n";
+            return EXIT_FAILURE;
+        }
+        std::cout << "Runner v0.7.42 chicken training checks passed\n";
+        return EXIT_SUCCESS;
+    }
     if (run_hexapod)
     {
         const runner::sim::CreatureBlueprint hexapod =
@@ -429,10 +486,10 @@ int main(int argc, char** argv)
                 rig, hexapod);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.41 hexapod training diagnostic failed\n";
+            std::cerr << "Runner v0.7.42 hexapod training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.41 hexapod training checks passed\n";
+        std::cout << "Runner v0.7.42 hexapod training checks passed\n";
         return EXIT_SUCCESS;
     }
 
@@ -488,12 +545,12 @@ int main(int argc, char** argv)
     }
     if (!report.passed)
     {
-        std::cerr << "Runner v0.7.41 four-rig training diagnostic failed\n";
+        std::cerr << "Runner v0.7.42 four-rig training diagnostic failed\n";
         return EXIT_FAILURE;
     }
     if (run_references)
-        std::cout << "Runner v0.7.41 four-rig training and frame-independence checks passed\n";
+        std::cout << "Runner v0.7.42 four-rig training and frame-independence checks passed\n";
     else
-        std::cout << "Runner v0.7.41 four-rig training checks passed\n";
+        std::cout << "Runner v0.7.42 four-rig training checks passed\n";
     return EXIT_SUCCESS;
 }

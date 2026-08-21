@@ -169,17 +169,46 @@ namespace runner
             };
             const float inverse_width = 1.0f / static_cast<float>(art.width);
             const float inverse_height = 1.0f / static_cast<float>(art.height);
+            const auto presentation_color = [](Color color) noexcept
+            {
+                const auto quantize = [](float channel) noexcept
+                {
+                    return std::round(std::clamp(channel, 0.0f, 1.0f) * 15.0f)
+                        / 15.0f;
+                };
+                color.r = quantize(color.r);
+                color.g = quantize(color.g);
+                color.b = quantize(color.b);
+                return color;
+            };
             for (int y = 0; y < art.height; ++y)
             {
-                for (int x = 0; x < art.width; ++x)
+                int x = 0;
+                while (x < art.width)
                 {
-                    Color color = art.pixels[static_cast<std::size_t>(
+                    const Color source_color = art.pixels[static_cast<std::size_t>(
                         y * art.width + x)];
-                    if (art.transparent(color))
+                    if (art.transparent(source_color))
+                    {
+                        ++x;
                         continue;
+                    }
+                    Color color = presentation_color(source_color);
+                    int run_end = x + 1;
+                    while (run_end < art.width)
+                    {
+                        const Color next_source = art.pixels[static_cast<std::size_t>(
+                            y * art.width + run_end)];
+                        const Color next = presentation_color(next_source);
+                        if (art.transparent(next_source) || next.r != color.r
+                            || next.g != color.g || next.b != color.b
+                            || next.a != color.a)
+                            break;
+                        ++run_end;
+                    }
                     color.a *= alpha;
                     const float u0 = static_cast<float>(x) * inverse_width;
-                    const float u1 = static_cast<float>(x + 1) * inverse_width;
+                    const float u1 = static_cast<float>(run_end) * inverse_width;
                     const float v0 = static_cast<float>(y) * inverse_height;
                     const float v1 = static_cast<float>(y + 1) * inverse_height;
                     const Vec2 p00 = point(u0, v0);
@@ -188,6 +217,7 @@ namespace runner
                     const Vec2 p01 = point(u0, v1);
                     canvas.triangle(p00, p10, p11, color);
                     canvas.triangle(p00, p11, p01, color);
+                    x = run_end;
                 }
             }
         }
@@ -285,6 +315,22 @@ namespace runner
 
     struct Application::Impl
     {
+        struct SpeciesArtBundle
+        {
+            art::PixelArt head{};
+            art::PixelArt body{};
+            art::PixelArt tail{};
+            art::PixelArt upper_leg{};
+            art::PixelArt lower_leg{};
+            art::PixelArt foot{};
+
+            [[nodiscard]] bool loaded() const noexcept
+            {
+                return head.loaded() || body.loaded() || tail.loaded()
+                    || upper_leg.loaded() || lower_leg.loaded() || foot.loaded();
+            }
+        };
+
         enum class Mode : std::uint8_t { live, rig_lab };
         enum class RigPreset : std::uint8_t {
             scaffold, humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
@@ -356,6 +402,9 @@ namespace runner
         art::PixelArt optional_thigh_art{};
         art::PixelArt optional_shin_art{};
         art::PixelArt optional_weapon_art{};
+        SpeciesArtBundle chicken_art{};
+        SpeciesArtBundle dog_art{};
+        SpeciesArtBundle hexapod_art{};
         bool optional_art_enabled{ false };
         bool debug_skeleton_overlay{};
         std::string status{ "AUTOPILOT STARTING" };
@@ -363,9 +412,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0741-natural-gait-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0741-natural-gait-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0741-natural-gait-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0742-species-anatomy-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0742-species-anatomy-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0742-species-anatomy-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1018,6 +1067,174 @@ namespace runner
                 }
             }
         }
+        [[nodiscard]] const SpeciesArtBundle* species_art_for(
+            sim::CreatureSpecies species) const noexcept
+        {
+            switch (species)
+            {
+            case sim::CreatureSpecies::chicken: return &chicken_art;
+            case sim::CreatureSpecies::dog: return &dog_art;
+            case sim::CreatureSpecies::hexapod: return &hexapod_art;
+            default: return nullptr;
+            }
+        }
+
+        void draw_species_creature(const sim::Environment& environment, Rect viewport,
+            float camera, float scale, bool show_nodes)
+        {
+            const auto& particles = environment.particles();
+            const auto& rig = environment.blueprint();
+            const SpeciesArtBundle* bundle = species_art_for(rig.presentation_species());
+            const bool use_art = optional_art_enabled && bundle != nullptr && bundle->loaded();
+            const float art_pixel_scale = art::presentation_pixel_scale(scale);
+            const bool mirrored = environment.facing_direction() < 0.0f;
+            auto point = [&](std::size_t index)
+            {
+                return world_to_screen(particles[index].position, viewport, camera, scale);
+            };
+            auto side = [&](const sim::MotorConstraint& motor)
+            {
+                const std::uint8_t mask = rig.support_branch_mask(motor);
+                return mask == 0x1u ? -1 : mask == 0x2u ? 1 : 0;
+            };
+
+            std::vector<sim::MotorConstraint> motors{};
+            motors.reserve(rig.active_motor_count + 4u);
+            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+                if (rig.motors[index].enabled)
+                    motors.push_back(rig.motors[index]);
+            for (const sim::CoupledMotorConstraint& coupled : rig.coupled_support_motors())
+                if (coupled.motor.enabled)
+                    motors.push_back(coupled.motor);
+
+            for (const sim::DistanceConstraint& bone : rig.bones)
+            {
+                if (bone.a >= particles.size() || bone.b >= particles.size())
+                    continue;
+                canvas.line(point(bone.a), point(bone.b),
+                    std::max(1.0f, scale * 0.014f), rgb(0x9bd9e8, 0.56f));
+            }
+
+            auto draw_limb_pass = [&](int pass)
+            {
+                for (const sim::MotorConstraint& motor : motors)
+                {
+                    if (motor.pivot >= particles.size() || motor.c >= particles.size()
+                        || rig.support_branch_mask(motor) == 0u)
+                        continue;
+                    const int branch = side(motor);
+                    const bool near = mirrored ? branch < 0 : branch > 0;
+                    if ((near ? 2 : 0) != pass)
+                        continue;
+                    const bool distal = std::ranges::any_of(motors,
+                        [&](const sim::MotorConstraint& candidate)
+                        {
+                            return candidate.enabled && candidate.c == motor.pivot
+                                && rig.support_branch_mask(candidate) != 0u;
+                        });
+                    const art::PixelArt* sprite = nullptr;
+                    if (use_art)
+                        sprite = distal ? &bundle->lower_leg : &bundle->upper_leg;
+                    const Vec2 beginning = point(motor.pivot);
+                    const Vec2 ending = point(motor.c);
+                    const float thickness = std::clamp(
+                        (particles[motor.pivot].radius + particles[motor.c].radius)
+                            * scale * 1.7f,
+                        art::scaled_pixels(5.0f, art_pixel_scale), scale * 0.31f);
+                    if (sprite != nullptr && sprite->loaded())
+                        draw_oriented_pixel_art(canvas, *sprite, beginning, ending,
+                            thickness, near ? 0.98f : 0.72f, false, mirrored);
+                    else
+                        canvas.line(beginning, ending, thickness,
+                            near ? rgb(0xcdd6d9) : rgb(0x73828b));
+
+                    const bool terminal = !std::ranges::any_of(motors,
+                        [&](const sim::MotorConstraint& candidate)
+                        {
+                            return candidate.enabled && candidate.pivot == motor.c
+                                && rig.support_branch_mask(candidate) != 0u;
+                        });
+                    if (terminal && use_art && bundle->foot.loaded())
+                    {
+                        const float facing = environment.facing_direction();
+                        const Vec2 toe = point(motor.c) + Vec2{ facing * scale * 0.20f, 0.0f };
+                        draw_oriented_pixel_art(canvas, bundle->foot, point(motor.c), toe,
+                            std::max(thickness * 0.78f, scale * 0.10f),
+                            near ? 0.98f : 0.72f, false, mirrored);
+                    }
+                }
+            };
+
+            draw_limb_pass(0);
+            const sim::CreatureSpecies species = rig.presentation_species();
+            std::size_t body_a = rig.root_node;
+            std::size_t body_b = rig.torso_node;
+            if (species == sim::CreatureSpecies::chicken && particles.size() > 5u)
+            {
+                body_a = 5u;
+                body_b = 2u;
+            }
+            else if (species == sim::CreatureSpecies::hexapod && particles.size() > 2u)
+            {
+                body_a = 0u;
+                body_b = 2u;
+            }
+            if (body_a < particles.size() && body_b < particles.size())
+            {
+                const Vec2 beginning = point(body_a);
+                const Vec2 ending = point(body_b);
+                const float thickness = std::max(scale * 0.18f,
+                    (particles[body_a].radius + particles[body_b].radius) * scale * 2.0f);
+                if (use_art && bundle->body.loaded())
+                    draw_oriented_pixel_art(canvas, bundle->body, beginning, ending,
+                        thickness, 0.98f, false, mirrored);
+                else
+                    canvas.line(beginning, ending, thickness, rgb(0x8ba0aa));
+
+                if (use_art && bundle->tail.loaded()
+                    && (species == sim::CreatureSpecies::chicken
+                        || species == sim::CreatureSpecies::dog))
+                {
+                    const Vec2 body_direction = normalized(ending - beginning,
+                        { environment.facing_direction(), 0.0f });
+                    const float tail_length = scale * (species
+                        == sim::CreatureSpecies::chicken ? 0.28f : 0.38f);
+                    draw_oriented_pixel_art(canvas, bundle->tail, beginning,
+                        beginning - body_direction * tail_length,
+                        thickness * 0.62f, 0.90f, false, mirrored);
+                }
+            }
+            if (rig.head_node < particles.size())
+            {
+                const Vec2 head = point(rig.head_node);
+                const float facing = environment.facing_direction();
+                const float head_length = std::clamp(
+                    particles[rig.head_node].radius * scale * 2.4f,
+                    scale * 0.18f, scale * 0.42f);
+                Vec2 beginning = head - Vec2{ facing * head_length * 0.45f, 0.0f };
+                Vec2 ending = head + Vec2{ facing * head_length * 0.55f, 0.0f };
+                if (species == sim::CreatureSpecies::chicken && particles.size() > 4u)
+                {
+                    beginning = head - normalized(point(4u) - head,
+                        { facing, 0.0f }) * head_length * 0.25f;
+                    ending = head + normalized(point(4u) - head,
+                        { facing, 0.0f }) * head_length * 0.75f;
+                }
+                if (use_art && bundle->head.loaded())
+                    draw_oriented_pixel_art(canvas, bundle->head,
+                        beginning, ending, std::max(scale * 0.16f,
+                            head_length * 0.70f), 0.98f, false, mirrored);
+                else
+                    canvas.circle(head, std::max(3.0f,
+                        particles[rig.head_node].radius * scale), rgb(0xcdd6d9), 18);
+            }
+            draw_limb_pass(2);
+            if (show_nodes)
+                for (const sim::Particle& particle : particles)
+                    canvas.circle(world_to_screen(particle.position, viewport, camera, scale),
+                        std::max(2.0f, particle.radius * scale * 0.22f), accent, 12);
+        }
+
         void draw_creature(const sim::Environment& environment, Rect viewport, float camera,
             float scale, bool show_nodes = false)
         {
@@ -1026,6 +1243,11 @@ namespace runner
             const float art_pixel_scale = art::presentation_pixel_scale(scale);
             if (particles.empty())
                 return;
+            if (rig.presentation_species() != sim::CreatureSpecies::human)
+            {
+                draw_species_creature(environment, viewport, camera, scale, show_nodes);
+                return;
+            }
             const bool mirrored_facing = environment.facing_direction() < 0.0f;
             const bool presentation_right_leg_near = mirrored_facing
                 ? !right_leg_near : right_leg_near;
@@ -1509,7 +1731,7 @@ namespace runner
                 environment.ground_height_at(root_x) - 0.18f);
             const float view_max_y = body_max_y + 0.32f;
             const float world_width = std::max(3.8f, view_max_x - view_min_x);
-            const float world_height = std::max(1.5f, view_max_y - view_min_y);
+            const float world_height = std::max(view_camera::human_reference_height_m, view_max_y - view_min_y);
             const float scale = view_camera::pip_pixels_per_meter(
                 (inner.size.x - 12.0f) / world_width,
                 (inner.size.y * 0.78f) / world_height);
@@ -2101,7 +2323,9 @@ namespace runner
             if (!course_eye_test_environment.has_value())
             {
                 float target_pixels_per_meter = view_camera::fitted_pixels_per_meter(
-                    viewport.size.y, rig_height, live_zoom_factor);
+                    viewport.size.y,
+                    std::max(rig_height, view_camera::human_reference_height_m),
+                    live_zoom_factor);
                 if (environment.shuttle_enabled() && live_zoom_auto)
                 {
                     const float arena_span = sim::shuttle_right_boundary
@@ -3387,6 +3611,26 @@ namespace runner
         load_optional("thigh_side.ppm", impl_->optional_thigh_art);
         load_optional("shin_side.ppm", impl_->optional_shin_art);
         load_optional("weapon_side.ppm", impl_->optional_weapon_art);
+        auto load_species = [&](std::string_view species, Impl::SpeciesArtBundle& bundle)
+        {
+            auto load_part = [&](std::string_view part, art::PixelArt& destination)
+            {
+                std::string optional_error{};
+                const std::filesystem::path path = asset_directory / "optional"
+                    / "species_runtime" / std::format("{}_{}_side.ppm", species, part);
+                if (!art::load_p3_pixel_art(path, destination, optional_error))
+                    destination = {};
+            };
+            load_part("head", bundle.head);
+            load_part("body", bundle.body);
+            load_part("tail", bundle.tail);
+            load_part("upper_leg", bundle.upper_leg);
+            load_part("lower_leg", bundle.lower_leg);
+            load_part("foot", bundle.foot);
+        };
+        load_species("chicken", impl_->chicken_art);
+        load_species("dog", impl_->dog_art);
+        load_species("hexapod", impl_->hexapod_art);
         impl_->optional_art_enabled = impl_->optional_foot_art.loaded()
             || impl_->optional_helmet_art.loaded()
             || impl_->optional_torso_art.loaded()
@@ -3395,7 +3639,10 @@ namespace runner
             || impl_->optional_hand_art.loaded()
             || impl_->optional_thigh_art.loaded()
             || impl_->optional_shin_art.loaded()
-            || impl_->optional_weapon_art.loaded();
+            || impl_->optional_weapon_art.loaded()
+            || impl_->chicken_art.loaded()
+            || impl_->dog_art.loaded()
+            || impl_->hexapod_art.loaded();
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);
@@ -3465,7 +3712,10 @@ namespace runner
         const std::size_t root = impl_->course_eye_test_environment->blueprint().root_node;
         impl_->camera_x = root < particles.size()
             ? particles[root].position.x + 0.25f : 0.25f;
-        impl_->live_pixels_per_meter = 118.0f;
+        // Keep every subject on the immutable Human world scale. This value
+        // frames the full 4.8 m Human in the production viewport without
+        // normalizing compact animals up to Human screen height.
+        impl_->live_pixels_per_meter = 84.0f;
         impl_->live_zoom_factor = 1.0f;
         impl_->live_zoom_auto = false;
         impl_->debug_skeleton_overlay = false;

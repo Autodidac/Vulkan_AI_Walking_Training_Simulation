@@ -1,3 +1,11 @@
+## 0.7.42
+
+- Preserved Human as the immutable physical and camera scale reference, keeping Chicken compact and retaining the authored Dog and Hexapod footprints without screen-height normalization.
+- Added dedicated orthographic modular art and runtime body, head, upper-leg, lower-leg, foot, and tail assets for Chicken, Dog, and Hexapod; animal rigs no longer substitute Human armor.
+- Corrected Chicken's authored stance center and removed inherited Human passive-foot enlargement; bounded Human balance-arm travel and strength around a relaxed opposed swing.
+- Rebuilt Hexapod control around four active outer support branches plus a bounded coupled middle pair, with six articulated knees and repeated-seed distance/gait validation.
+- Kept authored fine cells and macro tiles immutable under contact, restricted mutation to explicit falling granular overlays, and preserved facing-local self-propelled shuttle returns.
+- Promoted training semantics to 0x0007'4201, checkpoint magic to EPPO42, autonomy state to RUNAUTONOMY 24, and automatic files to runner-v0742-species-anatomy-*, with lifetime-only fallback from v0.7.41.
 ## 0.7.41
 
 - Reduced the production catalog and release matrix to Human, Chicken, Dog, and Hexapod while preserving retired Biped, Quadruped, and Monoped data only for compatible `.rig` import and low-level topology regression coverage.

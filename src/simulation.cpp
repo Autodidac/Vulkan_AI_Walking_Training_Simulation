@@ -37,6 +37,13 @@ namespace runner::sim
                 if (motor.enabled && (motor.a == node || motor.pivot == node || motor.c == node))
                     return true;
             }
+            for (const CoupledMotorConstraint& coupled : rig.coupled_support_motors())
+            {
+                const MotorConstraint& motor = coupled.motor;
+                if (motor.enabled
+                    && (motor.a == node || motor.pivot == node || motor.c == node))
+                    return true;
+            }
             return false;
         }
 
@@ -162,26 +169,25 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::chicken()
     {
         CreatureBlueprint result{};
-        // A compact authored bird: a braced body and counterweight surround two
-        // real, opposed two-link legs.  The previous long horizontal truss was
-        // classified as a humanoid pair while its unsatisfiable braces locked
-        // both hips, which is why Chicken immediately cartwheeled.
+        // Species-scale bird anatomy: compact horizontal body, counterweight tail,
+        // forward head/beak, and two opposed digitigrade legs. It remains a true
+        // two-leg policy subject without borrowing Human proportions or armor.
         result.nodes = {
-            { 0.00f, 2.18f }, { 0.12f, 2.82f },
-            { 0.34f, 3.18f }, { 0.76f, 3.38f }, { 1.08f, 3.34f },
-            { -0.72f, 2.55f },
-            { 0.30f, 1.22f }, { -0.18f, 0.24f },
-            { 0.38f, 1.18f }, { 0.18f, 0.24f }
+            { -0.10f, 0.70f }, { 0.02f, 1.26f },
+            { 0.30f, 1.33f }, { 0.58f, 1.36f }, { 0.76f, 1.30f },
+            { -0.65f, 1.12f },
+            { -0.03f, 0.42f }, { -0.10f, 0.10f },
+            { 0.10f, 0.41f }, { 0.15f, 0.10f }
         };
         result.radii = {
-            0.32f, 0.34f, 0.22f, 0.27f, 0.11f,
-            0.18f, 0.17f, 0.14f, 0.17f, 0.14f
+            0.17f, 0.18f, 0.11f, 0.14f, 0.07f,
+            0.10f, 0.09f, 0.07f, 0.09f, 0.07f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
             { 2, 3, 0.0f, 0.98f }, { 3, 4, 0.0f, 0.92f },
-            { 0, 2, 0.0f, 0.90f }, { 1, 3, 0.0f, 0.88f },
-            { 0, 5, 0.0f, 0.94f }, { 1, 5, 0.0f, 0.86f },
+            { 0, 2, 0.0f, 0.88f }, { 1, 3, 0.0f, 0.86f },
+            { 0, 5, 0.0f, 0.92f }, { 1, 5, 0.0f, 0.82f },
             { 0, 6, 0.0f, 1.0f }, { 6, 7, 0.0f, 1.0f },
             { 0, 8, 0.0f, 1.0f }, { 8, 9, 0.0f, 1.0f }
         };
@@ -195,12 +201,13 @@ namespace runner::sim
         result.head_node = 3u;
         result.left_contact_node = 7u;
         result.right_contact_node = 9u;
-        add_passive_feet(result, 0.15f, 0.25f);
+        // Bird talons remain species-scale point supports. The Human passive-foot
+        // helper deliberately widens loaded boot contacts and must not inflate a
+        // 0.07 m Chicken foot into a 0.104 m skating pad.
         result.rebuild_rest_lengths();
-        calibrate_grounded_defaults(result, 38.0f, 55.0f, 0.045f, 0.052f);
+        calibrate_grounded_defaults(result, 34.0f, 52.0f, 0.040f, 0.047f);
         return result;
     }
-
     CreatureBlueprint CreatureBlueprint::biped()
     {
         CreatureBlueprint result{};
@@ -289,10 +296,12 @@ namespace runner::sim
             result.calibrate_motor(index, knee ? 58.0f : 36.0f,
                 knee ? 58.0f : 36.0f, strength);
         }
-        result.calibrate_motor(4, 95.0f, 95.0f, 0.034f);
-        result.calibrate_motor(5, 108.0f, 108.0f, 0.031f);
-        result.calibrate_motor(6, 95.0f, 95.0f, 0.034f);
-        result.calibrate_motor(7, 108.0f, 108.0f, 0.031f);
+        // Arms are locomotion appendages, not balance flywheels. The policy keeps
+        // useful opposed swing without the former near-unrestricted flailing.
+        result.calibrate_motor(4, 62.0f, 62.0f, 0.024f);
+        result.calibrate_motor(5, 76.0f, 76.0f, 0.022f);
+        result.calibrate_motor(6, 62.0f, 62.0f, 0.024f);
+        result.calibrate_motor(7, 76.0f, 76.0f, 0.022f);
         return result;
     }
 
@@ -341,17 +350,19 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::crawler4()
     {
         CreatureBlueprint result{};
+        // Medium dog-scale four-leg anatomy. Near/far pairs remain layered in
+        // side view while shoulder and hip spacing preserve a readable gait.
         result.nodes = {
-            { -0.70f, 1.64f }, { 0.55f, 1.68f }, { 1.26f, 1.86f },
-            { -0.90f, 0.92f }, { -1.00f, 0.23f },
-            { -0.50f, 0.88f }, { -0.42f, 0.23f },
-            { 0.35f, 0.90f }, { 0.25f, 0.23f },
-            { 0.75f, 0.88f }, { 0.85f, 0.23f }
+            { -0.58f, 1.08f }, { 0.50f, 1.12f }, { 1.04f, 1.38f },
+            { -0.76f, 0.60f }, { -0.88f, 0.14f },
+            { -0.40f, 0.56f }, { -0.30f, 0.14f },
+            { 0.34f, 0.59f }, { 0.24f, 0.14f },
+            { 0.68f, 0.57f }, { 0.80f, 0.14f }
         };
         result.radii = {
-            0.29f, 0.30f, 0.23f,
-            0.15f, 0.13f, 0.15f, 0.13f,
-            0.15f, 0.13f, 0.15f, 0.13f
+            0.22f, 0.23f, 0.18f,
+            0.11f, 0.09f, 0.11f, 0.09f,
+            0.11f, 0.09f, 0.11f, 0.09f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.94f },
@@ -376,33 +387,30 @@ namespace runner::sim
         result.right_contact_node = 6u;
         result.additional_right_contact_nodes = { 8u };
         result.rebuild_rest_lengths();
-        calibrate_obstacle_legs(result, 50.0f);
+        calibrate_obstacle_legs(result, 47.0f);
         return result;
     }
-
     CreatureBlueprint CreatureBlueprint::hexapod()
     {
         CreatureBlueprint result{};
-        // Six physical knee chains with a fixed eight-channel policy contract.
-        // The outer four legs are independently driven as hip/knee pairs; the
-        // middle pair remains articulated passive compliance and contributes
-        // support/contact observations.  This preserves existing checkpoints
-        // while removing the old rigid-spoke anatomy.
+        // Three longitudinal pairs, each with a visible knee. The outer pairs use
+        // the eight policy channels and the middle pair is coupled into opposing
+        // tripods by CreatureBlueprint::coupled_support_motors().
         result.nodes = {
-            { -0.82f, 1.66f }, { 0.00f, 1.70f },
-            { 0.82f, 1.68f }, { 1.46f, 1.92f },
-            { -1.16f, 0.92f }, { -1.34f, 0.23f },
-            { -0.58f, 0.88f }, { -0.52f, 0.23f },
-            { -0.14f, 0.84f }, { -0.18f, 0.23f },
-            { 0.14f, 0.84f }, { 0.18f, 0.23f },
-            { 0.58f, 0.88f }, { 0.52f, 0.23f },
-            { 1.16f, 0.92f }, { 1.34f, 0.23f }
+            { -0.66f, 1.00f }, { 0.00f, 1.06f },
+            { 0.66f, 1.02f }, { 1.10f, 1.24f },
+            { -0.98f, 0.58f }, { -1.18f, 0.14f },
+            { -0.52f, 0.53f }, { -0.40f, 0.14f },
+            { -0.18f, 0.48f }, { -0.05f, 0.14f },
+            { 0.22f, 0.48f }, { 0.34f, 0.14f },
+            { 0.56f, 0.53f }, { 0.72f, 0.14f },
+            { 0.98f, 0.58f }, { 1.18f, 0.14f }
         };
         result.radii = {
-            0.27f, 0.29f, 0.27f, 0.22f,
-            0.15f, 0.13f, 0.15f, 0.13f,
-            0.15f, 0.13f, 0.15f, 0.13f,
-            0.15f, 0.13f, 0.15f, 0.13f
+            0.20f, 0.22f, 0.20f, 0.16f,
+            0.10f, 0.08f, 0.10f, 0.08f,
+            0.10f, 0.08f, 0.10f, 0.08f,
+            0.10f, 0.08f, 0.10f, 0.08f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
@@ -429,10 +437,9 @@ namespace runner::sim
         result.right_contact_node = 7u;
         result.additional_right_contact_nodes = { 11u, 15u };
         result.rebuild_rest_lengths();
-        calibrate_obstacle_legs(result, 44.0f);
+        calibrate_obstacle_legs(result, 58.0f);
         return result;
     }
-
     CreatureBlueprint CreatureBlueprint::monoped()
     {
         CreatureBlueprint result{};
@@ -2661,7 +2668,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             const Vec2 current_body = particles_[blueprint_.torso_node].position - root;
             if (length(rest_body) > 1.0e-5f && length(current_body) > 1.0e-5f)
             {
-                const float desired_lean = guided_monoped ? 0.015f : 0.08f;
+                const bool human_casual = blueprint_.human_casual_gait_plan();
+                const float desired_lean = guided_monoped ? 0.015f
+                    : guided_avian ? 0.025f
+                    : human_casual ? 0.018f : 0.08f;
                 const Vec2 desired_body = normalized(
                     { desired_lean * locomotion_direction(), 1.0f },
                     { 0.0f, 1.0f }) * length(rest_body);
@@ -2675,9 +2685,13 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                             blueprint_.motors[index]) == 0u;
                 }
                 const float correction_gain = guided_monoped ? 0.060f
-                    : appendaged_biped ? 0.040f : 0.025f;
+                    : guided_avian ? 0.040f
+                    : human_casual ? 0.050f
+                    : appendaged_biped ? 0.028f : 0.025f;
                 const float maximum_correction = guided_monoped ? 0.0140f
-                    : appendaged_biped ? 0.0100f : 0.0060f;
+                    : guided_avian ? 0.0080f
+                    : human_casual ? 0.0100f
+                    : appendaged_biped ? 0.0060f : 0.0060f;
                 const float correction = clamp(-body_rotation * correction_gain,
                     -maximum_correction, maximum_correction);
                 for (std::size_t node = 0; node < particles_.size(); ++node)
@@ -2698,7 +2712,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     }
                     const bool upper_body_node = node == blueprint_.torso_node
                         || node == blueprint_.head_node
-                        || manipulator_branch_node(blueprint_, node)
+                        || (!human_casual
+                            && manipulator_branch_node(blueprint_, node))
                         || guided_body_node;
                     if (!upper_body_node || node == blueprint_.root_node)
                         continue;
@@ -4708,6 +4723,15 @@ step_not_qualified:
                 solve_distance(bone);
             for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
                 solve_motor(blueprint_.motors[index], applied_actions[index]);
+            for (const CoupledMotorConstraint& coupled :
+                blueprint_.coupled_support_motors())
+            {
+                if (!coupled.motor.enabled
+                    || coupled.source_action >= applied_actions.size())
+                    continue;
+                solve_motor(coupled.motor,
+                    applied_actions[coupled.source_action] * coupled.action_scale);
+            }
             solve_articulated_toes();
             stabilize_balance_posture();
             stabilize_duck_posture();

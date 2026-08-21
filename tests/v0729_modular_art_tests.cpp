@@ -409,7 +409,11 @@ int main()
     const std::string main_source = read_text(root / "src" / "main.cpp");
     const std::string renderer_header = read_text(root / "src" / "renderer.hpp");
     require(main_source.find("--diagnose-art") != std::string::npos
-            && main_source.find("--art-eye-test") != std::string::npos
+            && main_source.find("--art-eye-test=human") != std::string::npos
+            && main_source.find("--art-eye-test=chicken") != std::string::npos
+            && main_source.find("--art-eye-test=dog") != std::string::npos
+            && main_source.find("--art-eye-test=hexapod") != std::string::npos
+            && main_source.find("Unknown art eye-test subject") != std::string::npos
             && main_source.find("prepare_art_diagnostic_rig") != std::string::npos
             && main_source.find("prepare_art_fallen_eye_test") != std::string::npos
             && main_source.find("rig_vertices") != std::string::npos

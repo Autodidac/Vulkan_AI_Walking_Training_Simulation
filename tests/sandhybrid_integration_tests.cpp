@@ -67,9 +67,9 @@ int main()
             - DeformableTerrain::fine_cell_spacing * 8.0f) < 1.0e-7f,
         "macro and fine-cell scale diverged");
     require_actor_scale(runner::sim::CreatureBlueprint::humanoid(), "human", 3.0f, 5.0f);
-    require_actor_scale(runner::sim::CreatureBlueprint::chicken(), "chicken", 3.0f, 5.0f);
-    require_actor_scale(runner::sim::CreatureBlueprint::crawler4(), "dog", 1.5f, 3.0f);
-    require_actor_scale(runner::sim::CreatureBlueprint::hexapod(), "hexapod", 1.5f, 3.0f);
+    require_actor_scale(runner::sim::CreatureBlueprint::chicken(), "chicken", 0.9f, 1.6f);
+    require_actor_scale(runner::sim::CreatureBlueprint::crawler4(), "dog", 1.1f, 1.8f);
+    require_actor_scale(runner::sim::CreatureBlueprint::hexapod(), "hexapod", 1.0f, 1.7f);
 
     DeformableTerrain terrain{};
     terrain.reset(0x7145A11Du, 0.72f);

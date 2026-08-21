@@ -1408,6 +1408,22 @@ namespace runner::sim
         bool enabled{ true };
     };
 
+    enum class CreatureSpecies : std::uint8_t
+    {
+        custom,
+        human,
+        chicken,
+        dog,
+        hexapod
+    };
+
+    struct CoupledMotorConstraint
+    {
+        MotorConstraint motor{};
+        std::uint8_t source_action{};
+        float action_scale{ 1.0f };
+    };
+
     [[nodiscard]] inline float motor_target_angle(const MotorConstraint& motor, float action) noexcept
     {
         action = clamp(action, -1.0f, 1.0f);
@@ -1608,6 +1624,14 @@ namespace runner::sim
                 if (node == motor.pivot || node == motor.c)
                     mask = static_cast<std::uint8_t>(mask | support_branch_mask(motor));
             }
+            for (const CoupledMotorConstraint& coupled : coupled_support_motors())
+            {
+                if (!coupled.motor.enabled)
+                    continue;
+                if (node == coupled.motor.pivot || node == coupled.motor.c)
+                    mask = static_cast<std::uint8_t>(
+                        mask | support_branch_mask(coupled.motor));
+            }
             return mask;
         }
 
@@ -1690,6 +1714,57 @@ namespace runner::sim
         {
             return !monopedal_gait() && support_seed_count() >= 4u;
         }
+        [[nodiscard]] CreatureSpecies presentation_species() const noexcept
+        {
+            if (human_casual_gait_plan())
+                return CreatureSpecies::human;
+            if (avian_gait())
+                return CreatureSpecies::chicken;
+            if (horizontal_multi_support_plan() && support_seed_count() >= 6u)
+                return CreatureSpecies::hexapod;
+            if (horizontal_multi_support_plan())
+                return CreatureSpecies::dog;
+            return CreatureSpecies::custom;
+        }
+        [[nodiscard]] std::array<CoupledMotorConstraint, 4>
+            coupled_support_motors() const noexcept
+        {
+            std::array<CoupledMotorConstraint, 4> result{};
+            for (CoupledMotorConstraint& coupled : result)
+                coupled.motor.enabled = false;
+            if (presentation_species() != CreatureSpecies::hexapod
+                || nodes.size() < 12u)
+                return result;
+
+            const auto make_motor = [&](std::uint16_t a, std::uint16_t pivot,
+                std::uint16_t c, std::uint8_t source_action,
+                float action_scale) noexcept
+            {
+                CoupledMotorConstraint coupled{};
+                coupled.motor = MotorConstraint{ a, pivot, c };
+                const float neutral = signed_angle(
+                    nodes[a] - nodes[pivot], nodes[c] - nodes[pivot]);
+                const float travel = 44.0f * 0.01745329251994329577f;
+                coupled.motor.minimum_angle = neutral - travel;
+                coupled.motor.maximum_angle = neutral + travel;
+                coupled.motor.neutral_angle = neutral;
+                coupled.motor.strength = 0.043f;
+                coupled.motor.enabled = true;
+                coupled.source_action = source_action;
+                coupled.action_scale = action_scale;
+                return coupled;
+            };
+
+            // Fixed-width policy, complete six-leg body: the middle pair derives
+            // its two-link actuation from the opposite outer tripod. Existing
+            // eight-channel checkpoints remain compatible while all six authored
+            // supports participate in locomotion instead of dragging passively.
+            result[0] = make_motor(0u, 1u, 8u, 2u, 0.92f);
+            result[1] = make_motor(1u, 8u, 9u, 3u, 0.88f);
+            result[2] = make_motor(2u, 1u, 10u, 0u, 0.92f);
+            result[3] = make_motor(1u, 10u, 11u, 1u, 0.88f);
+            return result;
+        }
 
         [[nodiscard]] static CreatureBlueprint scaffold();
         [[nodiscard]] static CreatureBlueprint chicken();
@@ -1716,7 +1791,7 @@ namespace runner::sim
         if (blueprint.paired_leg_chains())
             return foundational_gait_cadence_hz;
         if (blueprint.support_seed_count() >= 6u)
-            return 0.90f;
+            return 1.20f;
         float support_height = std::numeric_limits<float>::infinity();
         for (std::size_t node = 0; node < blueprint.nodes.size(); ++node)
         {

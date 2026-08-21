@@ -301,6 +301,16 @@ int main(){
    sim::CourseStage::shuttle,0.0f);
   if(post_handoff.step(action).terminated)break;}
  const float return_x=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
+ if(post_handoff.invalid_reason()!=sim::InvalidMotion::none
+  ||return_x>=return_origin-1.0f||post_handoff.course_progress()!=0.0f
+  ||post_handoff.gait_cycles()<2u
+  ||post_handoff.maximum_backward_brace_seconds()
+    >sim::sustained_backward_brace_limit_seconds){
+  std::cerr<<"post-handoff evidence origin="<<return_origin<<" x="<<return_x
+   <<" invalid="<<static_cast<int>(post_handoff.invalid_reason())
+   <<" progress="<<post_handoff.course_progress()
+   <<" gait="<<post_handoff.gait_cycles()
+   <<" backward_brace="<<post_handoff.maximum_backward_brace_seconds()<<'\n';}
  require(post_handoff.invalid_reason()==sim::InvalidMotion::none
   &&return_x<return_origin-1.0f&&post_handoff.course_progress()==0.0f
   &&post_handoff.gait_cycles()>=2u

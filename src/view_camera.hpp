@@ -12,6 +12,9 @@ namespace runner::view_camera
     inline constexpr float minimum_zoom_factor = 0.28f;
     inline constexpr float maximum_zoom_factor = 3.60f;
     inline constexpr float target_rig_height_fraction = 0.34f;
+    // Human is the immutable world-scale reference. Auto framing may include a
+    // smaller species, but it must not enlarge that species to Human height.
+    inline constexpr float human_reference_height_m = 4.8f;
     inline constexpr float live_ground_fraction = 0.74f;
     inline constexpr float lookahead_screen_fraction = 0.17f;
     inline constexpr float camera_dead_zone_pixels = 18.0f;

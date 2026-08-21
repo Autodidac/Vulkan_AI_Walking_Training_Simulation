@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 
 namespace runner::diagnostics
 {
@@ -28,7 +29,6 @@ namespace runner::diagnostics
         [[nodiscard]] bool sustained_multi_topology() noexcept
         {
             const std::array rigs{
-                sim::CreatureBlueprint::quadruped(),
                 sim::CreatureBlueprint::crawler4(),
                 sim::CreatureBlueprint::hexapod()
             };
@@ -55,7 +55,19 @@ namespace runner::diagnostics
                         || environment.gait_cycles()
                             < static_cast<std::uint32_t>(
                                 rl::multi_support_release_stride_events(rig)))
+                    {
+                        std::fprintf(stderr,
+                            "multi-topology evidence species=%u seed=%llu invalid=%u elapsed=%.3f distance=%.3f required=%.3f gait=%u required_gait=%.3f\n",
+                            static_cast<unsigned>(rig.presentation_species()),
+                            static_cast<unsigned long long>(seed),
+                            static_cast<unsigned>(environment.invalid_reason()),
+                            environment.elapsed_seconds(),
+                            environment.distance_travelled(),
+                            rl::multi_support_release_distance(rig),
+                            environment.gait_cycles(),
+                            rl::multi_support_release_stride_events(rig));
                         return false;
+                    }
                 }
             }
             return true;

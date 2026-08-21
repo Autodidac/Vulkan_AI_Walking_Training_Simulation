@@ -740,7 +740,6 @@ int main()
         "duck press does not retract after the hold");
     const std::array stub_rigs{
         sim::CreatureBlueprint::scaffold(),
-        sim::CreatureBlueprint::chicken(),
         sim::CreatureBlueprint::biped(),
         sim::CreatureBlueprint::humanoid()
     };
@@ -762,6 +761,11 @@ int main()
     require(chicken_topology.paired_leg_chains()
             && !chicken_topology.horizontal_multi_support_plan(),
         "chicken paired-leg balance topology is not isolated from multi-support press logic");
+    require(chicken_topology.radii[chicken_topology.left_contact_node] >= 0.06f
+            && chicken_topology.radii[chicken_topology.left_contact_node] <= 0.08f
+            && chicken_topology.radii[chicken_topology.right_contact_node] >= 0.06f
+            && chicken_topology.radii[chicken_topology.right_contact_node] <= 0.08f,
+        "chicken talons inherited the Human passive-boot contact radius");
 
     const sim::CreatureBlueprint quadruped_topology =
         sim::CreatureBlueprint::quadruped();
@@ -1566,11 +1570,12 @@ int main()
             && biped_foundational_gait.step_length >= 0.50f
             && biped_foundational_gait.step_length <= 0.82f
             && humanoid_foundational_gait.step_length >= 0.62f
-            && humanoid_foundational_gait.step_length <= 0.82f
+            && humanoid_foundational_gait.step_length <= 1.05f
             && humanoid_foundational_gait.swing_lift >= 0.16f
             && humanoid_foundational_gait.swing_lift <= 0.24f,
         "foundational biped gait is not finite and anatomy-bounded");
-    require(humanoid_foundational_gait.step_length < 0.82f
+    require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
+            && humanoid_foundational_gait.step_length <= 1.05f
             && humanoid_foundational_gait.swing_lift < 0.82f
             && std::abs(shifted_arm_gait.step_length
                 - humanoid_foundational_gait.step_length) < 1.0e-6f
@@ -1617,7 +1622,7 @@ int main()
             && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::crawler4()) == 1.44f
             && sim::authored_foundational_gait_cadence_hz(
-                sim::CreatureBlueprint::hexapod()) == 0.90f,
+                sim::CreatureBlueprint::hexapod()) == 1.20f,
         "foundational teacher and observed topology clocks diverged");
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
@@ -1697,8 +1702,10 @@ int main()
             monoped_prior.foundational_teacher_sample_count();
         const std::size_t chicken_samples =
             chicken_prior.foundational_teacher_sample_count();
-        require(monoped_samples >= 512u && chicken_samples >= 512u,
-            "fragile rigs cannot build clean planted teacher-trajectory priors");
+        require(monoped_samples >= 512u,
+            "monoped compatibility rig cannot build a clean planted teacher-trajectory prior");
+        require(chicken_samples >= 512u,
+            "chicken cannot build a clean planted teacher-trajectory prior");
         require(biped_prior.foundational_teacher_sample_count() == 0u,
             "clean fragile-topology prior is applied to ordinary paired rigs");
         chicken_prior.set_course(sim::CourseStage::uneven, 0.30f, false);
@@ -1949,10 +1956,12 @@ int main()
         }
         else
         {
-            require((motor.maximum_angle - motor.minimum_angle) * 180.0f / pi >= 180.0f,
-                "humanoid arm motor lacks useful acrobatic travel");
-            require(motor.strength <= 0.040f,
-                "humanoid arm motor is too strong for balance and controlled flips");
+            const float arm_travel = (motor.maximum_angle - motor.minimum_angle)
+                * 180.0f / pi;
+            require(arm_travel >= 110.0f && arm_travel <= 155.0f,
+                "humanoid arm motor does not preserve bounded natural counter-swing travel");
+            require(motor.strength <= 0.025f,
+                "humanoid arm motor is too strong for natural gait stabilization");
         }
     }
 
@@ -2663,32 +2672,32 @@ int main()
         "non-finite legacy odometer was imported");
 
     const std::filesystem::path lifetime_import_directory =
-        std::filesystem::temp_directory_path() / "runner-v0741-lifetime-import-test";
+        std::filesystem::temp_directory_path() / "runner-v0742-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0741-natural-gait-autosave.eppo";
+        / "runner-v0742-species-anatomy-autosave.eppo";
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0741-natural-gait-evolved.rig";
+        / "runner-v0742-species-anatomy-evolved.rig";
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0741-natural-gait-autonomy.state";
-    const std::filesystem::path v0740_autosave = lifetime_import_directory
-        / "runner-v0740-physical-facing-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0740_autosave, error),
+        / "runner-v0742-species-anatomy-autonomy.state";
+    const std::filesystem::path v0741_autosave = lifetime_import_directory
+        / "runner-v0741-natural-gait-autosave.eppo";
+    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0741_autosave, error),
         "failed to write legacy lifetime import fixture: " + error);
-    constexpr std::array<char, 8> v0740_magic{
-        'E', 'P', 'P', 'O', '4', '0', '\0', '\1' };
-    require(rewrite_checkpoint_magic(v0740_autosave, v0740_magic),
-        "failed to mark the fallback fixture as an EPPO40 checkpoint");
+    constexpr std::array<char, 8> v0741_magic{
+        'E', 'P', 'P', 'O', '4', '1', '\0', '\1' };
+    require(rewrite_checkpoint_magic(v0741_autosave, v0741_magic),
+        "failed to mark the fallback fixture as an EPPO41 checkpoint");
     {
         rl::AutonomousTrainer importing{ humanoid, 16 };
         importing.set_autosave_paths(current_autosave, current_rig, current_state);
         importing.set_background_enabled(false);
         std::string import_message{};
         require(importing.load_autosave(import_message)
-                && import_message.find("V0.7.40 LIFETIME LEDGER")
+                && import_message.find("V0.7.41 LIFETIME LEDGER")
                     != std::string::npos,
-            "v0.7.40 fallback autosave was not selected before a new save");
+            "v0.7.41 fallback autosave was not selected before a new save");
         for (int attempt = 0; attempt < 400
             && importing.metrics().total_updates != trainer.metrics().total_updates;
             ++attempt)

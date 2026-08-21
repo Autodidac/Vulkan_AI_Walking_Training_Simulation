@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4102u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4201u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -573,8 +573,12 @@ namespace runner::rl
         const locomotion::Plan movement = current_locomotion_plan(environment);
         const float local_direction = movement.direction
             * environment.facing_direction();
-        const float gait_authority = rig.support_seed_count() >= 6u
-            ? 1.0f : multi_support_gait_authority(movement);
+        const float learned_gait_authority = multi_support_gait_authority(movement);
+        const float topology_gait_floor = movement.intent == locomotion::Intent::recover
+            || movement.intent == locomotion::Intent::crawl
+            ? 0.0f
+            : (rig.support_seed_count() >= 6u ? 0.86f : 0.72f);
+        const float gait_authority = std::max(learned_gait_authority, topology_gait_floor);
         const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t index = 0; index < rig.active_motor_count; ++index)
@@ -684,8 +688,12 @@ namespace runner::rl
         const locomotion::Plan movement = current_locomotion_plan(environment);
         const float local_direction = movement.direction
             * environment.facing_direction();
-        const float gait_authority = rig.support_seed_count() >= 6u
-            ? 1.0f : multi_support_gait_authority(movement);
+        const float learned_gait_authority = multi_support_gait_authority(movement);
+        const float topology_gait_floor = movement.intent == locomotion::Intent::recover
+            || movement.intent == locomotion::Intent::crawl
+            ? 0.0f
+            : (rig.support_seed_count() >= 6u ? 0.86f : 0.72f);
+        const float gait_authority = std::max(learned_gait_authority, topology_gait_floor);
         const float base_phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t proximal_index = 0;
@@ -759,6 +767,7 @@ namespace runner::rl
         float leg_height{ 2.30f };
         float direction{ 1.0f };
         float phase_offset{};
+        float stance_center_x{};
     };
 
     [[nodiscard]] inline BipedGaitParameters anatomy_scaled_foundational_gait(
@@ -788,7 +797,9 @@ namespace runner::rl
             : 2.30f;
         return {
             sim::foundational_gait_cadence_hz,
-            clamp(leg_length * 0.34f, 0.62f, 0.82f),
+            rig.human_casual_gait_plan()
+                ? clamp(leg_length * 0.44f, 0.82f, 1.05f)
+                : clamp(leg_length * 0.34f, 0.62f, 0.82f),
             clamp(leg_length * 0.085f, 0.16f, 0.24f),
             clamp(leg_length * 0.93f, 1.88f, 2.40f),
             1.0f
@@ -829,7 +840,8 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            const Vec2 target{ x, -parameters.leg_height + lift };
+            const Vec2 target{ x + parameters.stance_center_x,
+                -parameters.leg_height + lift };
             const Vec2 authored_upper = rig.nodes[hip.c]
                 - rig.nodes[hip.pivot];
             const Vec2 authored_lower = rig.nodes[knee.c]
@@ -905,7 +917,7 @@ namespace runner::rl
                 - rig.nodes[shoulder.pivot];
             const Vec2 target = authored_opposed_swing_target(
                 authored_endpoint, arm_phase,
-                (upper_length + lower_length) * 0.15f, 0.0f,
+                (upper_length + lower_length) * 0.10f, 0.0f,
                 parameters.direction);
             const Vec2 authored_upper = rig.nodes[shoulder.c]
                 - rig.nodes[shoulder.pivot];
@@ -962,11 +974,18 @@ namespace runner::rl
         // flung the trunk; preserving an authored rest endpoint as the stride
         // centre instead produced a double-support shuffle.
         BipedGaitParameters parameters{};
-        parameters.cadence_hz = clamp(cadence_hz, 0.92f, 1.22f);
-        parameters.step_length = chain_length * 0.30f;
-        parameters.swing_lift = chain_length * 0.11f;
-        parameters.leg_height = chain_length * 0.91f;
+        parameters.cadence_hz = clamp(cadence_hz * 1.10f, 1.28f, 1.42f);
+        parameters.step_length = chain_length * 0.42f;
+        parameters.swing_lift = chain_length * 0.24f;
+        // The planted target must preserve the authored root-to-talon reach.
+        // Shortening it to 0.88 raised both supports and created false skating.
+        parameters.leg_height = chain_length * 0.98f;
         parameters.direction = direction < 0.0f ? -1.0f : 1.0f;
+        parameters.stance_center_x = 0.5f * (
+            (rig.nodes[rig.left_contact_node].x
+                - rig.nodes[rig.motors[0].pivot].x)
+            + (rig.nodes[rig.right_contact_node].x
+                - rig.nodes[rig.motors[2].pivot].x));
         // The authored chicken rests with its first support behind the root and
         // its second support ahead. Match that physical stance on the first
         // sample instead of commanding both legs through an immediate crossing.
@@ -1057,14 +1076,16 @@ namespace runner::rl
                 ? rig.nodes[rig.root_node].y - rest_support_height
                 : 2.0f;
             const bool six_supports = rig.support_seed_count() >= 6u;
-            const bool tall_four_supports = !six_supports
-                && root_clearance >= 1.65f;
+            const float anatomy_scaled_amplitude = std::clamp(
+                root_clearance * (six_supports ? 1.08f : 0.42f),
+                six_supports ? 0.72f : 0.24f,
+                six_supports ? 1.02f : 0.42f);
 
             const MultiSupportTeacherParameters multi_parameters{
                 sim::authored_foundational_gait_cadence_hz(rig),
-                six_supports ? 1.08f : (tall_four_supports ? 1.08f : 0.92f),
+                anatomy_scaled_amplitude,
                 pi * 1.5f,
-                six_supports ? 0.36f : 0.0f
+                six_supports ? 0.08f : 0.0f
             };
             return rig_has_driven_two_link_support_chains(rig)
                 ? multi_support_two_link_teacher_action(environment, multi_parameters)
@@ -1290,9 +1311,9 @@ namespace runner::rl
         if (stage == sim::CourseStage::shuttle)
         {
             if (rig.paired_leg_chains())
-                return { 0.90f, 0.72f };
+                return { 0.96f, 0.80f };
             if (rig.support_seed_count() >= 4u)
-                return { 0.90f, 0.60f };
+                return { 0.94f, 0.68f };
         }
         return {};
     }

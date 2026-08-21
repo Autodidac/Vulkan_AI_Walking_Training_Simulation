@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.41 LANGUAGES CXX)
+project(Runner VERSION 0.7.42 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -186,6 +186,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
@@ -225,6 +226,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0739_STATIC_CELLS_DIRECTION.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()

@@ -111,12 +111,31 @@ namespace
             && std::string_view(argv[1]) == "--course-eye-test";
     }
 
-    [[nodiscard]] bool wants_art_eye_test(int argc, char** argv) noexcept
+    struct ArtEyeTestRequest
     {
-        return argc > 1
-            && argv != nullptr
-            && argv[1] != nullptr
-            && std::string_view(argv[1]) == "--art-eye-test";
+        bool requested{ false };
+        bool valid{ true };
+        std::size_t rig_index{};
+    };
+
+    [[nodiscard]] ArtEyeTestRequest art_eye_test_request(
+        int argc, char** argv) noexcept
+    {
+        if (argc <= 1 || argv == nullptr || argv[1] == nullptr)
+            return {};
+
+        const std::string_view argument{ argv[1] };
+        if (argument == "--art-eye-test" || argument == "--art-eye-test=human")
+            return { true, true, 0u };
+        if (argument == "--art-eye-test=chicken")
+            return { true, true, 1u };
+        if (argument == "--art-eye-test=dog")
+            return { true, true, 2u };
+        if (argument == "--art-eye-test=hexapod")
+            return { true, true, 3u };
+        if (argument.starts_with("--art-eye-test="))
+            return { true, false, 0u };
+        return {};
     }
 
     [[nodiscard]] bool wants_walk_eye_test(int argc, char** argv) noexcept
@@ -179,6 +198,25 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0739_STATIC_CELLS_DIRECTION.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0740_PHYSICAL_FACING_RETURN.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_lower_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_foot_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_tail_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_body_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_head_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_upper_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_lower_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_foot_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "dog_tail_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_body_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_head_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_upper_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_lower_leg_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_foot_side.ppm",
+            std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "hexapod_tail_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",
@@ -404,6 +442,14 @@ namespace
 
 int main(int argc, char** argv)
 {
+    const ArtEyeTestRequest art_eye_test = art_eye_test_request(argc, argv);
+    if (art_eye_test.requested && !art_eye_test.valid)
+    {
+        std::fprintf(stderr,
+            "Unknown art eye-test subject. Expected human, chicken, dog, or hexapod.\n");
+        return 2;
+    }
+
     if (wants_version(argc, argv))
     {
         std::printf("Runner %s\n", RUNNER_VERSION);
@@ -688,8 +734,9 @@ if (wants_camera_diagnostic(argc, argv))
         return 1;
     }
 
-    if (wants_art_eye_test(argc, argv))
-        application.prepare_art_eye_test();
+    if (art_eye_test.requested)
+        static_cast<void>(application.prepare_art_diagnostic_rig(
+            art_eye_test.rig_index));
     else if (wants_course_eye_test(argc, argv))
         application.prepare_course_eye_test();
     bool running = true;
