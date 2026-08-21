@@ -177,6 +177,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0737_HYBRID_LOCOMOTION_TERRAIN.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0738_TURN_TOPOLOGY_STATS.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0739_STATIC_CELLS_DIRECTION.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0740_PHYSICAL_FACING_RETURN.md",
             std::filesystem::path{ "assets" } / "optional" / "runner_armor_concepts"
                 / "runtime" / "hand_side.ppm",
             std::filesystem::path{ "assets" } / "ui" / "runner_icon.png",

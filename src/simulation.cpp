@@ -913,13 +913,7 @@ namespace runner::sim
         const std::uint16_t node = equipment_mount_node();
         if (!valid_node(node))
             return {};
-        Vec2 mount = particles_[node].position;
-        if (facing_direction() < 0.0f && valid_node(blueprint_.root_node))
-        {
-            const float root_x = particles_[blueprint_.root_node].position.x;
-            mount.x = root_x * 2.0f - mount.x;
-        }
-        return mount;
+        return particles_[node].position;
     }
 
     Vec2 Environment::equipment_display_position() const noexcept
@@ -1514,15 +1508,19 @@ namespace runner::sim
     {
         if (!valid_node(blueprint_.root_node))
             return;
+        const float root_x = particles_[blueprint_.root_node].position.x;
         for (Particle& particle : particles_)
         {
             // Turning is a deliberate zero-speed lesson boundary. Clearing
             // Verlet velocity prevents the pre-turn stride from becoming an
             // equal-and-opposite launch on the first reverse-facing step. The
-            // articulated pose stays in its authored physical frame; facing
-            // is a movement/render contract, not a reflection of the plant.
+            // complete articulated plant changes facing here so physics,
+            // contacts, observations, motors, equipment, and presentation all
+            // share one world-space pose instead of mirroring only the picture.
+            particle.position.x = root_x * 2.0f - particle.position.x;
             particle.previous = particle.position;
         }
+        equipment_aim_angle_ = wrap_angle(pi - equipment_aim_angle_);
         previous_pelvis_ = particles_[blueprint_.root_node].position;
         previous_root_for_path_ = previous_pelvis_;
         previous_torso_angle_ = torso_roll_angle();
@@ -1532,6 +1530,21 @@ namespace runner::sim
             previous_angles_[index] = joint_angle(blueprint_.motors[index]);
             angular_velocities_[index] = 0.0f;
             previous_applied_actions_[index] = 0.0f;
+        }
+        if (support_contact_latch_.size() != particles_.size())
+            support_contact_latch_.assign(particles_.size(), 0u);
+        else
+            std::fill(support_contact_latch_.begin(), support_contact_latch_.end(), std::uint8_t{0});
+        support_contact_anchor_x_.resize(particles_.size());
+        for (std::size_t index = 0; index < particles_.size(); ++index)
+            support_contact_anchor_x_[index] = particles_[index].position.x;
+        for (std::size_t side = 0;
+            side < previous_articulated_toe_angles_.size(); ++side)
+        {
+            const std::size_t motor_index = side == 0u ? 1u : 3u;
+            if (motor_index < blueprint_.active_motor_count)
+                previous_articulated_toe_angles_[side] =
+                    joint_angle(blueprint_.motors[motor_index]);
         }
         left_foot_phase_ = detect_foot_contact_phase(true);
         right_foot_phase_ = detect_foot_contact_phase(false);
@@ -2347,9 +2360,10 @@ namespace runner::sim
                 leg.upper_length * leg.upper_length - along * along));
             const Vec2 base = hip + axis * along;
 
-            // Both knees share one sagittal bend side. Preserving each prior
-            // side independently locked a crab/X fold into the physical solve.
-            constexpr float bend_sign = 1.0f;
+            // Both knees share one facing-local sagittal bend side. Preserving
+            // each prior side independently locked a crab/X fold into the solve,
+            // while a fixed world sign broke physical reflection on shuttle turns.
+            const float bend_sign = facing_direction();
             const Vec2 target_knee = base + perpendicular * (height * bend_sign);
             const Vec2 knee_delta = target_knee - knee_particle.position;
             knee_particle.position = target_knee;
@@ -2407,8 +2421,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 const float horizontal = rhs.position.x - lhs.position.x;
                 if (std::abs(horizontal) >= minimum_gap)
                     continue;
-                float authored_direction = blueprint_.nodes[second_index].x
-                    - blueprint_.nodes[first_index].x;
+                float authored_direction = (blueprint_.nodes[second_index].x
+                    - blueprint_.nodes[first_index].x) * facing_direction();
                 if (std::abs(authored_direction) < 1.0e-4f)
                     authored_direction = horizontal;
                 const float direction = authored_direction < 0.0f ? -1.0f : 1.0f;
@@ -2512,8 +2526,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
     {
         if (!valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node))
             return;
-        const Vec2 rest_body = blueprint_.nodes[blueprint_.torso_node]
+        Vec2 rest_body = blueprint_.nodes[blueprint_.torso_node]
             - blueprint_.nodes[blueprint_.root_node];
+        rest_body.x *= facing_direction();
         const Vec2 current_body = particles_[blueprint_.torso_node].position
             - particles_[blueprint_.root_node].position;
         if (length(rest_body) <= 1.0e-5f || length(current_body) <= 1.0e-5f)
@@ -2536,7 +2551,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             }
             if (!valid_node(parent))
                 return;
-            const Vec2 rest_offset = blueprint_.nodes[node] - blueprint_.nodes[parent];
+            Vec2 rest_offset = blueprint_.nodes[node] - blueprint_.nodes[parent];
+            rest_offset.x *= facing_direction();
             const Vec2 target = particles_[parent].position + rotate(rest_offset, body_rotation);
             Vec2 error = target - particles_[node].position;
             const float maximum_error = std::max(0.08f, length(rest_offset) * 0.45f);
@@ -2596,8 +2612,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 {
                     rest_support /= static_cast<float>(support_count);
                     current_support /= static_cast<float>(support_count);
-                    Vec2 correction = current_support
-                        + (blueprint_.nodes[blueprint_.root_node] - rest_support)
+                    Vec2 rest_root_offset =
+                        blueprint_.nodes[blueprint_.root_node] - rest_support;
+                    rest_root_offset.x *= facing_direction();
+                    Vec2 correction = current_support + rest_root_offset
                         - particles_[blueprint_.root_node].position;
                     const float magnitude = length(correction);
                     const float maximum_step = guided_monoped ? 0.030f : 0.015f;
@@ -2712,7 +2730,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             if (node >= particles_.size() || node >= blueprint_.nodes.size()
                 || blueprint_.is_support_seed(node))
                 return;
-            const Vec2 target = current_support + (blueprint_.nodes[node] - rest_support);
+            Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+            rest_offset.x *= facing_direction();
+            const Vec2 target = current_support + rest_offset;
             Vec2 correction = target - particles_[node].position;
             const float magnitude = length(correction);
             if (magnitude > maximum_step && magnitude > 1.0e-6f)
@@ -2808,7 +2828,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             {
                 if (node >= blueprint_.nodes.size() || blueprint_.is_support_seed(node))
                     continue;
-                const Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+                Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+                rest_offset.x *= facing_direction();
                 Vec2 target = current_support + rest_offset;
                 if (node == left_knee || node == right_knee)
                 {
@@ -2861,7 +2882,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         {
             if (node >= blueprint_.nodes.size() || blueprint_.is_support_seed(node))
                 continue;
-            const Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+            Vec2 rest_offset = blueprint_.nodes[node] - rest_support;
+            rest_offset.x *= facing_direction();
             Vec2 target = current_support + Vec2{
                 rest_offset.x * horizontal_scale,
                 rest_offset.y * vertical_scale
@@ -3040,7 +3062,8 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const Vec2 driven_arm = particles_[motor.c].position - pivot;
         if (length(reference_arm) <= 1.0e-5f || length(driven_arm) <= 1.0e-5f)
             return;
-        const float target = motor_target_angle(motor, action);
+        const float target = motor_target_angle(motor, action)
+            * facing_direction();
         const float current = signed_angle(reference_arm, driven_arm);
         const float error = wrap_angle(current - target);
         const float correction = clamp(error, -0.24f, 0.24f) * motor.strength;
@@ -3244,8 +3267,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             const MotorConstraint& motor = blueprint_.motors[index];
             if (!motor.enabled)
                 continue;
+            const float local_angle = joint_angle(motor) * facing_direction();
             maximum = std::max(maximum,
-                std::abs(wrap_angle(joint_angle(motor) - motor.neutral_angle)));
+                std::abs(wrap_angle(local_angle - motor.neutral_angle)));
         }
         return maximum;
     }
@@ -3341,8 +3365,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             return 0.0f;
         const Vec2 current = particles_[blueprint_.torso_node].position
             - particles_[blueprint_.root_node].position;
-        const Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
+        Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
             - blueprint_.nodes[blueprint_.root_node];
+        authored.x *= facing_direction();
         const Vec2 desired = blueprint_.horizontal_body_plan()
             ? authored : Vec2{ 0.0f, std::max(0.01f, length(authored)) };
         return signed_angle(desired, current);
@@ -3751,8 +3776,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const Vec2 current = normalized(
             particles_[blueprint_.torso_node].position - particles_[blueprint_.root_node].position,
             { 0.0f, 1.0f });
-        const Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
+        Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
             - blueprint_.nodes[blueprint_.root_node];
+        authored.x *= facing_direction();
         const Vec2 desired = blueprint_.horizontal_body_plan()
             ? normalized(authored, { 1.0f, 0.0f }) : Vec2{ 0.0f, 1.0f };
         return clamp(dot(current, desired), -1.0f, 1.0f);
@@ -3904,8 +3930,11 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const float locomotion_x = terrain_sample_x(root_x, course_progress());
         const float left_clearance = contact_cluster_clearance(blueprint_.left_contact_node);
         const float right_clearance = contact_cluster_clearance(blueprint_.right_contact_node);
-        const float left_center = contact_cluster_center_x(blueprint_.left_contact_node);
-        const float right_center = contact_cluster_center_x(blueprint_.right_contact_node);
+        const float facing = facing_direction();
+        const float left_center = (contact_cluster_center_x(
+            blueprint_.left_contact_node) - root_x) * facing;
+        const float right_center = (contact_cluster_center_x(
+            blueprint_.right_contact_node) - root_x) * facing;
         lower_leg_scissored_this_step_ = false;
         if (measure_forward_gait_faults(shuttle_state_.phase, elapsed_seconds_)
             && blueprint_.paired_leg_chains() && blueprint_.active_motor_count >= 4u)
@@ -5233,33 +5262,37 @@ step_not_qualified:
         static_assert(observation_count == 62);
 
         const Vec2 root = particles_[blueprint_.root_node].position;
-        const Vec2 torso = normalized(
+        const float facing = facing_direction();
+        Vec2 torso = normalized(
             particles_[blueprint_.torso_node].position - root, { 0.0f, 1.0f });
+        torso.x *= facing;
         const Vec2 pelvis_velocity = particles_[blueprint_.root_node].position
             - particles_[blueprint_.root_node].previous;
         result[0] = torso.x;
         result[1] = torso.y;
-        result[2] = clamp(pelvis_velocity.x / last_step_dt_ / 6.0f, -3.0f, 3.0f);
+        result[2] = clamp(pelvis_velocity.x * facing
+            / last_step_dt_ / 6.0f, -3.0f, 3.0f);
         result[3] = clamp(pelvis_velocity.y / last_step_dt_ / 6.0f, -3.0f, 3.0f);
         for (std::size_t index = 0; index < anatomy_action_count; ++index)
         {
             const MotorConstraint& motor = blueprint_.motors[index];
             if (!motor.enabled)
                 continue;
-            const float delta = wrap_angle(joint_angle(motor) - motor.neutral_angle);
+            const float delta = wrap_angle(
+                joint_angle(motor) * facing - motor.neutral_angle);
             const float span = delta < 0.0f
                 ? std::max(0.001f, motor.neutral_angle - motor.minimum_angle)
                 : std::max(0.001f, motor.maximum_angle - motor.neutral_angle);
             result[joint_angle_begin + index] = clamp(delta / span, -2.0f, 2.0f);
             result[joint_velocity_begin + index] = clamp(
-                angular_velocities_[index] / 18.0f, -3.0f, 3.0f);
+                angular_velocities_[index] * facing / 18.0f, -3.0f, 3.0f);
         }
         result[20] = contact_supported(blueprint_.left_contact_node) ? 1.0f : 0.0f;
         result[21] = contact_supported(blueprint_.right_contact_node) ? 1.0f : 0.0f;
-        result[22] = clamp((particles_[blueprint_.left_contact_node].position.x - root.x) / 2.0f,
-            -2.0f, 2.0f);
-        result[23] = clamp((particles_[blueprint_.right_contact_node].position.x - root.x) / 2.0f,
-            -2.0f, 2.0f);
+        result[22] = clamp((particles_[blueprint_.left_contact_node].position.x - root.x)
+            * facing / 2.0f, -2.0f, 2.0f);
+        result[23] = clamp((particles_[blueprint_.right_contact_node].position.x - root.x)
+            * facing / 2.0f, -2.0f, 2.0f);
         result[24] = clamp((root.y - ground_height_at(root.x)) / 5.0f, 0.0f, 2.0f);
         result[25] = non_foot_grounded_ ? -1.0f
             : recovery_active_ ? clamp(torso.y, -1.0f, 1.0f) : 1.0f;
@@ -5313,13 +5346,15 @@ step_not_qualified:
         result[40] = terrain_firmness_;
         result[41] = terrain_looseness_;
         result[42] = clamp(burial_depth_ / 0.80f, 0.0f, 2.0f);
-        result[43] = shuttle_enabled() ? requested_direction : free_space_direction_;
+        result[43] = (shuttle_enabled() ? requested_direction : free_space_direction_)
+            * facing;
         result[44] = facing_direction();
         result[45] = shuttle_enabled()
             ? static_cast<float>(shuttle_phase())
                 / 3.0f
             : 0.0f;
-        result[46] = clamp(incoming_material_velocity_.x / 6.0f, -2.0f, 2.0f);
+        result[46] = clamp(incoming_material_velocity_.x * facing / 6.0f,
+            -2.0f, 2.0f);
         result[47] = clamp(incoming_material_velocity_.y / 6.0f, -2.0f, 2.0f);
         result[48] = clamp(incoming_time_to_impact_ / 4.0f, 0.0f, 2.5f);
         result[49] = clamp(incoming_material_density_, 0.0f, 1.0f);
@@ -5337,7 +5372,7 @@ step_not_qualified:
         if (equipment_target_.active)
         {
             const Vec2 target_delta = equipment_target_.position - root;
-            result[57] = clamp(target_delta.x / 16.0f, -2.0f, 2.0f);
+            result[57] = clamp(target_delta.x * facing / 16.0f, -2.0f, 2.0f);
             result[58] = clamp(target_delta.y / 8.0f, -2.0f, 2.0f);
             const float desired = std::atan2(target_delta.y, target_delta.x);
             result[59] = clamp(wrap_angle(desired - equipment_aim_angle_) / pi,

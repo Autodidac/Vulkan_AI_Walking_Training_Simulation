@@ -205,7 +205,6 @@ int main()
             "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
             "minimum_shoulder", "envelope.chest_radius",
             "assembled_art_scale", "scaled_pixels(23.0f, art_pixel_scale)", "presentation_side",
-            "art::facing_presented_position",
             "authored_joint_overlap", "0.36f : 0.55f",
             "Modular armor is the exclusive presentation",
             "Authoritative graph bones stay visible beneath authored",
@@ -224,7 +223,8 @@ int main()
             && app.find("rgb(0x202a31") == std::string::npos
             && app.find("rgb(0xaeb9c1") == std::string::npos
             && app.find("if (optional_art_enabled && optional_foot_art.loaded())")
-                == std::string::npos,
+                == std::string::npos
+            && app.find("art::facing_presented_position") == std::string::npos,
         "axis-aligned boot, raw terrain-cell visual, generated underwrap, bone-strip art, motor-slot, or paired-biped gate remains");
     require(app.find("ui_layout::DistanceUnits distance_units{ ui_layout::DistanceUnits::imperial };")
                 != std::string::npos,

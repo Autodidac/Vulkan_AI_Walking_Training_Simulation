@@ -11,7 +11,12 @@
 
 namespace runner::sim {
 struct EnvironmentTestAccess {
-    static void shuttle(Environment& e, ShuttleState s) noexcept { e.shuttle_state_ = s; }
+    static void shuttle(Environment& e, ShuttleState s) noexcept {
+        const float prior_facing=e.shuttle_state_.facing_direction;
+        e.shuttle_state_=s;
+        if((prior_facing<0.0f)!=(s.facing_direction<0.0f))
+            e.mirror_rig_about_root();
+    }
     static void root_x(Environment& e, float x) noexcept {
         const float d=x-e.particles_[e.blueprint_.root_node].position.x;
         for(Particle& p:e.particles_){p.position.x+=d;p.previous.x+=d;}
@@ -25,7 +30,7 @@ struct EnvironmentTestAccess {
     static void rebuild(Environment& e) noexcept { e.rebuild_course_features(); }
     static void configure_facing_target(Environment& e,float facing,float distance=4.0f) noexcept {
         ShuttleState state{};state.facing_direction=facing;state.locomotion_direction=facing;
-        state.completed_turns=2u;e.shuttle_state_=state;
+        state.completed_turns=2u;shuttle(e,state);
         const Vec2 mount=e.equipment_mount_position();
         e.equipment_target_.active=true;e.equipment_target_.position={mount.x+facing*distance,mount.y};
         e.equipment_target_.radius=0.42f;
@@ -192,6 +197,87 @@ int main(){
  for(std::size_t i=0;i<factories.size();++i){sim::Environment e{factories[i](),0x732100u+i};
   e.set_course(sim::CourseStage::shuttle,0.30f);e.set_course_motion_enabled(false);
   require(e.shuttle_enabled()&&e.facing_direction()==1.0f&&e.locomotion_direction()==1.0f,"all-rig shuttle");}
+ sim::Environment reflected{sim::CreatureBlueprint::humanoid(),0x740419u};
+ reflected.set_course(sim::CourseStage::shuttle,0.30f);
+ reflected.set_course_motion_enabled(false);
+ const auto right_observations=reflected.observation();
+ const std::vector<sim::Particle> right_particles{
+  reflected.particles().begin(),reflected.particles().end()};
+ const float reflected_root_x=right_particles[reflected.blueprint().root_node].position.x;
+ sim::ShuttleState reflected_return{};
+ reflected_return.facing_direction=-1.0f;
+ reflected_return.locomotion_direction=-1.0f;
+ reflected_return.completed_turns=1u;
+ sim::EnvironmentTestAccess::shuttle(reflected,reflected_return);
+ const auto left_observations=reflected.observation();
+ for(std::size_t node=0;node<right_particles.size();++node){
+  const runner::Vec2 right_offset=right_particles[node].position
+   - runner::Vec2{reflected_root_x,0.0f};
+  const runner::Vec2 left_offset=reflected.particles()[node].position
+   - runner::Vec2{reflected_root_x,0.0f};
+  require(std::abs(right_offset.x+left_offset.x)<1.0e-5f
+   &&std::abs(right_offset.y-left_offset.y)<1.0e-5f,
+   "turn state did not physically reflect the articulated plant");}
+ for(std::size_t index=0;index<right_observations.size();++index){
+  if(index==44u)continue;
+  require(std::abs(right_observations[index]-left_observations[index])<1.0e-5f,
+   "reflected plant changed a facing-local controller observation");}
+ require(right_observations[44]==1.0f&&left_observations[44]==-1.0f,
+  "reflected observation omitted explicit world facing");
+ sim::Environment symmetry_right{sim::CreatureBlueprint::humanoid(),0x740420u};
+ sim::Environment symmetry_left{sim::CreatureBlueprint::humanoid(),0x740420u};
+ symmetry_right.set_course(sim::CourseStage::shuttle,0.30f);
+ symmetry_left.set_course(sim::CourseStage::shuttle,0.30f);
+ symmetry_right.set_course_motion_enabled(false);
+ symmetry_left.set_course_motion_enabled(false);
+ sim::ShuttleState symmetry_return{};
+ symmetry_return.facing_direction=-1.0f;
+ symmetry_return.locomotion_direction=-1.0f;
+ symmetry_return.completed_turns=1u;
+ sim::EnvironmentTestAccess::shuttle(symmetry_left,symmetry_return);
+ const float symmetry_right_origin=symmetry_right.particles()[symmetry_right.blueprint().root_node].position.x;
+ const float symmetry_left_origin=symmetry_left.particles()[symmetry_left.blueprint().root_node].position.x;
+ float maximum_action_mismatch{};
+ float maximum_pose_mismatch{};
+ constexpr float mirrored_pose_epsilon=5.0e-4f; // Cross-toolchain FMA drift stays sub-millimeter.
+ int first_pose_mismatch=-1;
+ for(int step=0;step<45;++step){
+  const auto right_action=rl::walking_teacher_action(symmetry_right);
+  const auto left_action=rl::walking_teacher_action(symmetry_left);
+  for(std::size_t index=0;index<right_action.size();++index)
+   maximum_action_mismatch=std::max(maximum_action_mismatch,
+    std::abs(right_action[index]-left_action[index]));
+  const sim::StepResult right_result=symmetry_right.step(right_action);
+  const sim::StepResult left_result=symmetry_left.step(left_action);
+  const float right_root=symmetry_right.particles()[symmetry_right.blueprint().root_node].position.x;
+  const float left_root=symmetry_left.particles()[symmetry_left.blueprint().root_node].position.x;
+  float frame_mismatch=std::abs((right_root-symmetry_right_origin)
+   +(left_root-symmetry_left_origin));
+  for(std::size_t node=0;node<symmetry_right.particles().size();++node){
+   const sim::Particle& rp=symmetry_right.particles()[node];
+   const sim::Particle& lp=symmetry_left.particles()[node];
+   frame_mismatch=std::max(frame_mismatch,std::abs((rp.position.x-right_root)
+    +(lp.position.x-left_root)));
+   frame_mismatch=std::max(frame_mismatch,std::abs(rp.position.y-lp.position.y));}
+  maximum_pose_mismatch=std::max(maximum_pose_mismatch,frame_mismatch);
+  if(first_pose_mismatch<0&&frame_mismatch>mirrored_pose_epsilon)first_pose_mismatch=step;
+  if(right_result.terminated||left_result.terminated)break;}
+ if(!(maximum_action_mismatch<1.0e-5f&&maximum_pose_mismatch<mirrored_pose_epsilon
+  &&first_pose_mismatch<0&&symmetry_right.invalid_reason()==sim::InvalidMotion::none
+  &&symmetry_left.invalid_reason()==sim::InvalidMotion::none))
+  std::cerr<<"symmetry action="<<maximum_action_mismatch
+   <<" pose="<<maximum_pose_mismatch<<" first="<<first_pose_mismatch
+   <<" right-invalid="<<static_cast<int>(symmetry_right.invalid_reason())
+   <<" left-invalid="<<static_cast<int>(symmetry_left.invalid_reason())<<'\n';
+ require(maximum_action_mismatch<1.0e-5f&&maximum_pose_mismatch<mirrored_pose_epsilon
+  &&first_pose_mismatch<0&&symmetry_right.invalid_reason()==sim::InvalidMotion::none
+  &&symmetry_left.invalid_reason()==sim::InvalidMotion::none,
+  "facing-local teacher and physical plant diverged under reflection");
+ require(sim::directional_backward_brace_ratio({0.0f,1.0f},{-0.32f,0.95f},-1.0f)
+   <sim::backward_brace_activation_ratio
+  &&sim::directional_backward_brace_ratio({0.0f,1.0f},{0.32f,0.95f},-1.0f)
+   >sim::backward_brace_activation_ratio,
+  "return acceptance cannot distinguish forward posture from backpedal bracing");
  const auto humanoid_reflex=rl::topology_runtime_reflex_authority(
   sim::CreatureBlueprint::humanoid(),sim::CourseStage::shuttle);
  const auto quadruped_reflex=rl::topology_runtime_reflex_authority(
@@ -217,8 +303,11 @@ int main(){
   if(post_handoff.step(action).terminated)break;}
  const float return_x=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
  require(post_handoff.invalid_reason()==sim::InvalidMotion::none
-  &&return_x<return_origin-1.0f&&post_handoff.course_progress()==0.0f,
-  "post-handoff forward residual resisted self-propelled return travel");
+  &&return_x<return_origin-1.0f&&post_handoff.course_progress()==0.0f
+  &&post_handoff.gait_cycles()>=2u
+  &&post_handoff.maximum_backward_brace_seconds()
+   <=sim::sustained_backward_brace_limit_seconds,
+  "post-handoff return moved left while backpedaling or without a real gait");
 
  sim::Environment physical{sim::CreatureBlueprint::biped(),0x7323u};
  physical.set_course(sim::CourseStage::shuttle,0.30f);physical.set_course_motion_enabled(false);
@@ -230,22 +319,27 @@ int main(){
    prior_phase=physical.shuttle_phase();
   if(physical_result.terminated)break;}
  require(physical.invalid_reason()==sim::InvalidMotion::none
-  &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f,
-  "physical teacher shuttle traversal");
+  &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f
+  &&physical.gait_cycles()>=6u
+  &&physical.maximum_backward_brace_seconds()
+   <=sim::sustained_backward_brace_limit_seconds,
+  "physical teacher shuttle traversed by dragging or backward bracing");
  const auto reverse_humanoid_probe=[](){
   sim::Environment environment{sim::CreatureBlueprint::humanoid(),0x9e3779b9u};
   environment.set_course(sim::CourseStage::shuttle,0.30f);environment.set_course_motion_enabled(false);
   for(int step=0;step<2400;++step){
    if(environment.step(rl::walking_teacher_action(environment)).terminated)break;}
-  return std::array<float,4>{environment.distance_travelled(),environment.elapsed_seconds(),
-   static_cast<float>(environment.completed_shuttle_turns()),static_cast<float>(environment.invalid_reason())};};
- const std::array<float,4> reverse_first=reverse_humanoid_probe();
- const std::array<float,4> reverse_repeated=reverse_humanoid_probe();
- std::cout<<"humanoid reverse distance="<<reverse_first[0]<<" elapsed="<<reverse_first[1]
-  <<" turns="<<reverse_first[2]<<" reason="<<reverse_first[3]<<'\n';
+  return std::array<float,6>{environment.distance_travelled(),environment.elapsed_seconds(),
+   static_cast<float>(environment.completed_shuttle_turns()),
+   static_cast<float>(environment.invalid_reason()),static_cast<float>(environment.gait_cycles()),
+   environment.maximum_backward_brace_seconds()};};
+ const std::array<float,6> reverse_first=reverse_humanoid_probe();
+ const std::array<float,6> reverse_repeated=reverse_humanoid_probe();
  require(reverse_first==reverse_repeated&&reverse_first[0]>=12.0f&&reverse_first[1]>=19.9f
-  &&reverse_first[2]>=1.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none),
-  "repeated reverse humanoid terrain traversal");
+  &&reverse_first[2]>=1.0f&&reverse_first[3]==static_cast<float>(sim::InvalidMotion::none)
+  &&reverse_first[4]>=6.0f
+  &&reverse_first[5]<=sim::sustained_backward_brace_limit_seconds,
+  "repeated return traversal accepted leftward backpedaling");
  sim::Environment equipment{sim::CreatureBlueprint::humanoid(),0x7322u};
  equipment.set_course(sim::CourseStage::shuttle,0.30f);
  equipment.set_course_motion_enabled(false);

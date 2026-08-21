@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'3901u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4001u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -545,6 +545,8 @@ namespace runner::rl
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        const float local_direction = movement.direction
+            * environment.facing_direction();
         const float gait_authority = rig.support_seed_count() >= 6u
             ? 1.0f : multi_support_gait_authority(movement);
         const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
@@ -559,7 +561,7 @@ namespace runner::rl
             const float phase_sign = multi_support_phase_group(rig, motor) == 0u
                 ? 1.0f : -1.0f;
             const float swing = std::sin(phase) * phase_sign;
-            const float drive = swing * movement.direction * gait_authority;
+            const float drive = swing * local_direction * gait_authority;
             const Vec2 reference = rig.nodes[motor.a] - rig.nodes[motor.pivot];
             Vec2 desired = rig.nodes[motor.c] - rig.nodes[motor.pivot];
             const float segment_length = length(desired);
@@ -567,11 +569,11 @@ namespace runner::rl
             if (rig.support_seed_count() >= 6u)
             {
                 desired.x -= parameters.stance_backstroke * segment_length
-                    * movement.direction * gait_authority;
+                    * local_direction * gait_authority;
             }
             else if (swing < 0.0f)
                 desired.x -= parameters.stance_backstroke * segment_length
-                    * movement.direction * gait_authority * -swing;
+                    * local_direction * gait_authority * -swing;
             desired.y += parameters.amplitude * segment_length
                 * std::max(0.0f, swing) * gait_authority * 0.72f;
             const float target = signed_angle(reference, desired);
@@ -654,6 +656,8 @@ namespace runner::rl
         auto action = multi_support_teacher_action(environment, parameters);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        const float local_direction = movement.direction
+            * environment.facing_direction();
         const float gait_authority = multi_support_gait_authority(movement);
         const float base_phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
@@ -694,7 +698,7 @@ namespace runner::rl
                 const float progress = swing_phase
                     ? (phase - pi) / pi : phase / pi;
                 target.x += sagittal_step_x(parameters.amplitude, progress,
-                    swing_phase) * movement.direction * gait_authority;
+                    swing_phase) * local_direction * gait_authority;
                 if (swing_phase)
                 {
                     target.y += (upper_length + lower_length) * 0.27f
@@ -994,6 +998,8 @@ namespace runner::rl
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
+        const float local_direction = movement.direction
+            * environment.facing_direction();
         if (movement.intent == locomotion::Intent::hold)
         {
             // Braking and turning are explicit support-transfer holds. A zero-
@@ -1004,12 +1010,12 @@ namespace runner::rl
         }
         if (rig.avian_gait())
             return avian_gait_teacher_action(environment,
-                movement.direction, movement.cadence_hz);
+                local_direction, movement.cadence_hz);
         if (!rig.paired_leg_chains())
         {
             if (rig.monopedal_gait())
                 return monoped_gait_teacher_action(environment,
-                    movement.direction, movement.cadence_hz);
+                    local_direction, movement.cadence_hz);
             if (rig.support_seed_count() < 4u)
                 return action;
             float rest_support_height = std::numeric_limits<float>::infinity();
@@ -1041,7 +1047,7 @@ namespace runner::rl
         const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * movement.cadence_hz;
         const float swing = std::sin(phase);
-        const float directed_swing = swing * movement.direction;
+        const float directed_swing = swing * local_direction;
         const float left_lift = std::max(0.0f, swing);
         const float right_lift = std::max(0.0f, -swing);
 
@@ -1107,10 +1113,10 @@ namespace runner::rl
                 movement.step_up ? 0.40f : 0.50f,
                 movement.step_up ? 0.66f : 0.50f,
                 movement.step_up ? 2.20f : 2.30f,
-                movement.direction
+                local_direction
             };
 
-        biped_parameters.direction = movement.direction;
+        biped_parameters.direction = local_direction;
         if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
         {
             // Backing is a real locomotion skill. Keep the learned opposed

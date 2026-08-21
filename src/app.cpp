@@ -363,9 +363,9 @@ namespace runner
         bool quit{};
         std::filesystem::path rig_path{ "creature.rig" };
         std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0739-static-cells-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0739-static-cells-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0739-static-cells-autonomy.state" };
+        std::filesystem::path autosave_policy_path{ "runner-v0740-physical-facing-autosave.eppo" };
+        std::filesystem::path autosave_rig_path{ "runner-v0740-physical-facing-evolved.rig" };
+        std::filesystem::path autosave_state_path{ "runner-v0740-physical-facing-autonomy.state" };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -1029,14 +1029,10 @@ namespace runner
             const bool mirrored_facing = environment.facing_direction() < 0.0f;
             const bool presentation_right_leg_near = mirrored_facing
                 ? !right_leg_near : right_leg_near;
-            const Vec2 presentation_root = rig.root_node < particles.size()
-                ? particles[rig.root_node].position : particles.front().position;
             auto point = [&](std::size_t index)
             {
-                const Vec2 presented = art::facing_presented_position(
-                    particles[index].position, presentation_root,
-                    environment.facing_direction());
-                return world_to_screen(presented, viewport, camera, scale);
+                return world_to_screen(
+                    particles[index].position, viewport, camera, scale);
             };
             auto branch_side = [](std::uint8_t mask) noexcept
             {

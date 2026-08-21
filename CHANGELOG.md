@@ -1,3 +1,11 @@
+## 0.7.40
+
+- Physically reflects the articulated rig at shuttle turns and unifies motor targets, controller observations, topology reflexes, equipment aim, modular art, preview, and PIP in one facing-local frame.
+- Fixed the hard-coded world-space knee-bend projection that made left-facing rigs resist the return and backpedal despite accumulating signed leftward distance.
+- Strengthened return acceptance to require opposed support swing, real gait cycles, facing-aligned velocity, bounded backward bracing, zero course translation, and deterministic repeated-seed physical traversal.
+- Preserved immutable authored macro/fine terrain; only explicitly dropped granular overlay cells can fall, stack, settle, or be removed.
+- Promoted training semantics to 0x0007'4001, checkpoint magic to EPPO40, autonomy state to RUNAUTONOMY 22, and automatic files to runner-v0740-physical-facing-*, with lifetime-only fallback from v0.7.39.
+
 ## 0.7.39
 
 - Replaced pressure-driven terrain deformation with immutable authored fine cells and one read-only collision/render surface connected between their centers; standing and walking no longer change any terrain cell underneath a rig.
