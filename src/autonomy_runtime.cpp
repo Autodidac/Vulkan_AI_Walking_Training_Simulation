@@ -93,11 +93,21 @@ namespace runner::rl
             snapshot = published_;
         }
 
-        const bool rig_changed = snapshot.blueprint.signature() != live_blueprint_.signature();
-        const bool best_changed = snapshot.has_best
+        const bool preview_committed = live_morphology_preview_active_
+            && snapshot.blueprint.signature() == live_blueprint_.signature();
+        const bool hold_preview = live_morphology_preview_active_
+            && !preview_committed;
+        if (preview_committed)
+            live_morphology_preview_active_ = false;
+        const bool rig_changed = !hold_preview
+            && (preview_committed
+                || snapshot.blueprint.signature() != live_blueprint_.signature());
+        const bool best_changed = !hold_preview && snapshot.has_best
             && snapshot.metrics.best_update != cached_metrics_.best_update;
-        const bool course_changed = snapshot.status.stage != cached_status_.stage
-            || std::abs(snapshot.status.difficulty - cached_status_.difficulty) > 1.0e-5f;
+        const bool course_changed = !hold_preview
+            && (snapshot.status.stage != cached_status_.stage
+                || std::abs(snapshot.status.difficulty
+                    - cached_status_.difficulty) > 1.0e-5f);
 
         const preview_sync::Decision decision = preview_sync::decide(
             rig_changed, course_changed, best_changed);
@@ -149,6 +159,33 @@ namespace runner::rl
         command.blueprint = blueprint;
         command.preserve_policy = preserve_policy;
         enqueue_command(std::move(command));
+    }
+
+    bool AutonomousTrainer::preview_blueprint(
+        const sim::CreatureBlueprint& blueprint)
+    {
+        if (!blueprint.valid())
+            return false;
+        live_blueprint_ = blueprint;
+        live_.set_blueprint(live_blueprint_, true);
+        live_.set_preview_course_motion_enabled(false);
+        live_morphology_preview_active_ = true;
+        return true;
+    }
+
+    void AutonomousTrainer::cancel_blueprint_preview()
+    {
+        PublishedSnapshot snapshot{};
+        {
+            std::scoped_lock lock(snapshot_mutex_);
+            snapshot = published_;
+        }
+        live_blueprint_ = snapshot.blueprint;
+        live_.set_blueprint(live_blueprint_, false);
+        live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
+        live_.policy().parameters() = snapshot.parameters;
+        live_.set_preview_course_motion_enabled(false);
+        live_morphology_preview_active_ = false;
     }
 
     void AutonomousTrainer::set_rig_optimization_mode(RigOptimizationMode mode) noexcept

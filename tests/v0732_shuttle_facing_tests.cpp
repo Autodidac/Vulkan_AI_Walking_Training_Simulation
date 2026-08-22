@@ -17,6 +17,14 @@ struct EnvironmentTestAccess {
         if((prior_facing<0.0f)!=(s.facing_direction<0.0f))
             e.mirror_rig_about_root();
     }
+    static std::size_t grounded(Environment& e, bool left) noexcept {
+        return e.support_seed_grounded_count(left);
+    }
+    static float clearance(Environment& e, bool left) noexcept {
+        return e.contact_cluster_clearance(left
+            ? e.blueprint_.left_contact_node
+            : e.blueprint_.right_contact_node);
+    }
     static void root_x(Environment& e, float x) noexcept {
         const float d=x-e.particles_[e.blueprint_.root_node].position.x;
         for(Particle& p:e.particles_){p.position.x+=d;p.previous.x+=d;}
@@ -296,10 +304,22 @@ int main(){
  const float return_origin=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
  std::array<float,sim::action_count> forward_specialized{};
  forward_specialized.fill(0.85f);
+ std::size_t minimum_left_grounded=std::numeric_limits<std::size_t>::max();
+ std::size_t minimum_right_grounded=std::numeric_limits<std::size_t>::max();
+ float maximum_left_clearance{};
+ float maximum_right_clearance{};
  for(int step=0;step<300;++step){
   const auto action=rl::effective_policy_action(post_handoff,forward_specialized,
    sim::CourseStage::shuttle,0.0f);
-  if(post_handoff.step(action).terminated)break;}
+  if(post_handoff.step(action).terminated)break;
+  minimum_left_grounded=std::min(minimum_left_grounded,
+   sim::EnvironmentTestAccess::grounded(post_handoff,true));
+  minimum_right_grounded=std::min(minimum_right_grounded,
+   sim::EnvironmentTestAccess::grounded(post_handoff,false));
+  maximum_left_clearance=std::max(maximum_left_clearance,
+   sim::EnvironmentTestAccess::clearance(post_handoff,true));
+  maximum_right_clearance=std::max(maximum_right_clearance,
+   sim::EnvironmentTestAccess::clearance(post_handoff,false));}
  const float return_x=post_handoff.particles()[post_handoff.blueprint().root_node].position.x;
  if(post_handoff.invalid_reason()!=sim::InvalidMotion::none
   ||return_x>=return_origin-1.0f||post_handoff.course_progress()!=0.0f
@@ -310,7 +330,11 @@ int main(){
    <<" invalid="<<static_cast<int>(post_handoff.invalid_reason())
    <<" progress="<<post_handoff.course_progress()
    <<" gait="<<post_handoff.gait_cycles()
-   <<" backward_brace="<<post_handoff.maximum_backward_brace_seconds()<<'\n';}
+   <<" backward_brace="<<post_handoff.maximum_backward_brace_seconds()<<'\n';
+   std::cerr<<"support evidence left-min="<<minimum_left_grounded
+    <<" right-min="<<minimum_right_grounded
+    <<" left-clear="<<maximum_left_clearance
+    <<" right-clear="<<maximum_right_clearance<<'\n';}
  require(post_handoff.invalid_reason()==sim::InvalidMotion::none
   &&return_x<return_origin-1.0f&&post_handoff.course_progress()==0.0f
   &&post_handoff.gait_cycles()>=2u
@@ -349,6 +373,35 @@ int main(){
   &&reverse_first[4]>=6.0f
   &&reverse_first[5]<=sim::sustained_backward_brace_limit_seconds,
   "repeated return traversal accepted leftward backpedaling");
+ constexpr std::array<std::uint64_t,6> evaluation_seeds{
+  0xE000u,0xE000u+4099u,0xE000u+2u*4099u,
+  0xE000u+3u*4099u,0xE000u+4u*4099u,0xE000u+5u*4099u};
+ for(const std::uint64_t seed:evaluation_seeds){
+  const auto evaluate=[seed](){
+   sim::Environment environment{sim::CreatureBlueprint::humanoid(),seed};
+   environment.set_course(sim::CourseStage::shuttle,0.30f);
+   environment.set_course_motion_enabled(false);
+   std::array<float,sim::action_count> residual{};
+   for(int step=0;step<2400;++step){
+    const auto action=rl::effective_policy_action(environment,residual,
+     sim::CourseStage::shuttle,0.0f);
+    if(environment.step(action).terminated)break;}
+   const rl::StageMotionQualification qualification=
+    rl::stage_motion_qualification(sim::CourseStage::shuttle,environment);
+   return std::array<double,10>{environment.distance_travelled(),environment.elapsed_seconds(),
+    static_cast<double>(environment.completed_shuttle_turns()),
+    static_cast<double>(environment.invalid_reason()),static_cast<double>(environment.gait_cycles()),
+    environment.maximum_backward_brace_seconds(),static_cast<double>(qualification.rejection_mask),
+    static_cast<double>(environment.alternating_steps()),static_cast<double>(environment.limb_crossings()),
+    static_cast<double>(environment.primary_support_span_ratio())};};
+  const auto first=evaluate();const auto repeated_evaluation=evaluate();
+  if(first!=repeated_evaluation||first[2]<1.0||first[3]!=0.0||first[6]!=0.0)
+   std::cerr<<"evaluation seed="<<seed<<" distance="<<first[0]<<" seconds="<<first[1]
+    <<" turns="<<first[2]<<" invalid="<<first[3]<<" gait="<<first[4]
+    <<" brace="<<first[5]<<" rejection="<<first[6]<<" alternating="<<first[7]
+    <<" crossings="<<first[8]<<" span="<<first[9]<<'\n';
+  require(first==repeated_evaluation&&first[2]>=1.0&&first[3]==0.0&&first[6]==0.0,
+   "post-handoff evaluator seed failed shuttle qualification");}
  sim::Environment equipment{sim::CreatureBlueprint::humanoid(),0x7322u};
  equipment.set_course(sim::CourseStage::shuttle,0.30f);
  equipment.set_course_motion_enabled(false);

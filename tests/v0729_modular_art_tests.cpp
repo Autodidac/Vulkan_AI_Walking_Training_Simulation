@@ -204,8 +204,8 @@ int main()
             "rig.node_support_mask(index)", "art::oriented_box_transform",
             "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
             "minimum_shoulder", "envelope.chest_radius",
-            "assembled_art_scale", "scaled_pixels(23.0f, art_pixel_scale)", "presentation_side",
-            "authored_joint_overlap", "0.36f : 0.55f",
+            "assembled_art_scale", "scaled_pixels(minimum_thickness, art_pixel_scale)", "presentation_side",
+            "authored_joint_overlap", "has_distal_motor ? 0.42f : 0.30f",
             "Modular armor is the exclusive presentation",
             "Authoritative graph bones stay visible beneath authored",
             "Raw fine-cell bottoms never render." })

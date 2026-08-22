@@ -244,22 +244,22 @@ namespace runner::sim
         CreatureBlueprint result{};
         result.species_identity = CreatureSpecies::human;
         result.nodes = {
-            // Exact v0.7.42 user-authored Human rest pose. Paired segment
+            // Exact v0.7.43 user-authored Human rest pose. Paired segment
             // normalization below retains this layered stance while preventing
             // either side from acquiring a different anatomical reach.
-            { -0.148461968f, 2.59142852f },
+            { -0.0572309196f, 2.59142852f },
             { -0.171161979f, 3.80571461f },
             { -0.177114367f, 4.18666649f },
-            { -0.339095294f, 1.46047616f },
-            { -0.480685741f, 0.728333235f },
-            { -0.0652857721f, 1.44261897f },
-            { -0.183066726f, 0.668809414f },
-            { -0.165464342f, 3.55571461f },
-            { -0.0044952929f, 3.13904762f },
-            { -0.0044952929f, 2.78785706f },
-            { -0.258045316f, 3.54380989f },
-            { 0.138361856f, 3.28190470f },
-            { 0.172961891f, 2.85333323f }
+            { -0.467656821f, 1.57501757f },
+            { -0.772568107f, 0.898941457f },
+            { 0.245305002f, 1.53785717f },
+            { 0.444918513f, 0.823571324f },
+            { -0.0885858908f, 3.56166649f },
+            { -0.00295924395f, 3.25098062f },
+            { 0.23482883f, 2.911695f },
+            { -0.201681122f, 3.50809526f },
+            { 0.0664982945f, 3.3293848f },
+            { 0.388954937f, 3.06923175f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.1054f, 0.19f, 0.1054f,
@@ -412,10 +412,59 @@ namespace runner::sim
         candidate.nodes[5] = candidate.nodes[0] + segments[1].direction * thigh;
         candidate.nodes[4] = candidate.nodes[3] + segments[2].direction * shin;
         candidate.nodes[6] = candidate.nodes[5] + segments[3].direction * shin;
-        candidate.nodes[8] = candidate.nodes[7] + segments[4].direction * upper_arm;
-        candidate.nodes[11] = candidate.nodes[10] + segments[5].direction * upper_arm;
-        candidate.nodes[9] = candidate.nodes[8] + segments[6].direction * forearm;
-        candidate.nodes[12] = candidate.nodes[11] + segments[7].direction * forearm;
+        if (edited_node == std::numeric_limits<std::size_t>::max())
+        {
+            // A saved/default human uses a compact layered side-view stance.
+            // Direct manipulation keeps the exact edited chain direction above;
+            // persistence normalization removes wide crab stances without
+            // changing the locked paired lengths.
+            constexpr float knee_half_span = 0.12f;
+            constexpr float foot_half_span = 0.17f;
+            constexpr float distal_horizontal = foot_half_span - knee_half_span;
+            if (thigh <= knee_half_span || shin <= distal_horizontal)
+                return false;
+            const float knee_drop = std::sqrt(thigh * thigh
+                - knee_half_span * knee_half_span);
+            const float shin_drop = std::sqrt(shin * shin
+                - distal_horizontal * distal_horizontal);
+            const float left_sign = candidate.nodes[3].x <= candidate.nodes[5].x
+                ? -1.0f : 1.0f;
+            candidate.nodes[3] = candidate.nodes[0]
+                + Vec2{ left_sign * knee_half_span, -knee_drop };
+            candidate.nodes[5] = candidate.nodes[0]
+                + Vec2{ -left_sign * knee_half_span, -knee_drop };
+            candidate.nodes[4] = candidate.nodes[3]
+                + Vec2{ left_sign * distal_horizontal, -shin_drop };
+            candidate.nodes[6] = candidate.nodes[5]
+                + Vec2{ -left_sign * distal_horizontal, -shin_drop };
+
+            // Keep the paired arms layered beside the torso in the saved/default
+            // pose. Training may swing them, but morphology normalization must
+            // not turn an authored relaxed stance into a forward balance brace.
+            const auto descend_toward = [](Vec2 parent, float target_x,
+                float segment_length) noexcept
+            {
+                const float dx = clamp(target_x - parent.x,
+                    -segment_length * 0.70f, segment_length * 0.70f);
+                return parent + Vec2{ dx, -std::sqrt(std::max(0.0f,
+                    segment_length * segment_length - dx * dx)) };
+            };
+            candidate.nodes[8] = descend_toward(candidate.nodes[7],
+                candidate.nodes[0].x - 0.14f, upper_arm);
+            candidate.nodes[11] = descend_toward(candidate.nodes[10],
+                candidate.nodes[0].x + 0.12f, upper_arm);
+            candidate.nodes[9] = descend_toward(candidate.nodes[8],
+                candidate.nodes[0].x - 0.08f, forearm);
+            candidate.nodes[12] = descend_toward(candidate.nodes[11],
+                candidate.nodes[0].x + 0.10f, forearm);
+        }
+        else
+        {
+            candidate.nodes[8] = candidate.nodes[7] + segments[4].direction * upper_arm;
+            candidate.nodes[11] = candidate.nodes[10] + segments[5].direction * upper_arm;
+            candidate.nodes[9] = candidate.nodes[8] + segments[6].direction * forearm;
+            candidate.nodes[12] = candidate.nodes[11] + segments[7].direction * forearm;
+        }
 
         if (!pair_radius(3u, 5u) || !pair_radius(4u, 6u)
             || !pair_radius(7u, 10u) || !pair_radius(8u, 11u)
@@ -2320,6 +2369,8 @@ namespace runner::sim
         support_contact_latch_.assign(particles_.size(), 0u);
         support_contact_anchor_x_.resize(particles_.size());
         previous_support_grounded_.assign(particles_.size(), 0u);
+        support_swing_seconds_.assign(particles_.size(), 0.0f);
+        support_swing_clearance_.assign(particles_.size(), 0.0f);
         for (std::size_t index = 0; index < particles_.size(); ++index)
             support_contact_anchor_x_[index] = particles_[index].position.x;
         previous_pelvis_ = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position : Vec2{};
@@ -2423,6 +2474,9 @@ namespace runner::sim
         maximum_speed_kmh_ = 0.0f;
         alternating_steps_ = 0;
         single_leg_cycles_ = 0;
+        last_topology_support_phase_ = std::numeric_limits<std::size_t>::max();
+        last_topology_transfer_seconds_ = -100.0f;
+        last_topology_transfer_x_ = previous_pelvis_.x;
         last_single_leg_landing_x_ = valid_node(blueprint_.root_node)
             ? particles_[blueprint_.root_node].position.x : 0.0f;
         progress_window_start_steps_ = 0;
@@ -2966,13 +3020,17 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             const Vec2 current_body = particles_[blueprint_.torso_node].position - root;
             if (length(rest_body) > 1.0e-5f && length(current_body) > 1.0e-5f)
             {
+                Vec2 authored_body = rest_body;
+                authored_body.x *= facing_direction();
                 const bool human_casual = blueprint_.human_casual_gait_plan();
-                const float desired_lean = guided_monoped ? 0.015f
-                    : guided_avian ? 0.025f
-                    : human_casual ? 0.018f : 0.08f;
+                const float travel_bias = guided_monoped ? 0.008f
+                    : guided_avian ? 0.010f
+                    : human_casual ? 0.006f : 0.012f;
                 const Vec2 desired_body = normalized(
-                    { desired_lean * locomotion_direction(), 1.0f },
-                    { 0.0f, 1.0f }) * length(rest_body);
+                    { authored_body.x + travel_bias * locomotion_direction()
+                        * length(rest_body), authored_body.y },
+                    normalized(authored_body, { 0.0f, 1.0f }))
+                    * length(rest_body);
                 const float body_rotation = signed_angle(desired_body, current_body);
                 bool appendaged_biped = false;
                 for (std::size_t index = 0;
@@ -3848,6 +3906,35 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const bool static_support = course_stage_ == CourseStage::balance
             || course_stage_ == CourseStage::duck_press;
 
+        // A foot is one articulated contact plate even though its ankle,
+        // heel, and toe are separate collision seeds.  Releasing those seeds
+        // independently leaves the trailing edge magnetically planted while
+        // the driven ankle rises, producing the tiny-step/dragging gait seen
+        // in the retained preview.  Promote any deliberate upward release to
+        // the complete authored contact cluster for this solver pass.
+        bool left_cluster_release = false;
+        bool right_cluster_release = false;
+        // Only Human has articulated heel/ball/toe plates. On multi-support
+        // animals, the additional nodes are independent legs, not one foot.
+        if (!static_support && blueprint_.human_casual_gait_plan())
+        {
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+            {
+                if (!blueprint_.is_support_seed(index))
+                    continue;
+                const Particle& particle = particles_[index];
+                const float upward_speed =
+                    (particle.position.y - particle.previous.y) / safe_dt;
+                if (!support_contact_release_requested(
+                        true, false, powered_release, upward_speed))
+                    continue;
+                left_cluster_release = left_cluster_release
+                    || contact_cluster_contains(blueprint_.left_contact_node, index);
+                right_cluster_release = right_cluster_release
+                    || contact_cluster_contains(blueprint_.right_contact_node, index);
+            }
+        }
+
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
             Particle& particle = particles_[index];
@@ -3875,8 +3962,14 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             const float minimum_y = contact_ground
                 + ground_contact_offset(traction_contact, particle.radius) - burial_allowance;
             const float separation = particle.position.y - minimum_y;
-            const bool release_requested = semantic_support && powered_release
-                && velocity.y > 0.0f;
+            const bool cluster_release_requested = semantic_support
+                && ((left_cluster_release
+                        && contact_cluster_contains(blueprint_.left_contact_node, index))
+                    || (right_cluster_release
+                        && contact_cluster_contains(blueprint_.right_contact_node, index)));
+            const bool release_requested = cluster_release_requested
+                || support_contact_release_requested(semantic_support,
+                    static_support, powered_release, velocity.y);
             const bool contact_latched = semantic_support
                 && (was_grounded || support_contact_latch_[index] != 0u);
             const bool actual_contact = separation <= 0.0025f
@@ -4090,6 +4183,33 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             particles_[motor.c].position - particles_[motor.pivot].position);
     }
 
+    MotorDiagnostic Environment::motor_diagnostic(
+        std::size_t motor_index) const noexcept
+    {
+        MotorDiagnostic diagnostic{};
+        if (motor_index >= blueprint_.active_motor_count
+            || motor_index >= anatomy_action_count)
+            return diagnostic;
+        const MotorConstraint& motor = blueprint_.motors[motor_index];
+        diagnostic.available = true;
+        diagnostic.enabled = motor.enabled;
+        diagnostic.support_branch = blueprint_.support_branch_mask(motor) != 0u;
+        diagnostic.parent = motor.a;
+        diagnostic.pivot = motor.pivot;
+        diagnostic.driven = motor.c;
+        diagnostic.action_slot = motor_index;
+        diagnostic.authored_neutral = motor.neutral_angle;
+        diagnostic.minimum = motor.minimum_angle;
+        diagnostic.maximum = motor.maximum_angle;
+        diagnostic.current_angle = joint_angle(motor) * facing_direction();
+        diagnostic.angular_velocity = angular_velocities_[motor_index]
+            * facing_direction();
+        diagnostic.applied_action = previous_applied_actions_[motor_index];
+        diagnostic.target_angle = motor_target_angle(
+            motor, diagnostic.applied_action);
+        return diagnostic;
+    }
+
     bool Environment::valid_node(std::uint16_t index) const noexcept
     {
         return index < particles_.size() && index < blueprint_.nodes.size();
@@ -4105,8 +4225,9 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         Vec2 authored = blueprint_.nodes[blueprint_.torso_node]
             - blueprint_.nodes[blueprint_.root_node];
         authored.x *= facing_direction();
-        const Vec2 desired = blueprint_.horizontal_body_plan()
-            ? normalized(authored, { 1.0f, 0.0f }) : Vec2{ 0.0f, 1.0f };
+        const Vec2 desired = normalized(authored,
+            blueprint_.horizontal_body_plan()
+                ? Vec2{ 1.0f, 0.0f } : Vec2{ 0.0f, 1.0f });
         return clamp(dot(current, desired), -1.0f, 1.0f);
     }
 
@@ -4233,24 +4354,11 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         const bool left_swinging = left_grounded_count < left_seed_count;
         const bool right_swinging = right_grounded_count < right_seed_count;
         const bool was_supported = previous_left_grounded_ || previous_right_grounded_;
-        const auto new_seed_contact = [this](bool left_side)
-        {
-            const auto is_new = [this](std::uint16_t node)
-            {
-                return valid_node(node) && particles_[node].grounded
-                    && node < previous_support_grounded_.size()
-                    && previous_support_grounded_[node] == 0u;
-            };
-            if (is_new(left_side ? blueprint_.left_contact_node
-                                 : blueprint_.right_contact_node))
-                return true;
-            const auto& additional = left_side
-                ? blueprint_.additional_left_contact_nodes
-                : blueprint_.additional_right_contact_nodes;
-            return std::ranges::any_of(additional, is_new);
-        };
-        const bool new_left = new_seed_contact(true);
-        const bool new_right = new_seed_contact(false);
+        // A foot is one semantic support cluster. Heel/toe rolling within a
+        // planted foot must not manufacture simultaneous landings that erase
+        // the real opposite-foot transfer event.
+        const bool new_left = left && !previous_left_grounded_;
+        const bool new_right = right && !previous_right_grounded_;
         const int strike_side = new_left == new_right ? 0 : (new_left ? -1 : 1);
         const float root_x = valid_node(blueprint_.root_node) ? particles_[blueprint_.root_node].position.x : 0.0f;
         const float locomotion_x = terrain_sample_x(root_x, course_progress());
@@ -4370,22 +4478,79 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
         alternating_step_this_step_ = false;
         single_leg_cycle_this_step_ = false;
         limb_crossing_this_step_ = false;
-        if (strike_side != 0)
+        const bool branch_level_support_transfers = blueprint_.horizontal_body_plan()
+            && blueprint_.horizontal_multi_support_plan();
+        if (branch_level_support_transfers)
+        {
+            for (std::size_t node = 0; node < particles_.size(); ++node)
+            {
+                if (!blueprint_.is_support_seed(node))
+                    continue;
+                const bool grounded = particles_[node].grounded;
+                const bool was_grounded = node < previous_support_grounded_.size()
+                    && previous_support_grounded_[node] != 0u;
+                if (!grounded)
+                {
+                    support_swing_seconds_[node] += dt;
+                    const float clearance = particles_[node].position.y
+                        - particles_[node].radius
+                        - ground_height_at(particles_[node].position.x);
+                    support_swing_clearance_[node] = std::max(
+                        support_swing_clearance_[node], clearance);
+                    continue;
+                }
+                if (was_grounded)
+                    continue;
+
+                std::size_t preceding_supports = 0u;
+                const float authored_x = blueprint_.nodes[node].x;
+                for (std::size_t candidate = 0;
+                    candidate < blueprint_.nodes.size(); ++candidate)
+                {
+                    if (blueprint_.is_support_seed(candidate)
+                        && blueprint_.nodes[candidate].x < authored_x - 0.02f)
+                        ++preceding_supports;
+                }
+                const std::size_t side = blueprint_.is_right_support_seed(node)
+                    ? 1u : 0u;
+                const std::size_t phase = (preceding_supports / 2u + side) & 1u;
+                const bool qualified = qualifies_topology_support_transfer(
+                    true, true, support_swing_seconds_[node],
+                    support_swing_clearance_[node],
+                    elapsed_seconds_ - last_topology_transfer_seconds_,
+                    locomotion_x - last_topology_transfer_x_,
+                    last_topology_support_phase_, phase);
+                if (qualified)
+                {
+                    ++alternating_steps_;
+                    alternating_step_this_step_ = true;
+                    last_support_transfer_seconds_ = elapsed_seconds_;
+                }
+                const bool real_landing = support_swing_seconds_[node] >= 0.05f
+                    && support_swing_clearance_[node] >= 0.015f;
+                if (real_landing
+                    && (last_topology_support_phase_
+                            == std::numeric_limits<std::size_t>::max()
+                        || phase != last_topology_support_phase_))
+                {
+                    last_topology_support_phase_ = phase;
+                    last_topology_transfer_seconds_ = elapsed_seconds_;
+                    last_topology_transfer_x_ = locomotion_x;
+                }
+                support_swing_seconds_[node] = 0.0f;
+                support_swing_clearance_[node] = 0.0f;
+            }
+        }
+        if (strike_side != 0 && !branch_level_support_transfers)
         {
             const float swing_air_seconds = new_left ? left_swing_seconds_ : right_swing_seconds_;
             const float swing_clearance = new_left ? left_swing_clearance_ : right_swing_clearance_;
             const bool recent_transfer_evidence = blueprint_.monopedal_gait()
                 ? swing_air_seconds >= 0.05f && swing_clearance >= 0.035f
-                : swing_air_seconds >= 0.06f && swing_clearance >= 0.04f;
+                : swing_air_seconds >= 0.06f && swing_clearance >= 0.015f;
             if (recent_transfer_evidence)
                 last_support_transfer_seconds_ = elapsed_seconds_;
-            if (last_contact_side_ == 0)
-            {
-                last_contact_side_ = strike_side;
-                last_step_time_ = elapsed_seconds_;
-                last_step_x_ = locomotion_x;
-            }
-            else
+            if (last_contact_side_ != 0)
             {
                 const bool swing_crossed = new_left
                     ? left_swing_started_behind_ && left_swing_crossed_
@@ -4400,15 +4565,23 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                         elapsed_seconds_ - last_step_time_,
                         locomotion_x - last_step_x_,
                         swing_air_seconds, swing_clearance);
-                if (!qualified_transfer)
-                    goto step_not_qualified;
-                ++alternating_steps_;
-                if (swing_crossed)
+                if (qualified_transfer)
                 {
-                    ++limb_crossings_;
-                    limb_crossing_this_step_ = true;
+                    ++alternating_steps_;
+                    if (swing_crossed)
+                    {
+                        ++limb_crossings_;
+                        limb_crossing_this_step_ = true;
+                    }
+                    alternating_step_this_step_ = true;
                 }
-                alternating_step_this_step_ = true;
+            }
+            // A marginal landing must not permanently poison gait telemetry.
+            // Keep the strict counter thresholds above, but advance the support
+            // candidate whenever a real airborne transfer occurred so the next
+            // opposite landing is measured against the immediately prior step.
+            if (recent_transfer_evidence)
+            {
                 last_contact_side_ = strike_side;
                 last_step_time_ = elapsed_seconds_;
                 last_step_x_ = locomotion_x;
@@ -4418,7 +4591,6 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                     right_swing_crossed_ = false;
             }
         }
-step_not_qualified:
         if (!left_swinging)
         {
             left_swing_seconds_ = 0.0f;

@@ -1,3 +1,12 @@
+## 0.7.43
+
+- Promoted the saved Human geometry to the authoritative neutral pose across reset, balance, observation, teacher, and preview paths.
+- Added deterministic live morphology preview/commit/cancel behavior with invalid-edit isolation and explicit controller compatibility state.
+- Added selected rig/node/bone/motor diagnostics for authored angles, current targets, limits, support roles, action slots, and morphology signatures.
+- Corrected Human forearm presentation and species-specific attachment scale/orientation without changing the Human world-scale reference.
+- Corrected shuttle retention so sustained opposed sagittal crossings are not mislabeled as crab gait merely because a replay ends at maximum stride; wide no-crossing motion remains rejected.
+- Promoted training semantics to 0x0007'4301, checkpoint magic to EPPO43, autonomy state to RUNAUTONOMY 25, and species-owned runner-v0743-* paths with lifetime-only v0.7.42 migration.
+
 ## 0.7.42
 
 - Preserved Human as the immutable physical and camera scale reference, keeping Chicken compact and retaining the authored Dog and Hexapod footprints without screen-height normalization.

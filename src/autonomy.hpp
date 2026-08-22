@@ -224,6 +224,13 @@ namespace runner::rl
         [[nodiscard]] bool load_autosave(std::string& message);
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
+        [[nodiscard]] bool preview_blueprint(
+            const sim::CreatureBlueprint& blueprint);
+        void cancel_blueprint_preview();
+        [[nodiscard]] bool live_morphology_preview_active() const noexcept
+        {
+            return live_morphology_preview_active_;
+        }
         void set_rig_optimization_mode(RigOptimizationMode mode) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
@@ -421,6 +428,7 @@ namespace runner::rl
         PpoTrainer worker_;
         PpoTrainer live_;
         sim::CreatureBlueprint live_blueprint_{};
+        bool live_morphology_preview_active_{};
         sim::Environment cached_training_preview_{};
         bool cached_has_training_preview_{};
         PublishedSnapshot published_{};

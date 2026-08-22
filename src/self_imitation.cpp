@@ -27,15 +27,44 @@ namespace runner::rl
         clear_foundational_teacher_prior();
         const bool fragile_support_topology = blueprint_.monopedal_gait()
             || blueprint_.avian_gait();
+        if (!fragile_support_topology)
+            return;
         if (course_stage_ != sim::CourseStage::uneven
-            || !fragile_support_topology)
+            && course_stage_ != sim::CourseStage::shuttle)
             return;
 
         constexpr std::size_t candidate_agents = 6u;
         constexpr std::size_t samples_per_agent = 256u;
         constexpr int maximum_steps = 1200;
-        const float required_distance = blueprint_.monopedal_gait() ? 5.0f : 10.0f;
-        const std::uint32_t required_cycles = blueprint_.monopedal_gait() ? 8u : 14u;
+        float required_distance{};
+        std::uint32_t required_cycles{};
+        if (course_stage_ == sim::CourseStage::shuttle)
+        {
+            required_distance = 12.0f;
+            required_cycles = 6u;
+        }
+        else if (blueprint_.monopedal_gait())
+        {
+            required_distance = 5.0f;
+            required_cycles = 8u;
+        }
+        else if (blueprint_.avian_gait())
+        {
+            required_distance = 10.0f;
+            required_cycles = 14u;
+        }
+        else if (blueprint_.paired_leg_chains())
+        {
+            required_distance = walk_mastery_distance;
+            required_cycles = static_cast<std::uint32_t>(
+                walk_mastery_stride_events);
+        }
+        else
+        {
+            required_distance = multi_support_release_distance(blueprint_);
+            required_cycles = static_cast<std::uint32_t>(
+                multi_support_release_stride_events(blueprint_));
+        }
         foundational_teacher_prior_.reserve(candidate_agents * samples_per_agent);
 
         for (std::size_t agent = 0; agent < candidate_agents; ++agent)
@@ -62,10 +91,13 @@ namespace runner::rl
                     break;
             }
 
+            const bool course_complete = course_stage_ != sim::CourseStage::shuttle
+                || environment.completed_shuttle_turns() >= 1u;
             const bool complete_clean_teacher = environment.valid_motion()
                 && environment.elapsed_seconds() >= 19.9f
                 && environment.distance_travelled() >= required_distance
-                && environment.gait_cycles() >= required_cycles;
+                && environment.gait_cycles() >= required_cycles
+                && course_complete;
             if (!complete_clean_teacher || trajectory.empty())
                 continue;
 

@@ -205,6 +205,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0740_PHYSICAL_FACING_RETURN.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
@@ -556,6 +557,22 @@ int main(int argc, char** argv)
                     rig.preview_reset_reason).size()),
                 runner::sim::invalid_motion_name(rig.preview_reset_reason).data(),
                 rig.rollout_course_motion_enabled ? "enabled" : "disabled");
+            if (rig.name == "human")
+                std::printf(
+                    "human shuttle updates=%llu authority=%.3f retained=%s "
+                    "best_update=%llu quality=%llu probe=%.4f/%.2f/%.2f/%u/%u/%.*s\n",
+                    static_cast<unsigned long long>(rig.shuttle_lesson_updates),
+                    rig.shuttle_teacher_authority,
+                    rig.shuttle_retained_policy ? "yes" : "no",
+                    static_cast<unsigned long long>(rig.shuttle_retained_update),
+                    static_cast<unsigned long long>(rig.shuttle_retained_quality),
+                    rig.shuttle_probe_distance, rig.shuttle_probe_stride_events,
+                    rig.shuttle_probe_turns, rig.shuttle_probe_rejection_mask,
+                    rig.shuttle_probe_invalid_runs,
+                    static_cast<int>(runner::sim::invalid_motion_name(
+                        rig.shuttle_probe_invalid_reason).size()),
+                    runner::sim::invalid_motion_name(
+                        rig.shuttle_probe_invalid_reason).data());
         }
         std::printf("Runner %s rig-training diagnostic: %s\n",
             RUNNER_VERSION, report.passed ? "passed" : "failed");

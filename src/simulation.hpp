@@ -473,8 +473,13 @@ namespace runner::sim
         std::uint32_t alternating_steps, std::uint32_t limb_crossings,
         float distance, float elapsed_seconds, float support_span_ratio) noexcept
     {
+        const bool established_sagittal_crossing = alternating_steps >= 6u
+            && limb_crossings >= 4u
+            && static_cast<std::uint64_t>(limb_crossings) * 5u
+                >= static_cast<std::uint64_t>(alternating_steps) * 3u;
         return elapsed_seconds >= 4.0f
             && distance >= 0.75f
+            && !established_sagittal_crossing
             && (support_span_ratio > 1.55f
                 || (alternating_steps >= 4u && limb_crossings < 2u));
     }
@@ -1044,9 +1049,9 @@ namespace runner::sim
     {
         return qualifies_alternating_step(previous_side, strike_side,
             seconds_since_previous, root_displacement)
-            && std::abs(root_displacement) >= 0.055f
-            && swing_air_seconds >= 0.08f
-            && swing_clearance >= 0.075f;
+            && std::abs(root_displacement) >= 0.045f
+            && swing_air_seconds >= 0.06f
+            && swing_clearance >= 0.015f;
     }
 
     [[nodiscard]] inline bool qualifies_monoped_support_transfer(
@@ -1062,6 +1067,21 @@ namespace runner::sim
             && std::abs(root_displacement) >= 0.035f
             && swing_air_seconds >= 0.05f
             && swing_clearance >= 0.035f;
+    }
+
+    [[nodiscard]] inline bool qualifies_topology_support_transfer(
+        bool horizontal_multi_support, bool new_landing,
+        float swing_air_seconds, float swing_clearance,
+        float seconds_since_transfer, float landing_displacement,
+        std::size_t previous_phase, std::size_t current_phase) noexcept
+    {
+        return horizontal_multi_support && new_landing
+            && swing_air_seconds >= 0.05f
+            && swing_clearance >= 0.015f
+            && seconds_since_transfer >= 0.08f
+            && std::abs(landing_displacement) >= 0.018f
+            && previous_phase != std::numeric_limits<std::size_t>::max()
+            && previous_phase != current_phase;
     }
 
     [[nodiscard]] inline float ground_velocity_retention(bool traction_contact,
@@ -1090,7 +1110,19 @@ namespace runner::sim
     }
 
     inline constexpr float moving_contact_slop_m = 0.032f;
-    inline constexpr float moving_contact_release_speed_mps = 0.12f;
+    // A support must unlatch as soon as an articulated gait deliberately
+    // raises it. Waiting for root-level jump velocity pins both feet and lets
+    // the body translate by stance slip without producing a real step.
+    inline constexpr float moving_contact_release_speed_mps = 0.035f;
+
+    [[nodiscard]] inline bool support_contact_release_requested(bool semantic_support,
+        bool static_support, bool powered_release, float upward_speed) noexcept
+    {
+        if (!semantic_support || upward_speed <= 0.0f)
+            return false;
+        return powered_release || (!static_support
+            && upward_speed > moving_contact_release_speed_mps);
+    }
 
     [[nodiscard]] inline bool planted_contact_persists(bool contact_latched,
         bool semantic_support, bool static_support, float separation,
@@ -1462,7 +1494,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0742-" + slug;
+        const std::string state_prefix = "runner-v0743-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -1984,6 +2016,24 @@ namespace runner::sim
         InvalidMotion invalid_reason{ InvalidMotion::none };
     };
 
+    struct MotorDiagnostic
+    {
+        bool available{};
+        bool enabled{};
+        bool support_branch{};
+        std::uint16_t parent{};
+        std::uint16_t pivot{};
+        std::uint16_t driven{};
+        std::size_t action_slot{};
+        float authored_neutral{};
+        float minimum{};
+        float maximum{};
+        float current_angle{};
+        float angular_velocity{};
+        float applied_action{};
+        float target_angle{};
+    };
+
     struct EnvironmentTestAccess;
 
     class Environment
@@ -2001,6 +2051,8 @@ namespace runner::sim
         void reset(std::uint64_t seed = 0);
         [[nodiscard]] StepResult step(std::span<const float, action_count> actions, float dt = 1.0f / 60.0f);
         [[nodiscard]] std::array<float, observation_count> observation() const noexcept;
+        [[nodiscard]] MotorDiagnostic motor_diagnostic(
+            std::size_t motor_index) const noexcept;
 
         [[nodiscard]] const std::vector<Particle>& particles() const noexcept { return particles_; }
         [[nodiscard]] const CreatureBlueprint& blueprint() const noexcept { return blueprint_; }
@@ -2493,6 +2545,11 @@ namespace runner::sim
         bool previous_left_grounded_{};
         bool previous_right_grounded_{};
         std::vector<std::uint8_t> previous_support_grounded_{};
+        std::vector<float> support_swing_seconds_{};
+        std::vector<float> support_swing_clearance_{};
+        std::size_t last_topology_support_phase_{ std::numeric_limits<std::size_t>::max() };
+        float last_topology_transfer_seconds_{ -100.0f };
+        float last_topology_transfer_x_{};
         bool collided_this_step_{};
         bool recovery_active_{};
         float recovery_started_seconds_{};

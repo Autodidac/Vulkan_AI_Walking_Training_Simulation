@@ -749,13 +749,13 @@ namespace runner::rl
                 sample_count += end - begin;
             }
         }
-        const float guided_weight = guided_rollout_imitation_weight(
-            lesson_update_, course_stage_, &blueprint_);
         const bool fragile_support_topology = blueprint_.monopedal_gait()
             || blueprint_.avian_gait();
+        const float guided_weight = guided_rollout_imitation_weight(
+            lesson_update_, course_stage_, &blueprint_);
         const bool use_clean_foundational_prior =
-            course_stage_ == sim::CourseStage::uneven
-            && fragile_support_topology
+            (course_stage_ == sim::CourseStage::uneven
+                || course_stage_ == sim::CourseStage::shuttle)
             && !foundational_teacher_prior_.empty();
         const std::size_t guided_source_count = use_clean_foundational_prior
             ? foundational_teacher_prior_.size() : rollout_.size();

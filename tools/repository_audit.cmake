@@ -30,6 +30,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0740_PHYSICAL_FACING_RETURN.md
         docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md
         docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md
+        docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md
         assets/optional/species_runtime/chicken_body_side.ppm
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
@@ -106,7 +107,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.42 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.43 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -160,6 +161,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0740_PHYSICAL_FACING_RETURN.md"
         "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
+        "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
@@ -283,7 +285,14 @@ foreach(reference IN ITEMS
         "WALK-MULTISUPPORT-PROGRESS-410"
         "WALK-GRANULAR-COHERENCE-411"
         "WALK-HYBRID-RUNTIME-BRAIN-413"
-        "WALK-RELEASE-412")
+        "WALK-RELEASE-412"
+        "WALK-AUTHORED-POSE-437"
+        "WALK-LIVE-MORPHOLOGY-438"
+        "WALK-RIG-DIAGNOSTICS-439"
+        "WALK-HUMAN-MODULE-SCALE-440"
+        "WALK-SPECIES-ATTACHMENTS-441"
+        "WALK-STANCE-GAIT-442"
+        "WALK-RELEASE-443")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -332,8 +341,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 24"
-        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24"
+        "RUNAUTONOMY 25"
+        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24 && version != 25"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -346,7 +355,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4202u"
+        "training_semantics_version = 0x0007'4301u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -472,7 +481,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0742-"
+        "runner-v0743-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -826,4 +835,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.42 repository hygiene passed")
+message(STATUS "Runner v0.7.43 repository hygiene passed")

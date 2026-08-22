@@ -28,6 +28,25 @@ namespace runner::rl
             state = autosave_state_;
             if (!std::filesystem::exists(checkpoint))
             {
+                std::filesystem::path v0742_candidate = checkpoint;
+                std::string v0742_name = v0742_candidate.filename().string();
+                constexpr std::string_view current_prefix{ "runner-v0743-" };
+                constexpr std::string_view prior_prefix{ "runner-v0742-" };
+                if (v0742_name.starts_with(current_prefix))
+                {
+                    v0742_name.replace(0u, current_prefix.size(), prior_prefix);
+                    v0742_candidate.replace_filename(v0742_name);
+                }
+                if (std::filesystem::exists(v0742_candidate))
+                {
+                    checkpoint = std::move(v0742_candidate);
+                    rig.clear();
+                    state.clear();
+                    legacy_lifetime_version = "V0.7.42";
+                }
+            }
+            if (!std::filesystem::exists(checkpoint))
+            {
                 const std::array legacy_candidates{
                     std::pair{ checkpoint.parent_path()
                         / "runner-v0741-natural-gait-autosave.eppo",
@@ -80,7 +99,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.42 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.43 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -262,7 +281,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.42 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.43 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

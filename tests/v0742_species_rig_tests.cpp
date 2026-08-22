@@ -91,7 +91,7 @@ int main()
             "species filename must be explicit and predictable");
         const runner::sim::CreatureSpeciesPaths paths =
             runner::sim::creature_species_paths(fixture.species);
-        const std::string state_prefix = "runner-v0742-"
+        const std::string state_prefix = "runner-v0743-"
             + std::string{ fixture.slug };
         require(paths.rig == filename,
             "species path set must own the authored rig filename");
@@ -395,6 +395,6 @@ int main()
     filesystem_error.clear();
     std::filesystem::remove_all(test_directory, filesystem_error);
     require(!filesystem_error, "could not clean test directory");
-    std::cout << "Runner v0.7.42 species rig persistence tests passed\n";
+    std::cout << "Runner v0.7.43 species rig persistence tests passed\n";
     return 0;
 }

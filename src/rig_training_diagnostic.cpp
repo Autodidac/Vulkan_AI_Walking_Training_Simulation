@@ -67,8 +67,9 @@ namespace runner::diagnostics
                     0xE000u + static_cast<std::uint64_t>(agent) * 4099u };
                 environment.set_course(stage, 0.30f);
                 environment.set_course_motion_enabled(false);
-                const int maximum_steps = static_cast<std::uint8_t>(stage)
-                    >= static_cast<std::uint8_t>(sim::CourseStage::hurdles)
+                const int maximum_steps = stage == sim::CourseStage::shuttle
+                    || static_cast<std::uint8_t>(stage)
+                        >= static_cast<std::uint8_t>(sim::CourseStage::hurdles)
                     ? 2400 : 1200;
                 for (int step = 0; step < maximum_steps; ++step)
                 {
@@ -204,7 +205,7 @@ namespace runner::diagnostics
             // network, train the appended shuttle skill, then discard any
             // pre-handoff champion and replay the retained production controller
             // with curriculum authority fully removed.
-            trainer.set_course(sim::CourseStage::shuttle, 0.30f, true);
+            trainer.set_course(sim::CourseStage::shuttle, 0.30f, false);
             for (std::uint64_t update = 0; update < updates; ++update)
                 trainer.train_one_update();
 

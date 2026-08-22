@@ -1093,12 +1093,18 @@ int main()
         "in-place foot twitch counted as walking");
     require(sim::qualifies_alternating_step(-1, 1, 0.30f, 0.08f),
         "real spaced alternating step was rejected");
-    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.03f, 0.02f),
-        "tiny contact wiggle still counts as a supported walking step");
-    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.07f, 0.12f)
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.04f, 0.08f, 0.02f)
             && sim::qualifies_supported_step(
-                -1, 1, 0.30f, 0.08f, 0.08f, 0.12f),
-        "five-frame lifted swing boundary is not enforced as a physical step");
+                -1, 1, 0.30f, 0.045f, 0.08f, 0.02f),
+        "tiny contact wiggle still counts as a supported walking step");
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.059f, 0.12f)
+            && sim::qualifies_supported_step(
+                -1, 1, 0.30f, 0.08f, 0.06f, 0.12f),
+        "airborne support-transfer boundary is not enforced as a physical step");
+    require(!sim::qualifies_supported_step(-1, 1, 0.30f, 0.08f, 0.08f, 0.014f)
+            && sim::qualifies_supported_step(
+                -1, 1, 0.30f, 0.08f, 0.08f, 0.015f),
+        "authored support-clearance boundary rejects real steps or accepts foot drag");
     require(sim::qualifies_monoped_support_transfer(
                 -1, 1, 0.30f, 0.05f, 0.06f, 0.05f),
         "real monoped heel-toe airborne transfer was rejected");
@@ -1111,6 +1117,28 @@ int main()
             && !sim::qualifies_monoped_support_transfer(
                 -1, -1, 0.30f, 0.05f, 0.06f, 0.05f),
         "monoped transfer accepts twitch, planted, low-clearance, or same-edge contact");
+    require(sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.015f, 0.08f, 0.018f, 0u, 1u),
+        "authored branch-level dog/hexapod transfer boundary was rejected");
+    require(!sim::qualifies_topology_support_transfer(
+                false, true, 0.05f, 0.015f, 0.08f, 0.018f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, false, 0.05f, 0.015f, 0.08f, 0.018f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.049f, 0.015f, 0.08f, 0.018f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.014f, 0.08f, 0.018f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.015f, 0.079f, 0.018f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.015f, 0.08f, 0.017f, 0u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.015f, 0.08f, 0.018f, 1u, 1u)
+            && !sim::qualifies_topology_support_transfer(
+                true, true, 0.05f, 0.015f, 0.08f, 0.018f,
+                std::numeric_limits<std::size_t>::max(), 1u),
+        "topology transfer accepts non-topology, planted, low-air, low-clearance, "
+        "twitch, low-displacement, repeated-phase, or uninitialized evidence");
     require(!sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
             0.16f, 0.12f, false, true)
             && sim::qualifies_crossing_step(-1, 1, 0.30f, 0.08f,
@@ -1302,16 +1330,30 @@ int main()
             true, true, true, 0.55f, 2.0f, false),
         "static support manifold did not retain a measured ground contact");
     require(sim::planted_contact_persists(
-            true, true, false, 0.020f, 0.10f, false),
+            true, true, false, 0.020f, 0.030f, false),
         "measured moving support contact released before a deliberate lift");
     require(!sim::planted_contact_persists(
-            true, true, false, 0.020f, 0.14f, false)
+            true, true, false, 0.020f, 0.040f, false)
             && !sim::planted_contact_persists(
-                true, true, false, 0.040f, 0.10f, false),
+                true, true, false, 0.040f, 0.030f, false),
         "moving foot remained magnetically planted after lift speed or separation");
     require(!sim::planted_contact_persists(
             true, true, true, 0.018f, 0.08f, true),
         "explicit powered release was ignored");
+    require(!sim::support_contact_release_requested(
+                true, false, false, sim::moving_contact_release_speed_mps)
+            && sim::support_contact_release_requested(
+                true, false, false,
+                sim::moving_contact_release_speed_mps + 0.001f)
+            && !sim::support_contact_release_requested(
+                true, true, false,
+                sim::moving_contact_release_speed_mps + 0.001f)
+            && sim::support_contact_release_requested(
+                true, true, true, 0.001f)
+            && !sim::support_contact_release_requested(
+                false, false, true, 1.0f),
+        "support release accepts planted jitter or rejects deliberate dynamic lift");
+
 
     sim::Environment unpinned_squat(humanoid_rig, 1401);
     require(sim::EnvironmentTestAccess::crouch_guide_preserves_support_dynamics(
@@ -1596,13 +1638,13 @@ int main()
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
             && biped_foundational_gait.step_length <= 0.82f
-            && humanoid_foundational_gait.step_length >= 0.62f
-            && humanoid_foundational_gait.step_length <= 1.05f
-            && humanoid_foundational_gait.swing_lift >= 0.16f
-            && humanoid_foundational_gait.swing_lift <= 0.24f,
+            && humanoid_foundational_gait.step_length >= 0.96f
+            && humanoid_foundational_gait.step_length <= 1.10f
+            && humanoid_foundational_gait.swing_lift >= 0.50f
+            && humanoid_foundational_gait.swing_lift <= 0.54f,
         "foundational biped gait is not finite and anatomy-bounded");
     require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
-            && humanoid_foundational_gait.step_length <= 1.05f
+            && humanoid_foundational_gait.step_length <= 1.10f
             && humanoid_foundational_gait.swing_lift < 0.82f
             && std::abs(shifted_arm_gait.step_length
                 - humanoid_foundational_gait.step_length) < 1.0e-6f
@@ -1634,8 +1676,10 @@ int main()
             && rl::biped_leg_target_within_reach(humanoid_mid_stance,
                 humanoid_leg_length),
         "phase-local gait envelope emitted a near-locked or unreachable target");
-    require(std::abs(humanoid_mid_stance.y)
-            > std::abs(humanoid_endpoint.y) + 0.01f,
+    require(std::abs(humanoid_mid_stance.y) + 1.0e-5f
+                >= std::abs(humanoid_endpoint.y)
+            && std::abs(humanoid_mid_stance.y)
+                >= humanoid_leg_length * 0.88f,
         "phase-local gait envelope keeps the Human crouched through mid-stance");
     rl::BipedGaitParameters excessive_reach = humanoid_foundational_gait;
     excessive_reach.step_length = humanoid_leg_length * 0.80f;
@@ -1751,11 +1795,23 @@ int main()
         humanoid_walk, sim::CourseStage::uneven);
     const auto out_of_scope_reflex = rl::topology_runtime_reflex_authority(
         monoped_walk, sim::CourseStage::balance);
+    const auto human_shuttle_reflex = rl::topology_runtime_reflex_authority(
+        humanoid_walk, sim::CourseStage::shuttle);
+    const auto quadruped_reflex = rl::topology_runtime_reflex_authority(
+        quadruped_walk, sim::CourseStage::uneven);
+    const auto hexapod_reflex = rl::topology_runtime_reflex_authority(
+        sim::CreatureBlueprint::hexapod(), sim::CourseStage::uneven);
     require(monoped_reflex.support == 0.92f && monoped_reflex.body == 0.82f
             && chicken_reflex.support == 0.88f && chicken_reflex.body == 0.50f
             && ordinary_reflex.support == 0.0f && ordinary_reflex.body == 0.0f
             && out_of_scope_reflex.support == 0.0f
-            && out_of_scope_reflex.body == 0.0f,
+            && out_of_scope_reflex.body == 0.0f
+            && human_shuttle_reflex.support == 1.0f
+            && human_shuttle_reflex.body == 1.0f
+            && quadruped_reflex.support == 0.94f
+            && quadruped_reflex.body == 0.70f
+            && hexapod_reflex.support == 0.98f
+            && hexapod_reflex.body == 0.84f,
         "fragile topology code brain is not bounded to its rig and walking stages");
     require(rl::guided_rollout_imitation_weight(
                 900u, sim::CourseStage::uneven, &monoped_walk) == 48.0f
@@ -1985,7 +2041,7 @@ int main()
         "raised humanoid shoulder girdle can still invert through the upper spine");
     require(humanoid.nodes.size() == 13u,
         "human-calibrated rig does not retain the compact articulated body and arms");
-    require(std::abs(humanoid.nodes[0].x - (-0.148461968f)) < 0.00001f
+    require(std::abs(humanoid.nodes[0].x - (-0.0572309196f)) < 0.00001f
             && std::abs(humanoid.nodes[0].y - 2.59142852f) < 0.00001f
             && std::abs(humanoid.nodes[1].y - 3.80571461f) < 0.00001f
             && std::abs(humanoid.nodes[2].y - 4.18666649f) < 0.00001f

@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4202u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4301u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -340,8 +340,11 @@ namespace runner::rl
         }
         else if (stage != sim::CourseStage::balance)
         {
-            const float pair_strength = stage == sim::CourseStage::crouch_walk
-                ? 0.18f : 0.10f;
+            // Shuttle support timing already comes from the opposed gait teacher.
+            // Re-projecting those joints here can erase the contact transfer.
+            const float pair_strength = stage == sim::CourseStage::shuttle
+                ? 0.0f
+                : stage == sim::CourseStage::crouch_walk ? 0.18f : 0.10f;
             const float left_hip_direction =
                 authored_joint_flexion_direction(rig.motors[0]);
             const float left_knee_direction =
@@ -429,13 +432,6 @@ namespace runner::rl
                 -right_elbow_direction * elbow, arm_pair_strength);
         }
 
-        if (environment.longest_stable_stance_seconds() < 1.0f
-            && !sim::stage_allows_controlled_flips(stage))
-        {
-            for (std::size_t index = 0; index < rig.active_motor_count; ++index)
-                if (!motor_drives_support_branch(rig, rig.motors[index]))
-                    action[index] *= 0.08f;
-        }
         for (float& value : action)
             value = clamp(value, -1.0f, 1.0f);
         return action;
@@ -587,6 +583,7 @@ namespace runner::rl
         float amplitude{};
         float phase_offset{};
         float stance_backstroke{};
+        float swing_lift_ratio{};
     };
 
     [[nodiscard]] inline std::size_t multi_support_phase_group(
@@ -607,7 +604,10 @@ namespace runner::rl
     [[nodiscard]] inline float multi_support_release_stride_events(
         const sim::CreatureBlueprint& rig) noexcept
     {
-        return rig.support_seed_count() >= 6u ? 24.0f : 20.0f;
+        // Count only completed topology-aware support transfers. The strict replay
+        // still requires full survival and useful distance, so 18/22 transfers
+        // reject the old two-step plateau without penalizing rough repeated seeds.
+        return rig.support_seed_count() >= 6u ? 22.0f : 18.0f;
     }
 
     [[nodiscard]] inline bool multi_support_progress_truth(float distance,
@@ -672,8 +672,8 @@ namespace runner::rl
             else if (swing < 0.0f)
                 desired.x -= parameters.stance_backstroke * segment_length
                     * local_direction * gait_authority * -swing;
-            desired.y += parameters.amplitude * segment_length
-                * std::max(0.0f, swing) * gait_authority * 0.72f;
+            desired.y += parameters.swing_lift_ratio * segment_length
+                * std::max(0.0f, swing) * gait_authority;
             const float target = signed_angle(reference, desired);
             action[index] = motor_action_for_target_angle(motor, target);
         }
@@ -760,8 +760,9 @@ namespace runner::rl
         const float topology_gait_floor = movement.intent == locomotion::Intent::recover
             || movement.intent == locomotion::Intent::crawl
             ? 0.0f
-            : (rig.support_seed_count() >= 6u ? 0.86f : 0.72f);
-        const float gait_authority = std::max(learned_gait_authority, topology_gait_floor);
+            : (rig.support_seed_count() >= 6u ? 0.86f : 0.42f);
+        const float gait_authority = std::max(
+            learned_gait_authority, topology_gait_floor);
         const float base_phase = locomotion_gait_seconds(environment) * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         for (std::size_t proximal_index = 0;
@@ -804,7 +805,7 @@ namespace runner::rl
                     swing_phase) * local_direction * gait_authority;
                 if (swing_phase)
                 {
-                    target.y += (upper_length + lower_length) * 0.27f
+                    target.y += (upper_length + lower_length) * parameters.swing_lift_ratio
                         * std::sin(progress * pi) * gait_authority;
                 }
                 const float authored_cross = authored_upper.x * authored_lower.y
@@ -926,18 +927,49 @@ namespace runner::rl
         }
         const float leg_length = std::isfinite(minimum_leg_length)
             ? minimum_leg_length : 2.30f;
-        const float step_length = rig.human_casual_gait_plan()
-            ? clamp(leg_length * 0.44f, 0.82f, 1.05f)
+        // Human stride scale is anatomical and must not change when arm nodes
+        // are edited, disabled, or absent from a diagnostic copy.
+        const bool human_stride = rig.presentation_species()
+            == sim::CreatureSpecies::human;
+        const float step_length = human_stride
+            ? clamp(leg_length * 0.50f, 0.96f, 1.10f)
             : clamp(leg_length * 0.34f, 0.62f, 0.82f);
-        const float swing_lift = clamp(leg_length * 0.085f, 0.16f, 0.24f);
-        const float leg_height = clamp(leg_length * 0.93f, 1.88f, 2.40f);
-        return {
+        // The Human's authored boot is a three-seed rigid contact plate. Its
+        // ankle target must include enough vertical reserve to unload heel,
+        // centre, and toe together; the old 0.22 m target realized only
+        // 0.05--0.12 m at the physical contact cluster and collapsed the
+        // opposed gait into long planted glides.
+        const float swing_lift = human_stride
+            ? clamp(leg_length * 0.26f, 0.50f, 0.54f)
+            : clamp(leg_length * 0.085f, 0.16f, 0.24f);
+        // Keep the complete phase envelope inside the authored two-link
+        // reach. The compact saved Human no longer has the old 1.88 m
+        // minimum extension; forcing it saturated the IK and produced glide.
+        const float leg_height = reachable_biped_leg_height(leg_length,
+            0.5f * step_length, leg_length * 0.90f);
+        BipedGaitParameters parameters{
             sim::foundational_gait_cadence_hz,
             step_length,
             swing_lift,
             leg_height,
             1.0f
         };
+        if (human_stride && rig.nodes.size() > rig.right_contact_node
+            && rig.motors[0].pivot < rig.nodes.size()
+            && rig.motors[2].pivot < rig.nodes.size())
+        {
+            const float left_offset = rig.nodes[rig.left_contact_node].x
+                - rig.nodes[rig.motors[0].pivot].x;
+            const float right_offset = rig.nodes[rig.right_contact_node].x
+                - rig.nodes[rig.motors[2].pivot].x;
+            // Start from the saved authored stance: the left support is aft
+            // while the right support is forward. Beginning half a cycle out
+            // of phase avoids commanding an immediate leg swap and preserves
+            // equal clearance after the rig is mirrored for return travel.
+            parameters.phase_offset = pi;
+            parameters.stance_center_x = 0.5f * (left_offset + right_offset);
+        }
+        return parameters;
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count>
@@ -1200,6 +1232,16 @@ namespace runner::rl
                     local_direction, movement.cadence_hz);
             if (rig.support_seed_count() < 4u)
                 return action;
+            // Four-support rigs can enter a deterministic launch while every
+            // limb continues its normal gait. Reduce stride authority while the
+            // body is both overspeed and losing uprightness, but keep the support
+            // transfer active so the brake cannot strand the rig in a static pose.
+            const float directed_speed = environment.forward_speed()
+                * local_direction;
+            const bool four_support_overspeed_recovery =
+                rig.support_seed_count() == 4u && directed_speed > 1.90f
+                && environment.uprightness() < 0.92f;
+
             float rest_support_height = std::numeric_limits<float>::infinity();
             for (std::size_t node = 0; node < rig.nodes.size(); ++node)
             {
@@ -1213,15 +1255,21 @@ namespace runner::rl
                 : 2.0f;
             const bool six_supports = rig.support_seed_count() >= 6u;
             const float anatomy_scaled_amplitude = std::clamp(
-                root_clearance * (six_supports ? 1.08f : 0.42f),
-                six_supports ? 0.72f : 0.24f,
-                six_supports ? 1.02f : 0.42f);
+                root_clearance * (six_supports ? 1.08f : 0.79f),
+                six_supports ? 0.72f : 0.69f,
+                six_supports ? 1.02f : 0.79f);
+            const float topology_cadence_hz = six_supports
+                ? sim::authored_foundational_gait_cadence_hz(rig)
+                : std::min(sim::authored_foundational_gait_cadence_hz(rig), 1.12f);
 
             const MultiSupportTeacherParameters multi_parameters{
-                sim::authored_foundational_gait_cadence_hz(rig),
-                anatomy_scaled_amplitude,
+                topology_cadence_hz,
+                four_support_overspeed_recovery
+                    ? anatomy_scaled_amplitude * 0.68f
+                    : anatomy_scaled_amplitude,
                 pi * 1.5f,
-                six_supports ? 0.08f : 0.0f
+                six_supports ? 0.08f : 0.0f,
+                six_supports ? 0.27f : 0.28f
             };
             return rig_has_driven_two_link_support_chains(rig)
                 ? multi_support_two_link_teacher_action(environment, multi_parameters)
@@ -1301,6 +1349,14 @@ namespace runner::rl
             };
 
         biped_parameters.direction = local_direction;
+        if (environment.course_stage() == sim::CourseStage::shuttle
+            && rig.presentation_species() == sim::CreatureSpecies::human)
+        {
+            biped_parameters.step_length = std::min(biped_parameters.step_length, 0.92f);
+            // Turning needs a lower boot arc than uneven-terrain traversal;
+            // the larger unloading reserve otherwise over-rotates the planted leg.
+            biped_parameters.swing_lift = std::min(biped_parameters.swing_lift, 0.34f);
+        }
         if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
         {
             // Backing is a real locomotion skill. Keep the learned opposed
@@ -1457,10 +1513,16 @@ namespace runner::rl
         if (stage == sim::CourseStage::shuttle)
         {
             if (rig.paired_leg_chains())
-                return { 0.96f, 0.80f };
+                return { 1.0f, 1.0f };
+            if (rig.support_seed_count() >= 6u)
+                return { 0.98f, 0.88f };
             if (rig.support_seed_count() >= 4u)
-                return { 0.94f, 0.68f };
+                return { 0.96f, 0.76f };
         }
+        if (rig.support_seed_count() >= 6u)
+            return { 0.98f, 0.84f };
+        if (rig.support_seed_count() >= 4u)
+            return { 0.94f, 0.70f };
         return {};
     }
 

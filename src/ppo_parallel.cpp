@@ -166,8 +166,16 @@ namespace runner::rl
                 else if (current_job == Job::evaluation)
                 {
                     constexpr std::size_t evaluation_agents = 6;
-                    const int maximum_steps = static_cast<std::uint8_t>(current_stage)
-                        >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 2400 : 1200;
+                    // Shuttle qualification requires a complete out-and-back
+                    // direction change. Its authored controller proves that
+                    // cycle over the same 40-second window used by the direct
+                    // shuttle diagnostic; the generic 20-second early-lesson
+                    // window can end before the first turn and reject every
+                    // otherwise-valid candidate.
+                    const int maximum_steps = current_stage == sim::CourseStage::shuttle
+                        || static_cast<std::uint8_t>(current_stage)
+                            >= static_cast<std::uint8_t>(sim::CourseStage::hurdles)
+                        ? 2400 : 1200;
                     EvaluationTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();

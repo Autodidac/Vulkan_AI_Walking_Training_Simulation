@@ -1,4 +1,5 @@
 #include "ppo.hpp"
+#include "autonomy.hpp"
 #include "simulation.hpp"
 
 #include <array>
@@ -66,7 +67,7 @@ int main() {
     };
     require(humanoid.nodes.size() == 13u
             && humanoid.species_identity == sim::CreatureSpecies::human
-            && std::abs(humanoid.nodes[0].x + 0.148461968f) < 1.0e-5f
+            && std::abs(humanoid.nodes[0].x + 0.0572309196f) < 1.0e-5f
             && std::abs(humanoid.nodes[0].y - 2.59142852f) < 1.0e-5f
             && std::abs(humanoid.nodes[1].x + 0.171161979f) < 1.0e-5f
             && std::abs(humanoid.nodes[1].y - 3.80571461f) < 1.0e-5f
@@ -102,14 +103,59 @@ int main() {
             && std::abs(rest_action[6]) < 0.08f
             && std::abs(rest_action[7]) < 0.08f,
         "authored arms are driven away from the body at gait startup");
+    const sim::MotorDiagnostic motor = humanoid_walk.motor_diagnostic(0u);
+    const sim::MotorDiagnostic absent_motor =
+        humanoid_walk.motor_diagnostic(sim::action_count);
+    require(motor.available && motor.action_slot == 0u
+            && std::isfinite(motor.current_angle)
+            && std::isfinite(motor.authored_neutral)
+            && std::isfinite(motor.target_angle)
+            && motor.minimum <= motor.maximum
+            && !absent_motor.available,
+        "selected-motor diagnostic did not expose bounded authored/runtime state");
+
+    {
+        rl::AutonomousTrainer live_authoring{ humanoid, 2u };
+        live_authoring.set_background_enabled(false);
+        const std::uint64_t original_signature = live_authoring.rig_signature();
+        sim::CreatureBlueprint edited = humanoid;
+        edited.radii[0] += 0.01f;
+        require(live_authoring.preview_blueprint(edited)
+                && live_authoring.live_morphology_preview_active()
+                && live_authoring.rig_signature() == edited.signature()
+                && live_authoring.rig_signature() != original_signature,
+            "valid morphology edit did not update the active rig immediately");
+        require(live_authoring.preview_blueprint(edited)
+                && live_authoring.rig_signature() == edited.signature(),
+            "repeated live morphology preview was not deterministic");
+        sim::CreatureBlueprint invalid = edited;
+        invalid.bones.clear();
+        require(!live_authoring.preview_blueprint(invalid)
+                && live_authoring.rig_signature() == edited.signature(),
+            "invalid live morphology edit corrupted the active preview");
+        live_authoring.cancel_blueprint_preview();
+        require(!live_authoring.live_morphology_preview_active()
+                && live_authoring.rig_signature() == original_signature,
+            "live morphology cancellation did not restore the published rig");
+    }
+
     sim::EnvironmentTestAccess::elapsed(humanoid_walk,
         1.0f / (4.0f * sim::foundational_gait_cadence_hz));
     const auto swing_action = rl::walking_teacher_action(humanoid_walk);
+    const auto pair_motion = [&](std::size_t first, std::size_t second) {
+        return std::abs(swing_action[first] - rest_action[first])
+            + std::abs(swing_action[second] - rest_action[second]);
+    };
+    const auto pair_separation = [&](std::size_t first, std::size_t second) {
+        return std::abs(swing_action[first] - swing_action[second]);
+    };
     require(finite_action(swing_action)
-            && (rest_action[0] * rest_action[2] < 0.0f
-                || rest_action[1] * rest_action[3] < 0.0f)
-            && (swing_action[4] * swing_action[6] < 0.0f
-                || swing_action[5] * swing_action[7] < 0.0f),
+            && pair_motion(0, 1) > 0.01f
+            && pair_motion(2, 3) > 0.01f
+            && pair_motion(4, 5) > 0.01f
+            && pair_motion(6, 7) > 0.01f
+            && (pair_separation(0, 2) + pair_separation(1, 3)) > 0.03f
+            && (pair_separation(4, 6) + pair_separation(5, 7)) > 0.03f,
         "paired legs and arms do not produce opposed sagittal swing");
 
     constexpr std::array factories{

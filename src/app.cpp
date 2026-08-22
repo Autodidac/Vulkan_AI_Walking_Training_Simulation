@@ -639,10 +639,30 @@ namespace runner
             });
         }
 
+        [[nodiscard]] bool preview_rig_change()
+        {
+            sim::CreatureBlueprint candidate = blueprint;
+            const std::size_t edited_node = selected_node >= 0
+                ? static_cast<std::size_t>(selected_node)
+                : std::numeric_limits<std::size_t>::max();
+            if (!candidate.enforce_human_paired_segment_lengths(edited_node))
+                return false;
+            candidate.rebuild_rest_lengths();
+            if (!candidate.valid())
+                return false;
+            blueprint = std::move(candidate);
+            return trainer.preview_blueprint(blueprint);
+        }
+
         void queue_rig_change(std::string_view reason)
         {
             rig_edit_pending = true;
             rig_edit_reason = reason;
+            if (!preview_rig_change())
+            {
+                trainer.cancel_blueprint_preview();
+                set_status("LIVE MORPHOLOGY REJECTED - CHECK NODE AND MOTOR CHAINS");
+            }
         }
 
         [[nodiscard]] std::array<std::string_view, sim::anatomy_action_count> motor_names() const noexcept
@@ -778,19 +798,23 @@ namespace runner
                 : std::numeric_limits<std::size_t>::max();
             if (!blueprint.enforce_human_paired_segment_lengths(edited_node))
             {
+                trainer.cancel_blueprint_preview();
                 set_status("RIG CHANGE REJECTED - HUMAN LIMB PAIRS MUST REMAIN VALID");
                 return;
             }
             blueprint.rebuild_rest_lengths();
             if (!blueprint.valid())
             {
+                trainer.cancel_blueprint_preview();
                 set_status("RIG CHANGE REJECTED - CONNECT EACH ENABLED MOTOR THROUGH TWO REAL BONES");
                 return;
             }
             rig_preset = preset_for_species(blueprint.presentation_species());
             select_autosave_rig_file(blueprint);
+            static_cast<void>(trainer.preview_blueprint(blueprint));
             trainer.set_blueprint(blueprint, true);
-            set_status(std::format("{} - QUEUED; {} REMAINS SPECIES-OWNED",
+            set_status(std::format(
+                "{} - LIVE PREVIEW COMMITTED; {} REMAINS SPECIES-OWNED",
                 reason, preset_name()));
         }
 
@@ -1195,8 +1219,10 @@ namespace runner
             const auto& rig = environment.blueprint();
             const SpeciesArtBundle* bundle = species_art_for(rig.presentation_species());
             const bool use_art = optional_art_enabled && bundle != nullptr && bundle->loaded();
-            const float art_pixel_scale = art::presentation_pixel_scale(scale);
+            const sim::CreatureSpecies species = rig.presentation_species();
             const bool mirrored = environment.facing_direction() < 0.0f;
+            const bool transverse_mirror = art::presented_limb_transverse_mirror(
+                environment.facing_direction());
             auto point = [&](std::size_t index)
             {
                 return world_to_screen(particles[index].position, viewport, camera, scale);
@@ -1235,24 +1261,28 @@ namespace runner
                     const bool near = mirrored ? branch < 0 : branch > 0;
                     if ((near ? 2 : 0) != pass)
                         continue;
-                    const bool distal = std::ranges::any_of(motors,
+                    const bool has_distal_motor = std::ranges::any_of(motors,
                         [&](const sim::MotorConstraint& candidate)
                         {
-                            return candidate.enabled && candidate.c == motor.pivot
+                            return candidate.enabled && candidate.pivot == motor.c
                                 && rig.support_branch_mask(candidate) != 0u;
                         });
                     const art::PixelArt* sprite = nullptr;
                     if (use_art)
-                        sprite = distal ? &bundle->lower_leg : &bundle->upper_leg;
+                        sprite = has_distal_motor
+                            ? &bundle->upper_leg : &bundle->lower_leg;
                     const Vec2 beginning = point(motor.pivot);
                     const Vec2 ending = point(motor.c);
+                    const float span = length(ending - beginning);
+                    const float species_ratio = species == sim::CreatureSpecies::chicken
+                        ? 0.30f : species == sim::CreatureSpecies::dog ? 0.28f : 0.24f;
                     const float thickness = std::clamp(
-                        (particles[motor.pivot].radius + particles[motor.c].radius)
-                            * scale * 1.7f,
-                        art::scaled_pixels(5.0f, art_pixel_scale), scale * 0.31f);
+                        span * species_ratio,
+                        scale * 0.045f, scale * 0.22f);
                     if (sprite != nullptr && sprite->loaded())
                         draw_oriented_pixel_art(canvas, *sprite, beginning, ending,
-                            thickness, near ? 0.98f : 0.72f, false, mirrored);
+                            thickness, near ? 0.98f : 0.72f,
+                            transverse_mirror, false);
                     else
                         canvas.line(beginning, ending, thickness,
                             near ? rgb(0xcdd6d9) : rgb(0x73828b));
@@ -1268,14 +1298,13 @@ namespace runner
                         const float facing = environment.facing_direction();
                         const Vec2 toe = point(motor.c) + Vec2{ facing * scale * 0.20f, 0.0f };
                         draw_oriented_pixel_art(canvas, bundle->foot, point(motor.c), toe,
-                            std::max(thickness * 0.78f, scale * 0.10f),
-                            near ? 0.98f : 0.72f, false, mirrored);
+                            std::max(thickness * 1.05f, scale * 0.075f),
+                            near ? 0.98f : 0.72f, transverse_mirror, false);
                     }
                 }
             };
 
             draw_limb_pass(0);
-            const sim::CreatureSpecies species = rig.presentation_species();
             std::size_t body_a = rig.root_node;
             std::size_t body_b = rig.torso_node;
             if (species == sim::CreatureSpecies::chicken && particles.size() > 5u)
@@ -1292,11 +1321,14 @@ namespace runner
             {
                 const Vec2 beginning = point(body_a);
                 const Vec2 ending = point(body_b);
-                const float thickness = std::max(scale * 0.18f,
-                    (particles[body_a].radius + particles[body_b].radius) * scale * 2.0f);
+                const float body_span = length(ending - beginning);
+                const float body_ratio = species == sim::CreatureSpecies::chicken
+                    ? 0.54f : species == sim::CreatureSpecies::dog ? 0.46f : 0.40f;
+                const float thickness = std::clamp(body_span * body_ratio,
+                    scale * 0.12f, scale * 0.48f);
                 if (use_art && bundle->body.loaded())
                     draw_oriented_pixel_art(canvas, bundle->body, beginning, ending,
-                        thickness, 0.98f, false, mirrored);
+                        thickness, 0.98f, transverse_mirror, false);
                 else
                     canvas.line(beginning, ending, thickness, rgb(0x8ba0aa));
 
@@ -1310,7 +1342,8 @@ namespace runner
                         == sim::CreatureSpecies::chicken ? 0.28f : 0.38f);
                     draw_oriented_pixel_art(canvas, bundle->tail, beginning,
                         beginning - body_direction * tail_length,
-                        thickness * 0.62f, 0.90f, false, mirrored);
+                        thickness * 0.62f, 0.90f,
+                        transverse_mirror, false);
                 }
             }
             if (rig.head_node < particles.size())
@@ -1322,17 +1355,11 @@ namespace runner
                     scale * 0.18f, scale * 0.42f);
                 Vec2 beginning = head - Vec2{ facing * head_length * 0.45f, 0.0f };
                 Vec2 ending = head + Vec2{ facing * head_length * 0.55f, 0.0f };
-                if (species == sim::CreatureSpecies::chicken && particles.size() > 4u)
-                {
-                    beginning = head - normalized(point(4u) - head,
-                        { facing, 0.0f }) * head_length * 0.25f;
-                    ending = head + normalized(point(4u) - head,
-                        { facing, 0.0f }) * head_length * 0.75f;
-                }
                 if (use_art && bundle->head.loaded())
                     draw_oriented_pixel_art(canvas, bundle->head,
-                        beginning, ending, std::max(scale * 0.16f,
-                            head_length * 0.70f), 0.98f, false, mirrored);
+                        beginning, ending, std::max(scale * 0.15f,
+                            head_length * 0.84f), 0.98f,
+                        transverse_mirror, false);
                 else
                     canvas.circle(head, std::max(3.0f,
                         particles[rig.head_node].radius * scale), rgb(0xcdd6d9), 18);
@@ -1633,17 +1660,23 @@ namespace runner
                     if (span <= 1.0f)
                         continue;
                     const Vec2 axis = delta / span;
-                    const float thickness_ratio = support_mask != 0u
+                    const bool support_limb = support_mask != 0u;
+                    const float thickness_ratio = support_limb
                         ? (has_distal_motor ? 0.52f : 0.48f)
-                        : (has_distal_motor ? 0.72f : 0.62f);
+                        : (has_distal_motor ? 0.58f : 0.44f);
+                    const float minimum_thickness = support_limb
+                        ? 23.0f : 16.0f;
+                    const float maximum_thickness = support_limb
+                        ? 74.0f : 54.0f;
                     const float thickness = std::clamp(
                         span * thickness_ratio * assembled_art_scale,
-                        art::scaled_pixels(23.0f, art_pixel_scale),
-                        art::scaled_pixels(74.0f, art_pixel_scale));
+                        art::scaled_pixels(minimum_thickness, art_pixel_scale),
+                        art::scaled_pixels(maximum_thickness, art_pixel_scale));
                     const float authored_joint_overlap = std::max(
                         art::skin_envelope_dimensions(
                             span, 0.0f, art_pixel_scale).joint_overlap,
-                        thickness * (support_mask != 0u ? 0.36f : 0.55f));
+                        thickness * (support_limb ? 0.36f
+                            : has_distal_motor ? 0.42f : 0.30f));
                     beginning = beginning - axis * authored_joint_overlap;
                     ending = ending + axis * authored_joint_overlap;
                     const bool transverse_mirror =
@@ -3066,11 +3099,13 @@ namespace runner
             }
             if (dragging_node && input.left_down && !over_joint_lab && selected_node >= 0
                 && static_cast<std::size_t>(selected_node) < blueprint.nodes.size())
+            {
                 blueprint.nodes[static_cast<std::size_t>(selected_node)] = unproject(input.mouse);
+                queue_rig_change("NODE MOVED");
+            }
             if (dragging_node && input.left_released)
             {
                 dragging_node = false;
-                apply_small_rig_change("NODE MOVED");
             }
         }
 
@@ -3309,7 +3344,12 @@ namespace runner
                 add_wrapped_text(canvas, cursor,
                     "Edit anatomy directly here, or select Morphology Evolve on Presets for bounded held-out changes. Shift adds a node, Ctrl connects it, Alt selects a bone.",
                     0.72f, muted, usable, 2.0f);
-                cursor.y += 58.0f;
+                cursor.y += 80.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("LIVE APPLY: {}   SIGNATURE {:016X}",
+                        trainer.live_morphology_preview_active() ? "PREVIEW" : "COMMITTED",
+                        blueprint.signature()),
+                    0.70f, trainer.live_morphology_preview_active() ? yellow : green, usable);
                 add_text_fit(canvas, cursor,
                     std::format("SELECTED NODE: {}", selected_node),
                     1.02f, white, usable - 120.0f);
@@ -3322,6 +3362,18 @@ namespace runner
                     && static_cast<std::size_t>(selected_node) < blueprint.radii.size())
                 {
                     float& radius = blueprint.radii[static_cast<std::size_t>(selected_node)];
+                    const std::size_t node_index = static_cast<std::size_t>(selected_node);
+                    const std::size_t connected = static_cast<std::size_t>(std::count_if(
+                        blueprint.bones.begin(), blueprint.bones.end(),
+                        [node_index](const sim::DistanceConstraint& bone) {
+                            return bone.a == node_index || bone.b == node_index;
+                        }));
+                    add_text_fit(canvas, cursor,
+                        std::format("AUTHORED ({:.3f}, {:.3f}) M   LINKS {}   SUPPORT {}",
+                            blueprint.nodes[node_index].x, blueprint.nodes[node_index].y,
+                            connected, blueprint.node_support_mask(node_index) != 0u ? "YES" : "NO"),
+                        0.68f, muted, usable);
+                    cursor.y += 22.0f;
                     const float updated = slider({ cursor, { usable, 38.0f } },
                         "NODE SIZE", radius, 0.08f, 0.60f, input);
                     if (updated != radius)
@@ -3362,7 +3414,14 @@ namespace runner
                         static_cast<std::size_t>(selected_bone)];
                     const float stiffness = slider({ cursor, { usable, 38.0f } },
                         "BONE STIFFNESS", selected.stiffness, 0.20f, 1.0f, input);
+                    add_text_fit(canvas, cursor,
+                        std::format("ENDPOINTS {}-{}   LENGTH {:.3f} M   STIFFNESS {:.2f}",
+                            selected.a, selected.b,
+                            runner::length(blueprint.nodes[selected.b] - blueprint.nodes[selected.a]),
+                            selected.stiffness),
+                        0.68f, muted, usable);
                     if (stiffness != selected.stiffness)
+                    cursor.y += 22.0f;
                     {
                         selected.stiffness = stiffness;
                         queue_rig_change("BONE STIFFNESS UPDATED");
@@ -3453,6 +3512,29 @@ namespace runner
                             : "NOT CONNECTED"),
                     0.78f, connected ? green : yellow, usable, 0.62f);
                 cursor.y += 29.0f;
+                const sim::MotorDiagnostic diagnostic =
+                    trainer.preview().motor_diagnostic(
+                        static_cast<std::size_t>(selected_motor));
+                if (diagnostic.available)
+                {
+                    constexpr float radians_to_degrees = 180.0f / pi;
+                    add_text_fit(canvas, cursor, std::format(
+                        "LIVE {:+.1f} DEG  REST {:+.1f} DEG  TARGET {:+.1f} DEG",
+                        diagnostic.current_angle * radians_to_degrees,
+                        diagnostic.authored_neutral * radians_to_degrees,
+                        diagnostic.target_angle * radians_to_degrees),
+                        0.72f, trainer.live_morphology_preview_active()
+                            ? green : accent, usable, 0.56f);
+                    cursor.y += 22.0f;
+                    add_text_fit(canvas, cursor, std::format(
+                        "ACTION {:+.2f}  VEL {:+.1f} DEG/S  SLOT {}  {}",
+                        diagnostic.applied_action,
+                        diagnostic.angular_velocity * radians_to_degrees,
+                        diagnostic.action_slot + 1u,
+                        diagnostic.support_branch ? "SUPPORT" : "MANIPULATOR"),
+                        0.70f, muted, usable, 0.54f);
+                    cursor.y += 25.0f;
+                }
                 float negative = (motor.neutral_angle - motor.minimum_angle)
                     * 180.0f / pi;
                 float positive = (motor.maximum_angle - motor.neutral_angle)
@@ -3460,14 +3542,20 @@ namespace runner
                 const float updated_negative = slider({ cursor, { usable, 38.0f } },
                     "NEGATIVE RANGE", negative, 2.0f, 120.0f, input, " DEG");
                 if (updated_negative != negative)
+                {
                     blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
                         updated_negative, positive, motor.strength);
+                    queue_rig_change("NEGATIVE RANGE UPDATED");
+                }
                 cursor.y += 50.0f;
                 const float updated_positive = slider({ cursor, { usable, 38.0f } },
                     "POSITIVE RANGE", positive, 2.0f, 120.0f, input, " DEG");
                 if (updated_positive != positive)
+                {
                     blueprint.calibrate_motor(static_cast<std::size_t>(selected_motor),
                         updated_negative, updated_positive, motor.strength);
+                    queue_rig_change("POSITIVE RANGE UPDATED");
+                }
                 cursor.y += 50.0f;
                 const float power = slider({ cursor, { usable, 38.0f } },
                     "MOTOR POWER", motor.strength, 0.0f, 0.20f, input);
