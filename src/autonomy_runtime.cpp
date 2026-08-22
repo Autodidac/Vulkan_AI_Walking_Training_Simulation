@@ -257,7 +257,8 @@ namespace runner::rl
     {
         while (!stop_token.stop_requested())
         {
-            consume_persistence_message();
+            if (consume_persistence_message())
+                publish_locked();
             worker_pipeline_stage_ = "COMMANDS";
             worker_pipeline_stage_mask_ |= 1u << 0u;
             apply_pending_commands();

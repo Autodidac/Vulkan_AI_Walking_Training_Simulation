@@ -5,7 +5,7 @@
 - Gives Chicken, Dog, and Hexapod their own side-view body, head, leg, foot, and tail modules and makes the packaged runtime fail diagnosis if any species module is missing.
 - Corrects Chicken stance/contact scaling, bounds Human arm stabilization around a relaxed opposite swing, and combines four active Hexapod outer branches with a coupled middle support pair.
 - Preserves immutable authored terrain and facing-local self-propelled return traversal while expanding repeated-seed, frame-cadence, topology, packaging, and visual acceptance gates.
-- Advances isolated state to 0x0007'4201, EPPO42, RUNAUTONOMY 24, and runner-v0742-species-anatomy-*, importing only validated lifetime totals from v0.7.41. See docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md.
+- Advances isolated state to 0x0007'4202, EPPO42, and RUNAUTONOMY 24. Every production species owns `{species}.rig`, `runner-v0742-{species}-autosave.eppo`, `runner-v0742-{species}-evolved.rig`, and `runner-v0742-{species}-autonomy.state`; only validated lifetime totals import from v0.7.41. See docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md.
 ## v0.7.41 four production rigs and natural gait truth
 
 - Narrows the production catalog to Human, Chicken, Dog, and Hexapod. Legacy Biped, Quadruped, and Monoped constructors remain load-compatible only and are excluded from Rig Lab, runtime acceptance, art diagnostics, and release gates.

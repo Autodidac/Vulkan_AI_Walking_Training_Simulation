@@ -287,9 +287,12 @@ int main()
             std::string message{};
             require(trainer.load_autosave(message),
                 "persisted morphology autosave was not queued");
-            require(wait_for_mode(trainer,
-                    runner::rl::RigOptimizationMode::morphology_evolve),
-                "persisted morphology mode did not round-trip");
+            const bool loaded = wait_for_loaded_mode(trainer,
+                runner::rl::RigOptimizationMode::morphology_evolve);
+            if (!loaded)
+                std::cerr << "Morphology reload status: "
+                    << trainer.autonomy_status().message << '\n';
+            require(loaded, "persisted morphology mode did not round-trip");
         }
 
         {

@@ -5,7 +5,7 @@
 - Corrected Chicken's authored stance center and removed inherited Human passive-foot enlargement; bounded Human balance-arm travel and strength around a relaxed opposed swing.
 - Rebuilt Hexapod control around four active outer support branches plus a bounded coupled middle pair, with six articulated knees and repeated-seed distance/gait validation.
 - Kept authored fine cells and macro tiles immutable under contact, restricted mutation to explicit falling granular overlays, and preserved facing-local self-propelled shuttle returns.
-- Promoted training semantics to 0x0007'4201, checkpoint magic to EPPO42, autonomy state to RUNAUTONOMY 24, and automatic files to runner-v0742-species-anatomy-*, with lifetime-only fallback from v0.7.41.
+- Promoted training semantics to 0x0007'4202, checkpoint magic to EPPO42, and autonomy state to RUNAUTONOMY 24; each production species now owns `{species}.rig` plus species-scoped autosave, evolved-rig, and autonomy-state files, with lifetime-only fallback from v0.7.41.
 ## 0.7.41
 
 - Reduced the production catalog and release matrix to Human, Chicken, Dog, and Hexapod while preserving retired Biped, Quadruped, and Monoped data only for compatible `.rig` import and low-level topology regression coverage.

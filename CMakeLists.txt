@@ -119,6 +119,28 @@ if(RUNNER_BUILD_APP)
     endforeach()
     add_custom_target(RunnerShaders DEPENDS ${RUNNER_SHADER_OUTPUTS})
 
+    add_executable(RunnerRigDefaults tools/rig_defaults.cpp)
+    target_link_libraries(RunnerRigDefaults PRIVATE Runner::Core)
+    target_include_directories(RunnerRigDefaults PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerRigDefaults PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerRigDefaults)
+
+    set(RUNNER_RIG_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/default-rigs")
+    set(RUNNER_RIG_OUTPUTS
+        "${RUNNER_RIG_OUTPUT_DIR}/human.rig"
+        "${RUNNER_RIG_OUTPUT_DIR}/chicken.rig"
+        "${RUNNER_RIG_OUTPUT_DIR}/dog.rig"
+        "${RUNNER_RIG_OUTPUT_DIR}/hexapod.rig")
+    add_custom_command(
+        OUTPUT ${RUNNER_RIG_OUTPUTS}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${RUNNER_RIG_OUTPUT_DIR}"
+        COMMAND "$<TARGET_FILE:RunnerRigDefaults>" "${RUNNER_RIG_OUTPUT_DIR}"
+        DEPENDS RunnerRigDefaults
+        VERBATIM
+        COMMENT "Generating validated species rig defaults")
+    add_custom_target(RunnerRigFiles ALL DEPENDS ${RUNNER_RIG_OUTPUTS})
+
     add_executable(Runner
         src/main.cpp
         src/app.cpp
@@ -128,7 +150,7 @@ if(RUNNER_BUILD_APP)
         src/locomotion_strategy.hpp src/preview_sync.hpp
         src/training_explainer.hpp src/ui_render_contract.hpp
         src/ui_frame_probe.hpp)
-    add_dependencies(Runner RunnerShaders)
+    add_dependencies(Runner RunnerShaders RunnerRigFiles)
     target_link_libraries(Runner PRIVATE Runner::Core SDL3::SDL3 Vulkan::Vulkan)
     target_compile_features(Runner PRIVATE cxx_std_23)
     target_compile_definitions(Runner PRIVATE
@@ -149,6 +171,10 @@ if(RUNNER_BUILD_APP)
 
     add_custom_command(TARGET Runner POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/human.rig" "$<TARGET_FILE_DIR:Runner>/human.rig"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/chicken.rig" "$<TARGET_FILE_DIR:Runner>/chicken.rig"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/dog.rig" "$<TARGET_FILE_DIR:Runner>/dog.rig"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/hexapod.rig" "$<TARGET_FILE_DIR:Runner>/hexapod.rig"
         COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/assets/ui"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_SOURCE}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner_icon_source.png"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_ICON_SOURCE_SHA256}" "$<TARGET_FILE_DIR:Runner>/assets/ui/runner_icon_source.sha256"
@@ -192,6 +218,7 @@ if(RUNNER_BUILD_APP)
 
     install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION . COMPONENT RunnerRuntime)
+    install(FILES ${RUNNER_RIG_OUTPUTS} DESTINATION . COMPONENT RunnerRuntime)
     install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders COMPONENT RunnerRuntime)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets COMPONENT RunnerRuntime)
     install(FILES "${RUNNER_ICON_SOURCE}" "${RUNNER_ICON_SOURCE_SHA256}"
@@ -479,6 +506,17 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0737LocomotionTerrain
         COMMAND RunnerV0737LocomotionTerrainTests)
     set_tests_properties(Runner.V0737LocomotionTerrain PROPERTIES TIMEOUT 180)
+
+    add_executable(RunnerV0742SpeciesRigTests
+        tests/v0742_species_rig_tests.cpp)
+    target_link_libraries(RunnerV0742SpeciesRigTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0742SpeciesRigTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0742SpeciesRigTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0742SpeciesRigTests)
+    add_test(NAME Runner.V0742SpeciesRig
+        COMMAND RunnerV0742SpeciesRigTests)
+    set_tests_properties(Runner.V0742SpeciesRig PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

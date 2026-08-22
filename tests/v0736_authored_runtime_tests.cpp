@@ -60,15 +60,25 @@ bool finite_action(const std::array<float, sim::action_count>& action) {
 
 int main() {
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
+    const auto segment_length = [&](std::size_t a, std::size_t b)
+    {
+        return runner::length(humanoid.nodes[b] - humanoid.nodes[a]);
+    };
     require(humanoid.nodes.size() == 13u
-            && std::abs(humanoid.nodes[2].y - 4.52000046f) < 1.0e-5f
-            && std::abs(humanoid.nodes[7].x + 0.0670530051f) < 1.0e-5f
-            && std::abs(humanoid.nodes[9].x - 0.118830621f) < 1.0e-5f
-            && std::abs(humanoid.nodes[10].x + 0.0194339603f) < 1.0e-5f
-            && std::abs(humanoid.nodes[12].x - 0.259952337f) < 1.0e-5f
+            && humanoid.species_identity == sim::CreatureSpecies::human
+            && std::abs(humanoid.nodes[0].x + 0.148461968f) < 1.0e-5f
+            && std::abs(humanoid.nodes[0].y - 2.59142852f) < 1.0e-5f
+            && std::abs(humanoid.nodes[1].x + 0.171161979f) < 1.0e-5f
+            && std::abs(humanoid.nodes[1].y - 3.80571461f) < 1.0e-5f
+            && std::abs(humanoid.nodes[2].x + 0.177114367f) < 1.0e-5f
+            && std::abs(humanoid.nodes[2].y - 4.18666649f) < 1.0e-5f
+            && std::abs(segment_length(0, 3) - segment_length(0, 5)) < 1.0e-4f
+            && std::abs(segment_length(3, 4) - segment_length(5, 6)) < 1.0e-4f
+            && std::abs(segment_length(7, 8) - segment_length(10, 11)) < 1.0e-4f
+            && std::abs(segment_length(8, 9) - segment_length(11, 12)) < 1.0e-4f
             && humanoid.nodes[9].y < humanoid.nodes[7].y
             && humanoid.nodes[12].y < humanoid.nodes[10].y,
-        "supplied authored humanoid rest pose was not promoted exactly");
+        "saved Human rest pose and paired anatomy were not promoted exactly");
 
     const runner::Vec2 rest_hand{ 0.18f, -0.82f };
     const runner::Vec2 rest = rl::authored_opposed_swing_target(

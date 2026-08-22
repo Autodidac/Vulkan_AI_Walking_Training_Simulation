@@ -339,8 +339,27 @@ namespace runner
         enum class LivePanelPage : std::uint8_t { summary, totals, advanced };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
+        inline static const std::filesystem::path legacy_rig_path{ "creature.rig" };
+        struct StartupRigSelection
+        {
+            sim::CreatureBlueprint blueprint{};
+            std::string source_note{};
+        };
+
+        [[nodiscard]] static StartupRigSelection load_startup_rig()
+        {
+            const sim::CreatureSpeciesPaths paths = sim::creature_species_paths(
+                sim::CreatureSpecies::human);
+            StartupRigSelection selection{};
+            selection.blueprint = sim::CreatureBlueprint::load_owned_or_default(
+                sim::CreatureSpecies::human, paths.rig, legacy_rig_path,
+                selection.source_note);
+            return selection;
+        }
+
+        StartupRigSelection startup_rig{ load_startup_rig() };
         render::Canvas canvas{};
-        sim::CreatureBlueprint blueprint{ sim::CreatureBlueprint::humanoid() };
+        sim::CreatureBlueprint blueprint{ startup_rig.blueprint };
         rl::AutonomousTrainer trainer{ blueprint, 64 };
         std::optional<sim::Environment> course_eye_test_environment{};
         bool art_eye_test{};
@@ -410,11 +429,13 @@ namespace runner
         std::string status{ "AUTOPILOT STARTING" };
         float status_time{ 4.0f };
         bool quit{};
-        std::filesystem::path rig_path{ "creature.rig" };
-        std::filesystem::path policy_path{ "creature.eppo" };
-        std::filesystem::path autosave_policy_path{ "runner-v0742-species-anatomy-autosave.eppo" };
-        std::filesystem::path autosave_rig_path{ "runner-v0742-species-anatomy-evolved.rig" };
-        std::filesystem::path autosave_state_path{ "runner-v0742-species-anatomy-autonomy.state" };
+        std::filesystem::path custom_rig_path{ "custom.rig" };
+        std::filesystem::path autosave_policy_path{
+            sim::creature_species_paths(sim::CreatureSpecies::human).autosave_checkpoint };
+        std::filesystem::path autosave_rig_path{
+            sim::creature_species_paths(sim::CreatureSpecies::human).evolved_rig };
+        std::filesystem::path autosave_state_path{
+            sim::creature_species_paths(sim::CreatureSpecies::human).autonomy_state };
 
         [[nodiscard]] std::string_view preset_name() const noexcept
         {
@@ -431,6 +452,80 @@ namespace runner
             case RigPreset::custom: return "CUSTOM / EVOLVED";
             }
             return "CUSTOM / EVOLVED";
+        }
+
+        [[nodiscard]] static std::optional<sim::CreatureSpecies> preset_species(
+            RigPreset preset) noexcept
+        {
+            switch (preset)
+            {
+            case RigPreset::humanoid: return sim::CreatureSpecies::human;
+            case RigPreset::chicken: return sim::CreatureSpecies::chicken;
+            case RigPreset::crawler4: return sim::CreatureSpecies::dog;
+            case RigPreset::hexapod: return sim::CreatureSpecies::hexapod;
+            case RigPreset::custom: return sim::CreatureSpecies::custom;
+            case RigPreset::scaffold:
+            case RigPreset::biped:
+            case RigPreset::quadruped:
+            case RigPreset::monoped:
+                return std::nullopt;
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] static RigPreset preset_for_species(
+            sim::CreatureSpecies species) noexcept
+        {
+            switch (species)
+            {
+            case sim::CreatureSpecies::human: return RigPreset::humanoid;
+            case sim::CreatureSpecies::chicken: return RigPreset::chicken;
+            case sim::CreatureSpecies::dog: return RigPreset::crawler4;
+            case sim::CreatureSpecies::hexapod: return RigPreset::hexapod;
+            case sim::CreatureSpecies::custom: return RigPreset::custom;
+            }
+            return RigPreset::custom;
+        }
+
+        [[nodiscard]] static sim::CreatureBlueprint canonical_blueprint(
+            RigPreset preset)
+        {
+            switch (preset)
+            {
+            case RigPreset::scaffold: return sim::CreatureBlueprint::scaffold();
+            case RigPreset::humanoid: return sim::CreatureBlueprint::humanoid();
+            case RigPreset::biped: return sim::CreatureBlueprint::biped();
+            case RigPreset::chicken: return sim::CreatureBlueprint::chicken();
+            case RigPreset::quadruped: return sim::CreatureBlueprint::quadruped();
+            case RigPreset::crawler4: return sim::CreatureBlueprint::crawler4();
+            case RigPreset::hexapod: return sim::CreatureBlueprint::hexapod();
+            case RigPreset::monoped: return sim::CreatureBlueprint::monoped();
+            case RigPreset::custom: return sim::CreatureBlueprint::scaffold();
+            }
+            return sim::CreatureBlueprint::scaffold();
+        }
+
+        [[nodiscard]] std::filesystem::path rig_file_for_preset(RigPreset preset) const
+        {
+            if (const auto species = preset_species(preset))
+                return sim::creature_species_paths(*species).rig;
+            return custom_rig_path;
+        }
+
+        [[nodiscard]] std::filesystem::path active_rig_path() const
+        {
+            return rig_file_for_preset(rig_preset);
+        }
+
+        void select_autosave_rig_file(const sim::CreatureBlueprint& candidate)
+        {
+            const sim::CreatureSpeciesPaths paths = sim::creature_species_paths(
+                candidate.presentation_species());
+            autosave_policy_path = paths.autosave_checkpoint;
+            autosave_rig_path = paths.evolved_rig;
+            autosave_state_path = paths.autonomy_state;
+            trainer.set_autosave_paths(autosave_policy_path,
+                autosave_rig_path, autosave_state_path);
         }
 
         [[nodiscard]] std::string format_speed(float meters_per_second) const
@@ -651,38 +746,52 @@ namespace runner
 
         void use_preset(RigPreset preset)
         {
-            rig_preset = preset;
-            switch (preset)
+            if (preset == RigPreset::custom)
+                return;
+
+            sim::CreatureBlueprint candidate = canonical_blueprint(preset);
+            std::string source_note{ "FACTORY DEFAULT" };
+            if (const auto species = preset_species(preset))
             {
-            case RigPreset::scaffold: blueprint = sim::CreatureBlueprint::scaffold(); break;
-            case RigPreset::humanoid: blueprint = sim::CreatureBlueprint::humanoid(); break;
-            case RigPreset::biped: blueprint = sim::CreatureBlueprint::biped(); break;
-            case RigPreset::chicken: blueprint = sim::CreatureBlueprint::chicken(); break;
-            case RigPreset::quadruped: blueprint = sim::CreatureBlueprint::quadruped(); break;
-            case RigPreset::crawler4: blueprint = sim::CreatureBlueprint::crawler4(); break;
-            case RigPreset::hexapod: blueprint = sim::CreatureBlueprint::hexapod(); break;
-            case RigPreset::monoped: blueprint = sim::CreatureBlueprint::monoped(); break;
-            case RigPreset::custom: break;
+                const std::filesystem::path species_path =
+                    sim::creature_species_paths(*species).rig;
+                candidate = sim::CreatureBlueprint::load_owned_or_default(
+                    *species, species_path, legacy_rig_path, source_note);
             }
+
+            rig_preset = preset;
+            blueprint = std::move(candidate);
             selected_node = -1;
             selected_bone = -1;
             selected_motor = 0;
             dragging_node = false;
+            select_autosave_rig_file(blueprint);
             trainer.set_blueprint(blueprint, false);
-            set_status(std::format("{} LOADED - AUTOPILOT STARTED A FRESH BALANCE LESSON", preset_name()));
+            set_status(std::format("{} LOADED FROM {} - FRESH BALANCE LESSON",
+                preset_name(), source_note));
         }
 
         void apply_small_rig_change(std::string_view reason)
         {
+            const std::size_t edited_node = selected_node >= 0
+                ? static_cast<std::size_t>(selected_node)
+                : std::numeric_limits<std::size_t>::max();
+            if (!blueprint.enforce_human_paired_segment_lengths(edited_node))
+            {
+                set_status("RIG CHANGE REJECTED - HUMAN LIMB PAIRS MUST REMAIN VALID");
+                return;
+            }
             blueprint.rebuild_rest_lengths();
             if (!blueprint.valid())
             {
                 set_status("RIG CHANGE REJECTED - CONNECT EACH ENABLED MOTOR THROUGH TWO REAL BONES");
                 return;
             }
-            rig_preset = RigPreset::custom;
+            rig_preset = preset_for_species(blueprint.presentation_species());
+            select_autosave_rig_file(blueprint);
             trainer.set_blueprint(blueprint, true);
-            set_status(std::format("{} - QUEUED; TRAINER RECALIBRATES WITHOUT BLOCKING", reason));
+            set_status(std::format("{} - QUEUED; {} REMAINS SPECIES-OWNED",
+                reason, preset_name()));
         }
 
         [[nodiscard]] bool test_motor_active(int index) const noexcept
@@ -3105,26 +3214,54 @@ namespace runner
                 if (button({ cursor, { third, 35.0f } }, "SAVE RIG", input)
                     || input.save_pressed)
                 {
+                    const std::filesystem::path path = active_rig_path();
                     std::string error{};
-                    set_status(blueprint.save(rig_path, error) ? "RIG SAVED" : error);
+                    set_status(blueprint.save(path, error)
+                        ? std::format("{} SAVED", path.filename().string())
+                        : error);
                 }
                 if (button({ cursor + Vec2{ third + 6.0f, 0.0f },
                     { third, 35.0f } }, "LOAD RIG", input) || input.load_pressed)
                 {
+                    const std::filesystem::path path = active_rig_path();
                     std::string error{};
-                    blueprint = sim::CreatureBlueprint::load(rig_path, error);
-                    rig_preset = RigPreset::custom;
-                    trainer.set_blueprint(blueprint, false);
-                    set_status(error.empty()
-                        ? "CUSTOM RIG LOADED - FRESH BALANCE LESSON STARTED"
-                        : error);
+                    std::optional<sim::CreatureBlueprint> candidate{};
+                    if (const auto species = preset_species(rig_preset))
+                    {
+                        candidate = sim::CreatureBlueprint::load_for_species(
+                            path, *species, error);
+                    }
+                    else
+                    {
+                        sim::CreatureBlueprint loaded =
+                            sim::CreatureBlueprint::load(path, error);
+                        if (error.empty())
+                            candidate = std::move(loaded);
+                    }
+                    if (candidate)
+                    {
+                        blueprint = std::move(*candidate);
+                        rig_preset = preset_for_species(
+                            blueprint.presentation_species());
+                        select_autosave_rig_file(blueprint);
+                        trainer.set_blueprint(blueprint, false);
+                        set_status(std::format("{} LOADED SAFELY - FRESH BALANCE LESSON",
+                            path.filename().string()));
+                    }
+                    else
+                    {
+                        set_status(std::format("{} NOT LOADED - ACTIVE RIG UNCHANGED: {}",
+                            path.filename().string(), error));
+                    }
                 }
                 if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
                     { third, 35.0f } }, "COPY TRAINING RIG", input))
                 {
                     blueprint = trainer.blueprint();
-                    rig_preset = RigPreset::custom;
-                    set_status("CURRENT TRAINING RIG COPIED INTO STRUCTURE EDITOR");
+                    rig_preset = preset_for_species(blueprint.presentation_species());
+                    select_autosave_rig_file(blueprint);
+                    set_status(std::format("TRAINING {} COPIED TO EDITOR; SAVE TARGET {}",
+                        preset_name(), active_rig_path().filename().string()));
                 }
                 cursor.y += 48.0f;
                 if (button({ cursor, { half, 35.0f } }, "RESTORE RETAINED CONTROLLER",
@@ -3531,7 +3668,8 @@ namespace runner
             }
             else
             {
-                trainer.step_preview(dt);
+                const ui_layout::Box layout_live =
+                    ui_layout::rig_lab_live_box(layout_content);
                 const ui_layout::Box layout_side =
                     ui_layout::rig_lab_panel_box(layout_content);
                 const ui_layout::Box layout_world =
@@ -3540,6 +3678,16 @@ namespace runner
                     { layout_side.width, layout_side.height } };
                 const Rect world{ { layout_world.x, layout_world.y },
                     { layout_world.width, layout_world.height } };
+                if (ui_layout::rig_lab_shows_live(layout_content))
+                {
+                    const Rect live{ { layout_live.x, layout_live.y },
+                        { layout_live.width, layout_live.height } };
+                    draw_live_world(live, dt, input);
+                }
+                else
+                {
+                    trainer.step_preview(dt);
+                }
                 draw_rig_panel(side, input);
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
                 canvas.push_clip(world.position + Vec2{ 1.0f, 1.0f },
@@ -3647,10 +3795,15 @@ namespace runner
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);
         std::string message{};
-        const bool resumed = impl_->trainer.load_autosave(message);
+        const bool resume_queued = impl_->trainer.load_autosave(message);
         impl_->trainer.synchronize();
         impl_->blueprint = impl_->trainer.blueprint();
-        impl_->rig_preset = resumed ? Impl::RigPreset::custom : Impl::RigPreset::humanoid;
+        if (!resume_queued)
+            message = std::format("{} - AUTOPILOT READY",
+                impl_->startup_rig.source_note);
+        impl_->rig_preset = Impl::preset_for_species(
+            impl_->blueprint.presentation_species());
+        impl_->select_autosave_rig_file(impl_->blueprint);
         impl_->trainer.set_background_enabled(true);
         if (impl_->original_runner_art.loaded())
         {

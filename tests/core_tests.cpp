@@ -900,7 +900,16 @@ int main()
     for (const auto& size : ui_layout::validation_sizes)
     {
         const ui_layout::Box content = ui_layout::content_box(size[0], size[1]);
+        require(ui_layout::rig_lab_layout_valid(size[0], size[1]),
+            "Rig Lab responsive layout overlaps or underflows");
+        const ui_layout::Box rig_live = ui_layout::rig_lab_live_box(content);
         const ui_layout::Box rig_world = ui_layout::rig_lab_world_box(content);
+        if (ui_layout::rig_lab_shows_live(content))
+        {
+            require(rig_live.width >= 620.0f
+                    && !ui_layout::overlaps(rig_live, rig_world),
+                "Rig Lab combined layout does not preserve the Live viewport");
+        }
         const ui_layout::BlueprintFit fit = ui_layout::fit_blueprint(
             rig_world, -0.9f, 1.1f, 0.0f, 4.9f);
         const float left = ui_layout::blueprint_screen_x(fit, rig_world, -0.9f);
@@ -1565,6 +1574,24 @@ int main()
         humanoid_with_shifted_arms.nodes[node].x += 4.0f;
     const rl::BipedGaitParameters shifted_arm_gait =
         rl::anatomy_scaled_foundational_gait(humanoid_with_shifted_arms);
+    const auto minimum_biped_leg_length = [](const sim::CreatureBlueprint& rig)
+    {
+        float minimum = std::numeric_limits<float>::infinity();
+        for (const std::size_t hip_index : { 0u, 2u })
+        {
+            const std::size_t knee_index = hip_index + 1u;
+            if (knee_index >= rig.active_motor_count)
+                continue;
+            const sim::MotorConstraint& hip = rig.motors[hip_index];
+            const sim::MotorConstraint& knee = rig.motors[knee_index];
+            minimum = std::min(minimum,
+                length(rig.nodes[hip.c] - rig.nodes[hip.pivot])
+                    + length(rig.nodes[knee.c] - rig.nodes[knee.pivot]));
+        }
+        return minimum;
+    };
+    const float biped_leg_length = minimum_biped_leg_length(biped_walk);
+    const float humanoid_leg_length = minimum_biped_leg_length(humanoid_walk);
     require(std::isfinite(biped_foundational_gait.step_length)
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
@@ -1582,6 +1609,54 @@ int main()
             && std::abs(shifted_arm_gait.swing_lift
                 - humanoid_foundational_gait.swing_lift) < 1.0e-6f,
         "foundational stride still depends on arm presence or geometry");
+    const auto bounded_foundational_endpoint = [](
+        const rl::BipedGaitParameters& parameters, float chain_length)
+    {
+        return rl::bounded_biped_leg_target({
+            parameters.stance_center_x + 0.5f * parameters.step_length,
+            -parameters.leg_height }, chain_length);
+    };
+    const Vec2 biped_endpoint = bounded_foundational_endpoint(
+        biped_foundational_gait, biped_leg_length);
+    const Vec2 humanoid_endpoint = bounded_foundational_endpoint(
+        humanoid_foundational_gait, humanoid_leg_length);
+    const Vec2 shifted_arm_endpoint = bounded_foundational_endpoint(
+        shifted_arm_gait, humanoid_leg_length);
+    const Vec2 humanoid_mid_stance = rl::bounded_biped_leg_target({
+        humanoid_foundational_gait.stance_center_x,
+        -humanoid_foundational_gait.leg_height }, humanoid_leg_length);
+    require(rl::biped_leg_target_within_reach(biped_endpoint,
+                biped_leg_length)
+            && rl::biped_leg_target_within_reach(humanoid_endpoint,
+                humanoid_leg_length)
+            && rl::biped_leg_target_within_reach(shifted_arm_endpoint,
+                humanoid_leg_length)
+            && rl::biped_leg_target_within_reach(humanoid_mid_stance,
+                humanoid_leg_length),
+        "phase-local gait envelope emitted a near-locked or unreachable target");
+    require(std::abs(humanoid_mid_stance.y)
+            > std::abs(humanoid_endpoint.y) + 0.01f,
+        "phase-local gait envelope keeps the Human crouched through mid-stance");
+    rl::BipedGaitParameters excessive_reach = humanoid_foundational_gait;
+    excessive_reach.step_length = humanoid_leg_length * 0.80f;
+    excessive_reach.leg_height = humanoid_leg_length * 1.20f;
+    require(!rl::biped_gait_target_within_reach(
+                excessive_reach, humanoid_leg_length),
+        "adversarial unreachable gait was accepted as an authored target");
+    const Vec2 excessive_desired{
+        excessive_reach.stance_center_x + 0.5f * excessive_reach.step_length,
+        -excessive_reach.leg_height };
+    const Vec2 excessive_bounded = rl::bounded_biped_leg_target(
+        excessive_desired, humanoid_leg_length);
+    const Vec2 invalid_bounded = rl::bounded_biped_leg_target({
+        std::numeric_limits<float>::quiet_NaN(), -1.0f },
+        humanoid_leg_length);
+    require(rl::biped_leg_target_within_reach(excessive_bounded,
+                humanoid_leg_length)
+            && std::abs(excessive_desired.x * excessive_bounded.y
+                - excessive_desired.y * excessive_bounded.x) < 1.0e-4f
+            && length(invalid_bounded) == 0.0f,
+        "phase-local gait envelope did not safely bound adversarial input");
     require(std::abs(rl::sagittal_step_x(0.60f, 0.0f, false) - 0.30f) < 1.0e-6f
             && std::abs(rl::sagittal_step_x(0.60f, 0.5f, false)) < 1.0e-6f
             && std::abs(rl::sagittal_step_x(0.60f, 1.0f, false) + 0.30f) < 1.0e-6f
@@ -1910,17 +1985,15 @@ int main()
         "raised humanoid shoulder girdle can still invert through the upper spine");
     require(humanoid.nodes.size() == 13u,
         "human-calibrated rig does not retain the compact articulated body and arms");
-    require(std::abs(humanoid.nodes[0].x - 0.0015322268f) < 0.00001f
-            && std::abs(humanoid.nodes[0].y - 2.6000f) < 0.00001f
-            && std::abs(humanoid.nodes[1].y - 4.0500f) < 0.00001f
-            && std::abs(humanoid.nodes[2].y - 4.52000046f) < 0.00001f
-            && std::abs(humanoid.nodes[9].x - 0.118830621f) < 0.00001f
-            && std::abs(humanoid.nodes[12].x - 0.259952337f) < 0.00001f
+    require(std::abs(humanoid.nodes[0].x - (-0.148461968f)) < 0.00001f
+            && std::abs(humanoid.nodes[0].y - 2.59142852f) < 0.00001f
+            && std::abs(humanoid.nodes[1].y - 3.80571461f) < 0.00001f
+            && std::abs(humanoid.nodes[2].y - 4.18666649f) < 0.00001f
             && humanoid.nodes[9].y > humanoid.nodes[0].y
             && humanoid.nodes[9].y < humanoid.nodes[1].y
             && humanoid.nodes[12].y > humanoid.nodes[0].y
             && humanoid.nodes[12].y < humanoid.nodes[1].y,
-        "supplied compact humanoid calibration not applied");
+        "current authored Human calibration not applied");
     require(humanoid.bones.size() == 15u,
         "humanoid legs or articulated arms are not structurally connected");
     require(humanoid.active_motor_count == sim::anatomy_action_count,
@@ -1946,8 +2019,10 @@ int main()
         {
             const float driven_arm = length(humanoid.nodes[motor.c] - humanoid.nodes[motor.pivot]);
             const float expected_linear_gain = (motor_index % 2u) == 0u ? 0.045f : 0.051f;
+            const float expected_strength = clamp(
+                expected_linear_gain / std::max(0.75f, driven_arm), 0.032f, 0.056f);
             const float expected_travel = (motor_index % 2u) == 0u ? 36.0f : 58.0f;
-            require(std::abs(motor.strength * std::max(0.75f, driven_arm) - expected_linear_gain) < 0.003f,
+            require(std::abs(motor.strength - expected_strength) < 0.0001f,
                 "humanoid leg motor does not use the bounded obstacle-capable effective gain");
             require(std::abs((motor.neutral_angle - motor.minimum_angle) * 180.0f / pi
                 - expected_travel) < 0.05f, "obstacle-capable backward leg travel was not applied");
@@ -2053,17 +2128,32 @@ int main()
         };
         const auto coordinated = rl::bilateral_joint_synergy_action(
             duck_lesson, unrelated, sim::CourseStage::duck_press);
-        require(std::abs(coordinated[0] + coordinated[2])
-                < std::abs(unrelated[0] + unrelated[2])
-            && std::abs(coordinated[1] + coordinated[3])
-                < std::abs(unrelated[1] + unrelated[3]),
+        const auto& duck_rig = duck_lesson.blueprint();
+        const float left_hip_direction =
+            rl::authored_joint_flexion_direction(duck_rig.motors[0]);
+        const float left_knee_direction =
+            rl::authored_joint_flexion_direction(duck_rig.motors[1]);
+        const float right_hip_direction =
+            rl::authored_joint_flexion_direction(duck_rig.motors[2]);
+        const float right_knee_direction =
+            rl::authored_joint_flexion_direction(duck_rig.motors[3]);
+        require(std::abs(coordinated[0] * left_hip_direction
+                    - coordinated[2] * right_hip_direction)
+                < std::abs(unrelated[0] * left_hip_direction
+                    - unrelated[2] * right_hip_direction)
+            && std::abs(coordinated[1] * left_knee_direction
+                    - coordinated[3] * right_knee_direction)
+                < std::abs(unrelated[1] * left_knee_direction
+                    - unrelated[3] * right_knee_direction),
             "AI outputs are still eight unrelated joint commands");
         sim::EnvironmentTestAccess::set_duck_pressure(duck_lesson, 1.0f);
         const std::array<float, sim::action_count> neutral{};
         const auto duck = rl::effective_policy_action(
             duck_lesson, neutral, sim::CourseStage::duck_press);
-        require(duck[0] < -0.05f && duck[1] > 0.10f
-                && duck[2] > 0.05f && duck[3] < -0.10f,
+        require(duck[0] * left_hip_direction > 0.05f
+                && duck[1] * left_knee_direction > 0.10f
+                && duck[2] * right_hip_direction > 0.05f
+                && duck[3] * right_knee_direction > 0.10f,
             "compression pressure does not trigger a coordinated leg-driven duck primitive");
         require(std::abs(duck[4]) < 0.01f && std::abs(duck[5]) < 0.01f
                 && std::abs(duck[6]) < 0.01f && std::abs(duck[7]) < 0.01f,
@@ -2675,12 +2765,14 @@ int main()
         std::filesystem::temp_directory_path() / "runner-v0742-lifetime-import-test";
     std::filesystem::remove_all(lifetime_import_directory);
     std::filesystem::create_directories(lifetime_import_directory);
+    const sim::CreatureSpeciesPaths human_paths =
+        sim::creature_species_paths(sim::CreatureSpecies::human);
     const std::filesystem::path current_autosave = lifetime_import_directory
-        / "runner-v0742-species-anatomy-autosave.eppo";
+        / human_paths.autosave_checkpoint;
     const std::filesystem::path current_rig = lifetime_import_directory
-        / "runner-v0742-species-anatomy-evolved.rig";
+        / human_paths.evolved_rig;
     const std::filesystem::path current_state = lifetime_import_directory
-        / "runner-v0742-species-anatomy-autonomy.state";
+        / human_paths.autonomy_state;
     const std::filesystem::path v0741_autosave = lifetime_import_directory
         / "runner-v0741-natural-gait-autosave.eppo";
     require(rl::PpoTrainer::write_checkpoint_data(legacy, v0741_autosave, error),
@@ -2714,6 +2806,54 @@ int main()
             "legacy autosave did not import only lifetime totals before current save");
     }
     std::filesystem::remove_all(lifetime_import_directory);
+
+    const std::filesystem::path isolation_directory =
+        std::filesystem::temp_directory_path() / "runner-v0742-species-isolation-test";
+    std::filesystem::remove_all(isolation_directory);
+    std::filesystem::create_directories(isolation_directory);
+    const std::filesystem::path isolated_checkpoint = isolation_directory
+        / "runner-v0742-human-autosave.eppo";
+    const std::filesystem::path wrong_species_rig = isolation_directory
+        / "runner-v0742-human-evolved.rig";
+    const std::filesystem::path isolated_state = isolation_directory
+        / "runner-v0742-human-autonomy.state";
+    require(rl::PpoTrainer::write_checkpoint_data(trainer.checkpoint_data(),
+            isolated_checkpoint, error),
+        "failed to write species-isolation checkpoint: " + error);
+    require(sim::CreatureBlueprint::crawler4().save(wrong_species_rig, error),
+        "failed to write cross-species autosave rig: " + error);
+    {
+        rl::AutonomousTrainer isolated{ humanoid, 16 };
+        isolated.set_autosave_paths(isolated_checkpoint, wrong_species_rig,
+            isolated_state);
+        isolated.set_background_enabled(false);
+        isolated.synchronize();
+        const std::uint64_t original_signature = isolated.rig_signature();
+        const rl::TrainingMetrics original_metrics = isolated.metrics();
+        std::string isolation_message{};
+        require(isolated.load_autosave(isolation_message),
+            "cross-species autosave fixture was not queued");
+        for (int attempt = 0; attempt < 400
+            && isolated.autonomy_status().message.find("Rig topology is dog")
+                == std::string::npos;
+            ++attempt)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            isolated.synchronize();
+        }
+        require(isolated.autonomy_status().message.find("Rig topology is dog")
+                != std::string::npos,
+            "cross-species autosave was not rejected before application");
+        require(isolated.rig_signature() == original_signature,
+            "cross-species autosave changed the active Human rig");
+        require(isolated.metrics().update == original_metrics.update
+                && isolated.metrics().total_updates == original_metrics.total_updates,
+            std::format("cross-species autosave changed controller counters: update {} -> {}, "
+                        "total {} -> {}",
+                original_metrics.update, isolated.metrics().update,
+                original_metrics.total_updates, isolated.metrics().total_updates));
+    }
+    std::filesystem::remove_all(isolation_directory);
 
     rl::PpoTrainer transferred_legacy{ humanoid, 16 };
     require(transferred_legacy.apply_checkpoint_data(legacy, error, true),

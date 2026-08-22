@@ -79,6 +79,7 @@ int main()
     const ui_layout::Box live_pip = ui_layout::training_pip_box(live_world);
     const ui_layout::Box rig_panel = ui_layout::rig_lab_panel_box(content);
     const ui_layout::Box rig_world = ui_layout::rig_lab_world_box(content);
+    const ui_layout::Box rig_live = ui_layout::rig_lab_live_box(content);
 
     Application application{};
     InputState input{};
@@ -92,6 +93,7 @@ int main()
     application.frame(switch_to_rig, dt, width, height);
     require_visible(application.vertices(), rig_panel, "Rig Lab PRESETS page");
     require_visible(application.vertices(), rig_world, "Rig Lab viewport");
+    require_visible(application.vertices(), rig_live, "Rig Lab Live viewport");
 
     const float usable_width = rig_panel.width - 36.0f;
     const float tab_width = (usable_width - 18.0f) * 0.25f;

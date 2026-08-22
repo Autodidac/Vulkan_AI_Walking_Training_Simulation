@@ -200,7 +200,8 @@ namespace runner::acceptance
                 float seed_minimum_clearance = std::numeric_limits<float>::max();
                 for (int frame = 0; frame < 1800; ++frame)
                 {
-                    const auto action = rl::duck_teacher_action(environment);
+                    const auto action = rl::effective_policy_action(
+                        environment, {}, sim::CourseStage::duck_press, 1.0f);
                     const sim::StepResult step = environment.step(action);
                     contact_seen = contact_seen || environment.duck_press_contact();
                     seed_longest_duck = std::max(seed_longest_duck,

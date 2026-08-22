@@ -249,13 +249,14 @@ namespace runner::rl
         persistence_cv_.notify_all();
     }
 
-    void AutonomousTrainer::consume_persistence_message()
+    bool AutonomousTrainer::consume_persistence_message()
     {
         std::scoped_lock lock(persistence_mutex_);
         if (consumed_persistence_message_serial_ == persistence_message_serial_)
-            return;
+            return false;
         consumed_persistence_message_serial_ = persistence_message_serial_;
         worker_message_ = persistence_message_;
+        return true;
     }
 
     void AutonomousTrainer::persistence_main(std::stop_token stop_token)
@@ -314,9 +315,10 @@ namespace runner::rl
                 if (!job.rig_path.empty() && std::filesystem::exists(job.rig_path))
                 {
                     std::string rig_error{};
-                    const sim::CreatureBlueprint loaded = sim::CreatureBlueprint::load(job.rig_path, rig_error);
-                    if (rig_error.empty())
-                        job.blueprint = loaded;
+                    auto loaded = sim::CreatureBlueprint::load_for_species(job.rig_path,
+                        job.blueprint.presentation_species(), rig_error);
+                    if (loaded)
+                        job.blueprint = std::move(*loaded);
                     else
                         message = rig_error;
                 }
@@ -324,21 +326,29 @@ namespace runner::rl
                 if (message.empty()
                     && PpoTrainer::read_checkpoint_data(job.checkpoint_path, *data, message))
                 {
-                    read_autonomy_state(job.state_path, job.stage, job.difficulty,
-                        job.rig_generation, job.accepted_rig_changes,
-                        job.rejected_rig_changes, job.rollback_count,
-                        job.optimization_mode);
-                    PendingCommand command{};
-                    command.type = CommandType::apply_autosave;
-                    command.blueprint = std::move(job.blueprint);
-                    command.checkpoint = std::move(data);
-                    command.rig_generation = job.rig_generation;
-                    command.accepted_rig_changes = job.accepted_rig_changes;
-                    command.rejected_rig_changes = job.rejected_rig_changes;
-                    command.rollback_count = job.rollback_count;
-                    command.optimization_mode = job.optimization_mode;
-                    enqueue_command(std::move(command));
-                    message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
+                    const bool current_snapshot = !job.rig_path.empty();
+                    if (current_snapshot && data->rig_signature != job.blueprint.signature())
+                    {
+                        message = "AUTOSAVE REJECTED - CONTROLLER AND SPECIES RIG DO NOT MATCH";
+                    }
+                    else
+                    {
+                        read_autonomy_state(job.state_path, job.stage, job.difficulty,
+                            job.rig_generation, job.accepted_rig_changes,
+                            job.rejected_rig_changes, job.rollback_count,
+                            job.optimization_mode);
+                        PendingCommand command{};
+                        command.type = CommandType::apply_autosave;
+                        command.blueprint = std::move(job.blueprint);
+                        command.checkpoint = std::move(data);
+                        command.rig_generation = job.rig_generation;
+                        command.accepted_rig_changes = job.accepted_rig_changes;
+                        command.rejected_rig_changes = job.rejected_rig_changes;
+                        command.rollback_count = job.rollback_count;
+                        command.optimization_mode = job.optimization_mode;
+                        enqueue_command(std::move(command));
+                        message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
+                    }
                 }
             }
 

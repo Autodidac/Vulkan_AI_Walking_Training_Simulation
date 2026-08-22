@@ -125,6 +125,13 @@ foreach(reference IN ITEMS
         "Runner.V0736AuthoredRuntime"
         "RunnerV0737LocomotionTerrainTests"
         "Runner.V0737LocomotionTerrain"
+        "RunnerV0742SpeciesRigTests"
+        "Runner.V0742SpeciesRig"
+        "RunnerRigDefaults"
+        "human.rig"
+        "chicken.rig"
+        "dog.rig"
+        "hexapod.rig"
         "Runner.HybridBrainDiagnostic"
         "src/hybrid_brain_diagnostic.cpp"
         "Runner.V0730ReferenceFrame"
@@ -339,7 +346,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4201u"
+        "training_semantics_version = 0x0007'4202u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -434,9 +441,7 @@ foreach(reference IN ITEMS
         "PASSED STAGE CHECKS"
         "FAILED STAGE CHECKS"
         "FEATURES CLEARED"
-        "runner-v0742-species-anatomy-autosave.eppo"
-        "runner-v0742-species-anatomy-evolved.rig"
-        "runner-v0742-species-anatomy-autonomy.state"
+        "creature_species_paths"
         "PACKAGED COURSE EYE TEST"
         "ORTHOGRAPHIC ART CHECK"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
@@ -463,6 +468,20 @@ foreach(reference IN ITEMS
         message(FATAL_ERROR "v0.7.28 application contract missing: ${reference}")
     endif()
 endforeach()
+
+file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
+foreach(reference IN ITEMS
+        "struct CreatureSpeciesPaths"
+        "runner-v0742-"
+        "-autosave.eppo"
+        "-evolved.rig"
+        "-autonomy.state")
+    string(FIND "${species_paths_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Species-owned path contract missing: ${reference}")
+    endif()
+endforeach()
+
 string(FIND "${app_text}" "shoulder_cap_radius" legacy_shoulder_cap_pos)
 if(NOT legacy_shoulder_cap_pos EQUAL -1)
     message(FATAL_ERROR "procedural shoulder-cap presentation remains under modular armor")

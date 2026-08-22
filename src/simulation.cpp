@@ -169,6 +169,7 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::chicken()
     {
         CreatureBlueprint result{};
+        result.species_identity = CreatureSpecies::chicken;
         // Species-scale bird anatomy: compact horizontal body, counterweight tail,
         // forward head/beak, and two opposed digitigrade legs. It remains a true
         // two-leg policy subject without borrowing Human proportions or armor.
@@ -241,23 +242,27 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::humanoid()
     {
         CreatureBlueprint result{};
+        result.species_identity = CreatureSpecies::human;
         result.nodes = {
-            { 0.0015322268f, 2.6000f },
-            { -0.0194339529f, 4.0500f },
-            { -0.02538634f, 4.52000046f },
-            { 0.13f, 1.425f }, { -0.14f, 0.25f },
-            { 0.21f, 1.425f }, { 0.14f, 0.25f },
-            // Exact v0.7.36 user-authored side-view rest: both arms are
-            // layered beside the torso/pelvis instead of starting in a T-pose.
-            { -0.0670530051f, 3.79976225f },
-            { 0.141518429f, 3.54380989f },
-            { 0.118830621f, 3.02000022f },
-            { -0.0194339603f, 3.81166697f },
-            { 0.309952319f, 3.53089261f },
-            { 0.259952337f, 2.99310279f }
+            // Exact v0.7.42 user-authored Human rest pose. Paired segment
+            // normalization below retains this layered stance while preventing
+            // either side from acquiring a different anatomical reach.
+            { -0.148461968f, 2.59142852f },
+            { -0.171161979f, 3.80571461f },
+            { -0.177114367f, 4.18666649f },
+            { -0.339095294f, 1.46047616f },
+            { -0.480685741f, 0.728333235f },
+            { -0.0652857721f, 1.44261897f },
+            { -0.183066726f, 0.668809414f },
+            { -0.165464342f, 3.55571461f },
+            { -0.0044952929f, 3.13904762f },
+            { -0.0044952929f, 2.78785706f },
+            { -0.258045316f, 3.54380989f },
+            { 0.138361856f, 3.28190470f },
+            { 0.172961891f, 2.85333323f }
         };
         result.radii = {
-            0.26f, 0.31f, 0.27f, 0.19f, 0.17f, 0.19f, 0.17f,
+            0.26f, 0.31f, 0.27f, 0.19f, 0.1054f, 0.19f, 0.1054f,
             0.16f, 0.15f, 0.14f, 0.16f, 0.15f, 0.14f
         };
         result.bones = {
@@ -283,7 +288,8 @@ namespace runner::sim
         result.head_node = 2u;
         result.left_contact_node = 4u;
         result.right_contact_node = 6u;
-        add_passive_feet(result);
+        const bool paired_dimensions_valid = result.enforce_human_paired_segment_lengths();
+        (void)paired_dimensions_valid;
         result.rebuild_rest_lengths();
         for (std::size_t index = 0; index < 4u; ++index)
         {
@@ -292,7 +298,8 @@ namespace runner::sim
             const float driven_length = length(
                 result.nodes[motor.c] - result.nodes[motor.pivot]);
             const float linear_gain = knee ? 0.051f : 0.045f;
-            const float strength = linear_gain / std::max(0.75f, driven_length);
+            const float strength = clamp(
+                linear_gain / std::max(0.75f, driven_length), 0.032f, 0.056f);
             result.calibrate_motor(index, knee ? 58.0f : 36.0f,
                 knee ? 58.0f : 36.0f, strength);
         }
@@ -305,6 +312,118 @@ namespace runner::sim
         return result;
     }
 
+    bool CreatureBlueprint::human_paired_limb_topology() const noexcept
+    {
+        if (nodes.size() != 13u || radii.size() != 13u
+            || active_motor_count != 8u || root_node != 0u || torso_node != 1u
+            || head_node != 2u || left_contact_node != 4u
+            || right_contact_node != 6u || !additional_left_contact_nodes.empty()
+            || !additional_right_contact_nodes.empty())
+            return false;
+        const std::array<MotorConstraint, 8> expected{
+            MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
+            MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
+            MotorConstraint{ 1, 7, 8 }, MotorConstraint{ 7, 8, 9 },
+            MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 }
+        };
+        for (std::size_t index = 0; index < expected.size(); ++index)
+        {
+            if (motors[index].a != expected[index].a
+                || motors[index].pivot != expected[index].pivot
+                || motors[index].c != expected[index].c)
+                return false;
+        }
+        return true;
+    }
+
+    bool CreatureBlueprint::enforce_human_paired_segment_lengths(
+        std::size_t edited_node) noexcept
+    {
+        if (!human_paired_limb_topology())
+            return true;
+
+        CreatureBlueprint candidate = *this;
+        struct Segment
+        {
+            std::uint16_t from{};
+            std::uint16_t to{};
+            Vec2 direction{};
+            float length{};
+        };
+        std::array<Segment, 8> segments = {
+            Segment{ 0u, 3u }, Segment{ 0u, 5u },
+            Segment{ 3u, 4u }, Segment{ 5u, 6u },
+            Segment{ 7u, 8u }, Segment{ 10u, 11u },
+            Segment{ 8u, 9u }, Segment{ 11u, 12u }
+        };
+        const auto capture_segment = [&](Segment& segment)
+        {
+            const Vec2 delta = candidate.nodes[segment.to]
+                - candidate.nodes[segment.from];
+            segment.length = length(delta);
+            if (!std::isfinite(segment.length) || segment.length < 0.05f)
+                return false;
+            segment.direction = delta / segment.length;
+            return std::isfinite(segment.direction.x)
+                && std::isfinite(segment.direction.y);
+        };
+        for (Segment& segment : segments)
+        {
+            if (!capture_segment(segment))
+                return false;
+        }
+        const auto pair_target = [&](const Segment& a, const Segment& b)
+        {
+            const bool source_a = edited_node == a.to
+                || (a.from != b.from && edited_node == a.from);
+            const bool source_b = edited_node == b.to
+                || (a.from != b.from && edited_node == b.from);
+            const float target = source_a != source_b
+                ? (source_a ? a.length : b.length)
+                : (a.length + b.length) * 0.5f;
+            return std::isfinite(target) && target >= 0.05f
+                ? target : 0.0f;
+        };
+        const auto pair_radius = [&](std::uint16_t a, std::uint16_t b)
+        {
+            const bool source_a = edited_node == a;
+            const bool source_b = edited_node == b;
+            const float target = source_a != source_b
+                ? (source_a ? candidate.radii[a] : candidate.radii[b])
+                : (candidate.radii[a] + candidate.radii[b]) * 0.5f;
+            if (!std::isfinite(target) || target <= 0.0f)
+                return false;
+            candidate.radii[a] = target;
+            candidate.radii[b] = target;
+            return true;
+        };
+
+        const float thigh = pair_target(segments[0], segments[1]);
+        const float shin = pair_target(segments[2], segments[3]);
+        const float upper_arm = pair_target(segments[4], segments[5]);
+        const float forearm = pair_target(segments[6], segments[7]);
+        if (thigh == 0.0f || shin == 0.0f || upper_arm == 0.0f
+            || forearm == 0.0f)
+            return false;
+
+        // Rebuild every paired chain from a single snapshot. Moving a proximal
+        // joint therefore cannot rotate, shorten, or invert its distal segment.
+        candidate.nodes[3] = candidate.nodes[0] + segments[0].direction * thigh;
+        candidate.nodes[5] = candidate.nodes[0] + segments[1].direction * thigh;
+        candidate.nodes[4] = candidate.nodes[3] + segments[2].direction * shin;
+        candidate.nodes[6] = candidate.nodes[5] + segments[3].direction * shin;
+        candidate.nodes[8] = candidate.nodes[7] + segments[4].direction * upper_arm;
+        candidate.nodes[11] = candidate.nodes[10] + segments[5].direction * upper_arm;
+        candidate.nodes[9] = candidate.nodes[8] + segments[6].direction * forearm;
+        candidate.nodes[12] = candidate.nodes[11] + segments[7].direction * forearm;
+
+        if (!pair_radius(3u, 5u) || !pair_radius(4u, 6u)
+            || !pair_radius(7u, 10u) || !pair_radius(8u, 11u)
+            || !pair_radius(9u, 12u))
+            return false;
+        *this = std::move(candidate);
+        return true;
+    }
     CreatureBlueprint CreatureBlueprint::quadruped()
     {
         CreatureBlueprint result{};
@@ -350,6 +469,7 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::crawler4()
     {
         CreatureBlueprint result{};
+        result.species_identity = CreatureSpecies::dog;
         // Medium dog-scale four-leg anatomy. Near/far pairs remain layered in
         // side view while shoulder and hip spacing preserve a readable gait.
         result.nodes = {
@@ -393,6 +513,7 @@ namespace runner::sim
     CreatureBlueprint CreatureBlueprint::hexapod()
     {
         CreatureBlueprint result{};
+        result.species_identity = CreatureSpecies::hexapod;
         // Three longitudinal pairs, each with a visible knee. The outer pairs use
         // the eight policy channels and the middle pair is coupled into opposing
         // tripods by CreatureBlueprint::coupled_support_motors().
@@ -472,8 +593,62 @@ namespace runner::sim
         return result;
     }
 
+    CreatureBlueprint CreatureBlueprint::for_species(CreatureSpecies species)
+    {
+        switch (species)
+        {
+        case CreatureSpecies::human: return humanoid();
+        case CreatureSpecies::chicken: return chicken();
+        case CreatureSpecies::dog: return crawler4();
+        case CreatureSpecies::hexapod: return hexapod();
+        case CreatureSpecies::custom: return scaffold();
+        }
+        return scaffold();
+    }
+
+    CreatureBlueprint CreatureBlueprint::load_owned_or_default(
+        CreatureSpecies species, const std::filesystem::path& owned_path,
+        const std::filesystem::path& legacy_path, std::string& source_note)
+    {
+        CreatureBlueprint fallback = for_species(species);
+        std::string load_error{};
+        if (std::filesystem::exists(owned_path))
+        {
+            if (auto loaded = load_for_species(owned_path, species, load_error))
+            {
+                source_note = owned_path.filename().string();
+                return std::move(*loaded);
+            }
+            source_note = std::format("{} REJECTED; FACTORY DEFAULT: {}",
+                owned_path.filename().string(), load_error);
+            return fallback;
+        }
+
+        if (!legacy_path.empty() && std::filesystem::exists(legacy_path))
+        {
+            if (auto migrated = load_for_species(legacy_path, species, load_error))
+            {
+                std::string save_error{};
+                if (migrated->save(owned_path, save_error))
+                    source_note = std::format("{} MIGRATED TO {}",
+                        legacy_path.filename().string(), owned_path.filename().string());
+                else
+                    source_note = std::format("{} LOADED; MIGRATION FAILED: {}",
+                        legacy_path.filename().string(), save_error);
+                return std::move(*migrated);
+            }
+            source_note = std::format("{} REJECTED FOR {}; FACTORY DEFAULT: {}",
+                legacy_path.filename().string(), creature_species_slug(species), load_error);
+            return fallback;
+        }
+
+        source_note = "FACTORY DEFAULT";
+        return fallback;
+    }
+
     void CreatureBlueprint::rebuild_rest_lengths() noexcept
     {
+        (void)enforce_human_paired_segment_lengths();
         for (DistanceConstraint& bone : bones)
         {
             if (bone.a < nodes.size() && bone.b < nodes.size())
@@ -569,8 +744,27 @@ namespace runner::sim
                 hash *= 1099511628211ULL;
             }
         };
-        auto add_float = [&](float value) { add_u64(std::bit_cast<std::uint32_t>(value)); };
+        // A rig signature identifies authored structure, not the least-significant
+        // bit selected by decimal persistence or an idempotent normalization pass.
+        // Quantizing below editor resolution keeps save/load signatures stable while
+        // still invalidating checkpoints for any meaningful anatomy change.
+        auto add_float = [&](float value)
+        {
+            constexpr double signature_units_per_world_unit = 100'000.0;
+            if (!std::isfinite(value))
+            {
+                add_u64(std::bit_cast<std::uint32_t>(value));
+                return;
+            }
+            const auto quantized = static_cast<std::int64_t>(
+                std::llround(static_cast<double>(value)
+                    * signature_units_per_world_unit));
+            add_u64(static_cast<std::uint64_t>(quantized));
+        };
 
+        add_u64(species_identity.has_value() ? 1u : 0u);
+        add_u64(species_identity.has_value()
+            ? static_cast<std::uint64_t>(*species_identity) : 0u);
         add_u64(nodes.size()); add_u64(bones.size()); add_u64(active_motor_count);
         add_u64(root_node); add_u64(torso_node); add_u64(head_node);
         add_u64(left_contact_node); add_u64(right_contact_node);
@@ -599,6 +793,28 @@ namespace runner::sim
 
     bool CreatureBlueprint::save(const std::filesystem::path& path, std::string& error) const
     {
+        CreatureBlueprint normalized = *this;
+        if (!normalized.enforce_human_paired_segment_lengths())
+        {
+            error = "Human paired limb dimensions could not be normalized.";
+            return false;
+        }
+        normalized.rebuild_rest_lengths();
+        if (!normalized.valid())
+        {
+            error = "Rig is structurally invalid and was not saved.";
+            return false;
+        }
+        const CreatureSpecies owned_species = normalized.presentation_species();
+        if (!normalized.topology_compatible_with_species(owned_species))
+        {
+            error = "Rig topology is incompatible with its owned species identity.";
+            return false;
+        }
+        // Saving a legacy rig is its one-time migration into an explicitly
+        // species-owned RUNRIG 5 document.
+        normalized.species_identity = owned_species;
+
         std::filesystem::path temporary = path;
         temporary += ".tmp";
         std::filesystem::path backup = path;
@@ -614,25 +830,39 @@ namespace runner::sim
                 error = "Could not open temporary rig file for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNRIG 4\n";
-            output << nodes.size() << ' ' << bones.size() << ' ' << active_motor_count << '\n';
-            output << "S " << root_node << ' ' << torso_node << ' ' << head_node << ' '
-                << left_contact_node << ' ' << right_contact_node << '\n';
-            output << "L " << additional_left_contact_nodes.size();
-            for (const std::uint16_t node : additional_left_contact_nodes) output << ' ' << node;
+            output << "RUNRIG 5\n";
+            output << normalized.nodes.size() << ' ' << normalized.bones.size()
+                << ' ' << normalized.active_motor_count << '\n';
+            output << "P " << creature_species_slug(*normalized.species_identity) << '\n';
+            output << "S " << normalized.root_node << ' ' << normalized.torso_node
+                << ' ' << normalized.head_node << ' ' << normalized.left_contact_node
+                << ' ' << normalized.right_contact_node << '\n';
+            output << "L " << normalized.additional_left_contact_nodes.size();
+            for (const std::uint16_t node : normalized.additional_left_contact_nodes)
+                output << ' ' << node;
             output << '\n';
-            output << "R " << additional_right_contact_nodes.size();
-            for (const std::uint16_t node : additional_right_contact_nodes) output << ' ' << node;
+            output << "R " << normalized.additional_right_contact_nodes.size();
+            for (const std::uint16_t node : normalized.additional_right_contact_nodes)
+                output << ' ' << node;
             output << '\n';
             output << std::setprecision(9);
-            for (std::size_t index = 0; index < nodes.size(); ++index)
-                output << "N " << nodes[index].x << ' ' << nodes[index].y << ' ' << radii[index] << '\n';
-            for (const DistanceConstraint& bone : bones)
-                output << "B " << bone.a << ' ' << bone.b << ' ' << bone.rest_length << ' ' << bone.stiffness << '\n';
-            for (std::size_t motor_index = 0; motor_index < active_motor_count; ++motor_index)
+            for (std::size_t index = 0; index < normalized.nodes.size(); ++index)
             {
-                const MotorConstraint& motor = motors[motor_index];
-                output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' ' << motor.pivot << ' ' << motor.c << ' '
+                output << "N " << normalized.nodes[index].x << ' '
+                    << normalized.nodes[index].y << ' '
+                    << normalized.radii[index] << '\n';
+            }
+            for (const DistanceConstraint& bone : normalized.bones)
+            {
+                output << "B " << bone.a << ' ' << bone.b << ' '
+                    << bone.rest_length << ' ' << bone.stiffness << '\n';
+            }
+            for (std::size_t motor_index = 0;
+                motor_index < normalized.active_motor_count; ++motor_index)
+            {
+                const MotorConstraint& motor = normalized.motors[motor_index];
+                output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a
+                    << ' ' << motor.pivot << ' ' << motor.c << ' '
                     << motor.minimum_angle << ' ' << motor.maximum_angle << ' '
                     << motor.neutral_angle << ' ' << motor.strength << '\n';
             }
@@ -700,7 +930,8 @@ namespace runner::sim
         std::size_t motor_count{};
         input >> magic >> version >> node_count >> bone_count >> motor_count;
         if (!input || magic != "RUNRIG"
-            || (version != 1 && version != 2 && version != 3 && version != 4)
+            || (version != 1 && version != 2 && version != 3 && version != 4
+                && version != 5)
             || node_count < 3 || node_count > 128 || bone_count > 256
             || motor_count == 0u || motor_count > anatomy_action_count)
         {
@@ -709,9 +940,22 @@ namespace runner::sim
         }
 
         CreatureBlueprint result{};
+        std::optional<CreatureSpecies> declared_species{};
         result.active_motor_count = motor_count;
         for (MotorConstraint& motor : result.motors)
             motor.enabled = false;
+        if (version >= 5)
+        {
+            char species_tag{};
+            std::string species_slug{};
+            input >> species_tag >> species_slug;
+            declared_species = creature_species_from_slug(species_slug);
+            if (!input || species_tag != 'P' || !declared_species.has_value())
+            {
+                error = "Invalid rig species identity.";
+                return humanoid();
+            }
+        }
         if (version >= 2)
         {
             char semantic_tag{};
@@ -822,13 +1066,47 @@ namespace runner::sim
             result.motors[index] = motor;
         }
 
+        if (!result.enforce_human_paired_segment_lengths())
+        {
+            error = "Human paired limb dimensions are invalid.";
+            return humanoid();
+        }
+        result.rebuild_rest_lengths();
         if (!result.valid())
         {
             error = "Rig is structurally invalid or has invalid semantic nodes.";
             return humanoid();
         }
+        if (declared_species.has_value()
+            && !result.topology_compatible_with_species(*declared_species))
+        {
+            error = "Rig declared species does not match its topology.";
+            return humanoid();
+        }
+        result.species_identity = declared_species;
         error.clear();
         return result;
+    }
+
+    std::optional<CreatureBlueprint> CreatureBlueprint::load_for_species(
+        const std::filesystem::path& path, CreatureSpecies expected,
+        std::string& error)
+    {
+        CreatureBlueprint candidate = load(path, error);
+        if (!error.empty())
+            return std::nullopt;
+        const CreatureSpecies candidate_species = candidate.species_identity
+            .value_or(candidate.inferred_species());
+        if (candidate_species != expected
+            || !candidate.topology_compatible_with_species(expected))
+        {
+            error = "Rig topology is "
+                + std::string(creature_species_slug(candidate_species))
+                + ", not " + std::string(creature_species_slug(expected)) + ".";
+            return std::nullopt;
+        }
+        candidate.species_identity = expected;
+        return candidate;
     }
 
     Environment::Environment()
@@ -849,6 +1127,31 @@ namespace runner::sim
         blueprint_.rebuild_rest_lengths();
         course_layout_initialized_ = false;
         reset(random_state_);
+    }
+
+    float Environment::authored_standing_head_clearance() const noexcept
+    {
+        if (blueprint_.head_node >= blueprint_.nodes.size())
+            return 4.30f;
+        float vertical_shift = -std::numeric_limits<float>::infinity();
+        for (std::size_t index = 0; index < blueprint_.nodes.size(); ++index)
+        {
+            if (!blueprint_.is_support_seed(index))
+                continue;
+            const float radius = index < particles_.size()
+                ? particles_[index].radius
+                : index < blueprint_.radii.size() ? blueprint_.radii[index] : 0.15f;
+            vertical_shift = std::max(vertical_shift,
+                ground_contact_offset(true, radius) - blueprint_.nodes[index].y);
+        }
+        if (!std::isfinite(vertical_shift))
+            vertical_shift = 0.0f;
+        const float head_radius = blueprint_.head_node < particles_.size()
+            ? particles_[blueprint_.head_node].radius
+            : blueprint_.head_node < blueprint_.radii.size()
+                ? blueprint_.radii[blueprint_.head_node] : 0.15f;
+        return std::max(0.0f,
+            blueprint_.nodes[blueprint_.head_node].y + head_radius + vertical_shift);
     }
 
     void Environment::set_course(CourseStage stage, float difficulty)
@@ -1716,10 +2019,6 @@ namespace runner::sim
             return;
         if (course_stage_ == CourseStage::duck_press)
         {
-            const float rest_head_top = valid_node(blueprint_.head_node)
-                ? blueprint_.nodes[blueprint_.head_node].y
-                    + particles_[blueprint_.head_node].radius
-                : 4.30f;
             if (!duck_press_completed_)
             {
                 float minimum_x = blueprint_.nodes.empty() ? -0.5f : blueprint_.nodes.front().x;
@@ -1731,6 +2030,8 @@ namespace runner::sim
                 }
                 const float press_anchor_x = blueprint_.root_node < blueprint_.nodes.size()
                     ? blueprint_.nodes[blueprint_.root_node].x : 0.0f;
+                const float rest_head_top = ground_height_at(press_anchor_x)
+                    + authored_standing_head_clearance();
                 const float authored_reach = std::max(
                     std::abs(minimum_x - press_anchor_x),
                     std::abs(maximum_x - press_anchor_x));
@@ -1779,10 +2080,7 @@ namespace runner::sim
         }
         if (course_stage_ == CourseStage::crouch_walk)
         {
-            const float rest_head_top = valid_node(blueprint_.head_node)
-                ? blueprint_.nodes[blueprint_.head_node].y
-                    + particles_[blueprint_.head_node].radius
-                : 4.30f;
+            const float rest_head_top = authored_standing_head_clearance();
             constexpr float runway = 6.5f;
             constexpr float spacing = 4.8f;
             const int first_sequence = std::max(0, static_cast<int>(std::floor(
@@ -2812,8 +3110,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             return;
         rest_support /= static_cast<float>(support_count);
 
-        const float rest_head_top = blueprint_.nodes[blueprint_.head_node].y
-            + particles_[blueprint_.head_node].radius;
+        const float press_anchor_x = blueprint_.root_node < blueprint_.nodes.size()
+            ? blueprint_.nodes[blueprint_.root_node].x : 0.0f;
+        const float rest_head_top = ground_height_at(press_anchor_x)
+            + authored_standing_head_clearance();
         const DuckPressProfile profile = duck_press_profile(
             elapsed_seconds_, course_difficulty_, rest_head_top,
             blueprint_.horizontal_multi_support_plan());
@@ -4171,7 +4471,9 @@ step_not_qualified:
                 - ground_height_at(particles_[blueprint_.head_node].position.x)
             : 0.0f;
         const float rest_head_clearance = valid_node(blueprint_.head_node)
-            ? blueprint_.nodes[blueprint_.head_node].y : 0.0f;
+            ? authored_standing_head_clearance()
+                - particles_[blueprint_.head_node].radius
+            : 0.0f;
         duck_depth_ = std::max(0.0f, rest_head_clearance - head_clearance);
         const float current_uprightness = torso_uprightness();
 

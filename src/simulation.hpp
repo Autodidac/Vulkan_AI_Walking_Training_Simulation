@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1417,6 +1418,59 @@ namespace runner::sim
         hexapod
     };
 
+    [[nodiscard]] inline std::string_view creature_species_slug(
+        CreatureSpecies species) noexcept
+    {
+        switch (species)
+        {
+        case CreatureSpecies::human: return "human";
+        case CreatureSpecies::chicken: return "chicken";
+        case CreatureSpecies::dog: return "dog";
+        case CreatureSpecies::hexapod: return "hexapod";
+        case CreatureSpecies::custom: return "custom";
+        }
+        return "custom";
+    }
+
+    [[nodiscard]] inline std::optional<CreatureSpecies> creature_species_from_slug(
+        std::string_view slug) noexcept
+    {
+        if (slug == "human") return CreatureSpecies::human;
+        if (slug == "chicken") return CreatureSpecies::chicken;
+        if (slug == "dog") return CreatureSpecies::dog;
+        if (slug == "hexapod") return CreatureSpecies::hexapod;
+        if (slug == "custom") return CreatureSpecies::custom;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] inline std::filesystem::path creature_species_rig_filename(
+        CreatureSpecies species)
+    {
+        return std::filesystem::path{ creature_species_slug(species) }
+            .replace_extension(".rig");
+    }
+
+    struct CreatureSpeciesPaths
+    {
+        std::filesystem::path rig{};
+        std::filesystem::path autosave_checkpoint{};
+        std::filesystem::path evolved_rig{};
+        std::filesystem::path autonomy_state{};
+    };
+
+    [[nodiscard]] inline CreatureSpeciesPaths creature_species_paths(
+        CreatureSpecies species)
+    {
+        const std::string slug{ creature_species_slug(species) };
+        const std::string state_prefix = "runner-v0742-" + slug;
+        return CreatureSpeciesPaths{
+            .rig = creature_species_rig_filename(species),
+            .autosave_checkpoint = state_prefix + "-autosave.eppo",
+            .evolved_rig = state_prefix + "-evolved.rig",
+            .autonomy_state = state_prefix + "-autonomy.state"
+        };
+    }
+
     struct CoupledMotorConstraint
     {
         MotorConstraint motor{};
@@ -1479,6 +1533,11 @@ namespace runner::sim
 
     struct CreatureBlueprint
     {
+        // RUNRIG 5+ owns its species identity. Geometry may evolve within the
+        // species contract without silently changing persistence, presentation,
+        // curriculum, or checkpoint ownership. Legacy rigs leave this empty and
+        // are classified from topology once when they are migrated.
+        std::optional<CreatureSpecies> species_identity{};
         std::vector<Vec2> nodes{};
         std::vector<float> radii{};
         std::vector<DistanceConstraint> bones{};
@@ -1714,7 +1773,7 @@ namespace runner::sim
         {
             return !monopedal_gait() && support_seed_count() >= 4u;
         }
-        [[nodiscard]] CreatureSpecies presentation_species() const noexcept
+        [[nodiscard]] CreatureSpecies inferred_species() const noexcept
         {
             if (human_casual_gait_plan())
                 return CreatureSpecies::human;
@@ -1725,6 +1784,31 @@ namespace runner::sim
             if (horizontal_multi_support_plan())
                 return CreatureSpecies::dog;
             return CreatureSpecies::custom;
+        }
+        [[nodiscard]] bool topology_compatible_with_species(
+            CreatureSpecies species) const noexcept
+        {
+            switch (species)
+            {
+            case CreatureSpecies::human:
+                return paired_leg_chains() && !avian_gait()
+                    && !horizontal_body_plan() && paired_manipulator_chains();
+            case CreatureSpecies::chicken:
+                return paired_leg_chains() && avian_gait();
+            case CreatureSpecies::dog:
+                return horizontal_multi_support_plan()
+                    && support_seed_count() >= 4u && support_seed_count() < 6u;
+            case CreatureSpecies::hexapod:
+                return horizontal_multi_support_plan()
+                    && support_seed_count() >= 6u;
+            case CreatureSpecies::custom:
+                return true;
+            }
+            return false;
+        }
+        [[nodiscard]] CreatureSpecies presentation_species() const noexcept
+        {
+            return species_identity.value_or(inferred_species());
         }
         [[nodiscard]] std::array<CoupledMotorConstraint, 4>
             coupled_support_motors() const noexcept
@@ -1774,6 +1858,13 @@ namespace runner::sim
         [[nodiscard]] static CreatureBlueprint crawler4();
         [[nodiscard]] static CreatureBlueprint hexapod();
         [[nodiscard]] static CreatureBlueprint monoped();
+        [[nodiscard]] static CreatureBlueprint for_species(CreatureSpecies species);
+        [[nodiscard]] static CreatureBlueprint load_owned_or_default(
+            CreatureSpecies species, const std::filesystem::path& owned_path,
+            const std::filesystem::path& legacy_path, std::string& source_note);
+        [[nodiscard]] bool human_paired_limb_topology() const noexcept;
+        [[nodiscard]] bool enforce_human_paired_segment_lengths(
+            std::size_t edited_node = std::numeric_limits<std::size_t>::max()) noexcept;
         void rebuild_rest_lengths() noexcept;
         void calibrate_motor(std::size_t motor_index, float negative_degrees = 30.0f,
             float positive_degrees = 30.0f, float power = 0.055f) noexcept;
@@ -1783,6 +1874,9 @@ namespace runner::sim
         [[nodiscard]] std::uint64_t signature() const noexcept;
         [[nodiscard]] bool save(const std::filesystem::path& path, std::string& error) const;
         [[nodiscard]] static CreatureBlueprint load(const std::filesystem::path& path, std::string& error);
+        [[nodiscard]] static std::optional<CreatureBlueprint> load_for_species(
+            const std::filesystem::path& path, CreatureSpecies expected,
+            std::string& error);
     };
 
     [[nodiscard]] inline float authored_foundational_gait_cadence_hz(
@@ -2220,6 +2314,7 @@ namespace runner::sim
         void invalidate(InvalidMotion reason) noexcept;
         [[nodiscard]] float joint_angle(const MotorConstraint& motor) const noexcept;
         [[nodiscard]] float torso_uprightness() const noexcept;
+        [[nodiscard]] float authored_standing_head_clearance() const noexcept;
         [[nodiscard]] float random_unit() noexcept;
         [[nodiscard]] bool valid_node(std::uint16_t index) const noexcept;
         [[nodiscard]] bool contact_cluster_contains(std::uint16_t contact_node,

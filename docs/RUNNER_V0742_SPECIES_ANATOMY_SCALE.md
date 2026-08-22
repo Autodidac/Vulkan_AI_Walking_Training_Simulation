@@ -26,7 +26,7 @@ Back / Turn / Return physically reflects the articulated plant and evaluates con
 
 ## Persistence boundary
 
-Training semantics are 0x0007'4201, checkpoint magic is EPPO42, autonomy state is RUNAUTONOMY 24, and automatic files use runner-v0742-species-anatomy-*. A v0.7.41 autosave may contribute only finite, monotonic lifetime totals. Its controller, optimizer, champion, curriculum mastery, and rig-scoped active state do not resume across this anatomy and control boundary.
+Training semantics are 0x0007'4202, checkpoint magic is EPPO42, and autonomy state is RUNAUTONOMY 24. Human, Chicken, Dog, and Hexapod each own `{species}.rig`, `runner-v0742-{species}-autosave.eppo`, `runner-v0742-{species}-evolved.rig`, and `runner-v0742-{species}-autonomy.state`. A cross-species rig or checkpoint signature is rejected before live state changes. A v0.7.41 autosave may contribute only finite, monotonic lifetime totals; its controller, optimizer, champion, curriculum mastery, and rig-scoped active state do not resume across this anatomy and control boundary.
 
 ## Release contract
 

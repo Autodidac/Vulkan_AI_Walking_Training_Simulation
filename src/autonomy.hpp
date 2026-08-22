@@ -361,7 +361,7 @@ namespace runner::rl
 
         [[nodiscard]] TrainingRoutine training_routine(std::stop_token stop_token);
         void worker_main(std::stop_token stop_token);
-        void consume_persistence_message();
+        [[nodiscard]] bool consume_persistence_message();
         void throttle_after_update() const;
 
         void manage_curriculum_locked();
@@ -434,9 +434,12 @@ namespace runner::rl
         std::uint64_t cached_optimizer_step_{};
         bool cached_has_best_{};
 
-        std::filesystem::path autosave_checkpoint_{ "runner-autosave.eppo" };
-        std::filesystem::path autosave_rig_{ "runner-evolved.rig" };
-        std::filesystem::path autosave_state_{ "runner-autonomy.state" };
+        std::filesystem::path autosave_checkpoint_{
+            sim::creature_species_paths(sim::CreatureSpecies::human).autosave_checkpoint };
+        std::filesystem::path autosave_rig_{
+            sim::creature_species_paths(sim::CreatureSpecies::human).evolved_rig };
+        std::filesystem::path autosave_state_{
+            sim::creature_species_paths(sim::CreatureSpecies::human).autonomy_state };
         sim::CourseStage stage_{ sim::CourseStage::balance };
         float difficulty_{ 0.25f };
         std::uint64_t rig_generation_{};

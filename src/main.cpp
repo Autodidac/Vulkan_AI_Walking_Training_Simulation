@@ -5,6 +5,7 @@
 #include "pixel_art.hpp"
 #include "renderer.hpp"
 #include "rig_training_diagnostic.hpp"
+#include "simulation.hpp"
 #include "ui_layout.hpp"
 #include "ui_frame_probe.hpp"
 #include "view_camera.hpp"
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #ifndef RUNNER_SHADER_DIRECTORY
 #define RUNNER_SHADER_DIRECTORY "shaders"
@@ -182,6 +184,10 @@ namespace
         const std::array required_files{
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.vert.spv",
             std::filesystem::path{ RUNNER_SHADER_DIRECTORY } / "flat.frag.spv",
+            std::filesystem::path{ "human.rig" },
+            std::filesystem::path{ "chicken.rig" },
+            std::filesystem::path{ "dog.rig" },
+            std::filesystem::path{ "hexapod.rig" },
             std::filesystem::path{ "docs" } / "SANDHYBRID_INTEGRATION_BRIDGE.md",
             std::filesystem::path{ "docs" } / "SandHybrid-missioncache.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0728_COURSE_COMPLETION.md",
@@ -235,6 +241,28 @@ namespace
                 return false;
             }
             filesystem_error.clear();
+        }
+
+        const std::array packaged_rigs{
+            std::pair{ std::filesystem::path{ "human.rig" },
+                runner::sim::CreatureSpecies::human },
+            std::pair{ std::filesystem::path{ "chicken.rig" },
+                runner::sim::CreatureSpecies::chicken },
+            std::pair{ std::filesystem::path{ "dog.rig" },
+                runner::sim::CreatureSpecies::dog },
+            std::pair{ std::filesystem::path{ "hexapod.rig" },
+                runner::sim::CreatureSpecies::hexapod }
+        };
+        for (const auto& [relative, expected_species] : packaged_rigs)
+        {
+            std::string rig_error{};
+            if (!runner::sim::CreatureBlueprint::load_for_species(
+                    base_directory / relative, expected_species, rig_error))
+            {
+                error = "Invalid packaged species rig " + relative.string()
+                    + ": " + rig_error;
+                return false;
+            }
         }
 
         const std::filesystem::path asset_directory =
@@ -330,6 +358,8 @@ namespace
             runner::ui_layout::rig_lab_panel_box(content);
         const runner::ui_layout::Box rig_world =
             runner::ui_layout::rig_lab_world_box(content);
+        const runner::ui_layout::Box rig_live =
+            runner::ui_layout::rig_lab_live_box(content);
 
         runner::Application application{};
         auto visible = [&](runner::ui_layout::Box region)
@@ -346,7 +376,7 @@ namespace
         runner::InputState switch_to_rig{};
         switch_to_rig.tab_pressed = true;
         application.frame(switch_to_rig, dt, width, height);
-        if (!visible(rig_panel) || !visible(rig_world))
+        if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_live))
             return false;
 
         const float usable_width = rig_panel.width - 36.0f;
@@ -363,7 +393,7 @@ namespace
                 tab_y
             };
             application.frame(click, dt, width, height);
-            if (!visible(rig_panel) || !visible(rig_world))
+            if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_live))
                 return false;
         }
         return true;

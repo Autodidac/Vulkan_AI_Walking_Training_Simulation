@@ -194,7 +194,40 @@ namespace
             - rig.nodes[rig.motors[0].c].x);
         return foot_gap <= 0.36f && knee_gap <= 0.26f;
     }
-}
+
+    float segment_length(const CreatureBlueprint& rig,
+        std::size_t a, std::size_t b)
+    {
+        return runner::length(rig.nodes[b] - rig.nodes[a]);
+    }
+
+    bool natural_human_paired_anatomy(const CreatureBlueprint& rig)
+    {
+        using runner::sim::CreatureSpecies;
+        if (rig.species_identity != CreatureSpecies::human
+            || !rig.human_paired_limb_topology() || rig.nodes.size() < 13u)
+            return false;
+
+        const auto paired = [&](std::size_t a0, std::size_t a1,
+            std::size_t b0, std::size_t b1)
+        {
+            return std::abs(segment_length(rig, a0, a1)
+                    - segment_length(rig, b0, b1)) <= 1.0e-4f;
+        };
+        const auto paired_radius = [&](std::size_t a, std::size_t b)
+        {
+            return std::abs(rig.radii[a] - rig.radii[b]) <= 1.0e-5f;
+        };
+        const float foot_gap = std::abs(rig.nodes[4].x - rig.nodes[6].x);
+        return paired(0, 3, 0, 5) && paired(3, 4, 5, 6)
+            && paired(7, 8, 10, 11)
+            && paired(8, 9, 11, 12) && paired_radius(3, 5)
+            && paired_radius(4, 6) && paired_radius(7, 10)
+            && paired_radius(8, 11) && paired_radius(9, 12)
+            && foot_gap > 0.05f && foot_gap < 0.75f
+            && rig.nodes[3].y > rig.nodes[4].y
+            && rig.nodes[5].y > rig.nodes[6].y;
+    }}
 
 int main()
 {
@@ -230,8 +263,8 @@ int main()
     const CreatureBlueprint& chicken = production_rigs[1];
     const CreatureBlueprint& dog = production_rigs[2];
     const CreatureBlueprint& hexapod = production_rigs[3];
-    require(compact_side_view_biped(human),
-        "human is still authored as a frontal split");
+    require(natural_human_paired_anatomy(human),
+        "human does not preserve its saved side-view pose and paired limb anatomy");
     require(compact_side_view_biped(chicken),
         "chicken legs are still authored as a frontal split");
     require(dog.support_seed_count() == 4u

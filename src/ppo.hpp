@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4201u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4202u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -203,6 +203,23 @@ namespace runner::rl
         return clamp((target_angle - motor.neutral_angle) / span, 0.0f, 1.0f);
     }
 
+    [[nodiscard]] inline float authored_joint_flexion_direction(
+        const sim::MotorConstraint& motor) noexcept
+    {
+        // A joint's authored neutral can sit on either side of the signed-angle
+        // branch cut. Flexion is the calibrated direction that folds the two
+        // links toward one another, not a hard-coded left/right motor sign.
+        const float neutral = wrap_angle(motor.neutral_angle);
+        if (std::abs(neutral) <= 1.0e-4f)
+            return 1.0f;
+        const float target = motor.neutral_angle
+            - std::copysign(std::min(0.12f, std::abs(neutral)), neutral);
+        const float action = motor_action_for_target_angle(motor, target);
+        if (std::abs(action) <= 1.0e-4f)
+            return -std::copysign(1.0f, neutral);
+        return std::copysign(1.0f, action);
+    }
+
     [[nodiscard]] inline std::uint8_t motor_support_mask(
         const sim::CreatureBlueprint& rig,
         const sim::MotorConstraint& motor) noexcept
@@ -297,26 +314,56 @@ namespace runner::rl
 
         if (stage == sim::CourseStage::duck_press)
         {
+            const float left_hip_direction =
+                authored_joint_flexion_direction(rig.motors[0]);
+            const float left_knee_direction =
+                authored_joint_flexion_direction(rig.motors[1]);
+            const float right_hip_direction =
+                authored_joint_flexion_direction(rig.motors[2]);
+            const float right_knee_direction =
+                authored_joint_flexion_direction(rig.motors[3]);
             const float shared_hip_flex = 0.5f
-                * (std::max(0.0f, -action[0]) + std::max(0.0f, action[2]));
+                * (std::max(0.0f, action[0] * left_hip_direction)
+                    + std::max(0.0f, action[2] * right_hip_direction));
             const float shared_knee_flex = 0.5f
-                * (std::max(0.0f, action[1]) + std::max(0.0f, -action[3]));
+                * (std::max(0.0f, action[1] * left_knee_direction)
+                    + std::max(0.0f, action[3] * right_knee_direction));
             constexpr float chain_strength = 0.88f;
-            action[0] = lerp(action[0], -shared_hip_flex, chain_strength);
-            action[1] = lerp(action[1], shared_knee_flex, chain_strength);
-            action[2] = lerp(action[2], shared_hip_flex, chain_strength);
-            action[3] = lerp(action[3], -shared_knee_flex, chain_strength);
+            action[0] = lerp(action[0],
+                left_hip_direction * shared_hip_flex, chain_strength);
+            action[1] = lerp(action[1],
+                left_knee_direction * shared_knee_flex, chain_strength);
+            action[2] = lerp(action[2],
+                right_hip_direction * shared_hip_flex, chain_strength);
+            action[3] = lerp(action[3],
+                right_knee_direction * shared_knee_flex, chain_strength);
         }
         else if (stage != sim::CourseStage::balance)
         {
             const float pair_strength = stage == sim::CourseStage::crouch_walk
                 ? 0.18f : 0.10f;
-            const float hip_mirror = 0.5f * (action[0] - action[2]);
-            const float knee_mirror = 0.5f * (action[1] - action[3]);
-            action[0] = lerp(action[0], hip_mirror, pair_strength);
-            action[2] = lerp(action[2], -hip_mirror, pair_strength);
-            action[1] = lerp(action[1], knee_mirror, pair_strength);
-            action[3] = lerp(action[3], -knee_mirror, pair_strength);
+            const float left_hip_direction =
+                authored_joint_flexion_direction(rig.motors[0]);
+            const float left_knee_direction =
+                authored_joint_flexion_direction(rig.motors[1]);
+            const float right_hip_direction =
+                authored_joint_flexion_direction(rig.motors[2]);
+            const float right_knee_direction =
+                authored_joint_flexion_direction(rig.motors[3]);
+            const float hip_phase = 0.5f
+                * (action[0] * left_hip_direction
+                    - action[2] * right_hip_direction);
+            const float knee_phase = 0.5f
+                * (action[1] * left_knee_direction
+                    - action[3] * right_knee_direction);
+            action[0] = lerp(action[0],
+                left_hip_direction * hip_phase, pair_strength);
+            action[2] = lerp(action[2],
+                -right_hip_direction * hip_phase, pair_strength);
+            action[1] = lerp(action[1],
+                left_knee_direction * knee_phase, pair_strength);
+            action[3] = lerp(action[3],
+                -right_knee_direction * knee_phase, pair_strength);
         }
 
         std::array<std::size_t, 2> shoulder_indices{};
@@ -358,18 +405,28 @@ namespace runner::rl
             const std::size_t right_shoulder = shoulder_indices[1];
             const std::size_t left_elbow = elbow_indices[0];
             const std::size_t right_elbow = elbow_indices[1];
+            const float left_shoulder_direction =
+                authored_joint_flexion_direction(rig.motors[left_shoulder]);
+            const float right_shoulder_direction =
+                authored_joint_flexion_direction(rig.motors[right_shoulder]);
+            const float left_elbow_direction =
+                authored_joint_flexion_direction(rig.motors[left_elbow]);
+            const float right_elbow_direction =
+                authored_joint_flexion_direction(rig.motors[right_elbow]);
             const float shoulder = 0.5f
-                * (action[left_shoulder] - action[right_shoulder]);
+                * (action[left_shoulder] * left_shoulder_direction
+                    - action[right_shoulder] * right_shoulder_direction);
             const float elbow = 0.5f
-                * (action[left_elbow] - action[right_elbow]);
-            action[left_shoulder] = lerp(
-                action[left_shoulder], shoulder, arm_pair_strength);
-            action[right_shoulder] = lerp(
-                action[right_shoulder], -shoulder, arm_pair_strength);
-            action[left_elbow] = lerp(
-                action[left_elbow], elbow, arm_pair_strength);
-            action[right_elbow] = lerp(
-                action[right_elbow], -elbow, arm_pair_strength);
+                * (action[left_elbow] * left_elbow_direction
+                    - action[right_elbow] * right_elbow_direction);
+            action[left_shoulder] = lerp(action[left_shoulder],
+                left_shoulder_direction * shoulder, arm_pair_strength);
+            action[right_shoulder] = lerp(action[right_shoulder],
+                -right_shoulder_direction * shoulder, arm_pair_strength);
+            action[left_elbow] = lerp(action[left_elbow],
+                left_elbow_direction * elbow, arm_pair_strength);
+            action[right_elbow] = lerp(action[right_elbow],
+                -right_elbow_direction * elbow, arm_pair_strength);
         }
 
         if (environment.longest_stable_stance_seconds() < 1.0f
@@ -392,9 +449,8 @@ namespace runner::rl
             ? 0.0f : environment.duck_obstacle_weight();
         if (environment.duck_active())
             pressure *= 0.55f;
-        auto action = rig.paired_leg_chains()
-            ? balance_teacher_action(environment)
-            : compact_support_teacher_action(environment, pressure * 0.48f);
+        auto action = compact_support_teacher_action(
+            environment, pressure * 0.48f);
         if (rig.paired_leg_chains() && !environment.duck_press_completed())
         {
             const float span_ratio = environment.primary_support_span_ratio();
@@ -407,10 +463,22 @@ namespace runner::rl
             const float hip_flex = std::max(0.025f,
                 0.10f * pressure - span_brake);
             const float knee_flex = (0.60f + drop_deficit * 0.10f) * pressure;
-            action[0] = clamp(action[0] - hip_flex, -0.62f, 0.62f);
-            action[1] = clamp(action[1] + knee_flex, -0.82f, 0.82f);
-            action[2] = clamp(action[2] + hip_flex, -0.62f, 0.62f);
-            action[3] = clamp(action[3] - knee_flex, -0.82f, 0.82f);
+            const float left_hip_direction =
+                authored_joint_flexion_direction(rig.motors[0]);
+            const float left_knee_direction =
+                authored_joint_flexion_direction(rig.motors[1]);
+            const float right_hip_direction =
+                authored_joint_flexion_direction(rig.motors[2]);
+            const float right_knee_direction =
+                authored_joint_flexion_direction(rig.motors[3]);
+            action[0] = clamp(action[0]
+                + left_hip_direction * hip_flex, -0.62f, 0.62f);
+            action[1] = clamp(action[1]
+                + left_knee_direction * knee_flex, -0.82f, 0.82f);
+            action[2] = clamp(action[2]
+                + right_hip_direction * hip_flex, -0.62f, 0.62f);
+            action[3] = clamp(action[3]
+                + right_knee_direction * knee_flex, -0.82f, 0.82f);
         }
         for (std::size_t index = 0; index < rig.active_motor_count; ++index)
         {
@@ -770,11 +838,76 @@ namespace runner::rl
         float stance_center_x{};
     };
 
+    inline constexpr float biped_leg_reach_reserve = 0.010f;
+
+    [[nodiscard]] inline float reachable_biped_leg_height(
+        float chain_length, float horizontal_extent,
+        float desired_height) noexcept
+    {
+        if (!std::isfinite(chain_length) || !std::isfinite(horizontal_extent)
+            || !std::isfinite(desired_height) || chain_length <= 0.01f)
+            return 0.0f;
+        const float maximum_reach = chain_length
+            * (1.0f - biped_leg_reach_reserve);
+        const float horizontal = std::abs(horizontal_extent);
+        const float maximum_height = std::sqrt(std::max(0.0f,
+            maximum_reach * maximum_reach - horizontal * horizontal));
+        return std::max(0.01f, std::min(std::abs(desired_height), maximum_height));
+    }
+
+    [[nodiscard]] inline Vec2 bounded_biped_leg_target(
+        Vec2 desired_target, float chain_length) noexcept
+    {
+        if (!std::isfinite(desired_target.x)
+            || !std::isfinite(desired_target.y)
+            || !std::isfinite(chain_length)
+            || chain_length <= 0.01f)
+            return {};
+        const float maximum_reach = chain_length
+            * (1.0f - biped_leg_reach_reserve);
+        const float radius = length(desired_target);
+        if (!std::isfinite(radius))
+            return {};
+        if (radius <= maximum_reach + 1.0e-6f)
+            return desired_target;
+        if (radius <= 1.0e-6f)
+            return {};
+        return (maximum_reach / radius) * desired_target;
+    }
+
+    [[nodiscard]] inline bool biped_leg_target_within_reach(
+        Vec2 target, float chain_length) noexcept
+    {
+        const float radius = length(target);
+        return std::isfinite(target.x) && std::isfinite(target.y)
+            && std::isfinite(chain_length)
+            && chain_length > 0.01f && std::isfinite(radius)
+            && radius <= chain_length * (1.0f - biped_leg_reach_reserve)
+                + 1.0e-5f;
+    }
+
+    [[nodiscard]] inline float biped_gait_maximum_target_radius(
+        const BipedGaitParameters& parameters) noexcept
+    {
+        const float horizontal_extent = std::abs(parameters.stance_center_x)
+            + 0.5f * std::abs(parameters.step_length);
+        return std::hypot(horizontal_extent, std::abs(parameters.leg_height));
+    }
+
+    [[nodiscard]] inline bool biped_gait_target_within_reach(
+        const BipedGaitParameters& parameters, float chain_length) noexcept
+    {
+        const float radius = biped_gait_maximum_target_radius(parameters);
+        return std::isfinite(chain_length) && chain_length > 0.01f
+            && std::isfinite(radius)
+            && radius <= chain_length * (1.0f - biped_leg_reach_reserve)
+                + 1.0e-5f;
+    }
+
     [[nodiscard]] inline BipedGaitParameters anatomy_scaled_foundational_gait(
         const sim::CreatureBlueprint& rig) noexcept
     {
-        float total_leg_length{};
-        std::size_t measured_chains{};
+        float minimum_leg_length = std::numeric_limits<float>::infinity();
         for (const std::size_t hip_index : { 0u, 2u })
         {
             const std::size_t knee_index = hip_index + 1u;
@@ -789,19 +922,20 @@ namespace runner::rl
                 + length(rig.nodes[knee.c] - rig.nodes[knee.pivot]);
             if (!std::isfinite(chain_length) || chain_length <= 0.01f)
                 continue;
-            total_leg_length += chain_length;
-            ++measured_chains;
+            minimum_leg_length = std::min(minimum_leg_length, chain_length);
         }
-        const float leg_length = measured_chains > 0u
-            ? total_leg_length / static_cast<float>(measured_chains)
-            : 2.30f;
+        const float leg_length = std::isfinite(minimum_leg_length)
+            ? minimum_leg_length : 2.30f;
+        const float step_length = rig.human_casual_gait_plan()
+            ? clamp(leg_length * 0.44f, 0.82f, 1.05f)
+            : clamp(leg_length * 0.34f, 0.62f, 0.82f);
+        const float swing_lift = clamp(leg_length * 0.085f, 0.16f, 0.24f);
+        const float leg_height = clamp(leg_length * 0.93f, 1.88f, 2.40f);
         return {
             sim::foundational_gait_cadence_hz,
-            rig.human_casual_gait_plan()
-                ? clamp(leg_length * 0.44f, 0.82f, 1.05f)
-                : clamp(leg_length * 0.34f, 0.62f, 0.82f),
-            clamp(leg_length * 0.085f, 0.16f, 0.24f),
-            clamp(leg_length * 0.93f, 1.88f, 2.40f),
+            step_length,
+            swing_lift,
+            leg_height,
             1.0f
         };
     }
@@ -840,8 +974,10 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            const Vec2 target{ x + parameters.stance_center_x,
+            const Vec2 desired_target{ x + parameters.stance_center_x,
                 -parameters.leg_height + lift };
+            const Vec2 target = bounded_biped_leg_target(desired_target,
+                upper_length + lower_length);
             const Vec2 authored_upper = rig.nodes[hip.c]
                 - rig.nodes[hip.pivot];
             const Vec2 authored_lower = rig.nodes[knee.c]
@@ -1185,18 +1321,28 @@ namespace runner::rl
         const float pressure = std::max(0.72f, environment.duck_obstacle_weight());
         const float phase = environment.elapsed_seconds() * 2.0f * pi * 1.05f;
         const float swing = std::sin(phase);
-        auto action = rig.paired_leg_chains()
-            ? balance_teacher_action(environment)
-            : compact_support_teacher_action(environment, pressure);
+        auto action = compact_support_teacher_action(environment, pressure);
 
         if (rig.paired_leg_chains())
         {
-            action[0] = clamp(action[0] - 0.24f * pressure + 0.34f * swing, -0.82f, 0.82f);
-            action[1] = clamp(action[1] + 0.50f * pressure
-                + 0.34f * std::max(0.0f, swing), -0.90f, 0.90f);
-            action[2] = clamp(action[2] + 0.24f * pressure - 0.34f * swing, -0.82f, 0.82f);
-            action[3] = clamp(action[3] - 0.50f * pressure
-                - 0.34f * std::max(0.0f, -swing), -0.90f, 0.90f);
+            const float left_hip_direction =
+                authored_joint_flexion_direction(rig.motors[0]);
+            const float left_knee_direction =
+                authored_joint_flexion_direction(rig.motors[1]);
+            const float right_hip_direction =
+                authored_joint_flexion_direction(rig.motors[2]);
+            const float right_knee_direction =
+                authored_joint_flexion_direction(rig.motors[3]);
+            action[0] = clamp(action[0] + left_hip_direction
+                * (0.24f * pressure + 0.34f * swing), -0.82f, 0.82f);
+            action[1] = clamp(action[1] + left_knee_direction
+                * (0.50f * pressure + 0.34f * std::max(0.0f, swing)),
+                -0.90f, 0.90f);
+            action[2] = clamp(action[2] + right_hip_direction
+                * (0.24f * pressure - 0.34f * swing), -0.82f, 0.82f);
+            action[3] = clamp(action[3] + right_knee_direction
+                * (0.50f * pressure + 0.34f * std::max(0.0f, -swing)),
+                -0.90f, 0.90f);
         }
         else
         {
