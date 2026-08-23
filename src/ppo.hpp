@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4301u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4407u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -244,6 +244,114 @@ namespace runner::rl
         return false;
     }
 
+    [[nodiscard]] inline bool motor_drives_manipulator_chain(
+        const sim::CreatureBlueprint& rig, std::size_t motor_index) noexcept
+    {
+        if (motor_index >= rig.active_motor_count)
+            return false;
+        const sim::MotorConstraint& motor = rig.motors[motor_index];
+        if (!motor.enabled || motor_drives_support_branch(rig, motor))
+            return false;
+        if (motor.a == rig.torso_node)
+        {
+            for (std::size_t distal_index = 0;
+                distal_index < rig.active_motor_count; ++distal_index)
+            {
+                const sim::MotorConstraint& distal = rig.motors[distal_index];
+                if (distal.enabled && !motor_drives_support_branch(rig, distal)
+                    && distal.pivot == motor.c)
+                    return true;
+            }
+            return false;
+        }
+        for (std::size_t proximal_index = 0;
+            proximal_index < rig.active_motor_count; ++proximal_index)
+        {
+            const sim::MotorConstraint& proximal = rig.motors[proximal_index];
+            if (proximal.enabled && !motor_drives_support_branch(rig, proximal)
+                && proximal.a == rig.torso_node && proximal.c == motor.pivot)
+                return true;
+        }
+        return false;
+    }
+
+    inline void settle_manipulator_actions_to_rest(
+        const sim::CreatureBlueprint& rig,
+        std::array<float, sim::action_count>& action, float strength) noexcept
+    {
+        strength = clamp(strength, 0.0f, 1.0f);
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            if (!motor_drives_manipulator_chain(rig, index))
+                continue;
+            const float rest = motor_action_for_target_angle(
+                rig.motors[index], rig.rest_joint_angle(index));
+            action[index] = lerp(action[index], rest, strength);
+        }
+    }
+    inline void constrain_human_manipulator_actions_to_body_envelope(
+        const sim::Environment& environment,
+        std::array<float, sim::action_count>& action) noexcept
+    {
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        const auto particles = environment.particles();
+        if (!rig.human_casual_gait_plan()
+            || rig.root_node >= particles.size()
+            || rig.root_node >= rig.nodes.size())
+            return;
+
+        const Vec2 root = particles[rig.root_node].position;
+        for (std::size_t shoulder_index = 0;
+            shoulder_index < rig.active_motor_count; ++shoulder_index)
+        {
+            const sim::MotorConstraint& shoulder = rig.motors[shoulder_index];
+            if (!motor_drives_manipulator_chain(rig, shoulder_index)
+                || shoulder.a != rig.torso_node)
+                continue;
+
+            for (std::size_t elbow_index = 0;
+                elbow_index < rig.active_motor_count; ++elbow_index)
+            {
+                const sim::MotorConstraint& elbow = rig.motors[elbow_index];
+                if (elbow_index == shoulder_index
+                    || !motor_drives_manipulator_chain(rig, elbow_index)
+                    || elbow.pivot != shoulder.c
+                    || elbow.c >= particles.size()
+                    || elbow.c >= rig.nodes.size())
+                    continue;
+
+                const float rest_radius = length(
+                    rig.nodes[elbow.c] - rig.nodes[rig.root_node]);
+                const float integrity_radius = std::max(
+                    1.80f, rest_radius * 3.0f + 0.80f);
+                const float soft_radius = std::max(
+                    rest_radius + 0.35f, integrity_radius - 0.45f);
+                const float hard_radius = std::max(
+                    soft_radius + 0.05f, integrity_radius - 0.18f);
+                const float current_radius = length(
+                    particles[elbow.c].position - root);
+                const float normalized = clamp(
+                    (current_radius - soft_radius)
+                        / std::max(0.05f, hard_radius - soft_radius),
+                    0.0f, 1.0f);
+                const float strength = normalized * normalized
+                    * (3.0f - 2.0f * normalized);
+                if (strength <= 0.0f)
+                    break;
+
+                const float shoulder_rest = motor_action_for_target_angle(
+                    shoulder, rig.rest_joint_angle(shoulder_index));
+                const float elbow_rest = motor_action_for_target_angle(
+                    elbow, rig.rest_joint_angle(elbow_index));
+                action[shoulder_index] = lerp(
+                    action[shoulder_index], shoulder_rest, strength);
+                action[elbow_index] = lerp(
+                    action[elbow_index], elbow_rest, strength);
+                break;
+            }
+        }
+    }
+
     [[nodiscard]] inline bool rig_has_driven_two_link_support_chains(
         const sim::CreatureBlueprint& rig) noexcept
     {
@@ -400,7 +508,11 @@ namespace runner::rl
         }
         if (manipulator_chain_count == 2u)
         {
-            const float arm_pair_strength = (stage == sim::CourseStage::uneven
+            const bool preserve_human_opposed_swing = rig.human_casual_gait_plan()
+                && (stage == sim::CourseStage::uneven
+                    || stage == sim::CourseStage::shuttle);
+            const float arm_pair_strength = preserve_human_opposed_swing ? 0.0f
+                : (stage == sim::CourseStage::uneven
                     || stage == sim::CourseStage::shuttle)
                 ? 0.18f : sim::stage_allows_controlled_flips(stage)
                     ? 0.24f : 0.10f;
@@ -569,9 +681,9 @@ namespace runner::rl
     [[nodiscard]] inline float locomotion_gait_seconds(
         const sim::Environment& environment) noexcept
     {
-        // A turn is a new control frame. Restart the deterministic gait clock
-        // at each shuttle phase so a learned good stance is not asked to resume
-        // at an arbitrary point in the opposite-direction cycle.
+        // Each planted shuttle phase owns a deterministic local gait clock.
+        // This keeps hold/turn transitions in their authored rest pose while
+        // preserving frame-rate-independent timing within every phase.
         return environment.shuttle_enabled()
             ? environment.shuttle_phase_seconds()
             : environment.elapsed_seconds();
@@ -677,8 +789,13 @@ namespace runner::rl
             const float target = signed_angle(reference, desired);
             action[index] = motor_action_for_target_angle(motor, target);
         }
-        return bilateral_joint_synergy_action(environment, action,
-            environment.course_stage());
+        // Leg and arm IK above already establishes authored bend direction,
+        // opposed phase, and the saved side-rest origin. Return that solved cycle
+        // directly; effective_policy_action applies the generic bilateral filter
+        // once at the final composition boundary.
+        for (float& value : action)
+            value = clamp(value, -1.0f, 1.0f);
+        return action;
     }
 
     struct TwoLinkSagittalSolution
@@ -824,8 +941,13 @@ namespace runner::rl
                 break;
             }
         }
-        return bilateral_joint_synergy_action(environment, action,
-            environment.course_stage());
+        // Leg and arm IK above already establishes authored bend direction,
+        // opposed phase, and the saved side-rest origin. Return that solved cycle
+        // directly; effective_policy_action applies the generic bilateral filter
+        // once at the final composition boundary.
+        for (float& value : action)
+            value = clamp(value, -1.0f, 1.0f);
+        return action;
     }
 
     struct BipedGaitParameters
@@ -840,6 +962,17 @@ namespace runner::rl
     };
 
     inline constexpr float biped_leg_reach_reserve = 0.010f;
+    [[nodiscard]] inline float authored_gait_startup_blend(
+        float gait_seconds) noexcept
+    {
+        if (!std::isfinite(gait_seconds))
+            return 0.0f;
+        // Preserve the authored rest pose at spawn, but reach the proven
+        // locomotion envelope before short failed episodes can repeatedly
+        // restart inside the blend and teach the policy to remain still.
+        const float ratio = clamp(gait_seconds / 0.15f, 0.0f, 1.0f);
+        return ratio * ratio * (3.0f - 2.0f * ratio);
+    }
 
     [[nodiscard]] inline float reachable_biped_leg_height(
         float chain_length, float horizontal_extent,
@@ -940,7 +1073,7 @@ namespace runner::rl
         // 0.05--0.12 m at the physical contact cluster and collapsed the
         // opposed gait into long planted glides.
         const float swing_lift = human_stride
-            ? clamp(leg_length * 0.26f, 0.50f, 0.54f)
+            ? clamp(leg_length * 0.19f, 0.38f, 0.42f)
             : clamp(leg_length * 0.085f, 0.16f, 0.24f);
         // Keep the complete phase envelope inside the authored two-link
         // reach. The compact saved Human no longer has the old 1.88 m
@@ -948,7 +1081,7 @@ namespace runner::rl
         const float leg_height = reachable_biped_leg_height(leg_length,
             0.5f * step_length, leg_length * 0.90f);
         BipedGaitParameters parameters{
-            sim::foundational_gait_cadence_hz,
+            human_stride ? 1.02f : sim::foundational_gait_cadence_hz,
             step_length,
             swing_lift,
             leg_height,
@@ -966,8 +1099,15 @@ namespace runner::rl
             // while the right support is forward. Beginning half a cycle out
             // of phase avoids commanding an immediate leg swap and preserves
             // equal clearance after the rig is mirrored for return travel.
-            parameters.phase_offset = pi;
+
             parameters.stance_center_x = 0.5f * (left_offset + right_offset);
+            const float authored_left_offset = left_offset
+                - parameters.stance_center_x;
+            const float authored_progress = clamp(
+                0.5f - authored_left_offset
+                    / std::max(parameters.step_length, 0.001f),
+                0.02f, 0.98f);
+            parameters.phase_offset = pi * authored_progress;
         }
         return parameters;
     }
@@ -978,6 +1118,8 @@ namespace runner::rl
     {
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
+        const float gait_seconds = locomotion_gait_seconds(environment);
+        const float startup_blend = authored_gait_startup_blend(gait_seconds);
         const auto solve_leg = [&](bool left, float phase)
         {
             phase = std::fmod(phase, 2.0f * pi);
@@ -1006,8 +1148,12 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
-            const Vec2 desired_target{ x + parameters.stance_center_x,
+            const Vec2 cyclic_target{ x + parameters.stance_center_x,
                 -parameters.leg_height + lift };
+            const Vec2 authored_target = rig.nodes[knee.c]
+                - rig.nodes[hip.pivot];
+            const Vec2 desired_target = authored_target
+                + startup_blend * (cyclic_target - authored_target);
             const Vec2 target = bounded_biped_leg_target(desired_target,
                 upper_length + lower_length);
             const Vec2 authored_upper = rig.nodes[hip.c]
@@ -1028,7 +1174,7 @@ namespace runner::rl
             action[hip_index] = motor_action_for_target_angle(hip, hip_target);
             action[knee_index] = motor_action_for_target_angle(knee, knee_target);
         };
-        const float phase = locomotion_gait_seconds(environment) * 2.0f * pi
+        const float phase = gait_seconds * 2.0f * pi
             * parameters.cadence_hz + parameters.phase_offset;
         solve_leg(true, phase);
         solve_leg(false, phase + pi);
@@ -1060,6 +1206,8 @@ namespace runner::rl
         {
             for (std::size_t second = first + 1u; second < arm_chain_count; ++second)
             {
+                // Physical side identity follows the authored shoulder anchors.
+                // Hands may cross at side-rest without exchanging support phase.
                 const float first_x = rig.nodes[
                     rig.motors[shoulder_motors[first]].pivot].x;
                 const float second_x = rig.nodes[
@@ -1080,12 +1228,15 @@ namespace runner::rl
                 rig.nodes[shoulder.c] - rig.nodes[shoulder.pivot]);
             const float lower_length = length(
                 rig.nodes[elbow.c] - rig.nodes[elbow.pivot]);
-            const float arm_phase = phase + ((chain & 1u) == 0u ? pi : 0.0f);
+            // The authored pose is the gait origin: hands begin at their saved
+            // side-rest positions, then move in modest opposed swing.
+            const float arm_phase = phase
+                + ((chain & 1u) == 0u ? pi : 0.0f);
             const Vec2 authored_endpoint = rig.nodes[elbow.c]
                 - rig.nodes[shoulder.pivot];
             const Vec2 target = authored_opposed_swing_target(
                 authored_endpoint, arm_phase,
-                (upper_length + lower_length) * 0.10f, 0.0f,
+                (upper_length + lower_length) * 0.040f * startup_blend, 0.0f,
                 parameters.direction);
             const Vec2 authored_upper = rig.nodes[shoulder.c]
                 - rig.nodes[shoulder.pivot];
@@ -1105,8 +1256,13 @@ namespace runner::rl
             action[elbow_index] = motor_action_for_target_angle(elbow,
                 signed_angle(-1.0f * solution.upper, solution.lower));
         }
-        return bilateral_joint_synergy_action(environment, action,
-            environment.course_stage());
+        // Leg and arm IK above already establishes authored bend direction,
+        // opposed phase, and the saved side-rest origin. Return that solved cycle
+        // directly; effective_policy_action applies the generic bilateral filter
+        // once at the final composition boundary.
+        for (float& value : action)
+            value = clamp(value, -1.0f, 1.0f);
+        return action;
     }
 
     [[nodiscard]] inline std::array<float, sim::action_count>
@@ -1142,9 +1298,9 @@ namespace runner::rl
         // flung the trunk; preserving an authored rest endpoint as the stride
         // centre instead produced a double-support shuffle.
         BipedGaitParameters parameters{};
-        parameters.cadence_hz = clamp(cadence_hz * 1.10f, 1.28f, 1.42f);
-        parameters.step_length = chain_length * 0.42f;
-        parameters.swing_lift = chain_length * 0.24f;
+        parameters.cadence_hz = clamp(cadence_hz * 1.30f, 1.55f, 1.74f);
+        parameters.step_length = chain_length * 0.68f;
+        parameters.swing_lift = chain_length * 0.28f;
         // The planted target must preserve the authored root-to-talon reach.
         // Shortening it to 0.88 raised both supports and created false skating.
         parameters.leg_height = chain_length * 0.98f;
@@ -1206,20 +1362,26 @@ namespace runner::rl
         return action;
     }
 
-    [[nodiscard]] inline std::array<float, sim::action_count> walking_teacher_action(
+    [[nodiscard]] inline std::array<float, sim::action_count> raw_walking_teacher_action(
         const sim::Environment& environment) noexcept
     {
         auto action = balance_teacher_action(environment);
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const locomotion::Plan movement = current_locomotion_plan(environment);
-        const float local_direction = movement.direction
-            * environment.facing_direction();
-        if (movement.intent == locomotion::Intent::hold)
+        // Turning is a planted hold, but braking begins while the rig still has
+        // travel momentum. Continue a short opposed support transfer until the
+        // shuttle reaches its backing threshold; dropping straight to static
+        // balance at the boundary lets the torso roll over the planted boots.
+        const bool shuttle_braking = environment.shuttle_enabled()
+            && environment.shuttle_phase() == sim::ShuttlePhase::braking;
+        const float local_direction = shuttle_braking
+            ? -environment.facing_direction()
+            : movement.direction * environment.facing_direction();
+        if (movement.intent == locomotion::Intent::hold && !shuttle_braking)
         {
-            // Braking and turning are explicit support-transfer holds. A zero-
-            // direction gait still cycles its knees and destabilizes a policy
-            // that already walks correctly, so preserve the authored stance
-            // until the shuttle state requests backing or forward traversal.
+            if (rig.human_casual_gait_plan() && environment.shuttle_enabled()
+                && environment.shuttle_phase() == sim::ShuttlePhase::turning)
+                settle_manipulator_actions_to_rest(rig, action, 1.0f);
             return action;
         }
         if (rig.avian_gait())
@@ -1255,9 +1417,9 @@ namespace runner::rl
                 : 2.0f;
             const bool six_supports = rig.support_seed_count() >= 6u;
             const float anatomy_scaled_amplitude = std::clamp(
-                root_clearance * (six_supports ? 1.08f : 0.79f),
-                six_supports ? 0.72f : 0.69f,
-                six_supports ? 1.02f : 0.79f);
+                root_clearance * (six_supports ? 1.55f : 0.79f),
+                six_supports ? 0.95f : 0.69f,
+                six_supports ? 1.42f : 0.79f);
             const float topology_cadence_hz = six_supports
                 ? sim::authored_foundational_gait_cadence_hz(rig)
                 : std::min(sim::authored_foundational_gait_cadence_hz(rig), 1.12f);
@@ -1330,8 +1492,7 @@ namespace runner::rl
                 action[crawl_elbows[1]] = clamp(action[crawl_elbows[1]]
                     - 0.18f * right_lift, -0.55f, 0.55f);
             }
-            return bilateral_joint_synergy_action(environment, action,
-                sim::CourseStage::moving_hazards);
+            return action;
         }
 
         const bool foundational_walk = environment.course_stage()
@@ -1357,7 +1518,16 @@ namespace runner::rl
             // the larger unloading reserve otherwise over-rotates the planted leg.
             biped_parameters.swing_lift = std::min(biped_parameters.swing_lift, 0.34f);
         }
-        if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
+        if (shuttle_braking)
+        {
+            // Use a low, short counter-step while momentum is being arrested.
+            // The phase remains deterministic and restarts at the boundary, so
+            // the rig plants instead of marching or being dragged backward.
+            biped_parameters.cadence_hz *= 0.62f;
+            biped_parameters.step_length *= 0.46f;
+            biped_parameters.swing_lift *= 0.56f;
+        }
+        else if (environment.shuttle_phase() == sim::ShuttlePhase::backing)
         {
             // Backing is a real locomotion skill. Keep the learned opposed
             // gait, but shorten and slow it so the rig can unload its leading
@@ -1367,8 +1537,29 @@ namespace runner::rl
             biped_parameters.step_length *= 0.78f;
             biped_parameters.swing_lift *= 0.82f;
         }
-
         return biped_gait_teacher_action(environment, biped_parameters);
+    }
+
+    [[nodiscard]] inline std::array<float, sim::action_count> walking_teacher_action(
+        const sim::Environment& environment) noexcept
+    {
+        const sim::CreatureBlueprint& rig = environment.blueprint();
+        const auto raw = raw_walking_teacher_action(environment);
+        auto filtered = bilateral_joint_synergy_action(environment,
+            raw, environment.course_stage());
+        // Topology IK already solves each support chain in its authored frame.
+        // Bilateral regularization is useful for relaxed body/manipulator motion,
+        // but processing the contact clock a second time turns return travel into
+        // backward bracing. Keep the exact support targets at every public action
+        // boundary so direct probes and the production code brain agree.
+        for (std::size_t index = 0; index < rig.active_motor_count; ++index)
+        {
+            if (motor_drives_support_branch(rig, rig.motors[index]))
+                filtered[index] = raw[index];
+        }
+        constrain_human_manipulator_actions_to_body_envelope(
+            environment, filtered);
+        return filtered;
     }
     [[nodiscard]] inline std::array<float, sim::action_count> crouch_walk_teacher_action(
         const sim::Environment& environment) noexcept
@@ -1506,6 +1697,15 @@ namespace runner::rl
             return { 0.92f, 0.82f };
         if (rig.avian_gait())
             return { 0.88f, 0.50f };
+        // A two-foot Human cannot leave its support clock entirely to a
+        // retained residual after curriculum handoff. A forward-specialized
+        // policy otherwise learns to keep both boots planted, skate them, and
+        // use the arms as balance poles. Keep the authored opposed leg transfer
+        // exact while leaving a small, bounded upper-body residual for learned
+        // balance and style.
+        if (stage == sim::CourseStage::uneven && rig.human_casual_gait_plan())
+            return { 1.0f, 0.84f };
+
         // Back / Turn / Return is a hybrid code-brain skill for every body
         // plan. Once the learned policy is past curriculum handoff it still
         // needs a persistent, faced-direction support clock; otherwise a
@@ -1552,6 +1752,8 @@ namespace runner::rl
     {
         const sim::CreatureBlueprint& rig = environment.blueprint();
         const std::size_t active = rig.active_motor_count;
+        std::array<float, sim::action_count> hard_support_teacher{};
+        bool hard_support_reflex{};
         auto support_motor = [&rig](std::size_t index) noexcept
         {
             return index < rig.active_motor_count
@@ -1630,7 +1832,7 @@ namespace runner::rl
         else if (stage == sim::CourseStage::uneven
             || stage == sim::CourseStage::shuttle)
         {
-            const auto teacher = walking_teacher_action(environment);
+            const auto teacher = raw_walking_teacher_action(environment);
             const float authority = clamp(lesson_authority, 0.0f, 1.0f);
             // Fragile authored body plans ship a deterministic support reflex as
             // their code brain. Learned weights still control the bounded
@@ -1640,6 +1842,14 @@ namespace runner::rl
             const float support_assist = std::max(0.995f * authority, reflex.support);
             const float body_assist = std::max(0.995f * authority, reflex.body);
             blend_teacher(teacher, support_assist, body_assist);
+            if (reflex.support >= 1.0f)
+            {
+                // The deterministic topology teacher is already solved in the
+                // authored joint frame. Preserve its exact support clock after
+                // regularizing only the learned residual below.
+                hard_support_teacher = teacher;
+                hard_support_reflex = true;
+            }
         }
         else if (stage == sim::CourseStage::crouch_walk)
         {
@@ -1657,7 +1867,7 @@ namespace runner::rl
             || stage == sim::CourseStage::climb_descent
             || stage == sim::CourseStage::combat_course)
         {
-            const auto teacher = walking_teacher_action(environment);
+            const auto teacher = raw_walking_teacher_action(environment);
             const locomotion::Plan movement = current_locomotion_plan(environment);
             const float support_assist = movement.intent == locomotion::Intent::crawl ? 0.78f : movement.intent == locomotion::Intent::flee ? 0.52f : movement.intent == locomotion::Intent::recover ? 0.62f : movement.step_up ? 0.48f : 0.24f;
             const float body_assist = movement.intent == locomotion::Intent::crawl ? 0.60f : movement.intent == locomotion::Intent::flee ? 0.34f : 0.20f;
@@ -1683,7 +1893,7 @@ namespace runner::rl
             || runtime_plan.intent == locomotion::Intent::flee
             || runtime_plan.intent == locomotion::Intent::crawl)
         {
-            const auto safety_teacher = walking_teacher_action(environment);
+            const auto safety_teacher = raw_walking_teacher_action(environment);
             const RuntimeSafetyAuthority authority =
                 runtime_safety_authority(runtime_plan);
             blend_teacher(safety_teacher, authority.support, authority.body);
@@ -1707,7 +1917,9 @@ namespace runner::rl
                     policy_action[index] = clamp(policy_action[index], -0.32f, 0.32f);
             }
         }
-        if (environment.longest_stable_stance_seconds() < 1.0f && !sim::stage_allows_controlled_flips(stage))
+        if (environment.longest_stable_stance_seconds() < 1.0f
+            && !sim::stage_allows_controlled_flips(stage)
+            && !hard_support_reflex)
         {
             for (std::size_t index = 0; index < active; ++index)
             {
@@ -1729,6 +1941,25 @@ namespace runner::rl
                     policy_action[index] = clamp(policy_action[index], -limit, limit);
             }
         }
+        // A full support reflex is the locomotion code brain for fragile plans;
+        // restore it after generic synergy so learned residuals cannot erase the
+        // opposed contact-transfer clock or accidentally process it twice.
+        if (hard_support_reflex)
+        {
+            for (std::size_t index = 0; index < active; ++index)
+            {
+                if (support_motor(index))
+                    policy_action[index] = hard_support_teacher[index];
+            }
+        }
+        if (rig.human_casual_gait_plan() && environment.shuttle_enabled())
+        {
+            const sim::ShuttlePhase phase = environment.shuttle_phase();
+            if (phase == sim::ShuttlePhase::turning)
+                settle_manipulator_actions_to_rest(rig, policy_action, 1.0f);
+        }
+        constrain_human_manipulator_actions_to_body_envelope(
+            environment, policy_action);
         return policy_action;
     }
 

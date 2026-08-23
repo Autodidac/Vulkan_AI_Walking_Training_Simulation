@@ -473,10 +473,14 @@ namespace runner::sim
         std::uint32_t alternating_steps, std::uint32_t limb_crossings,
         float distance, float elapsed_seconds, float support_span_ratio) noexcept
     {
+        // A strict segment crossing is a passing-phase sample, not one event
+        // per support transfer. Sustained travel with at least one observed
+        // passing phase per four transfers is sagittal gait; a true crab or
+        // marching exploit still produces few or no crossings.
         const bool established_sagittal_crossing = alternating_steps >= 6u
             && limb_crossings >= 4u
-            && static_cast<std::uint64_t>(limb_crossings) * 5u
-                >= static_cast<std::uint64_t>(alternating_steps) * 3u;
+            && static_cast<std::uint64_t>(limb_crossings) * 4u
+                >= static_cast<std::uint64_t>(alternating_steps);
         return elapsed_seconds >= 4.0f
             && distance >= 0.75f
             && !established_sagittal_crossing
@@ -1494,7 +1498,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0743-" + slug;
+        const std::string state_prefix = "runner-v0744-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -1917,7 +1921,7 @@ namespace runner::sim
         if (blueprint.paired_leg_chains())
             return foundational_gait_cadence_hz;
         if (blueprint.support_seed_count() >= 6u)
-            return 1.20f;
+            return 1.50f;
         float support_height = std::numeric_limits<float>::infinity();
         for (std::size_t node = 0; node < blueprint.nodes.size(); ++node)
         {
@@ -2337,6 +2341,7 @@ namespace runner::sim
         void project_structure_rigid(float dt) noexcept;
         void separate_support_clusters() noexcept;
         void stabilize_passive_appendages() noexcept;
+        void stabilize_human_manipulator_envelope() noexcept;
         void stabilize_balance_posture() noexcept;
         void stabilize_duck_posture() noexcept;
         [[nodiscard]] bool articulated_toe_motor(bool left,

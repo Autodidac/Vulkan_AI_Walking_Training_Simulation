@@ -31,6 +31,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md
         docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md
         docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md
+        docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md
         assets/optional/species_runtime/chicken_body_side.ppm
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
@@ -82,6 +83,9 @@ foreach(required IN ITEMS
         tools/generate_runner_armor_assets.py
         tools/art_sources/runner_v0729_modular_atlas.png
         tools/art_sources/runner_user_modular_sheet.png
+        tools/art_sources/runner_v0744_dog_modules_source.png
+        tools/generate_species_art_assets.py
+        tests/v0744_dog_art_rig_tests.cpp
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
         tests/v0720_ui_tests.cpp
@@ -107,7 +111,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.43 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.44 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -128,6 +132,8 @@ foreach(reference IN ITEMS
         "Runner.V0737LocomotionTerrain"
         "RunnerV0742SpeciesRigTests"
         "Runner.V0742SpeciesRig"
+        "RunnerV0744DogArtRigTests"
+        "Runner.V0744DogArtRig"
         "RunnerRigDefaults"
         "human.rig"
         "chicken.rig"
@@ -163,6 +169,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
         "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
+        "RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -341,8 +348,8 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 25"
-        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24 && version != 25"
+        "RUNAUTONOMY 26"
+        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24 && version != 25 && version != 26"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -355,7 +362,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4301u"
+        "training_semantics_version = 0x0007'4407u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -481,7 +488,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0743-"
+        "runner-v0744-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -835,4 +842,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.43 repository hygiene passed")
+message(STATUS "Runner v0.7.44 repository hygiene passed")

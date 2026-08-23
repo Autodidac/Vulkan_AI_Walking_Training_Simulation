@@ -30,7 +30,7 @@ namespace runner::rl
             {
                 std::filesystem::path v0742_candidate = checkpoint;
                 std::string v0742_name = v0742_candidate.filename().string();
-                constexpr std::string_view current_prefix{ "runner-v0743-" };
+                constexpr std::string_view current_prefix{ "runner-v0744-" };
                 constexpr std::string_view prior_prefix{ "runner-v0742-" };
                 if (v0742_name.starts_with(current_prefix))
                 {
@@ -99,7 +99,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.43 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.44 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -281,7 +281,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.43 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.44 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

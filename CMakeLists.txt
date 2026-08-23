@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.43 LANGUAGES CXX)
+project(Runner VERSION 0.7.44 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -214,10 +214,17 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         VERBATIM)
 
     install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
+    if(WIN32)
+        install(FILES
+            "$<TARGET_FILE_DIR:Runner>/SDL3.dll"
+            "$<TARGET_FILE_DIR:Runner>/vulkan-1.dll"
+            DESTINATION . COMPONENT RunnerRuntime)
+    endif()
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION . COMPONENT RunnerRuntime)
     install(FILES ${RUNNER_RIG_OUTPUTS} DESTINATION . COMPONENT RunnerRuntime)
     install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders COMPONENT RunnerRuntime)
@@ -256,6 +263,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
@@ -519,6 +527,18 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0742SpeciesRig
         COMMAND RunnerV0742SpeciesRigTests)
     set_tests_properties(Runner.V0742SpeciesRig PROPERTIES TIMEOUT 180)
+    add_executable(RunnerV0744DogArtRigTests
+        tests/v0744_dog_art_rig_tests.cpp)
+    target_link_libraries(RunnerV0744DogArtRigTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0744DogArtRigTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(RunnerV0744DogArtRigTests PRIVATE
+        RUNNER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(RunnerV0744DogArtRigTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0744DogArtRigTests)
+    add_test(NAME Runner.V0744DogArtRig COMMAND RunnerV0744DogArtRigTests)
+    set_tests_properties(Runner.V0744DogArtRig PROPERTIES TIMEOUT 60)
+
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

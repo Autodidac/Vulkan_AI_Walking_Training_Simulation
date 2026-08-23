@@ -78,8 +78,11 @@ namespace runner::rl
             {
                 ImitationSample sample{};
                 sample.observation = environment.observation();
-                sample.action = walking_teacher_action(environment);
-                const sim::StepResult result = environment.step(sample.action);
+                // Store the pre-filter action the policy must predict, while the
+                // demonstration environment executes the filtered public action.
+                sample.action = raw_walking_teacher_action(environment);
+                const sim::StepResult result = environment.step(
+                    walking_teacher_action(environment));
                 const bool clean_demonstration_frame = environment.valid_motion()
                     && !environment.non_foot_grounded()
                     && environment.uprightness() > 0.62f

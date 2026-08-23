@@ -1,3 +1,13 @@
+## v0.7.44 Dog art and species-rig assembly
+
+- Gives Dog a purpose-built exact-side-view modular robot atlas with canine body, head, tail, articulated leg, and planted paw modules instead of stretched Human pieces.
+- Rebuilds Dog, Chicken, and Hexapod factory poses around species-correct proportions, paired chain lengths, forward head orientation, and one coherent support plane while preserving the saved Human rig.
+- Uses species art profiles to cover physical joints cleanly, remove visible fallback strings in normal rendering, and keep Live, PIP, and Rig Lab on the same assembly path.
+- Verifies Dog art dimensions, visible landmarks, transparent-key gutters, deterministic four-species construction, paired support geometry, malformed contacts, and cross-species topology rejection.
+- Reproduces the runtime species modules with `python tools/generate_species_art_assets.py`; the generator validates the checked source image by SHA-256 before extraction.
+- Imports the latest saved Human rig as the neutral authority and applies exact opposed leg transfer plus bounded contralateral arm swing around that stance; learned residuals cannot suppress the planted-support clock or erase startup body motion.
+- Advances isolated learned state to training semantics 0x0007'4407, EPPO44, RUNAUTONOMY 26, and species-scoped runner-v0744-* paths, with lifetime-only migration from v0.7.43. See docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md.
+
 ## v0.7.43 authored pose and live morphology
 
 - Makes the saved Human rig the authoritative neutral stance used by reset, balance, observations, teacher targets, and retained-policy playback.
@@ -165,7 +175,7 @@
 - Distinguishes a real multi-legged support transfer from fully planted skating without weakening the planted anti-skating rejection.
 - Removes conveyor-derived locomotion credit from rollouts, champion evaluation, and the large preview; progress must come from simulated rig displacement.
 - Adds `Runner.exe --diagnose-rig-training
-Runner.exe --diagnose-walk-eye`, a deterministic 100-update biped/quadruped/crawler/hexapod comparison with distance, stride, invalid-seed, and preview-reset evidence.
+`Runner.exe --diagnose-rig-training`, a deterministic bounded Human/Chicken/Dog/Hexapod comparison with retained distance, gait-transfer, invalid-seed, and preview-reset evidence.
 - Advances every runtime simulation at fixed 60 Hz regardless of render cadence; 20, 60, and 240 Hz produce the same preview physics state.
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.

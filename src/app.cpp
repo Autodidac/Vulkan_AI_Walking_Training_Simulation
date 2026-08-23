@@ -173,51 +173,105 @@ namespace runner
             {
                 const auto quantize = [](float channel) noexcept
                 {
-                    return std::round(std::clamp(channel, 0.0f, 1.0f) * 15.0f)
-                        / 15.0f;
+                    return std::round(std::clamp(channel, 0.0f, 1.0f) * 7.0f)
+                        / 7.0f;
                 };
                 color.r = quantize(color.r);
                 color.g = quantize(color.g);
                 color.b = quantize(color.b);
                 return color;
             };
+            const auto same_color = [](Color lhs, Color rhs) noexcept
+            {
+                return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b
+                    && lhs.a == rhs.a;
+            };
+            const auto emit_rectangle = [&](int x_begin, int x_end,
+                int y_begin, int y_end, Color color)
+            {
+                color.a *= alpha;
+                const float u0 = static_cast<float>(x_begin) * inverse_width;
+                const float u1 = static_cast<float>(x_end) * inverse_width;
+                const float v0 = static_cast<float>(y_begin) * inverse_height;
+                const float v1 = static_cast<float>(y_end) * inverse_height;
+                const Vec2 p00 = point(u0, v0);
+                const Vec2 p10 = point(u1, v0);
+                const Vec2 p11 = point(u1, v1);
+                const Vec2 p01 = point(u0, v1);
+                canvas.triangle(p00, p10, p11, color);
+                canvas.triangle(p00, p11, p01, color);
+            };
+            const std::size_t pixel_count = static_cast<std::size_t>(
+                art.width * art.height);
+            std::vector<Color> presented(pixel_count);
+            std::vector<std::uint8_t> drawable(pixel_count, 0u);
+            std::vector<std::uint8_t> consumed(pixel_count, 0u);
             for (int y = 0; y < art.height; ++y)
             {
-                int x = 0;
-                while (x < art.width)
+                for (int x = 0; x < art.width; ++x)
                 {
-                    const Color source_color = art.pixels[static_cast<std::size_t>(
-                        y * art.width + x)];
+                    const std::size_t index = static_cast<std::size_t>(
+                        y * art.width + x);
+                    const Color source_color = art.pixels[index];
                     if (art.transparent(source_color))
-                    {
-                        ++x;
                         continue;
-                    }
-                    Color color = presentation_color(source_color);
-                    int run_end = x + 1;
-                    while (run_end < art.width)
+                    presented[index] = presentation_color(source_color);
+                    drawable[index] = 1u;
+                }
+            }
+            for (int y = 0; y < art.height; ++y)
+            {
+                for (int x = 0; x < art.width; ++x)
+                {
+                    const std::size_t origin = static_cast<std::size_t>(
+                        y * art.width + x);
+                    if (drawable[origin] == 0u || consumed[origin] != 0u)
+                        continue;
+                    const Color color = presented[origin];
+                    int maximum_width = 0;
+                    while (x + maximum_width < art.width)
                     {
-                        const Color next_source = art.pixels[static_cast<std::size_t>(
-                            y * art.width + run_end)];
-                        const Color next = presentation_color(next_source);
-                        if (art.transparent(next_source) || next.r != color.r
-                            || next.g != color.g || next.b != color.b
-                            || next.a != color.a)
+                        const std::size_t candidate = static_cast<std::size_t>(
+                            y * art.width + x + maximum_width);
+                        if (drawable[candidate] == 0u || consumed[candidate] != 0u
+                            || !same_color(presented[candidate], color))
                             break;
-                        ++run_end;
+                        ++maximum_width;
                     }
-                    color.a *= alpha;
-                    const float u0 = static_cast<float>(x) * inverse_width;
-                    const float u1 = static_cast<float>(run_end) * inverse_width;
-                    const float v0 = static_cast<float>(y) * inverse_height;
-                    const float v1 = static_cast<float>(y + 1) * inverse_height;
-                    const Vec2 p00 = point(u0, v0);
-                    const Vec2 p10 = point(u1, v0);
-                    const Vec2 p11 = point(u1, v1);
-                    const Vec2 p01 = point(u0, v1);
-                    canvas.triangle(p00, p10, p11, color);
-                    canvas.triangle(p00, p11, p01, color);
-                    x = run_end;
+                    int best_width = maximum_width;
+                    int best_height = 1;
+                    int row_width = maximum_width;
+                    for (int scan_y = y + 1; scan_y < art.height; ++scan_y)
+                    {
+                        int compatible_width = 0;
+                        while (compatible_width < row_width)
+                        {
+                            const std::size_t candidate = static_cast<std::size_t>(
+                                scan_y * art.width + x + compatible_width);
+                            if (drawable[candidate] == 0u || consumed[candidate] != 0u
+                                || !same_color(presented[candidate], color))
+                                break;
+                            ++compatible_width;
+                        }
+                        row_width = compatible_width;
+                        if (row_width == 0)
+                            break;
+                        const int height = scan_y - y + 1;
+                        if (row_width * height > best_width * best_height)
+                        {
+                            best_width = row_width;
+                            best_height = height;
+                        }
+                    }
+                    for (int fill_y = y; fill_y < y + best_height; ++fill_y)
+                    {
+                        for (int fill_x = x; fill_x < x + best_width; ++fill_x)
+                        {
+                            consumed[static_cast<std::size_t>(
+                                fill_y * art.width + fill_x)] = 1u;
+                        }
+                    }
+                    emit_rectangle(x, x + best_width, y, y + best_height, color);
                 }
             }
         }
@@ -1212,6 +1266,55 @@ namespace runner
             }
         }
 
+        struct SpeciesArtProfile
+        {
+            float limb_ratio;
+            float limb_minimum;
+            float limb_maximum;
+            float joint_overlap;
+            float body_ratio;
+            float body_minimum;
+            float body_maximum;
+            float body_rear_overlap;
+            float body_front_overlap;
+            float foot_length;
+            float foot_thickness;
+            float tail_length;
+            float tail_ratio;
+            float head_scale;
+            float head_minimum;
+            float head_maximum;
+            float head_ratio;
+        };
+
+        [[nodiscard]] static constexpr SpeciesArtProfile species_art_profile(
+            sim::CreatureSpecies species) noexcept
+        {
+            switch (species)
+            {
+            case sim::CreatureSpecies::chicken:
+                return { 0.34f, 0.055f, 0.15f, 0.035f,
+                    0.62f, 0.18f, 0.36f, 0.03f, 0.04f,
+                    0.15f, 0.09f, 0.25f, 0.58f,
+                    3.10f, 0.22f, 0.38f, 0.75f };
+            case sim::CreatureSpecies::dog:
+                return { 0.42f, 0.075f, 0.18f, 0.060f,
+                    0.52f, 0.22f, 0.42f, 0.08f, 0.07f,
+                    0.22f, 0.105f, 0.34f, 0.56f,
+                    3.00f, 0.25f, 0.44f, 0.72f };
+            case sim::CreatureSpecies::hexapod:
+                return { 0.33f, 0.060f, 0.16f, 0.045f,
+                    0.46f, 0.18f, 0.38f, 0.05f, 0.05f,
+                    0.16f, 0.08f, 0.0f, 0.0f,
+                    2.80f, 0.22f, 0.38f, 0.72f };
+            default:
+                return { 0.30f, 0.050f, 0.18f, 0.040f,
+                    0.45f, 0.14f, 0.42f, 0.04f, 0.04f,
+                    0.18f, 0.08f, 0.30f, 0.60f,
+                    2.80f, 0.22f, 0.40f, 0.74f };
+            }
+        }
+
         void draw_species_creature(const sim::Environment& environment, Rect viewport,
             float camera, float scale, bool show_nodes)
         {
@@ -1220,6 +1323,7 @@ namespace runner
             const SpeciesArtBundle* bundle = species_art_for(rig.presentation_species());
             const bool use_art = optional_art_enabled && bundle != nullptr && bundle->loaded();
             const sim::CreatureSpecies species = rig.presentation_species();
+            const SpeciesArtProfile profile = species_art_profile(species);
             const bool mirrored = environment.facing_direction() < 0.0f;
             const bool transverse_mirror = art::presented_limb_transverse_mirror(
                 environment.facing_direction());
@@ -1242,12 +1346,15 @@ namespace runner
                 if (coupled.motor.enabled)
                     motors.push_back(coupled.motor);
 
-            for (const sim::DistanceConstraint& bone : rig.bones)
+            if (!use_art || show_nodes)
             {
-                if (bone.a >= particles.size() || bone.b >= particles.size())
-                    continue;
-                canvas.line(point(bone.a), point(bone.b),
-                    std::max(1.0f, scale * 0.014f), rgb(0x9bd9e8, 0.56f));
+                for (const sim::DistanceConstraint& bone : rig.bones)
+                {
+                    if (bone.a >= particles.size() || bone.b >= particles.size())
+                        continue;
+                    canvas.line(point(bone.a), point(bone.b),
+                        std::max(1.0f, scale * 0.014f), rgb(0x9bd9e8, 0.56f));
+                }
             }
 
             auto draw_limb_pass = [&](int pass)
@@ -1271,14 +1378,14 @@ namespace runner
                     if (use_art)
                         sprite = has_distal_motor
                             ? &bundle->upper_leg : &bundle->lower_leg;
-                    const Vec2 beginning = point(motor.pivot);
-                    const Vec2 ending = point(motor.c);
+                    Vec2 beginning = point(motor.pivot);
+                    Vec2 ending = point(motor.c);
+                    const Vec2 direction = normalized(ending - beginning, { 1.0f, 0.0f });
+                    beginning = beginning - direction * scale * profile.joint_overlap;
+                    ending = ending + direction * scale * profile.joint_overlap;
                     const float span = length(ending - beginning);
-                    const float species_ratio = species == sim::CreatureSpecies::chicken
-                        ? 0.30f : species == sim::CreatureSpecies::dog ? 0.28f : 0.24f;
-                    const float thickness = std::clamp(
-                        span * species_ratio,
-                        scale * 0.045f, scale * 0.22f);
+                    const float thickness = std::clamp(span * profile.limb_ratio,
+                        scale * profile.limb_minimum, scale * profile.limb_maximum);
                     if (sprite != nullptr && sprite->loaded())
                         draw_oriented_pixel_art(canvas, *sprite, beginning, ending,
                             thickness, near ? 0.98f : 0.72f,
@@ -1296,9 +1403,11 @@ namespace runner
                     if (terminal && use_art && bundle->foot.loaded())
                     {
                         const float facing = environment.facing_direction();
-                        const Vec2 toe = point(motor.c) + Vec2{ facing * scale * 0.20f, 0.0f };
-                        draw_oriented_pixel_art(canvas, bundle->foot, point(motor.c), toe,
-                            std::max(thickness * 1.05f, scale * 0.075f),
+                        const Vec2 contact = point(motor.c);
+                        const Vec2 toe = contact
+                            + Vec2{ facing * scale * profile.foot_length, 0.0f };
+                        draw_oriented_pixel_art(canvas, bundle->foot, contact, toe,
+                            std::max(thickness, scale * profile.foot_thickness),
                             near ? 0.98f : 0.72f, transverse_mirror, false);
                     }
                 }
@@ -1319,30 +1428,26 @@ namespace runner
             }
             if (body_a < particles.size() && body_b < particles.size())
             {
-                const Vec2 beginning = point(body_a);
-                const Vec2 ending = point(body_b);
+                Vec2 beginning = point(body_a);
+                Vec2 ending = point(body_b);
+                const Vec2 body_direction = normalized(ending - beginning,
+                    { environment.facing_direction(), 0.0f });
+                beginning = beginning - body_direction * scale * profile.body_rear_overlap;
+                ending = ending + body_direction * scale * profile.body_front_overlap;
                 const float body_span = length(ending - beginning);
-                const float body_ratio = species == sim::CreatureSpecies::chicken
-                    ? 0.54f : species == sim::CreatureSpecies::dog ? 0.46f : 0.40f;
-                const float thickness = std::clamp(body_span * body_ratio,
-                    scale * 0.12f, scale * 0.48f);
+                const float thickness = std::clamp(body_span * profile.body_ratio,
+                    scale * profile.body_minimum, scale * profile.body_maximum);
                 if (use_art && bundle->body.loaded())
                     draw_oriented_pixel_art(canvas, bundle->body, beginning, ending,
                         thickness, 0.98f, transverse_mirror, false);
                 else
                     canvas.line(beginning, ending, thickness, rgb(0x8ba0aa));
 
-                if (use_art && bundle->tail.loaded()
-                    && (species == sim::CreatureSpecies::chicken
-                        || species == sim::CreatureSpecies::dog))
+                if (use_art && bundle->tail.loaded() && profile.tail_length > 0.0f)
                 {
-                    const Vec2 body_direction = normalized(ending - beginning,
-                        { environment.facing_direction(), 0.0f });
-                    const float tail_length = scale * (species
-                        == sim::CreatureSpecies::chicken ? 0.28f : 0.38f);
                     draw_oriented_pixel_art(canvas, bundle->tail, beginning,
-                        beginning - body_direction * tail_length,
-                        thickness * 0.62f, 0.90f,
+                        beginning - body_direction * scale * profile.tail_length,
+                        thickness * profile.tail_ratio, 0.90f,
                         transverse_mirror, false);
                 }
             }
@@ -1351,14 +1456,13 @@ namespace runner
                 const Vec2 head = point(rig.head_node);
                 const float facing = environment.facing_direction();
                 const float head_length = std::clamp(
-                    particles[rig.head_node].radius * scale * 2.4f,
-                    scale * 0.18f, scale * 0.42f);
-                Vec2 beginning = head - Vec2{ facing * head_length * 0.45f, 0.0f };
-                Vec2 ending = head + Vec2{ facing * head_length * 0.55f, 0.0f };
+                    particles[rig.head_node].radius * scale * profile.head_scale,
+                    scale * profile.head_minimum, scale * profile.head_maximum);
+                const Vec2 beginning = head - Vec2{ facing * head_length * 0.45f, 0.0f };
+                const Vec2 ending = head + Vec2{ facing * head_length * 0.55f, 0.0f };
                 if (use_art && bundle->head.loaded())
                     draw_oriented_pixel_art(canvas, bundle->head,
-                        beginning, ending, std::max(scale * 0.15f,
-                            head_length * 0.84f), 0.98f,
+                        beginning, ending, head_length * profile.head_ratio, 0.98f,
                         transverse_mirror, false);
                 else
                     canvas.circle(head, std::max(3.0f,
@@ -1370,7 +1474,6 @@ namespace runner
                     canvas.circle(world_to_screen(particle.position, viewport, camera, scale),
                         std::max(2.0f, particle.radius * scale * 0.22f), accent, 12);
         }
-
         void draw_creature(const sim::Environment& environment, Rect viewport, float camera,
             float scale, bool show_nodes = false)
         {
@@ -1663,11 +1766,11 @@ namespace runner
                     const bool support_limb = support_mask != 0u;
                     const float thickness_ratio = support_limb
                         ? (has_distal_motor ? 0.52f : 0.48f)
-                        : (has_distal_motor ? 0.58f : 0.44f);
+                        : (has_distal_motor ? 0.52f : 0.34f);
                     const float minimum_thickness = support_limb
-                        ? 23.0f : 16.0f;
+                        ? 23.0f : 14.0f;
                     const float maximum_thickness = support_limb
-                        ? 74.0f : 54.0f;
+                        ? 74.0f : 48.0f;
                     const float thickness = std::clamp(
                         span * thickness_ratio * assembled_art_scale,
                         art::scaled_pixels(minimum_thickness, art_pixel_scale),

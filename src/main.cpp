@@ -206,6 +206,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0741_FOUR_RIG_NATURAL_GAIT.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
@@ -243,6 +244,25 @@ namespace
             }
             filesystem_error.clear();
         }
+
+#ifdef _WIN32
+        const std::array required_windows_runtime_files{
+            std::filesystem::path{ "SDL3.dll" },
+            std::filesystem::path{ "vulkan-1.dll" }
+        };
+        for (const std::filesystem::path& relative : required_windows_runtime_files)
+        {
+            const std::filesystem::path absolute = base_directory / relative;
+            if (!std::filesystem::is_regular_file(absolute, filesystem_error))
+            {
+                error = "Missing packaged Windows runtime dependency: " + absolute.string();
+                if (filesystem_error)
+                    error += " (" + filesystem_error.message() + ")";
+                return false;
+            }
+            filesystem_error.clear();
+        }
+#endif
 
         const std::array packaged_rigs{
             std::pair{ std::filesystem::path{ "human.rig" },
@@ -492,14 +512,33 @@ int main(int argc, char** argv)
         const runner::diagnostics::WalkEyeTestProof proof =
             runner::diagnostics::run_walk_eye_test_proof();
         std::printf(
+            "last evaluation: count=%llu distance=%.3fm strides=%.2f "
+            "survival=%.3fs valid=%u quality=0x%016llX invalid=%u "
+            "reject=0x%08X reason=%.*s\n",
+            static_cast<unsigned long long>(proof.evaluation_count),
+            proof.evaluation_distance, proof.evaluation_stride_events,
+            proof.evaluation_survival, proof.evaluation_valid ? 1u : 0u,
+            static_cast<unsigned long long>(proof.evaluation_quality_key),
+            proof.evaluation_invalid_runs, proof.evaluation_rejection_mask,
+            static_cast<int>(runner::sim::invalid_motion_name(
+                proof.evaluation_invalid_reason).size()),
+            runner::sim::invalid_motion_name(
+                proof.evaluation_invalid_reason).data());
+        std::printf(
             "Runner %s walk-eye proof: %s; updates=%llu retained=%llu "
             "authority=%.3f mean=%.3fm/%.2f steps invalid=%u/6 "
-            "display=%.3fm/%u steps/%u crossings scissor=%.3fs seed=%u\n",
+            "reject=0x%08X reason=%.*s display=%.3fm/%u steps/%u crossings "
+            "scissor=%.3fs seed=%u\n",
             RUNNER_VERSION, proof.passed ? "passed" : "failed",
             static_cast<unsigned long long>(proof.updates),
             static_cast<unsigned long long>(proof.retained_update),
             proof.teacher_authority, proof.retained_distance,
             proof.retained_stride_events, proof.retained_invalid_runs,
+            proof.retained_rejection_mask,
+            static_cast<int>(runner::sim::invalid_motion_name(
+                proof.retained_invalid_reason).size()),
+            runner::sim::invalid_motion_name(
+                proof.retained_invalid_reason).data(),
             proof.displayed_distance, proof.displayed_steps,
             proof.displayed_crossings, proof.displayed_max_scissor_seconds,
             proof.selected_seed);

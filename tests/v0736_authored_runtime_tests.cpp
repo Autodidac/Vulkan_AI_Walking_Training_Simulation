@@ -67,12 +67,12 @@ int main() {
     };
     require(humanoid.nodes.size() == 13u
             && humanoid.species_identity == sim::CreatureSpecies::human
-            && std::abs(humanoid.nodes[0].x + 0.0572309196f) < 1.0e-5f
-            && std::abs(humanoid.nodes[0].y - 2.59142852f) < 1.0e-5f
-            && std::abs(humanoid.nodes[1].x + 0.171161979f) < 1.0e-5f
-            && std::abs(humanoid.nodes[1].y - 3.80571461f) < 1.0e-5f
-            && std::abs(humanoid.nodes[2].x + 0.177114367f) < 1.0e-5f
-            && std::abs(humanoid.nodes[2].y - 4.18666649f) < 1.0e-5f
+            && std::abs(humanoid.nodes[0].x + 0.179952502f) < 1.0e-5f
+            && std::abs(humanoid.nodes[0].y - 2.61523819f) < 1.0e-5f
+            && std::abs(humanoid.nodes[1].x - 0.00281051546f) < 1.0e-5f
+            && std::abs(humanoid.nodes[1].y - 3.76404762f) < 1.0e-5f
+            && std::abs(humanoid.nodes[2].x - 0.0123144165f) < 1.0e-5f
+            && std::abs(humanoid.nodes[2].y - 4.13904762f) < 1.0e-5f
             && std::abs(segment_length(0, 3) - segment_length(0, 5)) < 1.0e-4f
             && std::abs(segment_length(3, 4) - segment_length(5, 6)) < 1.0e-4f
             && std::abs(segment_length(7, 8) - segment_length(10, 11)) < 1.0e-4f
@@ -149,13 +149,18 @@ int main() {
     const auto pair_separation = [&](std::size_t first, std::size_t second) {
         return std::abs(swing_action[first] - swing_action[second]);
     };
+
+
     require(finite_action(swing_action)
             && pair_motion(0, 1) > 0.01f
             && pair_motion(2, 3) > 0.01f
             && pair_motion(4, 5) > 0.01f
             && pair_motion(6, 7) > 0.01f
             && (pair_separation(0, 2) + pair_separation(1, 3)) > 0.03f
-            && (pair_separation(4, 6) + pair_separation(5, 7)) > 0.03f,
+            // Human arms intentionally use a relaxed four-percent chain excursion.
+            // Require both arms to move and remain opposed without restoring the
+            // oversized pre-v0.7.44 throw that violated the body envelope.
+            && (pair_separation(4, 6) + pair_separation(5, 7)) > 0.02f,
         "paired legs and arms do not produce opposed sagittal swing");
 
     constexpr std::array factories{

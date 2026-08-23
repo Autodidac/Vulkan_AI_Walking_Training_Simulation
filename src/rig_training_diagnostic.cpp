@@ -301,6 +301,15 @@ namespace runner::diagnostics
 
         const rl::TrainingMetrics& metrics = trainer.metrics();
         proof.retained_update = metrics.best_update;
+        proof.evaluation_count = metrics.evaluation_count;
+        proof.evaluation_distance = metrics.evaluation_distance;
+        proof.evaluation_stride_events = metrics.evaluation_stride_events;
+        proof.evaluation_survival = metrics.evaluation_survival;
+        proof.evaluation_quality_key = metrics.evaluation_quality_key;
+        proof.evaluation_rejection_mask = metrics.evaluation_rejection_mask;
+        proof.evaluation_invalid_runs = metrics.evaluation_invalid_runs;
+        proof.evaluation_invalid_reason = metrics.evaluation_invalid_reason;
+        proof.evaluation_valid = metrics.evaluation_valid;
         proof.teacher_authority = rl::foundational_walk_teacher_authority(
             trainer.lesson_update(), blueprint);
         if (!trainer.has_best_policy())
@@ -348,6 +357,17 @@ namespace runner::diagnostics
             if (!strict_valid)
             {
                 ++proof.retained_invalid_runs;
+                proof.retained_rejection_mask |= qualification.rejection_mask;
+                if (!environment.body_integrity_valid())
+                {
+                    proof.retained_rejection_mask |= rl::evidence_bit(
+                        rl::MotionEvidenceFailure::invalid_motion);
+                }
+                if (proof.retained_invalid_reason == sim::InvalidMotion::none
+                    && environment.invalid_reason() != sim::InvalidMotion::none)
+                {
+                    proof.retained_invalid_reason = environment.invalid_reason();
+                }
             }
             else if (latest_transfer_pose.has_value()
                 && (!selected_pose

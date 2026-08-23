@@ -36,6 +36,26 @@ struct EnvironmentTestAccess {
         e.distance_travelled_=distance;e.shuttle_distance_travelled_=distance;
     }
     static void rebuild(Environment& e) noexcept { e.rebuild_course_features(); }
+    static void report_integrity(Environment& e) noexcept {
+        const CreatureBlueprint& rig=e.blueprint_;
+        const Vec2 root=e.particles_[rig.root_node].position;
+        const Vec2 torso=e.particles_[rig.torso_node].position-root;
+        const Vec2 head=e.particles_[rig.head_node].position-e.particles_[rig.torso_node].position;
+        const Vec2 rest_torso=rig.nodes[rig.torso_node]-rig.nodes[rig.root_node];
+        const Vec2 rest_head=rig.nodes[rig.head_node]-rig.nodes[rig.torso_node];
+        std::cerr<<" integrity-detail torso-ratio="<<length(torso)/std::max(length(rest_torso),1.0e-5f)
+            <<" head-ratio="<<length(head)/std::max(length(rest_head),1.0e-5f)
+            <<" head-dot="<<dot(normalized(torso,{0.0f,1.0f}),normalized(head,{0.0f,1.0f}));
+        for(std::size_t i=0;i<rig.bones.size();++i){const DistanceConstraint& bone=rig.bones[i];
+            const float ratio=length(e.particles_[bone.b].position-e.particles_[bone.a].position)/bone.rest_length;
+            if(ratio<0.20f||ratio>2.50f)std::cerr<<" bad-bone["<<i<<"]="<<ratio;}
+        for(std::size_t i=0;i<e.particles_.size();++i){
+            const float rest_radius=length(rig.nodes[i]-rig.nodes[rig.root_node]);
+            const float current_radius=length(e.particles_[i].position-root);
+            const float limit=std::max(1.80f,rest_radius*3.00f+0.80f);
+            if(current_radius>limit)std::cerr<<" bad-radius["<<i<<"]="<<current_radius<<'/'<<limit;}
+        std::cerr<<'\n';
+    }
     static void configure_facing_target(Environment& e,float facing,float distance=4.0f) noexcept {
         ShuttleState state{};state.facing_direction=facing;state.locomotion_direction=facing;
         state.completed_turns=2u;shuttle(e,state);
@@ -351,6 +371,27 @@ int main(){
   if(physical.shuttle_phase()!=prior_phase)
    prior_phase=physical.shuttle_phase();
   if(physical_result.terminated)break;}
+ const bool physical_teacher_passed=physical.invalid_reason()==sim::InvalidMotion::none
+  &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f
+  &&physical.gait_cycles()>=6u
+  &&physical.maximum_backward_brace_seconds()
+   <=sim::sustained_backward_brace_limit_seconds;
+ if(!physical_teacher_passed){
+  std::cerr<<"physical teacher evidence distance="<<physical.distance_travelled()
+   <<" elapsed="<<physical.elapsed_seconds()
+   <<" turns="<<physical.completed_shuttle_turns()
+   <<" gait="<<physical.gait_cycles()
+   <<" brace="<<physical.maximum_backward_brace_seconds()
+   <<" invalid="<<static_cast<int>(physical.invalid_reason())
+   <<" reason="<<sim::invalid_motion_name(physical.invalid_reason())
+   <<" phase="<<static_cast<int>(physical.shuttle_phase())
+   <<" x="<<physical.particles()[physical.blueprint().root_node].position.x
+   <<" speed="<<physical.forward_speed()
+   <<" upright="<<physical.uprightness()
+   <<" integrity="<<physical.body_integrity_valid()
+   <<" bone_error="<<physical.maximum_bone_length_error_ratio()<<'\n';
+  if(!physical.body_integrity_valid()) sim::EnvironmentTestAccess::report_integrity(physical);
+ }
  require(physical.invalid_reason()==sim::InvalidMotion::none
   &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f
   &&physical.gait_cycles()>=6u

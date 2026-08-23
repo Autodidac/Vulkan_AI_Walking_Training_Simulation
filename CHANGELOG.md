@@ -1,3 +1,14 @@
+## 0.7.44
+
+- Replaced Dog's stretched Human-derived presentation with a purpose-built orthographic modular atlas containing canine head, torso, tail, upper-leg, lower-leg, and paw art.
+- Reauthored Dog, Chicken, and Hexapod neutral geometry so their support chains, body axes, head direction, paired lengths, and contact planes match their species while Human geometry remains unchanged.
+- Added species art profiles that overlap armor across physical joints, size paws and limbs coherently, hide fallback bones during normal rendering, and preserve optional node diagnostics.
+- Added deterministic Dog asset landmark/gutter checks, four-species factory validation, paired-support invariants, repeated construction, malformed-support rejection, and cross-species topology negatives.
+- Added a reproducible checked-source art generator and packaged the exact Dog atlas source alongside the runtime modules.
+- Imported the latest saved Human neutral rig and rebuilt walking around exact opposed leg transfer, contralateral bounded arm swing, authored bend direction, and a single policy-composition boundary so learned residuals cannot erase planted support.
+- Kept Human startup body control active while the deterministic support clock is engaged; a 1,200-update zero-authority retained replay now covers 25.036 m with 36.50 gait events and zero invalid seeds.
+- Promoted training semantics to 0x0007'4407, checkpoint magic to EPPO44, autonomy state to RUNAUTONOMY 26, and species-owned runner-v0744-* paths with lifetime-only v0.7.43 migration.
+
 ## 0.7.43
 
 - Promoted the saved Human geometry to the authoritative neutral pose across reset, balance, observation, teacher, and preview paths.

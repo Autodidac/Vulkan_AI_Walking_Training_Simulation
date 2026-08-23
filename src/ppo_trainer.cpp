@@ -98,7 +98,11 @@ namespace runner::rl
             if (stage == sim::CourseStage::crouch_walk)
                 return crouch_walk_teacher_action(environment);
             if (sim::stage_requires_forward_gait(stage))
-                return walking_teacher_action(environment);
+            {
+                // Imitation targets live in raw policy action space. The common
+                // topology filter is applied once when the action is executed.
+                return raw_walking_teacher_action(environment);
+            }
             return balance_teacher_action(environment);
         }
     }

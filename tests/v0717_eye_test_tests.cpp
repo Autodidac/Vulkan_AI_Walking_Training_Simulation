@@ -96,6 +96,12 @@ int main(int argc, char** argv)
     require(!sim::crab_walking_motion(
             44u, 39u, 50.0f, 36.0f, 2.15f),
         "a valid sagittal gait was rejected for ending at maximum stride");
+    require(!sim::crab_walking_motion(
+            67u, 19u, 47.0f, 36.0f, 2.12f),
+        "a sustained casual stride was rejected for sampling crossings below every transfer");
+    require(sim::crab_walking_motion(
+            67u, 3u, 47.0f, 36.0f, 2.12f),
+        "a wide high-count gait with almost no passing phases evades crab rejection");
 
     require(sim::sagittal_crossing_shaping_reward(true, true, true) > 0.0f
             && sim::sagittal_crossing_shaping_reward(true, true, false) == 0.0f

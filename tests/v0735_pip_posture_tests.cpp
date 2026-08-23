@@ -127,13 +127,15 @@ int main()
         "rear branch art is still independently inverted from whole-rig facing");
 
     const sim::CreatureBlueprint humanoid = sim::CreatureBlueprint::humanoid();
-    require(std::abs(humanoid.nodes[9].x - humanoid.nodes[0].x) < 0.35f
+    require(humanoid.nodes[9].x < humanoid.nodes[0].x
+            && humanoid.nodes[12].x > humanoid.nodes[0].x
+            && std::abs(humanoid.nodes[9].x - humanoid.nodes[0].x) < 0.35f
             && std::abs(humanoid.nodes[12].x - humanoid.nodes[0].x) < 0.35f
-            && humanoid.nodes[9].y > humanoid.nodes[0].y
-            && humanoid.nodes[9].y < humanoid.nodes[1].y
-            && humanoid.nodes[12].y > humanoid.nodes[0].y
-            && humanoid.nodes[12].y < humanoid.nodes[1].y,
-        "authored humanoid hands do not begin beside the body");
+            && humanoid.nodes[9].y <= humanoid.nodes[0].y
+            && humanoid.nodes[12].y <= humanoid.nodes[0].y
+            && std::abs(humanoid.nodes[9].y - humanoid.nodes[0].y) < 0.35f
+            && std::abs(humanoid.nodes[12].y - humanoid.nodes[0].y) < 0.35f,
+        "authored humanoid hands do not begin at the saved relaxed side rest");
 
     require(close(art::presentation_pixel_scale(
                 std::numeric_limits<float>::quiet_NaN()), 1.0f)

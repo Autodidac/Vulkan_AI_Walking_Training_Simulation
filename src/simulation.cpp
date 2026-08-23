@@ -89,6 +89,7 @@ namespace runner::sim
             return false;
         }
 
+
         void add_passive_feet(CreatureBlueprint& rig, float heel_reach = 0.20f,
             float toe_reach = 0.34f) noexcept
         {
@@ -174,15 +175,15 @@ namespace runner::sim
         // forward head/beak, and two opposed digitigrade legs. It remains a true
         // two-leg policy subject without borrowing Human proportions or armor.
         result.nodes = {
-            { -0.10f, 0.70f }, { 0.02f, 1.26f },
-            { 0.30f, 1.33f }, { 0.58f, 1.36f }, { 0.76f, 1.30f },
-            { -0.65f, 1.12f },
-            { -0.03f, 0.42f }, { -0.10f, 0.10f },
-            { 0.10f, 0.41f }, { 0.15f, 0.10f }
+            { -0.10f, 0.68f }, { 0.24f, 0.72f },
+            { 0.46f, 0.88f }, { 0.82f, 1.02f }, { 1.04f, 1.00f },
+            { -0.62f, 0.78f },
+            { -0.16f, 0.40f }, { -0.24f, 0.10f },
+            { 0.02f, 0.39f }, { 0.12f, 0.10f }
         };
         result.radii = {
-            0.17f, 0.18f, 0.11f, 0.14f, 0.07f,
-            0.10f, 0.09f, 0.07f, 0.09f, 0.07f
+            0.16f, 0.17f, 0.10f, 0.12f, 0.06f,
+            0.08f, 0.075f, 0.06f, 0.075f, 0.06f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.98f },
@@ -244,22 +245,22 @@ namespace runner::sim
         CreatureBlueprint result{};
         result.species_identity = CreatureSpecies::human;
         result.nodes = {
-            // Exact v0.7.43 user-authored Human rest pose. Paired segment
-            // normalization below retains this layered stance while preventing
-            // either side from acquiring a different anatomical reach.
-            { -0.0572309196f, 2.59142852f },
-            { -0.171161979f, 3.80571461f },
-            { -0.177114367f, 4.18666649f },
-            { -0.467656821f, 1.57501757f },
-            { -0.772568107f, 0.898941457f },
-            { 0.245305002f, 1.53785717f },
-            { 0.444918513f, 0.823571324f },
+            // Exact v0.7.44 user-authored Human neutral pose. Training,
+            // preview, and newly-created human.rig files share this upright
+            // geometry; paired normalization retains equal anatomical reach.
+            { -0.179952502f, 2.61523819f },
+            { 0.00281051546f, 3.76404762f },
+            { 0.0123144165f, 4.13904762f },
+            { -0.299952507f, 1.52010894f },
+            { -0.349952519f, 0.459101081f },
+            { -0.0599525049f, 1.52010894f },
+            { -0.00995250046f, 0.459101081f },
             { -0.0885858908f, 3.56166649f },
-            { -0.00295924395f, 3.25098062f },
-            { 0.23482883f, 2.911695f },
+            { -0.319952488f, 3.00594616f },
+            { -0.259952486f, 2.48330688f },
             { -0.201681122f, 3.50809526f },
-            { 0.0664982945f, 3.3293848f },
-            { 0.388954937f, 3.06923175f }
+            { -0.0599525124f, 2.92305803f },
+            { -0.0799525008f, 2.39736629f }
         };
         result.radii = {
             0.26f, 0.31f, 0.27f, 0.19f, 0.1054f, 0.19f, 0.1054f,
@@ -303,8 +304,9 @@ namespace runner::sim
             result.calibrate_motor(index, knee ? 58.0f : 36.0f,
                 knee ? 58.0f : 36.0f, strength);
         }
-        // Arms are locomotion appendages, not balance flywheels. The policy keeps
-        // useful opposed swing without the former near-unrestricted flailing.
+        // Arms remain low-authority locomotion appendages around the saved
+        // authored side-rest. The body-envelope solver absorbs only outward
+        // runaway momentum; it does not provide locomotion or balance force.
         result.calibrate_motor(4, 62.0f, 62.0f, 0.024f);
         result.calibrate_motor(5, 76.0f, 76.0f, 0.022f);
         result.calibrate_motor(6, 62.0f, 62.0f, 0.024f);
@@ -522,16 +524,16 @@ namespace runner::sim
         // Medium dog-scale four-leg anatomy. Near/far pairs remain layered in
         // side view while shoulder and hip spacing preserve a readable gait.
         result.nodes = {
-            { -0.58f, 1.08f }, { 0.50f, 1.12f }, { 1.04f, 1.38f },
-            { -0.76f, 0.60f }, { -0.88f, 0.14f },
-            { -0.40f, 0.56f }, { -0.30f, 0.14f },
-            { 0.34f, 0.59f }, { 0.24f, 0.14f },
-            { 0.68f, 0.57f }, { 0.80f, 0.14f }
+            { -0.46f, 0.80f }, { 0.38f, 0.84f }, { 0.78f, 1.08f },
+            { -0.56f, 0.46f }, { -0.48f, 0.11f },
+            { -0.33f, 0.46f }, { -0.25f, 0.11f },
+            { 0.27f, 0.46f }, { 0.23f, 0.11f },
+            { 0.48f, 0.46f }, { 0.52f, 0.11f }
         };
         result.radii = {
-            0.22f, 0.23f, 0.18f,
-            0.11f, 0.09f, 0.11f, 0.09f,
-            0.11f, 0.09f, 0.11f, 0.09f
+            0.23f, 0.24f, 0.20f,
+            0.09f, 0.075f, 0.09f, 0.075f,
+            0.09f, 0.075f, 0.09f, 0.075f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 0.94f },
@@ -567,20 +569,20 @@ namespace runner::sim
         // the eight policy channels and the middle pair is coupled into opposing
         // tripods by CreatureBlueprint::coupled_support_motors().
         result.nodes = {
-            { -0.66f, 1.00f }, { 0.00f, 1.06f },
-            { 0.66f, 1.02f }, { 1.10f, 1.24f },
-            { -0.98f, 0.58f }, { -1.18f, 0.14f },
-            { -0.52f, 0.53f }, { -0.40f, 0.14f },
-            { -0.18f, 0.48f }, { -0.05f, 0.14f },
-            { 0.22f, 0.48f }, { 0.34f, 0.14f },
-            { 0.56f, 0.53f }, { 0.72f, 0.14f },
-            { 0.98f, 0.58f }, { 1.18f, 0.14f }
+            { -0.54f, 0.93f }, { 0.00f, 0.98f },
+            { 0.54f, 0.94f }, { 0.84f, 1.08f },
+            { -0.73f, 0.49f }, { -0.84f, 0.11f },
+            { -0.44f, 0.46f }, { -0.34f, 0.11f },
+            { -0.16f, 0.43f }, { -0.08f, 0.11f },
+            { 0.18f, 0.43f }, { 0.08f, 0.11f },
+            { 0.44f, 0.46f }, { 0.34f, 0.11f },
+            { 0.73f, 0.49f }, { 0.84f, 0.11f }
         };
         result.radii = {
-            0.20f, 0.22f, 0.20f, 0.16f,
-            0.10f, 0.08f, 0.10f, 0.08f,
-            0.10f, 0.08f, 0.10f, 0.08f,
-            0.10f, 0.08f, 0.10f, 0.08f
+            0.18f, 0.20f, 0.18f, 0.14f,
+            0.085f, 0.065f, 0.085f, 0.065f,
+            0.085f, 0.065f, 0.085f, 0.065f,
+            0.085f, 0.065f, 0.085f, 0.065f
         };
         result.bones = {
             { 0, 1, 0.0f, 1.0f }, { 1, 2, 0.0f, 1.0f },
@@ -2803,6 +2805,49 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 rhs.previous.x += direction * correction * 0.35f;
             }
         }
+
+        const auto support_mean_x = [&](std::uint16_t primary,
+                                        const std::vector<std::uint16_t>& additional) noexcept
+        {
+            float sum = 0.0f;
+            std::size_t count = 0;
+            const auto accumulate = [&](std::uint16_t node)
+            {
+                if (!valid_node(node))
+                    return;
+                sum += particles_[node].position.x;
+                ++count;
+            };
+            accumulate(primary);
+            for (const std::uint16_t node : additional)
+                accumulate(node);
+            return count == 0 ? 0.0f : sum / static_cast<float>(count);
+        };
+        const float authored_direction =
+            (blueprint_.nodes[blueprint_.right_contact_node].x
+                - blueprint_.nodes[blueprint_.left_contact_node].x)
+            * facing_direction() < 0.0f ? -1.0f : 1.0f;
+        const float current_gap = authored_direction
+            * (support_mean_x(blueprint_.right_contact_node, blueprint_.additional_right_contact_nodes)
+                - support_mean_x(blueprint_.left_contact_node, blueprint_.additional_left_contact_nodes));
+        constexpr float minimum_cluster_gap = 0.080f;
+        if (current_gap < minimum_cluster_gap)
+        {
+            const float correction = 0.5f * (minimum_cluster_gap - current_gap);
+            const auto shift = [&](std::uint16_t node, float amount)
+            {
+                if (!valid_node(node))
+                    return;
+                particles_[node].position.x += amount;
+                particles_[node].previous.x += amount * 0.35f;
+            };
+            shift(blueprint_.left_contact_node, -authored_direction * correction);
+            for (const std::uint16_t node : blueprint_.additional_left_contact_nodes)
+                shift(node, -authored_direction * correction);
+            shift(blueprint_.right_contact_node, authored_direction * correction);
+            for (const std::uint16_t node : blueprint_.additional_right_contact_nodes)
+                shift(node, authored_direction * correction);
+        }
     }
 
     float Environment::maximum_bone_length_error_ratio() const noexcept
@@ -2942,7 +2987,56 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 stabilize(static_cast<std::uint16_t>(index), 0.040f);
         }
     }
+    void Environment::stabilize_human_manipulator_envelope() noexcept
+    {
+        if (!blueprint_.human_casual_gait_plan()
+            || !valid_node(blueprint_.root_node)
+            || blueprint_.root_node >= blueprint_.nodes.size())
+            return;
 
+        const Particle& root = particles_[blueprint_.root_node];
+        const Vec2 root_velocity = root.position - root.previous;
+        for (std::size_t node = 0; node < particles_.size(); ++node)
+        {
+            if (!manipulator_endpoint(blueprint_, node)
+                || node >= blueprint_.nodes.size())
+                continue;
+
+            Particle& endpoint = particles_[node];
+            const Vec2 offset = endpoint.position - root.position;
+            const float radius = length(offset);
+            if (radius <= 1.0e-5f)
+                continue;
+
+            const float rest_radius = length(
+                blueprint_.nodes[node] - blueprint_.nodes[blueprint_.root_node]);
+            const float integrity_radius = std::max(
+                1.80f, rest_radius * 3.0f + 0.80f);
+            const float soft_radius = std::min(
+                integrity_radius - 0.30f, rest_radius + 0.70f);
+            const float hard_radius = integrity_radius - 0.12f;
+            const Vec2 direction = offset / radius;
+            const Vec2 relative_velocity =
+                (endpoint.position - endpoint.previous) - root_velocity;
+            const float outward_velocity = dot(relative_velocity, direction);
+            const float normalized = clamp(
+                (radius - soft_radius)
+                    / std::max(0.05f, hard_radius - soft_radius),
+                0.0f, 1.0f);
+            const float strength = normalized * normalized
+                * (3.0f - 2.0f * normalized);
+            if (outward_velocity > 0.0f && strength > 0.0f)
+                endpoint.previous += direction * outward_velocity * strength;
+
+            if (radius > hard_radius)
+            {
+                const Vec2 correction = direction
+                    * std::min(radius - hard_radius, 0.018f);
+                endpoint.position -= correction;
+                endpoint.previous -= correction;
+            }
+        }
+    }
     void Environment::stabilize_balance_posture() noexcept
     {
         const bool balance_lesson = course_stage_ == CourseStage::balance;
@@ -5196,7 +5290,10 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             for (const DistanceConstraint& bone : blueprint_.bones)
                 solve_distance(bone);
             for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
-                solve_motor(blueprint_.motors[index], applied_actions[index]);
+            {
+                const MotorConstraint& motor = blueprint_.motors[index];
+                solve_motor(motor, applied_actions[index]);
+            }
             for (const CoupledMotorConstraint& coupled :
                 blueprint_.coupled_support_motors())
             {
@@ -5210,6 +5307,7 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
             stabilize_balance_posture();
             stabilize_duck_posture();
             stabilize_passive_appendages();
+            stabilize_human_manipulator_envelope();
             solve_ground(dt);
             solve_course(dt);
             // Re-apply the authored crouch after collision resolution so the

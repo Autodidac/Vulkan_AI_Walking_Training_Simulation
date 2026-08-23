@@ -1197,9 +1197,11 @@ int main()
     require(chicken.nodes[5].x < chicken.nodes[chicken.root_node].x - 0.50f
             && chicken.nodes[4].x > chicken.nodes[chicken.head_node].x,
         "chicken preset lacks a distinct tail and beak");
-    require(chicken.nodes[chicken.torso_node].y
-            > chicken.nodes[chicken.root_node].y + 0.55f,
-        "chicken semantic torso axis is not vertically load-bearing");
+    require(chicken.nodes[chicken.torso_node].x
+            > chicken.nodes[chicken.root_node].x + 0.25f
+            && std::abs(chicken.nodes[chicken.torso_node].y
+                - chicken.nodes[chicken.root_node].y) < 0.30f,
+        "chicken semantic torso axis is not a compact horizontal bird body");
     require(std::ranges::any_of(chicken.bones, [&](const sim::DistanceConstraint& bone)
         {
             return (bone.a == chicken.root_node && bone.b == chicken.torso_node)
@@ -1640,8 +1642,9 @@ int main()
             && biped_foundational_gait.step_length <= 0.82f
             && humanoid_foundational_gait.step_length >= 0.96f
             && humanoid_foundational_gait.step_length <= 1.10f
-            && humanoid_foundational_gait.swing_lift >= 0.50f
-            && humanoid_foundational_gait.swing_lift <= 0.54f,
+            && humanoid_foundational_gait.swing_lift >= 0.38f
+            && humanoid_foundational_gait.swing_lift <= 0.42f
+            && std::abs(humanoid_foundational_gait.cadence_hz - 1.02f) < 1.0e-6f,
         "foundational biped gait is not finite and anatomy-bounded");
     require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
             && humanoid_foundational_gait.step_length <= 1.10f
@@ -1651,6 +1654,32 @@ int main()
             && std::abs(shifted_arm_gait.swing_lift
                 - humanoid_foundational_gait.swing_lift) < 1.0e-6f,
         "foundational stride still depends on arm presence or geometry");
+    require(rl::authored_gait_startup_blend(-1.0f) == 0.0f
+            && rl::authored_gait_startup_blend(0.0f) == 0.0f
+            && std::abs(rl::authored_gait_startup_blend(0.075f) - 0.5f) < 1.0e-6f
+            && rl::authored_gait_startup_blend(0.15f) == 1.0f
+            && rl::authored_gait_startup_blend(2.0f) == 1.0f
+            && rl::authored_gait_startup_blend(
+                std::numeric_limits<float>::quiet_NaN()) == 0.0f,
+        "authored gait startup does not blend deterministically from the saved pose");
+    const float authored_left_foot_offset = humanoid_walk.nodes[
+        humanoid_walk.left_contact_node].x
+        - humanoid_walk.nodes[humanoid_walk.motors[0].pivot].x;
+    const float authored_right_foot_offset = humanoid_walk.nodes[
+        humanoid_walk.right_contact_node].x
+        - humanoid_walk.nodes[humanoid_walk.motors[2].pivot].x;
+    const float authored_gait_progress = humanoid_foundational_gait.phase_offset / pi;
+    const float gait_left_foot_offset = humanoid_foundational_gait.stance_center_x
+        + rl::sagittal_step_x(humanoid_foundational_gait.step_length,
+            authored_gait_progress, false);
+    const float gait_right_foot_offset = humanoid_foundational_gait.stance_center_x
+        + rl::sagittal_step_x(humanoid_foundational_gait.step_length,
+            authored_gait_progress, true);
+    require(humanoid_foundational_gait.phase_offset > 0.0f
+            && humanoid_foundational_gait.phase_offset < pi
+            && std::abs(gait_left_foot_offset - authored_left_foot_offset) < 1.0e-5f
+            && std::abs(gait_right_foot_offset - authored_right_foot_offset) < 1.0e-5f,
+        "foundational Human gait does not begin from the saved authored foot stance");
     const auto bounded_foundational_endpoint = [](
         const rl::BipedGaitParameters& parameters, float chain_length)
     {
@@ -1741,7 +1770,7 @@ int main()
             && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::crawler4()) == 1.44f
             && sim::authored_foundational_gait_cadence_hz(
-                sim::CreatureBlueprint::hexapod()) == 1.20f,
+                sim::CreatureBlueprint::hexapod()) == 1.50f,
         "foundational teacher and observed topology clocks diverged");
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
@@ -1803,7 +1832,7 @@ int main()
         sim::CreatureBlueprint::hexapod(), sim::CourseStage::uneven);
     require(monoped_reflex.support == 0.92f && monoped_reflex.body == 0.82f
             && chicken_reflex.support == 0.88f && chicken_reflex.body == 0.50f
-            && ordinary_reflex.support == 0.0f && ordinary_reflex.body == 0.0f
+            && ordinary_reflex.support == 1.0f && ordinary_reflex.body == 0.84f
             && out_of_scope_reflex.support == 0.0f
             && out_of_scope_reflex.body == 0.0f
             && human_shuttle_reflex.support == 1.0f
@@ -1813,6 +1842,43 @@ int main()
             && hexapod_reflex.support == 0.98f
             && hexapod_reflex.body == 0.84f,
         "fragile topology code brain is not bounded to its rig and walking stages");
+    {
+        sim::Environment human_reflex{ humanoid_walk, 0x447u };
+        human_reflex.set_course(sim::CourseStage::uneven, 0.30f);
+        const auto raw_support_teacher = rl::raw_walking_teacher_action(human_reflex);
+        std::array<float, sim::action_count> positive{};
+        std::array<float, sim::action_count> negative{};
+        positive.fill(1.0f);
+        negative.fill(-1.0f);
+        const auto positive_effective = rl::effective_policy_action(
+            human_reflex, positive, sim::CourseStage::uneven, 0.0f);
+        const auto negative_effective = rl::effective_policy_action(
+            human_reflex, negative, sim::CourseStage::uneven, 0.0f);
+        bool bounded_body_residual_visible = false;
+        float maximum_body_action{};
+        for (std::size_t index = 0; index < humanoid_walk.active_motor_count; ++index)
+        {
+            if (index < 4u)
+            {
+                require(std::abs(positive_effective[index] - raw_support_teacher[index]) < 1.0e-6f
+                        && std::abs(negative_effective[index] - raw_support_teacher[index]) < 1.0e-6f,
+                    "post-handoff Human policy can override the opposed leg-transfer clock");
+                continue;
+            }
+            require(std::abs(positive_effective[index]) <= 0.320001f
+                    && std::abs(negative_effective[index]) <= 0.320001f,
+                "post-handoff Human upper-body residual exceeds its gait bound");
+            maximum_body_action = std::max(maximum_body_action,
+                std::abs(positive_effective[index]));
+            bounded_body_residual_visible = bounded_body_residual_visible
+                || std::abs(positive_effective[index] - negative_effective[index]) > 0.02f;
+        }
+        require(maximum_body_action > 0.10f,
+            "startup stability damping erased the Human code-brain body control");
+        require(bounded_body_residual_visible,
+            "post-handoff Human gait erased the learned upper-body residual");
+    }
+
     require(rl::guided_rollout_imitation_weight(
                 900u, sim::CourseStage::uneven, &monoped_walk) == 48.0f
             && rl::guided_rollout_imitation_weight(
@@ -2041,14 +2107,14 @@ int main()
         "raised humanoid shoulder girdle can still invert through the upper spine");
     require(humanoid.nodes.size() == 13u,
         "human-calibrated rig does not retain the compact articulated body and arms");
-    require(std::abs(humanoid.nodes[0].x - (-0.0572309196f)) < 0.00001f
-            && std::abs(humanoid.nodes[0].y - 2.59142852f) < 0.00001f
-            && std::abs(humanoid.nodes[1].y - 3.80571461f) < 0.00001f
-            && std::abs(humanoid.nodes[2].y - 4.18666649f) < 0.00001f
-            && humanoid.nodes[9].y > humanoid.nodes[0].y
-            && humanoid.nodes[9].y < humanoid.nodes[1].y
-            && humanoid.nodes[12].y > humanoid.nodes[0].y
-            && humanoid.nodes[12].y < humanoid.nodes[1].y,
+    require(std::abs(humanoid.nodes[0].x - (-0.179952502f)) < 0.00001f
+            && std::abs(humanoid.nodes[0].y - 2.61523819f) < 0.00001f
+            && std::abs(humanoid.nodes[1].y - 3.76404762f) < 0.00001f
+            && std::abs(humanoid.nodes[2].y - 4.13904762f) < 0.00001f
+            && humanoid.nodes[9].y < humanoid.nodes[0].y
+            && humanoid.nodes[9].y > humanoid.nodes[3].y
+            && humanoid.nodes[12].y < humanoid.nodes[0].y
+            && humanoid.nodes[12].y > humanoid.nodes[5].y,
         "current authored Human calibration not applied");
     require(humanoid.bones.size() == 15u,
         "humanoid legs or articulated arms are not structurally connected");
