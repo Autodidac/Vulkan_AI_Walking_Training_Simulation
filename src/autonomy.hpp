@@ -143,6 +143,17 @@ namespace runner::rl
                 <= duck_press_mastery_joint_speed_limit;
     }
 
+    [[nodiscard]] inline bool shuttle_mastery_evidence(
+        const TrainingMetrics& metrics) noexcept
+    {
+        return metrics.evaluation_valid
+            && metrics.evaluation_quality_key != 0u
+            && metrics.evaluation_distance >= walk_mastery_distance
+            && metrics.evaluation_stride_events >= walk_mastery_stride_events
+            && metrics.evaluation_survival >= 18.0f
+            && metrics.evaluation_collisions <= 1.0f;
+    }
+
     struct AutonomyStatus
     {
         bool enabled{ false };

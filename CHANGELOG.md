@@ -1,3 +1,12 @@
+## 0.7.46
+
+- Replaced interpolated terrain/contact sampling and smoothed surface rendering with exact authored material-cell boundaries; static cells stay fixed and only deposited material evolves.
+- Reworked the Human teacher envelope for straighter mid-stance support, relaxed low opposed arm swing, and bounded casual gait targets while preserving the v0.7.45 zombie baseline under `legacy/v0.7.45-zombie-gait/`.
+- Fixed BACK / TURN / RETURN mastery stalling at 80% by judging complete round-trip evidence without a signed net-speed gate that cancels across opposite directions.
+- Corrected Dog and Chicken head/tail fit, dog tail orientation, and anatomical head facing across non-Human rigs.
+- Added exact-cell boundary, gait-envelope, adversarial turn-mastery, and species-art regression coverage.
+- Advanced isolated training state to semantics `0x0007'4601` and `runner-v0746-*` paths with lifetime-only migration from v0.7.45.
+
 ## 0.7.45
 
 - Restored a near-straight Human support leg at physical mid-stance with bounded contact-exchange flexion, lower casual cadence, and coordinated torso correction.

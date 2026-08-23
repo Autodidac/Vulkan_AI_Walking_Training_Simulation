@@ -135,6 +135,25 @@ int main()
         require(std::abs(first.cells()[i].height-second.cells()[i].height)<1.0e-7f, "same seed changed height");
         require(std::abs(first.cells()[i].firmness-second.cells()[i].firmness)<1.0e-7f, "same seed changed firmness");
     }
+    bool found_exact_cell_transition = false;
+    for (std::size_t i = 0; i + 1u < sim::DeformableTerrain::cell_count; ++i)
+    {
+        const auto& left = first.cells()[i];
+        const auto& right = first.cells()[i + 1u];
+        if (left.region == right.region && std::abs(left.height - right.height) < 1.0e-5f)
+            continue;
+        const float boundary = (static_cast<float>(i) + 0.5f) * sim::DeformableTerrain::cell_spacing;
+        const float before = boundary - 1.0e-4f;
+        const float after = boundary + 1.0e-4f;
+        require(std::abs(first.height_at(before) - left.height) < 1.0e-7f && std::abs(first.height_at(after) - right.height) < 1.0e-7f, "terrain height interpolated between fixed material cells");
+        require(std::abs(first.firmness_at(before) - left.firmness) < 1.0e-7f && std::abs(first.firmness_at(after) - right.firmness) < 1.0e-7f, "terrain firmness interpolated between fixed material cells");
+        require(std::abs(first.looseness_at(before) - left.loose_fraction) < 1.0e-7f && std::abs(first.looseness_at(after) - right.loose_fraction) < 1.0e-7f, "terrain looseness interpolated between fixed material cells");
+        require(std::abs(first.water_depth_at(before) - left.water_depth) < 1.0e-7f && std::abs(first.water_depth_at(after) - right.water_depth) < 1.0e-7f, "water depth interpolated between fixed material cells");
+        require(std::abs(first.water_surface_at(before) - left.water_surface) < 1.0e-7f && std::abs(first.water_surface_at(after) - right.water_surface) < 1.0e-7f, "water surface diverged from exact material cells");
+        found_exact_cell_transition = true;
+        break;
+    }
+    require(found_exact_cell_transition, "seed did not expose an exact-cell terrain transition");
     std::array<sim::TerrainRegion, 3> previous_middle{};
     bool saw_distinct_middle_order = false;
     for (std::uint64_t seed = 1u; seed <= 16u; ++seed)

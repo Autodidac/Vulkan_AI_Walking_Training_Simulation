@@ -33,6 +33,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md
         docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md
         docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md
+        docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md
         assets/optional/species_runtime/chicken_body_side.ppm
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
@@ -113,7 +114,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.45 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.46 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -173,6 +174,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         "RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
+        "RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -309,7 +311,11 @@ foreach(reference IN ITEMS
         "WALK-HUMAN-ANIMATION-447"
         "WALK-HUMAN-STANCE-448"
         "WALK-SPECIES-ART-FIT-449"
-        "WALK-RELEASE-450")
+        "WALK-RELEASE-450"
+        "WALK-ZOMBIE-LEGACY-451"
+        "WALK-HUMAN-NATURAL-GAIT-452"
+        "WALK-SIMENGINE-MATERIAL-CELLS-453"
+        "WALK-TURN-MASTERY-454")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -356,6 +362,17 @@ foreach(reference IN ITEMS
     endif()
 endforeach()
 
+
+file(READ "${RUNNER_SOURCE_DIR}/src/autonomy.hpp" autonomy_header_text)
+foreach(reference IN ITEMS
+        "shuttle_mastery_evidence"
+        "metrics.evaluation_distance >= walk_mastery_distance"
+        "metrics.evaluation_stride_events >= walk_mastery_stride_events")
+    string(FIND "${autonomy_header_text}" "${reference}" pos)
+    if(pos EQUAL -1)
+        message(FATAL_ERROR "Round-trip turn mastery contract missing: ${reference}")
+    endif()
+endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
         "RUNAUTONOMY 26"
@@ -372,7 +389,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4501u"
+        "training_semantics_version = 0x0007'4601u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -384,7 +401,9 @@ foreach(reference IN ITEMS
         "incremental_locomotion_candidate"
         "multi_support_two_link_teacher_action"
         "multi_support_progress_truth"
-        "runtime_safety_authority")
+        "runtime_safety_authority"
+        "biped_stance_vertical_reach"
+        "human_casual_arm_rest_target")
     string(FIND "${ppo_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Training semantics contract missing: ${reference}")
@@ -408,7 +427,7 @@ foreach(reference IN ITEMS
         "launch_pad_half_width = 0.70f"
         "launch_transition_width = 0.55f"
         "authored_flag = 0x02u"
-        "std::lerp(cells_[sample.first].height"
+        "cells_[nearest_index(course_x)].height"
         "an observation only; it may not excavate, compact, or raise a berm"
         "TerrainRegion::shallow_water"
         "TerrainRegion::hole")
@@ -498,7 +517,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0745-"
+        "runner-v0746-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -852,4 +871,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.45 repository hygiene passed")
+message(STATUS "Runner v0.7.46 repository hygiene passed")

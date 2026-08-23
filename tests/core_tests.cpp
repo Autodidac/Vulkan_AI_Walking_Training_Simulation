@@ -1644,7 +1644,7 @@ int main()
             && humanoid_foundational_gait.step_length <= 1.10f
             && humanoid_foundational_gait.swing_lift >= 0.38f
             && humanoid_foundational_gait.swing_lift <= 0.42f
-            && std::abs(humanoid_foundational_gait.cadence_hz - 1.02f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.cadence_hz - 1.04f) < 1.0e-6f
             && humanoid_foundational_gait.transition_flex >= 0.14f
             && humanoid_foundational_gait.transition_flex <= 0.18f,
         "foundational biped gait is not finite and anatomy-bounded");
@@ -1695,9 +1695,16 @@ int main()
         humanoid_foundational_gait, humanoid_leg_length);
     const Vec2 shifted_arm_endpoint = bounded_foundational_endpoint(
         shifted_arm_gait, humanoid_leg_length);
+    const float humanoid_mid_vertical_reach = rl::biped_stance_vertical_reach(
+        humanoid_foundational_gait.stance_center_x, humanoid_leg_length);
+    const float humanoid_endpoint_vertical_reach =
+        rl::biped_stance_vertical_reach(
+            humanoid_foundational_gait.stance_center_x
+                + 0.5f * humanoid_foundational_gait.step_length,
+            humanoid_leg_length);
     const Vec2 humanoid_mid_stance = rl::bounded_biped_leg_target({
         humanoid_foundational_gait.stance_center_x,
-        -humanoid_foundational_gait.leg_height }, humanoid_leg_length);
+        -humanoid_mid_vertical_reach }, humanoid_leg_length);
     require(rl::biped_leg_target_within_reach(biped_endpoint,
                 biped_leg_length)
             && rl::biped_leg_target_within_reach(humanoid_endpoint,
@@ -1708,14 +1715,20 @@ int main()
                 humanoid_leg_length),
         "phase-local gait envelope emitted a near-locked or unreachable target");
     require(std::abs(humanoid_mid_stance.y) + 1.0e-5f
-                >= std::abs(humanoid_endpoint.y)
-            && std::abs(humanoid_mid_stance.y)
-                >= humanoid_leg_length * 0.95f
+                >= humanoid_endpoint_vertical_reach
+            && length(humanoid_mid_stance) + 1.0e-5f
+                >= humanoid_leg_length
+                    * (1.0f - rl::biped_leg_reach_reserve)
             && humanoid_foundational_gait.leg_height
                 >= humanoid_leg_length * 0.95f
             && std::abs(humanoid_mid_stance.y)
-                > std::abs(humanoid_endpoint.y) + 0.10f,
-        "phase-local gait envelope keeps the Human crouched through mid-stance");
+                > humanoid_endpoint_vertical_reach
+                    + 0.01f * humanoid_leg_length
+            && rl::biped_stance_vertical_reach(
+                std::numeric_limits<float>::quiet_NaN(),
+                humanoid_leg_length) == 0.0f
+            && rl::biped_stance_vertical_reach(0.0f, -1.0f) == 0.0f,
+        "phase-local gait envelope failed to straighten Human mid-stance support");
     rl::BipedGaitParameters excessive_reach = humanoid_foundational_gait;
     excessive_reach.step_length = humanoid_leg_length * 0.80f;
     excessive_reach.leg_height = humanoid_leg_length * 1.20f;
@@ -1756,6 +1769,12 @@ int main()
         authored_hand, pi * 0.5f, 0.405f, 0.0f, 1.0f);
     const Vec2 arm_backward = rl::authored_opposed_swing_target(
         authored_hand, pi * 1.5f, 0.405f, 0.0f, 1.0f);
+    const Vec2 casual_arm_rest = rl::human_casual_arm_rest_target(1.70f);
+    const Vec2 casual_arm_forward = rl::authored_opposed_swing_target(
+        casual_arm_rest, pi * 0.5f, 0.17f, 0.0f, 1.0f);
+    const Vec2 casual_arm_backward = rl::authored_opposed_swing_target(
+        casual_arm_rest, pi * 1.5f, 0.17f, 0.0f, 1.0f);
+
     require(left_knee.valid && right_knee.valid
             && mirrored_left_knee.valid && mirrored_right_knee.valid
             && left_knee.upper.x > 0.0f && right_knee.upper.x > 0.0f
@@ -1766,6 +1785,14 @@ int main()
             && arm_backward.x < authored_hand.x - 0.38f
             && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
             && arm_forward.y < -1.20f
+            && std::abs(casual_arm_rest.x) < 1.0e-6f
+            && std::abs(casual_arm_rest.y + 1.428f) < 1.0e-5f
+            && casual_arm_forward.x > 0.16f
+            && casual_arm_backward.x < -0.16f
+            && std::abs(casual_arm_forward.y - casual_arm_backward.y) < 1.0e-5f
+            && length(rl::human_casual_arm_rest_target(
+                std::numeric_limits<float>::quiet_NaN())) == 0.0f
+            && length(rl::human_casual_arm_rest_target(-1.0f)) == 0.0f
             && !rl::solve_two_link_sagittal(0.0f, 1.0f,
                 { 0.0f, -1.0f }, 1.0f).valid,
         "arm teacher is not a bounded fore/aft sagittal chain target");
@@ -1781,6 +1808,26 @@ int main()
     require(rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
         "cross-platform Walk mastery aggregate drifted");
+    rl::TrainingMetrics turn_mastery{};
+    turn_mastery.evaluation_valid = true;
+    turn_mastery.evaluation_quality_key = 1u;
+    turn_mastery.evaluation_distance = rl::walk_mastery_distance;
+    turn_mastery.evaluation_stride_events = rl::walk_mastery_stride_events;
+    turn_mastery.evaluation_survival = 18.0f;
+    turn_mastery.evaluation_collisions = 1.0f;
+    for (const float signed_round_trip_speed : { -8.0f, 0.0f, 8.0f })
+    {
+        turn_mastery.evaluation_speed = signed_round_trip_speed;
+        require(rl::shuttle_mastery_evidence(turn_mastery),
+            "valid round-trip turn evidence was rejected by signed-speed cancellation");
+    }
+    turn_mastery.evaluation_distance = rl::walk_mastery_distance - 0.01f;
+    require(!rl::shuttle_mastery_evidence(turn_mastery),
+        "turn mastery accepted insufficient round-trip distance");
+    turn_mastery.evaluation_distance = rl::walk_mastery_distance;
+    turn_mastery.evaluation_valid = false;
+    require(!rl::shuttle_mastery_evidence(turn_mastery),
+        "turn mastery accepted an invalid evaluation");
     require(rl::foundational_walk_teacher_handoff_update(biped_walk) == 500u
             && rl::foundational_walk_teacher_handoff_update(humanoid_walk) == 900u
             && rl::foundational_walk_teacher_handoff_update(quadruped_walk) == 900u,

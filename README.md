@@ -1,3 +1,11 @@
+## v0.7.46 Exact cells, natural gait, and round-trip mastery
+
+- Terrain physics and presentation use the same exact authored material cells. Static macro/fine cells do not bubble, interpolate, or move; deposited cells remain the only evolving material.
+- Human locomotion now targets straighter support legs and relaxed opposed arm motion instead of preserving the documented v0.7.45 zombie crouch.
+- BACK / TURN / RETURN can complete from valid round-trip distance, strides, survival, and collision evidence even when opposite directions cancel signed net speed.
+- Dog and Chicken heads/tails are fitted and oriented by species anatomy, including the corrected dog tail direction.
+- Training semantics are `0x0007'4601` under species-owned `runner-v0746-*` paths, with lifetime-only v0.7.45 migration. See `docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md`.
+
 ## v0.7.45 Human support gait and species art fit
 
 - Human walking reaches a near-straight planted leg at mid-stance instead of retaining the v0.7.44 zombie crouch, while contact exchange keeps enough flexion to avoid hopping or locked-knee marching.

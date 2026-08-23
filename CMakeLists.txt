@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.45 LANGUAGES CXX)
+project(Runner VERSION 0.7.46 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -218,6 +218,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         VERBATIM)
 
     install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
@@ -267,6 +268,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()

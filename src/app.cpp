@@ -960,17 +960,18 @@ namespace runner
             }
 
             const float surface_step = sim::DeformableTerrain::fine_cell_spacing;
-            const float first_surface_x = std::floor(left / surface_step) * surface_step;
+            const float first_surface_x =
+                (std::floor(left / surface_step + 0.5f) - 0.5f) * surface_step;
             const float viewport_bottom = viewport.position.y + viewport.size.y;
             for (float x = first_surface_x; x < right; x += surface_step)
             {
                 const float next_x = x + surface_step;
-                const float ground_a = environment.ground_height_at(x);
-                const float ground_b = environment.ground_height_at(next_x);
+                const float center_x = x + 0.5f * surface_step;
+                const float ground = environment.ground_height_at(center_x);
                 const Vec2 surface_a = world_to_screen(
-                    { x, ground_a }, viewport, camera, scale);
+                    { x, ground }, viewport, camera, scale);
                 const Vec2 surface_b = world_to_screen(
-                    { next_x, ground_b }, viewport, camera, scale);
+                    { next_x, ground }, viewport, camera, scale);
                 const Vec2 bottom_a{ surface_a.x, viewport_bottom };
                 const Vec2 bottom_b{ surface_b.x, viewport_bottom };
                 canvas.triangle(surface_a, surface_b, bottom_b, rgb(0x4d392c));
@@ -980,27 +981,11 @@ namespace runner
                 // collision surface. Raw fine-cell bottoms never render.
                 const float band_depth = 0.30f;
                 const Vec2 band_a = world_to_screen(
-                    { x, ground_a - band_depth }, viewport, camera, scale);
+                    { x, ground - band_depth }, viewport, camera, scale);
                 const Vec2 band_b = world_to_screen(
-                    { next_x, ground_b - band_depth }, viewport, camera, scale);
-                Color band_color{ 0.0f, 0.0f, 0.0f, 0.0f };
-                float color_weight = 0.0f;
-                for (int offset = -3; offset <= 3; ++offset)
-                {
-                    const float weight = static_cast<float>(4 - std::abs(offset));
-                    const Color sample_color = material_color(
-                        environment.terrain_surface_material_at(
-                            x + surface_step * (0.5f + static_cast<float>(offset))));
-                    band_color.r += sample_color.r * weight;
-                    band_color.g += sample_color.g * weight;
-                    band_color.b += sample_color.b * weight;
-                    band_color.a += sample_color.a * weight;
-                    color_weight += weight;
-                }
-                band_color.r /= color_weight;
-                band_color.g /= color_weight;
-                band_color.b /= color_weight;
-                band_color.a /= color_weight;
+                    { next_x, ground - band_depth }, viewport, camera, scale);
+                const Color band_color = material_color(
+                    environment.terrain_surface_material_at(center_x));
                 canvas.triangle(surface_a, surface_b, band_b, band_color);
                 canvas.triangle(surface_a, band_b, band_a, band_color);
             }
@@ -1008,25 +993,29 @@ namespace runner
             for (float x = first_surface_x; x < right; x += surface_step)
             {
                 const float next_x = x + surface_step;
+                const float center_x = x + 0.5f * surface_step;
+                const float ground = environment.ground_height_at(center_x);
                 const Vec2 surface_a = world_to_screen(
-                    { x, environment.ground_height_at(x) }, viewport, camera, scale);
+                    { x, ground }, viewport, camera, scale);
                 const Vec2 surface_b = world_to_screen(
-                    { next_x, environment.ground_height_at(next_x) }, viewport, camera, scale);
+                    { next_x, ground }, viewport, camera, scale);
                 canvas.line(surface_a, surface_b, 1.25f, rgb(0xc59a65, 0.92f));
             }
 
             const float water_step = sim::DeformableTerrain::fine_cell_spacing;
-            for (float x = left; x <= right; x += water_step)
+            for (float x = first_surface_x; x <= right; x += water_step)
             {
-                const float depth = environment.water_depth_at(x);
+                const float next_x = x + water_step;
+                const float center_x = x + 0.5f * water_step;
+                const float depth = environment.water_depth_at(center_x);
                 if (depth <= 0.002f)
                     continue;
-                const float ground = environment.ground_height_at(x);
-                const float surface = environment.water_surface_at(x);
-                draw_world_color(x, ground, x + water_step, surface,
+                const float ground = environment.ground_height_at(center_x);
+                const float surface = environment.water_surface_at(center_x);
+                draw_world_color(x, ground, next_x, surface,
                     rgb(0x2479a8, 0.62f));
                 const Vec2 a = world_to_screen({ x, surface }, viewport, camera, scale);
-                const Vec2 b = world_to_screen({ x + water_step, surface }, viewport, camera, scale);
+                const Vec2 b = world_to_screen({ next_x, surface }, viewport, camera, scale);
                 canvas.line(a, b, 1.5f, rgb(0x66d4ef, 0.90f));
             }
 
@@ -1367,6 +1356,7 @@ namespace runner
 
             draw_limb_pass(0);
             std::size_t body_a = rig.root_node;
+            Vec2 body_direction{ environment.facing_direction(), 0.0f };
             std::size_t body_b = rig.torso_node;
             if (species == sim::CreatureSpecies::chicken && particles.size() > 5u)
             {
@@ -1382,7 +1372,7 @@ namespace runner
             {
                 Vec2 beginning = point(body_a);
                 Vec2 ending = point(body_b);
-                const Vec2 body_direction = normalized(ending - beginning,
+                body_direction = normalized(ending - beginning,
                     { environment.facing_direction(), 0.0f });
                 beginning = beginning - body_direction * scale * profile.body_rear_overlap;
                 ending = ending + body_direction * scale * profile.body_front_overlap;
@@ -1410,17 +1400,24 @@ namespace runner
             {
                 const Vec2 head = point(rig.head_node);
                 const float facing = environment.facing_direction();
+                const Vec2 raw_head_direction = rig.torso_node < particles.size()
+                    ? normalized(head - point(rig.torso_node),
+                        { facing, 0.0f })
+                    : body_direction;
+                const Vec2 head_direction = normalized({
+                    facing * std::max(0.20f, std::abs(raw_head_direction.x)),
+                    raw_head_direction.y
+                }, { facing, 0.0f });
                 const float head_length = std::clamp(
                     particles[rig.head_node].radius * scale * profile.head_scale,
                     scale * profile.head_minimum, scale * profile.head_maximum);
-                const Vec2 head_anchor = head + Vec2{
-                    facing * scale * profile.head_anchor_forward,
-                    -scale * profile.head_anchor_up
-                };
+                const Vec2 head_anchor = head
+                    + head_direction * scale * profile.head_anchor_forward
+                    + Vec2{ 0.0f, -scale * profile.head_anchor_up };
                 const Vec2 beginning = head_anchor
-                    - Vec2{ facing * head_length * 0.45f, 0.0f };
+                    - head_direction * head_length * 0.45f;
                 const Vec2 ending = head_anchor
-                    + Vec2{ facing * head_length * 0.55f, 0.0f };
+                    + head_direction * head_length * 0.55f;
                 if (use_art && bundle->head.loaded())
                     draw_oriented_pixel_art(canvas, bundle->head,
                         beginning, ending, head_length * profile.head_ratio, 0.98f,

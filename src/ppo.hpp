@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4501u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4601u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -990,6 +990,28 @@ namespace runner::rl
         return std::max(0.01f, std::min(std::abs(desired_height), maximum_height));
     }
 
+    [[nodiscard]] inline float biped_stance_vertical_reach(
+        float horizontal_extent, float chain_length) noexcept
+    {
+        if (!std::isfinite(horizontal_extent) || !std::isfinite(chain_length)
+            || chain_length <= 0.01f)
+            return 0.0f;
+        const float maximum_reach = chain_length
+            * (1.0f - biped_leg_reach_reserve);
+        const float horizontal = std::min(
+            std::abs(horizontal_extent), maximum_reach);
+        return std::sqrt(std::max(0.0f,
+            maximum_reach * maximum_reach - horizontal * horizontal));
+    }
+
+    [[nodiscard]] inline Vec2 human_casual_arm_rest_target(
+        float chain_length) noexcept
+    {
+        if (!std::isfinite(chain_length) || chain_length <= 0.01f)
+            return {};
+        return { 0.0f, -0.84f * chain_length };
+    }
+
     [[nodiscard]] inline Vec2 bounded_biped_leg_target(
         Vec2 desired_target, float chain_length) noexcept
     {
@@ -1081,8 +1103,12 @@ namespace runner::rl
         // minimum extension; forcing it saturated the IK and produced glide.
         const float leg_height = reachable_biped_leg_height(leg_length,
             0.5f * step_length, leg_length * 0.95f);
+        // A small Human-only cadence reserve keeps the retained physical replay
+        // above the strict 18 m release floor after the support-leg reach and
+        // relaxed-arm corrections. 1.04 Hz remains inside the casual cadence
+        // window and does not alter authored stride length or other topologies.
         BipedGaitParameters parameters{
-            human_stride ? 1.02f : sim::foundational_gait_cadence_hz,
+            human_stride ? 1.04f : sim::foundational_gait_cadence_hz,
             step_length,
             swing_lift,
             leg_height,
@@ -1134,6 +1160,7 @@ namespace runner::rl
             float progress{};
             float x{};
             float lift{};
+            const bool stance_phase = phase < pi;
             if (phase < pi)
             {
                 progress = phase / pi;
@@ -1156,8 +1183,14 @@ namespace runner::rl
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
             const float transition_flex = std::max(0.0f,
                 parameters.transition_flex) * std::abs(std::cos(progress * pi));
-            const Vec2 cyclic_target{ x + parameters.stance_center_x,
-                -parameters.leg_height + lift + transition_flex };
+            const float stance_x = x + parameters.stance_center_x;
+            const bool casual_human = rig.presentation_species()
+                == sim::CreatureSpecies::human;
+            const float vertical_reach = casual_human && stance_phase
+                ? biped_stance_vertical_reach(stance_x, upper_length + lower_length)
+                : parameters.leg_height;
+            const Vec2 cyclic_target{ stance_x,
+                -vertical_reach + lift + transition_flex };
             const Vec2 authored_target = rig.nodes[knee.c]
                 - rig.nodes[hip.pivot];
             const Vec2 desired_target = authored_target
@@ -1236,16 +1269,28 @@ namespace runner::rl
                 rig.nodes[shoulder.c] - rig.nodes[shoulder.pivot]);
             const float lower_length = length(
                 rig.nodes[elbow.c] - rig.nodes[elbow.pivot]);
+            const float chain_length = upper_length + lower_length;
             // The authored pose is the gait origin: hands begin at their saved
-            // side-rest positions, then move in modest opposed swing.
+            // side-rest positions. Human gait then blends toward a relaxed arm
+            // hang before applying a modest opposed swing.
             const float arm_phase = phase
                 + ((chain & 1u) == 0u ? pi : 0.0f);
             const Vec2 authored_endpoint = rig.nodes[elbow.c]
                 - rig.nodes[shoulder.pivot];
-            const Vec2 target = authored_opposed_swing_target(
-                authored_endpoint, arm_phase,
-                (upper_length + lower_length) * 0.040f * startup_blend, 0.0f,
+            const bool casual_human = rig.presentation_species()
+                == sim::CreatureSpecies::human;
+            const Vec2 gait_origin = casual_human
+                ? human_casual_arm_rest_target(chain_length)
+                : authored_endpoint;
+            const float swing_fraction = casual_human ? 0.10f : 0.040f;
+            const Vec2 cyclic_target = authored_opposed_swing_target(
+                gait_origin, arm_phase,
+                chain_length * swing_fraction, 0.0f,
                 parameters.direction);
+            const Vec2 desired_target = authored_endpoint
+                + startup_blend * (cyclic_target - authored_endpoint);
+            const Vec2 target = bounded_biped_leg_target(
+                desired_target, chain_length);
             const Vec2 authored_upper = rig.nodes[shoulder.c]
                 - rig.nodes[shoulder.pivot];
             const Vec2 authored_lower = rig.nodes[elbow.c]

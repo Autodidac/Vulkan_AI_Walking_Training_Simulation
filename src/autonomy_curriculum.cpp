@@ -21,6 +21,7 @@ namespace runner::rl
         case sim::CourseStage::duck_press:
             return strict_duck_press_mastery(metrics);
         case sim::CourseStage::shuttle:
+            return shuttle_mastery_evidence(metrics);
         case sim::CourseStage::uneven:
             return metrics.evaluation_distance >= walk_mastery_distance
                 && metrics.evaluation_stride_events >= walk_mastery_stride_events

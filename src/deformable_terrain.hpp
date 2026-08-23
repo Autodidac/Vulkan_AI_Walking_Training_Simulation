@@ -187,9 +187,7 @@ namespace runner::sim
 
         [[nodiscard]] float height_at(float course_x) const noexcept
         {
-            const Sample sample = sample_coordinates(course_x);
-            return std::lerp(cells_[sample.first].height,
-                cells_[sample.second].height, sample.fraction);
+            return cells_[nearest_index(course_x)].height;
         }
 
         [[nodiscard]] static bool launch_pad_at(float course_x) noexcept
@@ -202,16 +200,12 @@ namespace runner::sim
 
         [[nodiscard]] float firmness_at(float course_x) const noexcept
         {
-            const Sample sample = sample_coordinates(course_x);
-            return std::clamp(std::lerp(cells_[sample.first].firmness,
-                cells_[sample.second].firmness, sample.fraction), 0.0f, 1.0f);
+            return std::clamp(cells_[nearest_index(course_x)].firmness, 0.0f, 1.0f);
         }
 
         [[nodiscard]] float looseness_at(float course_x) const noexcept
         {
-            const Sample sample = sample_coordinates(course_x);
-            return std::clamp(std::lerp(cells_[sample.first].loose_fraction,
-                cells_[sample.second].loose_fraction, sample.fraction), 0.0f, 1.0f);
+            return std::clamp(cells_[nearest_index(course_x)].loose_fraction, 0.0f, 1.0f);
         }
 
         [[nodiscard]] TerrainRegion region_at(float course_x) const noexcept
@@ -227,16 +221,12 @@ namespace runner::sim
 
         [[nodiscard]] float water_depth_at(float course_x) const noexcept
         {
-            const Sample sample = sample_coordinates(course_x);
-            return std::max(0.0f, std::lerp(cells_[sample.first].water_depth,
-                cells_[sample.second].water_depth, sample.fraction));
+            return std::max(0.0f, cells_[nearest_index(course_x)].water_depth);
         }
 
         [[nodiscard]] float water_surface_at(float course_x) const noexcept
         {
-            const Sample sample = sample_coordinates(course_x);
-            return std::lerp(cells_[sample.first].water_surface,
-                cells_[sample.second].water_surface, sample.fraction);
+            return cells_[nearest_index(course_x)].water_surface;
         }
 
         [[nodiscard]] float slope_at(float course_x) const noexcept
