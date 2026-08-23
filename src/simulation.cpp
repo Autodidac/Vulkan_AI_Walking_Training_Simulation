@@ -3136,11 +3136,11 @@ for (int pass = 0; pass < chain_convergence_passes; ++pass)
                 }
                 const float correction_gain = guided_monoped ? 0.060f
                     : guided_avian ? 0.040f
-                    : human_casual ? 0.050f
+                    : human_casual ? 0.070f
                     : appendaged_biped ? 0.028f : 0.025f;
                 const float maximum_correction = guided_monoped ? 0.0140f
                     : guided_avian ? 0.0080f
-                    : human_casual ? 0.0100f
+                    : human_casual ? 0.0140f
                     : appendaged_biped ? 0.0060f : 0.0060f;
                 const float correction = clamp(-body_rotation * correction_gain,
                     -maximum_correction, maximum_correction);

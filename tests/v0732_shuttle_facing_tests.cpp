@@ -20,6 +20,20 @@ struct EnvironmentTestAccess {
     static std::size_t grounded(Environment& e, bool left) noexcept {
         return e.support_seed_grounded_count(left);
     }
+    static float support_extension_ratio(Environment& e, bool left) noexcept {
+        const CreatureBlueprint& rig=e.blueprint_;
+        const std::size_t hip_index=left?0u:2u;
+        const std::size_t knee_index=left?1u:3u;
+        if(rig.motors.size()<=knee_index)return 0.0f;
+        const MotorConstraint& hip=rig.motors[hip_index];
+        const MotorConstraint& knee=rig.motors[knee_index];
+        if(hip.pivot>=rig.nodes.size()||hip.c>=rig.nodes.size()
+            ||knee.pivot>=rig.nodes.size()||knee.c>=rig.nodes.size())return 0.0f;
+        const float chain=length(rig.nodes[hip.c]-rig.nodes[hip.pivot])
+            +length(rig.nodes[knee.c]-rig.nodes[knee.pivot]);
+        return length(e.particles_[knee.c].position-e.particles_[hip.pivot].position)
+            /std::max(chain,1.0e-5f);
+    }
     static float clearance(Environment& e, bool left) noexcept {
         return e.contact_cluster_clearance(left
             ? e.blueprint_.left_contact_node
@@ -366,14 +380,23 @@ int main(){
  physical.set_course(sim::CourseStage::shuttle,0.30f);physical.set_course_motion_enabled(false);
  sim::ShuttlePhase prior_phase=physical.shuttle_phase();
  sim::StepResult physical_result{};
+ float maximum_support_extension=0.0f;
+ std::size_t extended_support_samples=0u;
+ std::size_t support_samples=0u;
  for(int step=0;step<2400;++step){
   physical_result=physical.step(rl::walking_teacher_action(physical));
+  if(physical.elapsed_seconds()>1.0f){for(const bool left:{true,false}){
+   if(sim::EnvironmentTestAccess::grounded(physical,left)==0u)continue;
+   const float extension=sim::EnvironmentTestAccess::support_extension_ratio(physical,left);
+   maximum_support_extension=std::max(maximum_support_extension,extension);
+   ++support_samples;if(extension>=0.93f)++extended_support_samples;}}
   if(physical.shuttle_phase()!=prior_phase)
    prior_phase=physical.shuttle_phase();
   if(physical_result.terminated)break;}
  const bool physical_teacher_passed=physical.invalid_reason()==sim::InvalidMotion::none
   &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f
   &&physical.gait_cycles()>=6u
+  &&maximum_support_extension>=0.94f&&extended_support_samples>=12u
   &&physical.maximum_backward_brace_seconds()
    <=sim::sustained_backward_brace_limit_seconds;
  if(!physical_teacher_passed){
@@ -388,6 +411,8 @@ int main(){
    <<" x="<<physical.particles()[physical.blueprint().root_node].position.x
    <<" speed="<<physical.forward_speed()
    <<" upright="<<physical.uprightness()
+   <<" support_extension="<<maximum_support_extension
+   <<" extended_support="<<extended_support_samples<<'/'<<support_samples
    <<" integrity="<<physical.body_integrity_valid()
    <<" bone_error="<<physical.maximum_bone_length_error_ratio()<<'\n';
   if(!physical.body_integrity_valid()) sim::EnvironmentTestAccess::report_integrity(physical);
@@ -395,6 +420,7 @@ int main(){
  require(physical.invalid_reason()==sim::InvalidMotion::none
   &&physical.completed_shuttle_turns()>=1u&&physical.distance_travelled()>=12.0f
   &&physical.gait_cycles()>=6u
+  &&maximum_support_extension>=0.94f&&extended_support_samples>=12u
   &&physical.maximum_backward_brace_seconds()
    <=sim::sustained_backward_brace_limit_seconds,
   "physical teacher shuttle traversed by dragging or backward bracing");

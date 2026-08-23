@@ -1,3 +1,9 @@
+## v0.7.45 Human support gait and species art fit
+
+- Human walking reaches a near-straight planted leg at mid-stance instead of retaining the v0.7.44 zombie crouch, while contact exchange keeps enough flexion to avoid hopping or locked-knee marching.
+- The physical shuttle gate now requires repeated grounded near-straight support evidence alongside real turns, gait transfer, strict integrity, and zero backward bracing.
+- Chicken and Dog use species-owned head/tail scale, attachment, and orientation profiles; Dog tail orientation is corrected without changing Human world scale.
+- Corrected training starts under semantics `0x0007'4501` and species-owned `runner-v0745-*` paths, with lifetime-only v0.7.44 migration. See `docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md`.
 ## v0.7.44 Dog art and species-rig assembly
 
 - Gives Dog a purpose-built exact-side-view modular robot atlas with canine body, head, tail, articulated leg, and planted paw modules instead of stretched Human pieces.

@@ -28,21 +28,21 @@ namespace runner::rl
             state = autosave_state_;
             if (!std::filesystem::exists(checkpoint))
             {
-                std::filesystem::path v0742_candidate = checkpoint;
-                std::string v0742_name = v0742_candidate.filename().string();
-                constexpr std::string_view current_prefix{ "runner-v0744-" };
-                constexpr std::string_view prior_prefix{ "runner-v0742-" };
-                if (v0742_name.starts_with(current_prefix))
+                std::filesystem::path v0744_candidate = checkpoint;
+                std::string v0744_name = v0744_candidate.filename().string();
+                constexpr std::string_view current_prefix{ "runner-v0745-" };
+                constexpr std::string_view prior_prefix{ "runner-v0744-" };
+                if (v0744_name.starts_with(current_prefix))
                 {
-                    v0742_name.replace(0u, current_prefix.size(), prior_prefix);
-                    v0742_candidate.replace_filename(v0742_name);
+                    v0744_name.replace(0u, current_prefix.size(), prior_prefix);
+                    v0744_candidate.replace_filename(v0744_name);
                 }
-                if (std::filesystem::exists(v0742_candidate))
+                if (std::filesystem::exists(v0744_candidate))
                 {
-                    checkpoint = std::move(v0742_candidate);
+                    checkpoint = std::move(v0744_candidate);
                     rig.clear();
                     state.clear();
-                    legacy_lifetime_version = "V0.7.42";
+                    legacy_lifetime_version = "V0.7.44";
                 }
             }
             if (!std::filesystem::exists(checkpoint))
@@ -99,7 +99,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.44 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.45 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -281,7 +281,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.44 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.45 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

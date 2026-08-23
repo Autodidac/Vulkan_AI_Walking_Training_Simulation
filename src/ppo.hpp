@@ -21,7 +21,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4407u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4501u;
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -959,6 +959,7 @@ namespace runner::rl
         float direction{ 1.0f };
         float phase_offset{};
         float stance_center_x{};
+        float transition_flex{};
     };
 
     inline constexpr float biped_leg_reach_reserve = 0.010f;
@@ -1079,7 +1080,7 @@ namespace runner::rl
         // reach. The compact saved Human no longer has the old 1.88 m
         // minimum extension; forcing it saturated the IK and produced glide.
         const float leg_height = reachable_biped_leg_height(leg_length,
-            0.5f * step_length, leg_length * 0.90f);
+            0.5f * step_length, leg_length * 0.95f);
         BipedGaitParameters parameters{
             human_stride ? 1.02f : sim::foundational_gait_cadence_hz,
             step_length,
@@ -1087,6 +1088,11 @@ namespace runner::rl
             leg_height,
             1.0f
         };
+        // Reach a nearly straight planted leg at mid-stance without driving both
+        // feet to maximum reach during contact exchange. Flexing only the phase
+        // endpoints prevents the old permanent crouch and the newer hop/flip.
+        parameters.transition_flex = human_stride
+            ? clamp(leg_length * 0.075f, 0.14f, 0.18f) : 0.0f;
         if (human_stride && rig.nodes.size() > rig.right_contact_node
             && rig.motors[0].pivot < rig.nodes.size()
             && rig.motors[2].pivot < rig.nodes.size())
@@ -1148,8 +1154,10 @@ namespace runner::rl
                 rig.nodes[hip.c] - rig.nodes[hip.pivot]);
             const float lower_length = length(
                 rig.nodes[knee.c] - rig.nodes[knee.pivot]);
+            const float transition_flex = std::max(0.0f,
+                parameters.transition_flex) * std::abs(std::cos(progress * pi));
             const Vec2 cyclic_target{ x + parameters.stance_center_x,
-                -parameters.leg_height + lift };
+                -parameters.leg_height + lift + transition_flex };
             const Vec2 authored_target = rig.nodes[knee.c]
                 - rig.nodes[hip.pivot];
             const Vec2 desired_target = authored_target
@@ -1510,14 +1518,6 @@ namespace runner::rl
             };
 
         biped_parameters.direction = local_direction;
-        if (environment.course_stage() == sim::CourseStage::shuttle
-            && rig.presentation_species() == sim::CreatureSpecies::human)
-        {
-            biped_parameters.step_length = std::min(biped_parameters.step_length, 0.92f);
-            // Turning needs a lower boot arc than uneven-terrain traversal;
-            // the larger unloading reserve otherwise over-rotates the planted leg.
-            biped_parameters.swing_lift = std::min(biped_parameters.swing_lift, 0.34f);
-        }
         if (shuttle_braking)
         {
             // Use a low, short counter-step while momentum is being arrested.

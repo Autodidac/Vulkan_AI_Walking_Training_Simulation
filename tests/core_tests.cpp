@@ -1644,7 +1644,9 @@ int main()
             && humanoid_foundational_gait.step_length <= 1.10f
             && humanoid_foundational_gait.swing_lift >= 0.38f
             && humanoid_foundational_gait.swing_lift <= 0.42f
-            && std::abs(humanoid_foundational_gait.cadence_hz - 1.02f) < 1.0e-6f,
+            && std::abs(humanoid_foundational_gait.cadence_hz - 1.02f) < 1.0e-6f
+            && humanoid_foundational_gait.transition_flex >= 0.14f
+            && humanoid_foundational_gait.transition_flex <= 0.18f,
         "foundational biped gait is not finite and anatomy-bounded");
     require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
             && humanoid_foundational_gait.step_length <= 1.10f
@@ -1685,7 +1687,7 @@ int main()
     {
         return rl::bounded_biped_leg_target({
             parameters.stance_center_x + 0.5f * parameters.step_length,
-            -parameters.leg_height }, chain_length);
+            -parameters.leg_height + parameters.transition_flex }, chain_length);
     };
     const Vec2 biped_endpoint = bounded_foundational_endpoint(
         biped_foundational_gait, biped_leg_length);
@@ -1708,7 +1710,11 @@ int main()
     require(std::abs(humanoid_mid_stance.y) + 1.0e-5f
                 >= std::abs(humanoid_endpoint.y)
             && std::abs(humanoid_mid_stance.y)
-                >= humanoid_leg_length * 0.88f,
+                >= humanoid_leg_length * 0.95f
+            && humanoid_foundational_gait.leg_height
+                >= humanoid_leg_length * 0.95f
+            && std::abs(humanoid_mid_stance.y)
+                > std::abs(humanoid_endpoint.y) + 0.10f,
         "phase-local gait envelope keeps the Human crouched through mid-stance");
     rl::BipedGaitParameters excessive_reach = humanoid_foundational_gait;
     excessive_reach.step_length = humanoid_leg_length * 0.80f;

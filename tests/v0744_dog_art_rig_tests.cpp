@@ -1,5 +1,6 @@
 #include "simulation.hpp"
 #include "ppo.hpp"
+#include "species_art_layout.hpp"
 
 #include <algorithm>
 #include <array>
@@ -161,6 +162,31 @@ int main()
 
     const CreatureBlueprint chicken = CreatureBlueprint::chicken();
     const CreatureBlueprint hexapod = CreatureBlueprint::hexapod();
+    constexpr runner::art::SpeciesArtProfile chicken_art =
+        runner::art::species_art_profile(CreatureSpecies::chicken);
+    constexpr runner::art::SpeciesArtProfile dog_art =
+        runner::art::species_art_profile(CreatureSpecies::dog);
+    constexpr runner::art::SpeciesArtProfile hexapod_art =
+        runner::art::species_art_profile(CreatureSpecies::hexapod);
+    static_assert(chicken_art.head_scale >= 4.7f
+        && chicken_art.head_minimum >= 0.36f
+        && chicken_art.tail_length >= 0.48f
+        && chicken_art.tail_ratio >= 0.84f);
+    static_assert(dog_art.head_scale >= 4.55f
+        && dog_art.head_anchor_forward > chicken_art.head_anchor_forward
+        && dog_art.tail_length >= 0.62f
+        && dog_art.tail_flip_vertical);
+    static_assert(!chicken_art.tail_flip_vertical
+        && !hexapod_art.tail_flip_vertical
+        && hexapod_art.tail_length == 0.0f);
+    static_assert(runner::art::tail_transverse_mirror(dog_art, false)
+        && !runner::art::tail_transverse_mirror(dog_art, true)
+        && !runner::art::tail_transverse_mirror(chicken_art, false));
+    require(chicken_art.head_anchor_up > 0.0f
+            && chicken_art.tail_anchor_up > 0.0f
+            && dog_art.head_anchor_up > 0.0f
+            && dog_art.tail_anchor_up > 0.0f,
+        "species head and tail modules lost their authored attachment offsets");
     require(chicken.valid() && chicken.avian_gait(),
         "Chicken factory rig must remain valid avian anatomy");
     require(hexapod.valid() && hexapod.horizontal_multi_support_plan()
@@ -193,6 +219,6 @@ int main()
     require(!adversarial.topology_compatible_with_species(CreatureSpecies::chicken),
         "cross-species Dog topology must fail validation");
 
-    std::cout << "Runner v0.7.44 Dog art and four-species rig checks passed\n";
+    std::cout << "Runner v0.7.45 species art and four-species rig checks passed\n";
     return 0;
 }

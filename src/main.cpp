@@ -207,6 +207,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0742_SPECIES_ANATOMY_SCALE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",

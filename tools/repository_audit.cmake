@@ -32,6 +32,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0742_SPECIES_ANATOMY_SCALE.md
         docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md
         docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md
+        docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md
         assets/optional/species_runtime/chicken_body_side.ppm
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
@@ -95,6 +96,7 @@ foreach(required IN ITEMS
         tests/v0724_structural_metrics_icon_tests.cpp
         src/locomotion_strategy.hpp
         src/preview_sync.hpp
+        src/species_art_layout.hpp
         src/training_explainer.hpp
         src/ui_render_contract.hpp
         src/ui_frame_probe.hpp
@@ -111,7 +113,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.44 LANGUAGES CXX)"
+        "project(Runner VERSION 0.7.45 LANGUAGES CXX)"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -170,6 +172,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
         "RUNNER_V0724_STRUCTURAL_METRICS_ICON.md"
         "RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
+        "RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -299,7 +302,14 @@ foreach(reference IN ITEMS
         "WALK-HUMAN-MODULE-SCALE-440"
         "WALK-SPECIES-ATTACHMENTS-441"
         "WALK-STANCE-GAIT-442"
-        "WALK-RELEASE-443")
+        "WALK-RELEASE-443"
+        "WALK-DOG-ART-444"
+        "WALK-SPECIES-RIG-BEAUTY-445"
+        "WALK-RELEASE-446"
+        "WALK-HUMAN-ANIMATION-447"
+        "WALK-HUMAN-STANCE-448"
+        "WALK-SPECIES-ART-FIT-449"
+        "WALK-RELEASE-450")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -362,7 +372,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4407u"
+        "training_semantics_version = 0x0007'4501u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -488,7 +498,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0744-"
+        "runner-v0745-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -842,4 +852,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.44 repository hygiene passed")
+message(STATUS "Runner v0.7.45 repository hygiene passed")

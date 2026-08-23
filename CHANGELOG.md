@@ -1,3 +1,9 @@
+## 0.7.45
+
+- Restored a near-straight Human support leg at physical mid-stance with bounded contact-exchange flexion, lower casual cadence, and coordinated torso correction.
+- Added grounded support-extension evidence to the deterministic physical shuttle regression so chronic crouch cannot pass on distance alone.
+- Added species-owned Chicken and Dog head/tail scale and attachment profiles and corrected the vertically inverted Dog tail.
+- Advanced isolated training state to semantics `0x0007'4501` and `runner-v0745-*` paths with lifetime-only migration from v0.7.44.
 ## 0.7.44
 
 - Replaced Dog's stretched Human-derived presentation with a purpose-built orthographic modular atlas containing canine head, torso, tail, upper-leg, lower-leg, and paw art.

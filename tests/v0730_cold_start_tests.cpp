@@ -14,7 +14,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "Runner v0.7.44 rig-training failure: " << message << '\n';
+        std::cerr << "Runner v0.7.45 rig-training failure: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -348,7 +348,7 @@ namespace
             require(all_sustained,
                 "walking teacher did not sustain the full probe");
             require(all_walked,
-                "v0.7.44 walking teacher regressed to the two-step plateau");
+                "v0.7.45 walking teacher regressed to the two-step plateau");
         }
     }
     void verify_frame_independent_preview()
@@ -405,7 +405,7 @@ int main(int argc, char** argv)
     const bool run_hexapod = mode == "--learner-hexapod";
     if (!run_references && !run_learner && !run_chicken && !run_hexapod)
     {
-        std::cerr << "Unknown v0.7.44 test mode: " << mode << '\n';
+        std::cerr << "Unknown v0.7.45 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
     verify_retained_release_gate_contract();
@@ -415,7 +415,7 @@ int main(int argc, char** argv)
         verify_frame_independent_preview();
         if (!run_learner)
         {
-            std::cout << "Runner v0.7.44 four-rig reference gait and frame-independence checks passed\n";
+            std::cout << "Runner v0.7.45 four-rig reference gait and frame-independence checks passed\n";
             return EXIT_SUCCESS;
         }
     }
@@ -454,10 +454,10 @@ int main(int argc, char** argv)
                 rig, chicken);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.44 chicken training diagnostic failed\n";
+            std::cerr << "Runner v0.7.45 chicken training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.44 chicken training checks passed\n";
+        std::cout << "Runner v0.7.45 chicken training checks passed\n";
         return EXIT_SUCCESS;
     }
     if (run_hexapod)
@@ -492,10 +492,10 @@ int main(int argc, char** argv)
                 rig, hexapod);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.44 hexapod training diagnostic failed\n";
+            std::cerr << "Runner v0.7.45 hexapod training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.44 hexapod training checks passed\n";
+        std::cout << "Runner v0.7.45 hexapod training checks passed\n";
         return EXIT_SUCCESS;
     }
 
@@ -551,12 +551,12 @@ int main(int argc, char** argv)
     }
     if (!report.passed)
     {
-        std::cerr << "Runner v0.7.44 four-rig training diagnostic failed\n";
+        std::cerr << "Runner v0.7.45 four-rig training diagnostic failed\n";
         return EXIT_FAILURE;
     }
     if (run_references)
-        std::cout << "Runner v0.7.44 four-rig training and frame-independence checks passed\n";
+        std::cout << "Runner v0.7.45 four-rig training and frame-independence checks passed\n";
     else
-        std::cout << "Runner v0.7.44 four-rig training checks passed\n";
+        std::cout << "Runner v0.7.45 four-rig training checks passed\n";
     return EXIT_SUCCESS;
 }
