@@ -165,19 +165,22 @@ int main()
             std::filesystem::temp_directory_path() / "runner-v0729-keyed.ppm";
         std::ofstream output(keyed_path, std::ios::binary | std::ios::trunc);
         output << "P3\n3 3\n255\n"
-            << "255 0 255  255 0 255  255 0 255\n"
-            << "255 0 255  1 1 1        255 0 255\n"
-            << "255 0 255  255 0 255  255 0 255\n";
+            << "255 0 255  255 80 220  255 0 255\n"
+            << "255 0 255  1 1 1       253 0 253\n"
+            << "255 0 255  255 0 255   255 0 255\n";
         output.close();
         runner::art::PixelArt keyed{};
         std::string error{};
         require(runner::art::load_p3_pixel_art(keyed_path, keyed, error)
                 && keyed.chroma_keyed,
             "adversarial keyed fixture did not detect its key");
-        require(keyed.transparent(keyed.pixels.front()),
-            "adversarial keyed fixture did not hide magenta");
+        require(keyed.transparent(keyed.pixels.front())
+                && keyed.transparent(keyed.pixels[5]),
+            "adversarial keyed fixture did not hide exact and near-magenta fringe");
         require(!keyed.transparent(keyed.pixels[4]),
             "adversarial keyed fixture erased black subject detail");
+        require(!keyed.transparent(keyed.pixels[1]),
+            "chroma tolerance erased an authored non-key pink pixel");
         std::filesystem::remove(keyed_path);
     }
 

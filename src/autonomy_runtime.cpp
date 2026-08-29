@@ -311,27 +311,45 @@ namespace runner::rl
             worker_busy_.store(true, std::memory_order_relaxed);
             const auto started = std::chrono::steady_clock::now();
 
-            worker_pipeline_stage_ = "ROLLOUT COLLECTION";
-            worker_pipeline_stage_mask_ |= 1u << 1u;
-            worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
-            worker_.begin_staged_update();
-            co_yield RoutineStage::rollout;
+            const bool confirming_retained = should_confirm_retained_mastery(
+                stage_, mastery_streak_, worker_.has_best_policy());
+            if (confirming_retained)
+            {
+                // Freeze optimization and test the exact retained controller.
+                // This prevents a stage-safe policy from drifting between the
+                // independent confirmations that own the final 20 percent.
+                worker_pipeline_stage_ = "RETAINED MASTERY TEST";
+                worker_pipeline_stage_mask_ |= 1u << 4u;
+                if (worker_.evaluate_retained_policy())
+                    manage_curriculum_locked();
+                else
+                    mastery_streak_ = 0;
+                co_yield RoutineStage::evaluation;
+            }
+            else
+            {
+                worker_pipeline_stage_ = "ROLLOUT COLLECTION";
+                worker_pipeline_stage_mask_ |= 1u << 1u;
+                worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
+                worker_.begin_staged_update();
+                co_yield RoutineStage::rollout;
 
-            worker_pipeline_stage_ = "ADVANTAGE COMPUTATION";
-            worker_pipeline_stage_mask_ |= 1u << 2u;
-            worker_.compute_staged_advantages();
-            co_yield RoutineStage::advantages;
+                worker_pipeline_stage_ = "ADVANTAGE COMPUTATION";
+                worker_pipeline_stage_mask_ |= 1u << 2u;
+                worker_.compute_staged_advantages();
+                co_yield RoutineStage::advantages;
 
-            worker_pipeline_stage_ = "PARALLEL GRADIENT / OPTIMIZER";
-            worker_pipeline_stage_mask_ |= 1u << 3u;
-            worker_.optimize_staged_update();
-            co_yield RoutineStage::optimizer;
+                worker_pipeline_stage_ = "PARALLEL GRADIENT / OPTIMIZER";
+                worker_pipeline_stage_mask_ |= 1u << 3u;
+                worker_.optimize_staged_update();
+                co_yield RoutineStage::optimizer;
 
-            worker_pipeline_stage_ = "EVALUATION / CURRICULUM";
-            worker_pipeline_stage_mask_ |= 1u << 4u;
-            worker_.finish_staged_update();
-            manage_curriculum_locked();
-            co_yield RoutineStage::evaluation;
+                worker_pipeline_stage_ = "EVALUATION / CURRICULUM";
+                worker_pipeline_stage_mask_ |= 1u << 4u;
+                worker_.finish_staged_update();
+                manage_curriculum_locked();
+                co_yield RoutineStage::evaluation;
+            }
 
             const auto finished = std::chrono::steady_clock::now();
             worker_busy_.store(false, std::memory_order_relaxed);

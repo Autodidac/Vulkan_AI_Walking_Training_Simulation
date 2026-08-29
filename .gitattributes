@@ -1,3 +1,4 @@
 # Preserve byte-audited optional P3 artwork on every platform.
 assets/optional/runner_armor_concepts/**/*.ppm -text
+assets/optional/species_runtime/*.ppm -text
 release-assets export-ignore

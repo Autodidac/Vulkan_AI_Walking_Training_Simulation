@@ -47,8 +47,8 @@ namespace runner::ui_layout
     inline constexpr float card_margin = 14.0f;
     inline constexpr float bottom_telemetry_height = 44.0f;
     inline constexpr float minimum_readable_text_scale = 0.78f;
-    inline constexpr float rig_lab_combined_min_content_width = 1484.0f;
-    inline constexpr float rig_lab_combined_live_ratio = 0.42f;
+    inline constexpr float rig_lab_combined_min_content_width = 3000.0f;
+    inline constexpr float rig_lab_combined_live_ratio = 0.34f;
 
     enum class DistanceUnits { metric, imperial };
 
@@ -254,7 +254,13 @@ namespace runner::ui_layout
 
     [[nodiscard]] constexpr float rig_lab_panel_width(float content_width) noexcept
     {
-        return std::clamp(content_width * 0.31f, 420.0f, 560.0f);
+        return std::clamp(content_width * 0.18f, 340.0f, 560.0f);
+    }
+
+    [[nodiscard]] constexpr float rig_lab_trainer_panel_width(
+        float content_width) noexcept
+    {
+        return std::clamp(content_width * 0.20f, 400.0f, 650.0f);
     }
 
     [[nodiscard]] constexpr bool rig_lab_shows_live(Box content) noexcept
@@ -268,18 +274,23 @@ namespace runner::ui_layout
             return { content.x, content.y, 0.0f, content.height };
         return { content.x, content.y,
             std::clamp(content.width * rig_lab_combined_live_ratio,
-                620.0f, 1680.0f), content.height };
+                620.0f, 1400.0f), content.height };
+    }
+
+    [[nodiscard]] constexpr Box rig_lab_trainer_panel_box(Box content) noexcept
+    {
+        const Box live = rig_lab_live_box(content);
+        const float x = rig_lab_shows_live(content)
+            ? live.x + live.width + panel_gap : content.x;
+        return { x, content.y,
+            rig_lab_trainer_panel_width(content.width), content.height };
     }
 
     [[nodiscard]] constexpr Box rig_lab_panel_box(Box content) noexcept
     {
-        const Box live = rig_lab_live_box(content);
-        const float panel_x = rig_lab_shows_live(content)
-            ? live.x + live.width + panel_gap : content.x;
-        const float remaining_width = rig_lab_shows_live(content)
-            ? content.x + content.width - panel_x : content.width;
-        return { panel_x, content.y,
-            rig_lab_panel_width(remaining_width), content.height };
+        const Box trainer = rig_lab_trainer_panel_box(content);
+        return { trainer.x + trainer.width + panel_gap, content.y,
+            rig_lab_panel_width(content.width), content.height };
     }
 
     [[nodiscard]] constexpr Box rig_lab_world_box(Box content) noexcept
@@ -348,22 +359,27 @@ namespace runner::ui_layout
             return false;
         const Box content = content_box(width, height);
         const Box live = rig_lab_live_box(content);
+        const Box trainer = rig_lab_trainer_panel_box(content);
         const Box panel = rig_lab_panel_box(content);
         const Box world = rig_lab_world_box(content);
         const bool live_valid = !rig_lab_shows_live(content)
             || (live.width >= 620.0f && contains(content, live)
-                && !overlaps(live, panel) && !overlaps(live, world));
-        return live_valid && panel.width >= 420.0f
-            && world.width >= (rig_lab_shows_live(content) ? 420.0f : 680.0f)
-            && contains(content, panel) && contains(content, world)
+                && !overlaps(live, trainer) && !overlaps(live, panel)
+                && !overlaps(live, world));
+        return live_valid && trainer.width >= 400.0f
+            && panel.width >= 340.0f && world.width >= 400.0f
+            && contains(content, trainer) && contains(content, panel)
+            && contains(content, world)
+            && !overlaps(trainer, panel) && !overlaps(trainer, world)
             && !overlaps(panel, world);
     }
 
-    inline constexpr std::array<std::array<float, 2>, 5> validation_sizes{
+    inline constexpr std::array<std::array<float, 2>, 6> validation_sizes{
         std::array<float, 2>{ 1280.0f, 820.0f },
         std::array<float, 2>{ 1600.0f, 900.0f },
         std::array<float, 2>{ 1920.0f, 1080.0f },
         std::array<float, 2>{ 2047.0f, 1112.0f },
-        std::array<float, 2>{ 2560.0f, 1440.0f }
+        std::array<float, 2>{ 2560.0f, 1440.0f },
+        std::array<float, 2>{ 3840.0f, 2160.0f }
     };
 }

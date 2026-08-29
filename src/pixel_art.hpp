@@ -29,10 +29,10 @@ namespace runner::art
         {
             if (chroma_keyed)
             {
-                constexpr float tolerance = 0.5f / 255.0f;
-                return std::abs(color.r - transparent_key.r) <= tolerance
-                    && std::abs(color.g - transparent_key.g) <= tolerance
-                    && std::abs(color.b - transparent_key.b) <= tolerance;
+                // Lanczos-resampled keyed sprites can carry a one-pixel near-key
+                // fringe. Hide only saturated magenta, never ordinary pink art.
+                return color.r >= 0.94f && color.g <= 0.08f && color.b >= 0.94f
+                    && std::abs(color.r - color.b) <= 0.08f;
             }
             return std::max({ color.r, color.g, color.b }) < 0.035f;
         }

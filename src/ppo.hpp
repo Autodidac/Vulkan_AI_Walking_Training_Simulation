@@ -21,7 +21,14 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4601u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4701u;
+
+    [[nodiscard]] inline constexpr std::uint64_t evaluation_seed(
+        std::size_t agent, std::uint64_t sequence) noexcept
+    {
+        return 0xE000u + static_cast<std::uint64_t>(agent) * 4099u
+            + sequence * 104729u;
+    }
 
     [[nodiscard]] inline bool motor_drives_support_branch(
         const sim::CreatureBlueprint& rig,
@@ -2903,6 +2910,7 @@ namespace runner::rl
         [[nodiscard]] bool import_lifetime_ledger(const TrainingMetrics& lifetime,
             std::string& error) noexcept;
         [[nodiscard]] bool restore_best_policy() noexcept;
+        [[nodiscard]] bool evaluate_retained_policy() noexcept;
         void begin_staged_update();
         void compute_staged_advantages();
         void optimize_staged_update();
@@ -3016,7 +3024,7 @@ namespace runner::rl
             std::uint64_t& random_state,
             float& log_probability) const noexcept;
         void update_policy();
-        void evaluate_policy();
+        void evaluate_policy(std::uint64_t evaluation_sequence = 0u);
         void refresh_self_imitation_prior();
         void clear_self_imitation_prior() noexcept;
         void apply_self_imitation_prior();
@@ -3042,7 +3050,7 @@ namespace runner::rl
             float& policy_loss,
             float& value_loss,
             float& entropy);
-        void parallel_evaluate_policy();
+        void parallel_evaluate_policy(std::uint64_t evaluation_sequence);
 
         static constexpr std::size_t rollout_horizon = 128;
 

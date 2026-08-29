@@ -115,8 +115,11 @@ def fit_sprite(sprite: Image.Image, target_size: tuple[int, int]) -> Image.Image
 
 
 def write_p3(path: Path, sprite: Image.Image) -> None:
+    # Pixel-cell art uses a binary mask: antialiasing against the chroma matte
+    # creates the magenta halo visible in the packaged renderer.
+    alpha = sprite.getchannel("A").point(lambda value: 255 if value >= 128 else 0)
     rgb = Image.new("RGB", sprite.size, KEY)
-    rgb.paste(sprite.convert("RGB"), mask=sprite.getchannel("A"))
+    rgb.paste(sprite.convert("RGB"), mask=alpha)
     lines = ["P3", f"{rgb.width} {rgb.height}", "255"]
     pixels = list(rgb.get_flattened_data())
     for offset in range(0, len(pixels), 12):

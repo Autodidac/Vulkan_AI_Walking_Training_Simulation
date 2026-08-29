@@ -903,12 +903,19 @@ int main()
         require(ui_layout::rig_lab_layout_valid(size[0], size[1]),
             "Rig Lab responsive layout overlaps or underflows");
         const ui_layout::Box rig_live = ui_layout::rig_lab_live_box(content);
+        const ui_layout::Box rig_trainer =
+            ui_layout::rig_lab_trainer_panel_box(content);
+        const ui_layout::Box rig_panel = ui_layout::rig_lab_panel_box(content);
         const ui_layout::Box rig_world = ui_layout::rig_lab_world_box(content);
+        require(rig_trainer.width >= 400.0f
+                && !ui_layout::overlaps(rig_trainer, rig_panel)
+                && !ui_layout::overlaps(rig_trainer, rig_world),
+            "Rig Lab does not preserve the complete trainer beside editing controls");
         if (ui_layout::rig_lab_shows_live(content))
         {
             require(rig_live.width >= 620.0f
-                    && !ui_layout::overlaps(rig_live, rig_world),
-                "Rig Lab combined layout does not preserve the Live viewport");
+                    && !ui_layout::overlaps(rig_live, rig_trainer),
+                "wide Rig Lab does not preserve its fourth Live viewport pane");
         }
         const ui_layout::BlueprintFit fit = ui_layout::fit_blueprint(
             rig_world, -0.9f, 1.1f, 0.0f, 4.9f);
@@ -964,6 +971,22 @@ int main()
             && rl::required_mastery_confirmations(sim::CourseStage::balance) == 3
             && rl::required_mastery_confirmations(sim::CourseStage::duck_press) >= 8,
         "standing and later-stage mastery confirmation counts are incorrect");
+    require(rl::should_confirm_retained_mastery(
+                sim::CourseStage::duck_press, 1, true)
+            && rl::should_confirm_retained_mastery(
+                sim::CourseStage::duck_press, 7, true)
+            && !rl::should_confirm_retained_mastery(
+                sim::CourseStage::duck_press, 0, true)
+            && !rl::should_confirm_retained_mastery(
+                sim::CourseStage::duck_press, 8, true)
+            && !rl::should_confirm_retained_mastery(
+                sim::CourseStage::duck_press, 1, false),
+        "retained mastery confirmation boundaries are incorrect");
+    require(rl::evaluation_seed(2u, 7u) == rl::evaluation_seed(2u, 7u)
+            && rl::evaluation_seed(2u, 7u) != rl::evaluation_seed(2u, 8u)
+            && rl::evaluation_seed(2u, 7u) != rl::evaluation_seed(3u, 7u),
+        "independent mastery evaluation seeds are not deterministic and distinct");
+
     rl::TrainingMetrics standing_mastery{};
     standing_mastery.evaluation_valid = true;
     standing_mastery.evaluation_invalid_runs = 0u;
@@ -3171,7 +3194,10 @@ int main()
         require(autonomous.autonomy_status().environment_count == 16,
             "autonomous trainer environment count mismatch");
         autonomous.train_one_update();
-        for (int attempt = 0; attempt < 400 && autonomous.metrics().update == 0; ++attempt)
+        const auto update_deadline = std::chrono::steady_clock::now()
+            + std::chrono::seconds(30);
+        while (autonomous.metrics().update == 0
+            && std::chrono::steady_clock::now() < update_deadline)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             autonomous.synchronize();

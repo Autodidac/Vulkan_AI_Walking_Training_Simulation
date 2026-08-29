@@ -210,6 +210,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
             std::filesystem::path{ "docs" } / "RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_lower_leg_side.ppm",
@@ -364,10 +365,8 @@ namespace
             || error.find("VK_KHR_win32_surface") != std::string_view::npos;
     }
 
-    [[nodiscard]] bool visible_application_frames()
+    [[nodiscard]] bool visible_application_frames(int width, int height)
     {
-        constexpr int width = 1600;
-        constexpr int height = 900;
         constexpr float dt = 1.0f / 60.0f;
         const runner::ui_layout::Box content = runner::ui_layout::content_box(
             static_cast<float>(width), static_cast<float>(height));
@@ -383,6 +382,8 @@ namespace
             runner::ui_layout::rig_lab_world_box(content);
         const runner::ui_layout::Box rig_live =
             runner::ui_layout::rig_lab_live_box(content);
+        const runner::ui_layout::Box rig_trainer =
+            runner::ui_layout::rig_lab_trainer_panel_box(content);
 
         runner::Application application{};
         auto visible = [&](runner::ui_layout::Box region)
@@ -399,7 +400,8 @@ namespace
         runner::InputState switch_to_rig{};
         switch_to_rig.tab_pressed = true;
         application.frame(switch_to_rig, dt, width, height);
-        if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_live))
+        if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_trainer)
+            || (runner::ui_layout::rig_lab_shows_live(content) && !visible(rig_live)))
             return false;
 
         const float usable_width = rig_panel.width - 36.0f;
@@ -416,7 +418,8 @@ namespace
                 tab_y
             };
             application.frame(click, dt, width, height);
-            if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_live))
+            if (!visible(rig_panel) || !visible(rig_world) || !visible(rig_trainer)
+                || (runner::ui_layout::rig_lab_shows_live(content) && !visible(rig_live)))
                 return false;
         }
         return true;
@@ -675,7 +678,8 @@ if (wants_camera_diagnostic(argc, argv))
                 2400.0f, 1350.0f);
         valid = valid && std::abs(dpi.x - 1.5f) < 1.0e-5f
             && std::abs(dpi.y - 1.5f) < 1.0e-5f
-            && visible_application_frames();
+            && visible_application_frames(1600, 900)
+            && visible_application_frames(3840, 2160);
         std::printf("Runner %s UI diagnostic: %s; layouts=%zu dpi=%.2fx%.2f frames=%s\n",
             RUNNER_VERSION, valid ? "passed" : "failed",
             runner::ui_layout::validation_sizes.size(), dpi.x, dpi.y,

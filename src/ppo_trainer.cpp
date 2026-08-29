@@ -675,9 +675,9 @@ namespace runner::rl
         finish_staged_update();
     }
 
-    void PpoTrainer::evaluate_policy()
+    void PpoTrainer::evaluate_policy(std::uint64_t evaluation_sequence)
     {
-        parallel_evaluate_policy();
+        parallel_evaluate_policy(evaluation_sequence);
     }
 
     bool PpoTrainer::restore_best_policy() noexcept
@@ -693,6 +693,17 @@ namespace runner::rl
         if (self_imitation_prior_.empty())
             refresh_self_imitation_prior();
         controller_state_ = ControllerState::resumed;
+        return true;
+    }
+
+    bool PpoTrainer::evaluate_retained_policy() noexcept
+    {
+        if (!restore_best_policy())
+            return false;
+        // Candidate retention keeps the fixed release probe. Only mastery
+        // confirmations move to a distinct deterministic seed batch.
+        evaluate_policy(std::max<std::uint64_t>(
+            1u, metrics_.evaluation_count));
         return true;
     }
 

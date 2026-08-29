@@ -1,3 +1,13 @@
+## 0.7.47
+
+- Restored the complete live trainer controls and statistics while Rig Lab is active, with a four-pane live/trainer/rig-controls/editor layout on wide displays.
+- Made canonical species selection factory-authoritative and rejected duplicate, body-role, coincident, non-terminal, unactuated, and wrong-count support branches before live morphology commits.
+- Corrected Chicken and Dog modular art scale, attachment, Dog tail direction, and chroma-key fringe while preserving Human reference scale.
+- Changed mastery confirmation to freeze and independently retest the retained best policy instead of optimizing between confirmations.
+- Advanced checkpoint semantics and species-owned autosave paths to v0.7.47 with lifetime-only v0.7.46 migration.
+- Added focused layout, visual-frame, art-key, species-topology, adversarial, and canonical-restore regression coverage.
+- Replaced the held v0.7.46 website package with a required audited v0.7.47 built-runtime release contract.
+
 ## 0.7.46
 
 - Replaced interpolated terrain/contact sampling and smoothed surface rendering with exact authored material-cell boundaries; static cells stay fixed and only deposited material evolves.

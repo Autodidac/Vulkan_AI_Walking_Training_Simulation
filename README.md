@@ -1,3 +1,12 @@
+## v0.7.47 Species-safe rigs, full Rig Lab control, and retained mastery
+
+- Rig Lab keeps the complete Autonomous Rig Trainer controls, lesson statistics, telemetry pages, and diagnostics active beside rig editing; wide displays also keep the full live world as a fourth pane.
+- Canonical Human, Chicken, Dog, and Hexapod presets always restore factory anatomy. Explicitly loaded or edited rigs must preserve unique, terminal, independently actuated species-correct support branches before live commit.
+- Chicken and Dog art uses corrected species-specific scale, anchors, and tail orientation. Binary sprite masks and narrow near-magenta rejection remove the extraction fringe without deleting authored colors.
+- A retained stage-safe controller is frozen and retested on independent deterministic seeds, preventing optimizer drift from pinning a valid lesson at 80 percent.
+- Training semantics are `0x0007'4701` under species-owned `runner-v0747-*` paths; v0.7.46 contributes lifetime totals only.
+- The built Windows package, checksum, manifest, exact-commit source archive, and publication re-download are mandatory release evidence. See `docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md`.
+
 ## v0.7.46 Exact cells, natural gait, and round-trip mastery
 
 - Terrain physics and presentation use the same exact authored material cells. Static macro/fine cells do not bubble, interpolate, or move; deposited cells remain the only evolving material.

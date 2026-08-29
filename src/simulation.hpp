@@ -1498,7 +1498,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0746-" + slug;
+        const std::string state_prefix = "runner-v0747-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -1821,6 +1821,96 @@ namespace runner::sim
                 return CreatureSpecies::dog;
             return CreatureSpecies::custom;
         }
+        [[nodiscard]] bool semantic_support_branches_valid(
+            std::size_t expected_supports) const noexcept
+        {
+            if (nodes.empty() || nodes.size() > 128u || expected_supports < 2u
+                || expected_supports > nodes.size() || (expected_supports & 1u) != 0u
+                || root_node >= nodes.size() || torso_node >= nodes.size()
+                || head_node >= nodes.size() || root_node == torso_node
+                || root_node == head_node || torso_node == head_node
+                || 1u + additional_left_contact_nodes.size() != expected_supports / 2u
+                || 1u + additional_right_contact_nodes.size() != expected_supports / 2u)
+                return false;
+
+            std::array<std::uint16_t, 128> supports{};
+            std::size_t support_count{};
+            const auto append_support = [&](std::uint16_t node) noexcept
+            {
+                if (node >= nodes.size() || node == root_node || node == torso_node
+                    || node == head_node
+                    || std::find(supports.begin(), supports.begin()
+                        + static_cast<std::ptrdiff_t>(support_count), node)
+                        != supports.begin() + static_cast<std::ptrdiff_t>(support_count))
+                    return false;
+                supports[support_count++] = node;
+                return true;
+            };
+            if (!append_support(left_contact_node))
+                return false;
+            for (const std::uint16_t node : additional_left_contact_nodes)
+                if (!append_support(node))
+                    return false;
+            if (!append_support(right_contact_node))
+                return false;
+            for (const std::uint16_t node : additional_right_contact_nodes)
+                if (!append_support(node))
+                    return false;
+            if (support_count != expected_supports)
+                return false;
+
+            std::array<std::uint16_t, 128> parents{};
+            const float body_floor = std::min({ nodes[root_node].y,
+                nodes[torso_node].y, nodes[head_node].y });
+            for (std::size_t index = 0; index < support_count; ++index)
+            {
+                const std::uint16_t support = supports[index];
+                std::uint16_t parent = std::numeric_limits<std::uint16_t>::max();
+                std::size_t degree{};
+                for (const DistanceConstraint& bone : bones)
+                {
+                    if (bone.stiffness < 0.20f)
+                        continue;
+                    if (bone.a == support || bone.b == support)
+                    {
+                        parent = bone.a == support ? bone.b : bone.a;
+                        ++degree;
+                    }
+                }
+                if (degree != 1u || parent >= nodes.size() || is_support_seed(parent)
+                    || parent == root_node || parent == torso_node || parent == head_node
+                    || nodes[support].y >= nodes[parent].y - 0.04f
+                    || nodes[support].y >= body_floor - 0.12f)
+                    return false;
+                for (std::size_t previous = 0; previous < index; ++previous)
+                {
+                    if (parents[previous] == parent
+                        || length(nodes[support] - nodes[supports[previous]]) < 0.04f
+                        || length(nodes[parent] - nodes[parents[previous]]) < 0.04f)
+                        return false;
+                }
+                parents[index] = parent;
+
+                bool distal_motor{};
+                bool proximal_motor{};
+                const auto check_motor = [&](const MotorConstraint& motor) noexcept
+                {
+                    if (!motor.enabled)
+                        return;
+                    distal_motor = distal_motor
+                        || (motor.pivot == parent && motor.c == support);
+                    proximal_motor = proximal_motor || motor.c == parent;
+                };
+                for (std::size_t motor = 0; motor < active_motor_count; ++motor)
+                    check_motor(motors[motor]);
+                for (const CoupledMotorConstraint& coupled : coupled_support_motors())
+                    check_motor(coupled.motor);
+                if (!distal_motor || !proximal_motor)
+                    return false;
+            }
+            return true;
+        }
+
         [[nodiscard]] bool topology_compatible_with_species(
             CreatureSpecies species) const noexcept
         {
@@ -1830,13 +1920,16 @@ namespace runner::sim
                 return paired_leg_chains() && !avian_gait()
                     && !horizontal_body_plan() && paired_manipulator_chains();
             case CreatureSpecies::chicken:
-                return paired_leg_chains() && avian_gait();
+                return paired_leg_chains() && avian_gait()
+                    && semantic_support_branches_valid(2u);
             case CreatureSpecies::dog:
                 return horizontal_multi_support_plan()
-                    && support_seed_count() >= 4u && support_seed_count() < 6u;
+                    && support_seed_count() == 4u
+                    && semantic_support_branches_valid(4u);
             case CreatureSpecies::hexapod:
                 return horizontal_multi_support_plan()
-                    && support_seed_count() >= 6u;
+                    && support_seed_count() == 6u
+                    && semantic_support_branches_valid(6u);
             case CreatureSpecies::custom:
                 return true;
             }

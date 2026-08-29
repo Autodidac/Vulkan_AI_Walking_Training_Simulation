@@ -168,19 +168,19 @@ int main()
         runner::art::species_art_profile(CreatureSpecies::dog);
     constexpr runner::art::SpeciesArtProfile hexapod_art =
         runner::art::species_art_profile(CreatureSpecies::hexapod);
-    static_assert(chicken_art.head_scale >= 5.1f
-        && chicken_art.head_minimum >= 0.40f
-        && chicken_art.tail_length >= 0.54f
-        && chicken_art.tail_ratio >= 0.88f);
-    static_assert(dog_art.head_scale >= 5.0f
+    static_assert(chicken_art.head_scale >= 5.8f
+        && chicken_art.head_minimum >= 0.48f
+        && chicken_art.tail_length >= 0.64f
+        && chicken_art.tail_ratio >= 1.0f);
+    static_assert(dog_art.head_scale >= 5.4f
         && dog_art.head_anchor_forward > chicken_art.head_anchor_forward
-        && dog_art.tail_length >= 0.66f
-        && !dog_art.tail_flip_vertical);
+        && dog_art.tail_length >= 0.72f
+        && dog_art.tail_flip_vertical);
     static_assert(!chicken_art.tail_flip_vertical
         && !hexapod_art.tail_flip_vertical
         && hexapod_art.tail_length == 0.0f);
-    static_assert(!runner::art::tail_transverse_mirror(dog_art, false)
-        && runner::art::tail_transverse_mirror(dog_art, true)
+    static_assert(runner::art::tail_transverse_mirror(dog_art, false)
+        && !runner::art::tail_transverse_mirror(dog_art, true)
         && !runner::art::tail_transverse_mirror(chicken_art, false));
     require(chicken_art.head_anchor_up > 0.0f
             && chicken_art.tail_anchor_up > 0.0f
@@ -219,6 +219,23 @@ int main()
     require(!adversarial.topology_compatible_with_species(CreatureSpecies::chicken),
         "cross-species Dog topology must fail validation");
 
-    std::cout << "Runner v0.7.46 species art and four-species rig checks passed\n";
+    CreatureBlueprint duplicate_support = dog;
+    duplicate_support.right_contact_node = duplicate_support.left_contact_node;
+    require(!duplicate_support.topology_compatible_with_species(CreatureSpecies::dog),
+        "duplicate Dog support role was accepted");
+    CreatureBlueprint torso_support = hexapod;
+    torso_support.additional_left_contact_nodes[0] = torso_support.torso_node;
+    require(!torso_support.topology_compatible_with_species(CreatureSpecies::hexapod),
+        "Hexapod torso was accepted as a foot");
+    CreatureBlueprint collapsed = dog;
+    collapsed.nodes[10] = collapsed.nodes[4];
+    require(!collapsed.topology_compatible_with_species(CreatureSpecies::dog),
+        "coincident Dog support branches were accepted");
+    require(dog.topology_compatible_with_species(CreatureSpecies::dog)
+            && chicken.topology_compatible_with_species(CreatureSpecies::chicken)
+            && hexapod.topology_compatible_with_species(CreatureSpecies::hexapod),
+        "factory species anatomy fails its own semantic support contract");
+
+    std::cout << "Runner v0.7.47 species art and four-species rig checks passed\n";
     return 0;
 }

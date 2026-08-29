@@ -825,14 +825,7 @@ namespace runner
                 return;
 
             sim::CreatureBlueprint candidate = canonical_blueprint(preset);
-            std::string source_note{ "FACTORY DEFAULT" };
-            if (const auto species = preset_species(preset))
-            {
-                const std::filesystem::path species_path =
-                    sim::creature_species_paths(*species).rig;
-                candidate = sim::CreatureBlueprint::load_owned_or_default(
-                    *species, species_path, legacy_rig_path, source_note);
-            }
+            const std::string source_note{ "FACTORY DEFAULT" };
 
             rig_preset = preset;
             blueprint = std::move(candidate);
@@ -864,7 +857,14 @@ namespace runner
                 set_status("RIG CHANGE REJECTED - CONNECT EACH ENABLED MOTOR THROUGH TWO REAL BONES");
                 return;
             }
-            rig_preset = preset_for_species(blueprint.presentation_species());
+            const sim::CreatureSpecies species = blueprint.presentation_species();
+            if (!blueprint.topology_compatible_with_species(species))
+            {
+                trainer.cancel_blueprint_preview();
+                set_status("RIG CHANGE REJECTED - SUPPORT ROLES MUST BE UNIQUE, TERMINAL, AND SPECIES-CORRECT");
+                return;
+            }
+            rig_preset = preset_for_species(species);
             select_autosave_rig_file(blueprint);
             static_cast<void>(trainer.preview_blueprint(blueprint));
             trainer.set_blueprint(blueprint, true);
@@ -3819,12 +3819,16 @@ namespace runner
             {
                 const ui_layout::Box layout_live =
                     ui_layout::rig_lab_live_box(layout_content);
+                const ui_layout::Box layout_trainer =
+                    ui_layout::rig_lab_trainer_panel_box(layout_content);
                 const ui_layout::Box layout_side =
                     ui_layout::rig_lab_panel_box(layout_content);
                 const ui_layout::Box layout_world =
                     ui_layout::rig_lab_world_box(layout_content);
                 const Rect side{ { layout_side.x, layout_side.y },
                     { layout_side.width, layout_side.height } };
+                const Rect trainer_panel{ { layout_trainer.x, layout_trainer.y },
+                    { layout_trainer.width, layout_trainer.height } };
                 const Rect world{ { layout_world.x, layout_world.y },
                     { layout_world.width, layout_world.height } };
                 if (ui_layout::rig_lab_shows_live(layout_content))
@@ -3837,6 +3841,7 @@ namespace runner
                 {
                     trainer.step_preview(dt);
                 }
+                draw_live_panel(trainer_panel, input);
                 draw_rig_panel(side, input);
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
                 canvas.push_clip(world.position + Vec2{ 1.0f, 1.0f },

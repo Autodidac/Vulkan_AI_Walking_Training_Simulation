@@ -50,6 +50,14 @@ namespace runner::rl
             ? balance_mastery_lock_confirmations : mastery_lock_confirmations;
     }
 
+    [[nodiscard]] inline bool should_confirm_retained_mastery(
+        sim::CourseStage stage, int mastery_streak, bool has_best_policy) noexcept
+    {
+        return has_best_policy && mastery_streak > 0
+            && mastery_streak < required_mastery_confirmations(stage);
+    }
+
+
     [[nodiscard]] inline std::uint64_t stage_minimum_fresh_updates(
         sim::CourseStage stage) noexcept
     {

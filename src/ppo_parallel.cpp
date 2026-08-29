@@ -107,6 +107,7 @@ namespace runner::rl
                 float current_entropy_coefficient{};
                 sim::CourseStage current_stage{ sim::CourseStage::balance };
                 float current_difficulty{};
+                std::uint64_t current_evaluation_sequence{};
 
                 {
                     std::unique_lock lock(mutex);
@@ -128,6 +129,7 @@ namespace runner::rl
                     current_entropy_coefficient = entropy_coefficient;
                     current_stage = stage;
                     current_difficulty = difficulty;
+                    current_evaluation_sequence = evaluation_sequence;
                 }
 
                 if (current_job == Job::gradient)
@@ -188,8 +190,8 @@ namespace runner::rl
                         for (std::size_t agent = worker_index; agent < evaluation_agents;
                             agent += current_active)
                         {
-                            const std::uint64_t seed = 0xE000u
-                                + static_cast<std::uint64_t>(agent) * 4099u;
+                            const std::uint64_t seed = evaluation_seed(
+                                agent, current_evaluation_sequence);
                             sim::Environment environment{ owner.blueprint_, seed };
                             environment.set_course(current_stage, current_difficulty);
                             // Evaluation and the visible preview answer the same
@@ -310,6 +312,7 @@ namespace runner::rl
         float entropy_coefficient{};
         sim::CourseStage stage{ sim::CourseStage::balance };
         float difficulty{ 0.25f };
+        std::uint64_t evaluation_sequence{};
     };
 
     void PpoTrainer::initialize_parallel_workers()
@@ -410,7 +413,7 @@ namespace runner::rl
         }
     }
 
-    void PpoTrainer::parallel_evaluate_policy()
+    void PpoTrainer::parallel_evaluate_policy(std::uint64_t evaluation_sequence)
     {
         constexpr std::size_t evaluation_agents = 6;
         if (!parallel_ || parallel_->worker_count == 0)
@@ -424,6 +427,7 @@ namespace runner::rl
             state.active_workers = std::min({ active_worker_count_, state.worker_count, evaluation_agents });
             state.stage = course_stage_;
             state.difficulty = course_difficulty_;
+            state.evaluation_sequence = evaluation_sequence;
             ++state.generation;
         }
         state.start_cv.notify_all();
