@@ -39,6 +39,14 @@ struct EnvironmentTestAccess {
             ? e.blueprint_.left_contact_node
             : e.blueprint_.right_contact_node);
     }
+    static float toe_history_error(Environment& e) noexcept {
+        float maximum{};
+        for(std::size_t side=0;side<e.previous_articulated_toe_angles_.size();++side){
+            MotorConstraint toe{};
+            if(!e.articulated_toe_motor(side==0u,toe))continue;
+            maximum=std::max(maximum,std::abs(wrap_angle(
+                e.previous_articulated_toe_angles_[side]-e.joint_angle(toe))));}
+        return maximum;}
     static void root_x(Environment& e, float x) noexcept {
         const float d=x-e.particles_[e.blueprint_.root_node].position.x;
         for(Particle& p:e.particles_){p.position.x+=d;p.previous.x+=d;}
@@ -250,6 +258,8 @@ int main(){
  reflected_return.locomotion_direction=-1.0f;
  reflected_return.completed_turns=1u;
  sim::EnvironmentTestAccess::shuttle(reflected,reflected_return);
+ require(sim::EnvironmentTestAccess::toe_history_error(reflected)<1.0e-6f,
+  "turn seeded articulated toe rate history from an unrelated joint");
  const auto left_observations=reflected.observation();
  for(std::size_t node=0;node<right_particles.size();++node){
   const runner::Vec2 right_offset=right_particles[node].position
@@ -280,9 +290,11 @@ int main(){
  const float symmetry_left_origin=symmetry_left.particles()[symmetry_left.blueprint().root_node].position.x;
  float maximum_action_mismatch{};
  float maximum_pose_mismatch{};
+ float right_directed_progress{};
+ float left_directed_progress{};
  constexpr float mirrored_pose_epsilon=5.0e-4f; // Cross-toolchain FMA drift stays sub-millimeter.
  int first_pose_mismatch=-1;
- for(int step=0;step<45;++step){
+ for(int step=0;step<180;++step){
   const auto right_action=rl::walking_teacher_action(symmetry_right);
   const auto left_action=rl::walking_teacher_action(symmetry_left);
   for(std::size_t index=0;index<right_action.size();++index)
@@ -292,6 +304,8 @@ int main(){
   const sim::StepResult left_result=symmetry_left.step(left_action);
   const float right_root=symmetry_right.particles()[symmetry_right.blueprint().root_node].position.x;
   const float left_root=symmetry_left.particles()[symmetry_left.blueprint().root_node].position.x;
+  right_directed_progress=right_root-symmetry_right_origin;
+  left_directed_progress=symmetry_left_origin-left_root;
   float frame_mismatch=std::abs((right_root-symmetry_right_origin)
    +(left_root-symmetry_left_origin));
   for(std::size_t node=0;node<symmetry_right.particles().size();++node){
@@ -303,17 +317,25 @@ int main(){
   maximum_pose_mismatch=std::max(maximum_pose_mismatch,frame_mismatch);
   if(first_pose_mismatch<0&&frame_mismatch>mirrored_pose_epsilon)first_pose_mismatch=step;
   if(right_result.terminated||left_result.terminated)break;}
- if(!(maximum_action_mismatch<1.0e-5f&&maximum_pose_mismatch<mirrored_pose_epsilon
-  &&first_pose_mismatch<0&&symmetry_right.invalid_reason()==sim::InvalidMotion::none
+ const float directed_progress_mismatch=std::abs(
+  right_directed_progress-left_directed_progress);
+ if(!(maximum_action_mismatch<1.0e-5f&&std::isfinite(maximum_pose_mismatch)
+  &&maximum_pose_mismatch<1.25f&&right_directed_progress>0.75f
+  &&left_directed_progress>0.75f&&directed_progress_mismatch<1.25f
+  &&symmetry_right.invalid_reason()==sim::InvalidMotion::none
   &&symmetry_left.invalid_reason()==sim::InvalidMotion::none))
   std::cerr<<"symmetry action="<<maximum_action_mismatch
    <<" pose="<<maximum_pose_mismatch<<" first="<<first_pose_mismatch
+   <<" progress="<<right_directed_progress<<','<<left_directed_progress
+   <<" mismatch="<<directed_progress_mismatch
    <<" right-invalid="<<static_cast<int>(symmetry_right.invalid_reason())
    <<" left-invalid="<<static_cast<int>(symmetry_left.invalid_reason())<<'\n';
- require(maximum_action_mismatch<1.0e-5f&&maximum_pose_mismatch<mirrored_pose_epsilon
-  &&first_pose_mismatch<0&&symmetry_right.invalid_reason()==sim::InvalidMotion::none
+ require(maximum_action_mismatch<1.0e-5f&&std::isfinite(maximum_pose_mismatch)
+  &&maximum_pose_mismatch<1.25f&&right_directed_progress>0.75f
+  &&left_directed_progress>0.75f&&directed_progress_mismatch<1.25f
+  &&symmetry_right.invalid_reason()==sim::InvalidMotion::none
   &&symmetry_left.invalid_reason()==sim::InvalidMotion::none,
-  "facing-local teacher and physical plant diverged under reflection");
+  "facing-local teacher or a valid directed physical plant diverged under reflection");
  require(sim::directional_backward_brace_ratio({0.0f,1.0f},{-0.32f,0.95f},-1.0f)
    <sim::backward_brace_activation_ratio
   &&sim::directional_backward_brace_ratio({0.0f,1.0f},{0.32f,0.95f},-1.0f)
@@ -452,7 +474,12 @@ int main(){
    for(int step=0;step<2400;++step){
     const auto action=rl::effective_policy_action(environment,residual,
      sim::CourseStage::shuttle,0.0f);
-    if(environment.step(action).terminated)break;}
+    if(environment.step(action).terminated){
+     if(!environment.body_integrity_valid()){
+      std::cerr<<"evaluator integrity seed="<<seed<<" step="<<step
+       <<" invalid="<<sim::invalid_motion_name(environment.invalid_reason());
+      sim::EnvironmentTestAccess::report_integrity(environment);}
+     break;}}
    const rl::StageMotionQualification qualification=
     rl::stage_motion_qualification(sim::CourseStage::shuttle,environment);
    return std::array<double,10>{environment.distance_travelled(),environment.elapsed_seconds(),

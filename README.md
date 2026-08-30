@@ -1,3 +1,30 @@
+# Epoch2DWalkEngine
+
+Epoch2DWalkEngine is the reusable C++23 articulated-locomotion, training, rig, contact, and terrain-integration library. `Runner` is its complete SDL3/Vulkan example application with Live Autopilot and Rig Lab. Installed consumers link `Epoch2DWalkEngine::Epoch2DWalkEngine`; existing `Runner::Core` source integrations remain compatible.
+
+Windows and Linux releases distinguish runnable Runner example packages, development/library packages, and exact source. See `docs/EPOCH2D_WALK_ENGINE_LIBRARY.md`.
+
+The release asset contract is explicit:
+
+- `Epoch2DWalkEngine-v0.7.48-runner-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.48-runner-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.48-dev-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.48-dev-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.48-source.zip`
+
+Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The runtime packages contain the full Runner example; the development packages contain the installable library, public headers, dependency package, CMake target, documentation, and consumer example.
+
+## v0.7.48 Contact-led Human gait and physical species art
+
+- Human stance feet acquire world-space plant anchors on contact, remain fixed through support, and release only for swing; the visible body now advances through real support exchange instead of skating over a scrolling pose.
+- The Human code-brain uses one opposed gait clock for both legs and relaxed contralateral arms. Retained policy residuals cannot synchronize both arms into a forward zombie reach.
+- Grounded Human boot art is seated flat on its physical support while airborne boot pitch continues to follow the shin.
+- Chicken, Dog, and Hexapod body/head/tail/limb modules are cropped to their visible subjects, fitted edge-to-edge, and assembled from species-specific physical attachment nodes rather than Human topology assumptions.
+- Training semantics are `0x0007'4801` under species-owned `runner-v0748-*` paths; v0.7.47 contributes lifetime totals only and saved `{species}.rig` anatomy remains species-owned.
+- Raw mode retains only physical motors, constraints, collision, and the Human's mandatory local articulation cluster; teacher, topology reflex, posture, swing, and course-motion guidance remain disabled. Diagnostics expose those two authority classes separately.
+- Walk-eye release proof requires the retained controller to clear both Assisted and six-seed Raw `12 m / 12-cycle` gates with zero invalid runs or rejection bits.
+- The clean walk-eye view hides diagnostic skeleton labels by default. See `docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md`.
+
 ## v0.7.47 Species-safe rigs, full Rig Lab control, and retained mastery
 
 - Rig Lab keeps the complete Autonomous Rig Trainer controls, lesson statistics, telemetry pages, and diagnostics active beside rig editing; wide displays also keep the full live world as a fourth pane.

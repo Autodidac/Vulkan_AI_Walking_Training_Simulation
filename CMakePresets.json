@@ -112,6 +112,13 @@
       "output": {
         "outputOnFailure": true
       }
+    },
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-release",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

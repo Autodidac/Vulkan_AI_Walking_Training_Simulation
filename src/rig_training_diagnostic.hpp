@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace runner::diagnostics
 {
@@ -91,6 +92,12 @@ namespace runner::diagnostics
         std::uint32_t displayed_crossings{};
         float displayed_max_scissor_seconds{};
         float teacher_authority{};
+        float raw_policy_distance{};
+        float raw_policy_stride_events{};
+        std::uint32_t raw_policy_rejection_mask{};
+        std::uint32_t raw_policy_invalid_runs{};
+        sim::InvalidMotion raw_policy_invalid_reason{ sim::InvalidMotion::none };
+        std::vector<float> retained_policy_parameters{};
         bool passed{};
     };
     [[nodiscard]] RigTrainingResult run_rig_training_case(

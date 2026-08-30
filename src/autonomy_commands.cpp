@@ -30,8 +30,8 @@ namespace runner::rl
             {
                 std::filesystem::path previous_candidate = checkpoint;
                 std::string previous_name = previous_candidate.filename().string();
-                constexpr std::string_view current_prefix{ "runner-v0747-" };
-                constexpr std::string_view prior_prefix{ "runner-v0746-" };
+                constexpr std::string_view current_prefix{ "runner-v0748-" };
+                constexpr std::string_view prior_prefix{ "runner-v0747-" };
                 if (previous_name.starts_with(current_prefix))
                 {
                     previous_name.replace(0u, current_prefix.size(), prior_prefix);
@@ -42,7 +42,7 @@ namespace runner::rl
                     checkpoint = std::move(previous_candidate);
                     rig.clear();
                     state.clear();
-                    legacy_lifetime_version = "V0.7.46";
+                    legacy_lifetime_version = "V0.7.47";
                 }
             }
             if (!std::filesystem::exists(checkpoint))
@@ -99,7 +99,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.47 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.48 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -182,6 +182,7 @@ namespace runner::rl
             if (!command.preserve_policy)
             {
                 stage_ = sim::CourseStage::balance;
+                gait_task_ = sim::GaitTask::walk;
                 difficulty_ = 0.25f;
                 rig_generation_ = 0;
                 accepted_rig_changes_ = 0;
@@ -191,6 +192,7 @@ namespace runner::rl
             }
             worker_.set_blueprint(command.blueprint, command.preserve_policy);
             worker_.set_course(stage_, difficulty_, false);
+            worker_.set_gait_task(gait_task_, false);
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             last_evaluation_count_ = worker_.metrics().evaluation_count;
@@ -230,6 +232,28 @@ namespace runner::rl
                 : RigOptimizationMode::control_optimize;
             worker_message_ = std::format("{} MODE SELECTED - NEXT HELD-OUT RIG CANDIDATE USES THIS CONTRACT",
                 rig_optimization_mode_name(optimization_mode_));
+            queue_autosave();
+            break;
+
+        case CommandType::set_gait_task:
+            gait_task_ = command.gait_task;
+            if (stage_ != sim::CourseStage::uneven)
+            {
+                stage_ = sim::CourseStage::uneven;
+                difficulty_ = 0.30f;
+                worker_.set_course(stage_, difficulty_, false);
+            }
+            worker_.set_gait_task(gait_task_, false);
+            mastery_streak_ = 0;
+            degradation_streak_ = 0;
+            last_evaluation_count_ = worker_.metrics().evaluation_count;
+            last_saved_best_update_ = 0u;
+            stage_entry_total_updates_ = worker_.metrics().total_updates;
+            stage_entry_total_episodes_ = worker_.metrics().total_episodes;
+            stage_entry_evaluation_count_ = worker_.metrics().evaluation_count;
+            stage_entry_baseline_initialized_ = true;
+            worker_message_ = std::format("GAIT TASK SELECTED - {}",
+                sim::gait_task_name(gait_task_));
             queue_autosave();
             break;
 
@@ -275,13 +299,15 @@ namespace runner::rl
                 if (worker_.apply_checkpoint_data(std::move(*command.checkpoint), error, false))
                 {
                     stage_ = worker_.course_stage();
+                    gait_task_ = command.gait_task;
+                    worker_.set_gait_task(gait_task_, true);
                     difficulty_ = worker_.course_difficulty();
                     rig_generation_ = command.rig_generation;
                     accepted_rig_changes_ = command.accepted_rig_changes;
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.47 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.48 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

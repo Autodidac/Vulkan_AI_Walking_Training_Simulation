@@ -1,3 +1,19 @@
+## 0.7.48
+
+- Replaced Human rail-sliding with contact-latched stance anchors and deterministic planted-foot coverage at 20, 60, and 240 Hz.
+- Made Human legs and low-amplitude contralateral arms share one gait clock, preventing synchronized forward arm bracing after curriculum handoff.
+- Seated grounded Human boot art on the physical contact plane while preserving airborne foot pitch.
+- Rebuilt Chicken, Dog, and Hexapod runtime module crops and topology-specific body/head/tail/limb attachment transforms.
+- Advanced training semantics and species-owned automatic paths to v0.7.48 with lifetime-only v0.7.47 import; authored `.rig` files remain compatible.
+- Productized the renderer-independent core as the installable `Epoch2DWalkEngine::Epoch2DWalkEngine` CMake package while retaining `Runner` as the full SDL3/Vulkan example.
+- Added a public umbrella header, package config/version/export metadata, library API probe, and Windows/Linux runtime plus development-package release contract.
+- Added focused art-bounds, topology, arm-phase, mirrored-foot, non-finite, and repeated-frame planted-contact tests.
+- Separated the Human's mandatory local articulation cluster from optional locomotion guidance so Raw policy audit remains physically viable without hidden root translation, gait selection, swing impulse, or course motion.
+- Made six-seed Raw retained-policy distance, contact-cycle, validity, and rejection evidence a hard walk-eye release gate and exposed mandatory versus optional authority in Advanced Diagnostics.
+- Offset the START placard from the spawn silhouette with a visible leader while preserving its exact course coordinate and leaving ordinary distance markers unchanged.
+- Preserved the proven pelvis-local Human posture/contact physics while reducing far-side limb opacity so two physical arms/legs no longer read as duplicate art.
+- Reduced Human upper-arm, forearm, and hand presentation envelopes while retaining their physical endpoints and alternating motion.
+
 ## 0.7.47
 
 - Restored the complete live trainer controls and statistics while Rig Lab is active, with a four-pane live/trainer/rig-controls/editor layout on wide displays.

@@ -166,6 +166,7 @@ namespace runner::rl
     {
         bool enabled{ false };
         sim::CourseStage stage{ sim::CourseStage::balance };
+        sim::GaitTask gait_task{ sim::GaitTask::walk };
         float difficulty{ 0.25f };
         std::uint64_t rig_generation{};
         std::uint64_t accepted_rig_changes{};
@@ -251,11 +252,25 @@ namespace runner::rl
             return live_morphology_preview_active_;
         }
         void set_rig_optimization_mode(RigOptimizationMode mode) noexcept;
+        void set_gait_task(sim::GaitTask task) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
         void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+        void set_preview_guidance_mode(sim::GuidanceMode mode) noexcept
+        {
+            live_.set_preview_guidance_mode(mode);
+        }
+        [[nodiscard]] sim::GuidanceMode preview_guidance_mode() const noexcept
+        {
+            return live_.preview_guidance_mode();
+        }
+        [[nodiscard]] GuidanceAuthorityReport preview_authority_report() const noexcept
+        {
+            return live_.preview_authority_report();
+        }
+
         void configure_preview_equipment(sim::WeaponClass weapon,
             float target_distance = 8.0f);
         [[nodiscard]] bool save_checkpoint(const std::filesystem::path& path, std::string& error);
@@ -297,6 +312,7 @@ namespace runner::rl
             reset_policy,
             set_exploration,
             set_optimization_mode,
+            set_gait_task,
             restore_best,
             save_checkpoint,
             apply_checkpoint,
@@ -311,6 +327,7 @@ namespace runner::rl
             std::uint64_t seed{};
             float scalar{};
             RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
+            sim::GaitTask gait_task{ sim::GaitTask::walk };
             std::filesystem::path path{};
             std::shared_ptr<PpoTrainer::CheckpointData> checkpoint{};
             bool transfer_only{};
@@ -429,6 +446,7 @@ namespace runner::rl
             sim::CreatureBlueprint blueprint{};
             bool transfer_only{};
             sim::CourseStage stage{ sim::CourseStage::balance };
+            sim::GaitTask gait_task{ sim::GaitTask::walk };
             float difficulty{ 0.25f };
             std::uint64_t rig_generation{};
             std::uint64_t accepted_rig_changes{};
@@ -468,6 +486,7 @@ namespace runner::rl
         std::filesystem::path autosave_state_{
             sim::creature_species_paths(sim::CreatureSpecies::human).autonomy_state };
         sim::CourseStage stage_{ sim::CourseStage::balance };
+        sim::GaitTask gait_task_{ sim::GaitTask::walk };
         float difficulty_{ 0.25f };
         std::uint64_t rig_generation_{};
         std::uint64_t accepted_rig_changes_{};

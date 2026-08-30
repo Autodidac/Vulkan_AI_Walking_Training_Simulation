@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <future>
 #include <cmath>
 #include <optional>
 
@@ -34,6 +35,9 @@ namespace runner::diagnostics
                 return 5.0f;
             if (blueprint.avian_gait())
                 return 10.0f;
+            if (blueprint.presentation_species() == sim::CreatureSpecies::human
+                && blueprint.paired_leg_chains())
+                return rl::gait_task_mastery_distance(sim::GaitTask::walk);
             return blueprint.paired_leg_chains()
                 ? rl::walk_mastery_distance
                 : rl::multi_support_release_distance(blueprint);
@@ -46,9 +50,29 @@ namespace runner::diagnostics
                 return 8.0f;
             if (blueprint.avian_gait())
                 return 14.0f;
+            if (blueprint.presentation_species() == sim::CreatureSpecies::human
+                && blueprint.paired_leg_chains())
+                return rl::gait_task_mastery_stride_events(sim::GaitTask::walk);
             return blueprint.paired_leg_chains()
                 ? rl::walk_mastery_stride_events
                 : rl::multi_support_release_stride_events(blueprint);
+        }
+        [[nodiscard]] float teacher_release_distance(
+            const sim::CreatureBlueprint& blueprint) noexcept
+        {
+            if (blueprint.presentation_species() == sim::CreatureSpecies::human
+                && blueprint.paired_leg_chains())
+                return rl::casual_walk_teacher_distance;
+            return release_distance(blueprint);
+        }
+
+        [[nodiscard]] float teacher_release_gait_cycles(
+            const sim::CreatureBlueprint& blueprint) noexcept
+        {
+            if (blueprint.presentation_species() == sim::CreatureSpecies::human
+                && blueprint.paired_leg_chains())
+                return rl::casual_walk_teacher_stride_events;
+            return release_gait_cycles(blueprint);
         }
 
         [[nodiscard]] RawPolicyOutcome evaluate_policy(
@@ -67,6 +91,8 @@ namespace runner::diagnostics
                     0xE000u + static_cast<std::uint64_t>(agent) * 4099u };
                 environment.set_course(stage, 0.30f);
                 environment.set_course_motion_enabled(false);
+                environment.set_guidance_mode(production_controller
+                    ? sim::GuidanceMode::assisted : sim::GuidanceMode::raw_policy_audit);
                 const int maximum_steps = stage == sim::CourseStage::shuttle
                     || static_cast<std::uint8_t>(stage)
                         >= static_cast<std::uint8_t>(sim::CourseStage::hurdles)
@@ -144,15 +170,17 @@ namespace runner::diagnostics
                 break;
         }
 
-        // Exercise the low-core path explicitly. Hosted runners expose two
-        // rollout workers, and release evidence must not depend on a large CPU.
-        rl::PpoTrainer trainer{ blueprint, 8u, true, 2u };
+        // Human owns two dependent 1,200-update lessons, so let its eight
+        // deterministic rollout environments run concurrently. The explicit
+        // two-core constructor contract is exercised separately below this
+        // aggregate release proof; the other species retain that ceiling.
+        const std::size_t diagnostic_workers = name == "human" ? 8u : 2u;
+        rl::PpoTrainer trainer{ blueprint, 8u, true, diagnostic_workers };
         trainer.set_course(sim::CourseStage::uneven, 0.30f, false);
         for (std::uint64_t update = 0; update < updates; ++update)
         {
             trainer.train_one_update();
-            for (std::uint32_t frame = 0; frame < 60u; ++frame)
-                trainer.step_preview();
+            trainer.step_preview();
         }
 
         const rl::TrainingMetrics& metrics = trainer.metrics();
@@ -242,11 +270,20 @@ namespace runner::diagnostics
 
         RigTrainingReport report{};
         report.updates = updates;
+        std::array<std::future<RigTrainingResult>, 4> cases_in_flight{};
         for (std::size_t index = 0; index < cases.size(); ++index)
         {
-            const RigCase& rig = cases[index];
-            report.rigs[index] = run_rig_training_case(
-                rig.name, rig.blueprint, updates);
+            RigCase rig = cases[index];
+            cases_in_flight[index] = std::async(std::launch::async,
+                [rig = std::move(rig), updates]() mutable
+                {
+                    return run_rig_training_case(
+                        rig.name, rig.blueprint, updates);
+                });
+        }
+        for (std::size_t index = 0; index < cases_in_flight.size(); ++index)
+        {
+            report.rigs[index] = cases_in_flight[index].get();
         }
 
         report.passed = updates >= 1200u;
@@ -259,10 +296,11 @@ namespace runner::diagnostics
                 && result.teacher_invalid_reason == sim::InvalidMotion::none
                 && result.teacher_survival >= 19.9f
                 && result.teacher_distance
-                    >= release_distance(cases[index].blueprint)
+                    >= teacher_release_distance(cases[index].blueprint)
                 && result.teacher_stride_events
-                    >= release_gait_cycles(cases[index].blueprint)
-                && result.rollout_workers == 2u
+                    >= teacher_release_gait_cycles(cases[index].blueprint)
+                && result.rollout_workers
+                    == (cases[index].name == "human" ? 8u : 2u)
                 && retained_policy_release_eligible(
                     result, cases[index].blueprint);
             if (cases[index].name == "human")
@@ -314,12 +352,14 @@ namespace runner::diagnostics
             trainer.lesson_update(), blueprint);
         if (!trainer.has_best_policy())
             return proof;
+        proof.retained_policy_parameters = trainer.best_policy_parameters();
 
         rl::PolicyNetwork policy{ 0x7300u };
         policy.parameters() = trainer.best_policy_parameters();
         float total_distance{};
         float total_stride_events{};
         bool selected_pose{};
+        float selected_final_distance{};
         for (std::size_t agent = 0; agent < evaluation_agents; ++agent)
         {
             const std::uint64_t seed = 0xE000u
@@ -327,7 +367,7 @@ namespace runner::diagnostics
             sim::Environment environment{ blueprint, seed };
             environment.set_course(sim::CourseStage::uneven, 0.30f);
             environment.set_course_motion_enabled(false);
-            std::optional<sim::Environment> latest_transfer_pose{};
+            std::optional<sim::Environment> first_transfer_pose{};
             for (int step = 0; step < 1200; ++step)
             {
                 const auto raw_action = policy.deterministic_action(
@@ -340,12 +380,14 @@ namespace runner::diagnostics
                     == sim::FootContactPhase::airborne;
                 const bool right_air = environment.right_foot_phase()
                     == sim::FootContactPhase::airborne;
-                if (environment.distance_travelled() >= 18.0f
+                if (environment.distance_travelled()
+                        >= rl::gait_task_mastery_distance(sim::GaitTask::walk)
                     && environment.alternating_steps() >= 16u
                     && environment.limb_crossings() >= 2u
                     && left_air != right_air)
                 {
-                    latest_transfer_pose = environment;
+                    if (!first_transfer_pose.has_value())
+                        first_transfer_pose = environment;
                 }
             }
 
@@ -369,23 +411,31 @@ namespace runner::diagnostics
                     proof.retained_invalid_reason = environment.invalid_reason();
                 }
             }
-            else if (latest_transfer_pose.has_value()
+            else if (first_transfer_pose.has_value()
                 && (!selected_pose
-                    || latest_transfer_pose->distance_travelled()
-                        > proof.displayed_distance))
+                    || environment.distance_travelled() > selected_final_distance))
             {
-                proof.environment = *latest_transfer_pose;
+                proof.environment = *first_transfer_pose;
                 proof.selected_seed = static_cast<std::uint32_t>(seed);
                 proof.displayed_distance = proof.environment.distance_travelled();
                 proof.displayed_steps = proof.environment.alternating_steps();
                 proof.displayed_crossings = proof.environment.limb_crossings();
                 proof.displayed_max_scissor_seconds =
                     proof.environment.maximum_lower_leg_scissor_seconds();
+                selected_final_distance = environment.distance_travelled();
                 selected_pose = true;
             }
             total_distance += environment.distance_travelled();
             total_stride_events += static_cast<float>(environment.gait_cycles());
         }
+
+        const RawPolicyOutcome raw = evaluate_policy(blueprint,
+            proof.retained_policy_parameters, false);
+        proof.raw_policy_distance = raw.distance;
+        proof.raw_policy_stride_events = raw.stride_events;
+        proof.raw_policy_rejection_mask = raw.rejection_mask;
+        proof.raw_policy_invalid_runs = raw.invalid_runs;
+        proof.raw_policy_invalid_reason = raw.invalid_reason;
 
         constexpr float inverse_agents = 1.0f
             / static_cast<float>(evaluation_agents);
@@ -396,9 +446,18 @@ namespace runner::diagnostics
             && proof.retained_update
                 >= rl::foundational_walk_teacher_handoff_update(blueprint)
             && rl::strict_evaluation_quality(metrics.best_quality_key)
-            && proof.retained_distance >= rl::walk_mastery_distance
-            && proof.retained_stride_events >= rl::walk_mastery_stride_events
+            && proof.retained_distance
+                >= rl::gait_task_mastery_distance(sim::GaitTask::walk)
+            && proof.retained_stride_events
+                >= rl::gait_task_mastery_stride_events(sim::GaitTask::walk)
             && proof.retained_invalid_runs == 0u
+            && proof.raw_policy_distance
+                >= rl::gait_task_mastery_distance(sim::GaitTask::walk)
+            && proof.raw_policy_stride_events
+                >= rl::gait_task_mastery_stride_events(sim::GaitTask::walk)
+            && proof.raw_policy_invalid_runs == 0u
+            && proof.raw_policy_rejection_mask == 0u
+            && proof.raw_policy_invalid_reason == sim::InvalidMotion::none
             && selected_pose;
         return proof;
     }

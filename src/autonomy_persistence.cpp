@@ -9,7 +9,8 @@ namespace runner::rl
     namespace
     {
         bool write_autonomy_state(const std::filesystem::path& path,
-            sim::CourseStage stage, float difficulty, std::uint64_t rig_generation,
+            sim::CourseStage stage, sim::GaitTask gait_task, float difficulty,
+            std::uint64_t rig_generation,
             std::uint64_t accepted, std::uint64_t rejected, int rollback,
             RigOptimizationMode optimization_mode, std::string& error)
         {
@@ -22,8 +23,9 @@ namespace runner::rl
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 26\n";
-            output << static_cast<int>(stage) << ' ' << difficulty << ' ' << rig_generation << ' '
+            output << "RUNAUTONOMY 27\n";
+            output << static_cast<int>(stage) << ' ' << static_cast<int>(gait_task)
+                << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << ' '
                 << static_cast<int>(optimization_mode) << '\n';
             output.close();
@@ -45,7 +47,8 @@ namespace runner::rl
         }
 
         void read_autonomy_state(const std::filesystem::path& path,
-            sim::CourseStage& stage, float& difficulty, std::uint64_t& rig_generation,
+            sim::CourseStage& stage, sim::GaitTask& gait_task, float& difficulty,
+            std::uint64_t& rig_generation,
             std::uint64_t& accepted, std::uint64_t& rejected, int& rollback,
             RigOptimizationMode& optimization_mode)
         {
@@ -61,10 +64,14 @@ namespace runner::rl
             std::uint64_t loaded_rejected{};
             int loaded_rollback{};
             int mode_value = static_cast<int>(RigOptimizationMode::control_optimize);
+            int gait_value = static_cast<int>(sim::GaitTask::walk);
             input >> magic >> version;
-            if (!input || magic != "RUNAUTONOMY" || (version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24 && version != 25 && version != 26))
+            if (!input || magic != "RUNAUTONOMY" || version < 16 || version > 27)
                 return;
-            input >> stage_value >> loaded_difficulty >> loaded_generation
+            input >> stage_value;
+            if (version >= 27)
+                input >> gait_value;
+            input >> loaded_difficulty >> loaded_generation
                 >> loaded_accepted >> loaded_rejected >> loaded_rollback;
             if (version >= 17)
                 input >> mode_value;
@@ -75,10 +82,13 @@ namespace runner::rl
                 || stage_value >= stage_limit
                 || !(loaded_difficulty >= 0.10f && loaded_difficulty <= 1.0f)
                 || loaded_rollback < 0
+                || gait_value < 0
+                || gait_value >= static_cast<int>(sim::gait_task_count)
                 || (mode_value != static_cast<int>(RigOptimizationMode::control_optimize)
                     && mode_value != static_cast<int>(RigOptimizationMode::morphology_evolve)))
                 return;
             stage = static_cast<sim::CourseStage>(stage_value);
+            gait_task = static_cast<sim::GaitTask>(gait_value);
             difficulty = loaded_difficulty;
             rig_generation = loaded_generation;
             accepted = loaded_accepted;
@@ -147,6 +157,7 @@ namespace runner::rl
         }
         snapshot.status.enabled = enabled_.load(std::memory_order_relaxed);
         snapshot.status.stage = stage_;
+        snapshot.status.gait_task = gait_task_;
         snapshot.status.difficulty = difficulty_;
         snapshot.status.rig_generation = rig_generation_;
         snapshot.status.accepted_rig_changes = accepted_rig_changes_;
@@ -200,6 +211,7 @@ namespace runner::rl
         job.checkpoint = worker_.checkpoint_data();
         job.blueprint = worker_.blueprint();
         job.stage = stage_;
+        job.gait_task = gait_task_;
         job.difficulty = difficulty_;
         job.rig_generation = rig_generation_;
         job.accepted_rig_changes = accepted_rig_changes_;
@@ -290,7 +302,8 @@ namespace runner::rl
                 if (ok && !job.rig_path.empty())
                     ok = job.blueprint.save(job.rig_path, message);
                 if (ok)
-                    ok = write_autonomy_state(job.state_path, job.stage, job.difficulty,
+                    ok = write_autonomy_state(job.state_path, job.stage, job.gait_task,
+                        job.difficulty,
                         job.rig_generation, job.accepted_rig_changes,
                         job.rejected_rig_changes, job.rollback_count,
                         job.optimization_mode, message);
@@ -333,7 +346,8 @@ namespace runner::rl
                     }
                     else
                     {
-                        read_autonomy_state(job.state_path, job.stage, job.difficulty,
+                        read_autonomy_state(job.state_path, job.stage, job.gait_task,
+                            job.difficulty,
                             job.rig_generation, job.accepted_rig_changes,
                             job.rejected_rig_changes, job.rollback_count,
                             job.optimization_mode);
@@ -346,6 +360,7 @@ namespace runner::rl
                         command.rejected_rig_changes = job.rejected_rig_changes;
                         command.rollback_count = job.rollback_count;
                         command.optimization_mode = job.optimization_mode;
+                        command.gait_task = job.gait_task;
                         enqueue_command(std::move(command));
                         message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
                     }

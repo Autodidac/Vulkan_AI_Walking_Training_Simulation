@@ -211,6 +211,8 @@ namespace
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_body_side.ppm",
             std::filesystem::path{ "docs" } / "RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md",
+            std::filesystem::path{ "docs" } / "EPOCH2D_WALK_ENGINE_LIBRARY.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_lower_leg_side.ppm",
@@ -362,7 +364,9 @@ namespace
     [[nodiscard]] bool is_headless_surface_error(std::string_view error) noexcept
     {
         return error.find("VK_KHR_surface") != std::string_view::npos
-            || error.find("VK_KHR_win32_surface") != std::string_view::npos;
+            || error.find("VK_KHR_win32_surface") != std::string_view::npos
+            || error.find("No available video device") != std::string_view::npos
+            || error.find("No dynamic Vulkan support") != std::string_view::npos;
     }
 
     [[nodiscard]] bool visible_application_frames(int width, int height)
@@ -547,6 +551,16 @@ int main(int argc, char** argv)
             proof.displayed_distance, proof.displayed_steps,
             proof.displayed_crossings, proof.displayed_max_scissor_seconds,
             proof.selected_seed);
+        std::printf(
+            "raw policy audit: mean=%.3fm/%.2f cycles invalid=%u/6 "
+            "reject=0x%08X reason=%.*s course_motion=disabled "
+            "optional_guidance=disabled mandatory_joint_cluster=enabled\n",
+            proof.raw_policy_distance, proof.raw_policy_stride_events,
+            proof.raw_policy_invalid_runs, proof.raw_policy_rejection_mask,
+            static_cast<int>(runner::sim::invalid_motion_name(
+                proof.raw_policy_invalid_reason).size()),
+            runner::sim::invalid_motion_name(
+                proof.raw_policy_invalid_reason).data());
         return proof.passed ? 0 : 1;
     }
     if (wants_art_diagnostic(argc, argv))
@@ -702,11 +716,36 @@ if (wants_camera_diagnostic(argc, argv))
             RUNNER_VERSION, report.passed_count(), report.cases.size());
         return report.passed() ? 0 : 1;
     }
-    const bool package_diagnostic = wants_package_diagnostic(argc, argv);
-    const bool diagnostic = wants_vulkan_diagnostic(argc, argv) || package_diagnostic;
+
+    if (wants_package_diagnostic(argc, argv))
+    {
+        const std::filesystem::path package_directory = executable_directory();
+        std::string layout_error{};
+        if (!validate_runtime_layout(package_directory, layout_error))
+        {
+            std::fprintf(stderr, "Runner package diagnostic failed: %s\n",
+                layout_error.c_str());
+            return 1;
+        }
+        std::printf(
+            "Runner %s package diagnostic passed: executable-relative runtime "
+            "files and species rigs are present\n",
+            RUNNER_VERSION);
+        return 0;
+    }
+
+    const bool diagnostic = wants_vulkan_diagnostic(argc, argv);
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
+        const std::string video_error = SDL_GetError();
+        if (diagnostic && is_headless_surface_error(video_error))
+        {
+            std::printf("Runner %s SDL3 Vulkan diagnostic passed: linked backend "
+                "enabled; the host has no video surface (%s)\n",
+                RUNNER_VERSION, video_error.c_str());
+            return 0;
+        }
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
@@ -716,17 +755,6 @@ if (wants_camera_diagnostic(argc, argv))
         base_directory / RUNNER_SHADER_DIRECTORY;
     const std::filesystem::path asset_directory =
         base_directory / RUNNER_ASSET_DIRECTORY;
-    if (package_diagnostic)
-    {
-        std::string layout_error{};
-        if (!validate_runtime_layout(base_directory, layout_error))
-        {
-            std::fprintf(stderr, "Runner package diagnostic failed: %s\n",
-                layout_error.c_str());
-            SDL_Quit();
-            return 1;
-        }
-    }
 
     if (!SDL_Vulkan_LoadLibrary(nullptr))
     {
@@ -735,9 +763,8 @@ if (wants_camera_diagnostic(argc, argv))
         {
             const char* video_driver = SDL_GetCurrentVideoDriver();
             std::printf(
-                package_diagnostic
-                    ? "Runner " RUNNER_VERSION " package diagnostic passed: runtime files present, backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n"
-                    : "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend enabled, video_driver=%s; the CI runner has no Vulkan presentation surface (%s)\n",
+                "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: backend "
+                "enabled, video_driver=%s; the host has no Vulkan presentation surface (%s)\n",
                 video_driver != nullptr ? video_driver : "unknown",
                 vulkan_error.c_str());
             SDL_Quit();
@@ -767,9 +794,7 @@ if (wants_camera_diagnostic(argc, argv))
     {
         const char* video_driver = SDL_GetCurrentVideoDriver();
         std::printf(
-            package_diagnostic
-                ? "Runner " RUNNER_VERSION " package diagnostic passed: runtime files present, video_driver=%s, instance_extensions=%u\n"
-                : "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
+            "Runner " RUNNER_VERSION " SDL3 Vulkan diagnostic passed: video_driver=%s, instance_extensions=%u\n",
             video_driver != nullptr ? video_driver : "unknown",
             static_cast<unsigned int>(instance_extension_count));
         SDL_Vulkan_UnloadLibrary();

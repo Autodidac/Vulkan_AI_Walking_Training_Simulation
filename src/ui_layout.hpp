@@ -71,6 +71,12 @@ namespace runner::ui_layout
     {
         return units == DistanceUnits::metric ? 10.0f : 15.24f;
     }
+    [[nodiscard]] constexpr float course_reference_marker_label_offset_pixels(
+        int marker_index) noexcept
+    {
+        return marker_index == 0 ? -116.0f : 0.0f;
+    }
+
 
     [[nodiscard]] constexpr std::uint64_t lifetime_delta(
         std::uint64_t total, std::uint64_t start) noexcept

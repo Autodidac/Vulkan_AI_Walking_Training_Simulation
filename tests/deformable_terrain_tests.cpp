@@ -234,8 +234,7 @@ int main()
         {
             const auto& before = fine_cells[index];
             const auto& after = subject.fine_cells()[index];
-            if (before.material_id != after.material_id || before.flags != after.flags
-                || before.fill != after.fill)
+            if (!before.same_state(after))
                 return false;
         }
         return true;
@@ -294,9 +293,7 @@ int main()
             const std::size_t fine_index = row * sim::DeformableTerrain::cell_count + column;
             const auto& fine_before = launch_fine_cells[fine_index];
             const auto& fine_after = protected_launch.fine_cells()[fine_index];
-            require(fine_before.material_id == fine_after.material_id
-                    && fine_before.flags == fine_after.flags
-                    && fine_before.fill == fine_after.fill,
+            require(fine_before.same_state(fine_after),
                 "launch fine cell changed under adversarial load");
         }
     }

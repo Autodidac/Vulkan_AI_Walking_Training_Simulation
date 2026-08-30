@@ -1,41 +1,19 @@
-name: Audited tagged release
+name: Epoch2DWalkEngine audited cross-platform release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 permissions:
   contents: write
 
 env:
-  VCPKG_ROOT: ${{ github.workspace }}\vcpkg
-  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-bincache
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
 
 jobs:
-  linux-gcc14:
+  linux-release:
     runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Install GCC 14 and Ninja
-        run: sudo apt-get update && sudo apt-get install -y g++-14 ninja-build
-      - name: Configure warnings-as-errors core build
-        env:
-          CXX: g++-14
-        run: >-
-          cmake -S . -B build/linux-gcc14 -G Ninja
-          -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=ON
-          -DCMAKE_BUILD_TYPE=Release
-      - name: Build and run every Linux test
-        run: |
-          cmake --build build/linux-gcc14 --parallel
-          ctest --test-dir build/linux-gcc14 --output-on-failure -V
-
-  build-test-release:
-    needs: linux-gcc14
-    runs-on: windows-2025
     steps:
       - name: Checkout exact tagged source
         uses: actions/checkout@v4
@@ -47,19 +25,131 @@ jobs:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
-      - name: Bootstrap vcpkg
+      - name: Install GCC 14 and Linux graphics prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake gcc-14 g++-14 libtool ninja-build pkg-config \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
+            libxi-dev libxss-dev libwayland-dev libxkbcommon-dev libdrm-dev \
+            libgbm-dev libgl1-mesa-dev libvulkan1 mesa-vulkan-drivers vulkan-tools
+      - name: Bootstrap pinned vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: Configure full GCC 14 release
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          cmake --preset linux-release --fresh
+      - name: Build and test full Linux example and library
+        run: |
+          cmake --build --preset linux-release --parallel
+          ctest --preset linux-release --output-on-failure -V
+      - name: Run every Linux feature diagnostic
+        run: |
+          runner=build/linux-release/Runner
+          for argument in \
+            --version --diagnose-vulkan --diagnose-package --diagnose-acceptance \
+            --diagnose-camera --diagnose-ui --diagnose-art --diagnose-rig-training \
+            --diagnose-walk-eye --diagnose-course --diagnose-hybrid-brain; do
+            "$runner" "$argument"
+          done
+      - name: Build, install, and consume the Linux SDK
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          cmake -S . -B build/linux-sdk -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=OFF
+          cmake --build build/linux-sdk --parallel
+          rm -rf package/epoch2d-dev-linux build/linux-installed-consumer
+          cmake --install build/linux-sdk --prefix package/epoch2d-dev-linux
+          cmake -S examples/installed_consumer -B build/linux-installed-consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/package/epoch2d-dev-linux"
+          cmake --build build/linux-installed-consumer --parallel
+          build/linux-installed-consumer/Epoch2DWalkEngineInstalledConsumer
+      - name: Package and independently audit Linux runtime and SDK
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          test "$tag" = "v0.7.48"
+          runtime="package/Epoch2DWalkEngine-$tag-runner-linux-x86_64"
+          sdk="package/epoch2d-dev-linux"
+          rm -rf "$runtime"
+          cmake --install build/linux-release --component RunnerRuntime --prefix "$runtime"
+          cp README.md LICENSE missioncache.md "$runtime/"
+
+          runtime_archive="Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
+          runtime_manifest="Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+          sdk_archive="Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
+          sdk_manifest="Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+          (cd "$runtime" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$runtime_manifest"
+          tar -C "$runtime" -czf "$runtime_archive" .
+          sha256sum "$runtime_archive" | awk '{print $1}' > "$runtime_archive.sha256"
+          (cd "$sdk" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$sdk_manifest"
+          tar -C "$sdk" -czf "$sdk_archive" .
+          sha256sum "$sdk_archive" | awk '{print $1}' > "$sdk_archive.sha256"
+
+          runtime_audit="$RUNNER_TEMP/epoch2d-runtime-linux"
+          sdk_audit="$RUNNER_TEMP/epoch2d-sdk-linux"
+          rm -rf "$runtime_audit" "$sdk_audit" "$RUNNER_TEMP/epoch2d-consumer-linux"
+          mkdir -p "$runtime_audit" "$sdk_audit"
+          tar -C "$runtime_audit" -xzf "$runtime_archive"
+          tar -C "$sdk_audit" -xzf "$sdk_archive"
+          (cd "$runtime_audit" && sha256sum -c "$GITHUB_WORKSPACE/$runtime_manifest")
+          (cd "$sdk_audit" && sha256sum -c "$GITHUB_WORKSPACE/$sdk_manifest")
+          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-package)
+          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-acceptance)
+          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-camera)
+          cmake -S examples/installed_consumer -B "$RUNNER_TEMP/epoch2d-consumer-linux" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$sdk_audit"
+          cmake --build "$RUNNER_TEMP/epoch2d-consumer-linux" --parallel
+          "$RUNNER_TEMP/epoch2d-consumer-linux/Epoch2DWalkEngineInstalledConsumer"
+      - name: Upload audited Linux assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch2d-linux-release-assets
+          if-no-files-found: error
+          path: |
+            Epoch2DWalkEngine-*-runner-linux-x86_64.tar.gz
+            Epoch2DWalkEngine-*-runner-linux-x86_64.tar.gz.sha256
+            Epoch2DWalkEngine-*-runner-linux-x86_64.manifest.sha256
+            Epoch2DWalkEngine-*-dev-linux-x86_64.tar.gz
+            Epoch2DWalkEngine-*-dev-linux-x86_64.tar.gz.sha256
+            Epoch2DWalkEngine-*-dev-linux-x86_64.manifest.sha256
+
+  windows-release:
+    needs: linux-release
+    runs-on: windows-2025
+    steps:
+      - name: Checkout exact tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download audited Linux assets
+        uses: actions/download-artifact@v4
+        with:
+          name: epoch2d-linux-release-assets
+          path: linux-assets
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
+          path: vcpkg
+      - name: Bootstrap pinned vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-      - name: Configure full MSVC release
+      - name: Configure, build, and test full Windows release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
-      - name: Build full SDL3/Vulkan application
-        run: cmake --build --preset windows-release
-      - name: Run every Windows test
-        run: ctest --preset windows-release --output-on-failure -V
-      - name: Run every feature diagnostic
+          cmake --build --preset windows-release --parallel
+          ctest --preset windows-release --output-on-failure -V
+      - name: Run every Windows feature diagnostic
         shell: pwsh
         run: |
           $runner = "build/windows-release/Release/Runner.exe"
@@ -67,103 +157,122 @@ jobs:
             & $runner $argument
             if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
           }
-      - name: Package exact tagged build and create manifests
+      - name: Build, install, and consume the Windows SDK
+        shell: pwsh
+        run: |
+          cmake -S . -B build/windows-sdk -G "Visual Studio 18 2026" -A x64 `
+            -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=OFF
+          cmake --build build/windows-sdk --config Release --parallel
+          $sdk = Join-Path $PWD "package/epoch2d-dev-windows"
+          if (Test-Path -LiteralPath $sdk) { Remove-Item -LiteralPath $sdk -Recurse -Force }
+          cmake --install build/windows-sdk --config Release --prefix $sdk
+          cmake -S examples/installed_consumer -B build/windows-installed-consumer `
+            -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=$sdk
+          cmake --build build/windows-installed-consumer --config Release --parallel
+          & "build/windows-installed-consumer/Release/Epoch2DWalkEngineInstalledConsumer.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Installed SDK consumer failed" }
+      - name: Package exact Windows runtime, SDK, and source
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $package = Join-Path $PWD "package/Runner-$tag-windows-x64"
-          New-Item -ItemType Directory -Force $package | Out-Null
-          cmake --install build/windows-release --config Release --component RunnerRuntime --prefix $package
-          Get-ChildItem build/windows-release/Release -Filter *.dll -File -ErrorAction SilentlyContinue |
-            Copy-Item -Destination $package -Force
-          Copy-Item README.md, LICENSE, missioncache.md -Destination $package -Force
-          $manifest = "Runner-$tag-windows-x64.manifest.sha256"
-          Get-ChildItem $package -Recurse -File | Sort-Object FullName | ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($package, $_.FullName).Replace('\', '/')
-            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
-          } | Set-Content -Encoding ascii $manifest
-          $archive = "Runner-$tag-windows-x64.zip"
-          Compress-Archive -Path "$package/*" -DestinationPath $archive -Force
-          (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
-            Set-Content -Encoding ascii "$archive.sha256"
-          $sourceRootName = "Runner-$tag-source"
-          $sourceArchive = "$sourceRootName.zip"
-          git archive --format=zip --prefix="$sourceRootName/" --output=$sourceArchive HEAD
-          if ($LASTEXITCODE -ne 0) { throw "git archive failed with exit code $LASTEXITCODE" }
+          if ($tag -ne "v0.7.48") { throw "Tag $tag does not match project version v0.7.48" }
+          $runtime = Join-Path $PWD "package/Epoch2DWalkEngine-$tag-runner-windows-x64"
+          $sdk = Join-Path $PWD "package/epoch2d-dev-windows"
+          if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
+          New-Item -ItemType Directory -Force $runtime | Out-Null
+          cmake --install build/windows-release --config Release --component RunnerRuntime --prefix $runtime
+          Copy-Item README.md, LICENSE, missioncache.md -Destination $runtime -Force
+
+          function Write-Manifest([string] $root, [string] $output) {
+            Get-ChildItem $root -Recurse -File | Sort-Object FullName | ForEach-Object {
+              $relative = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
+              "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
+            } | Set-Content -Encoding ascii $output
+          }
+          function Write-Archive([string] $root, [string] $archive, [string] $manifest) {
+            Write-Manifest $root $manifest
+            Compress-Archive -Path "$root/*" -DestinationPath $archive -Force
+            (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
+              Set-Content -Encoding ascii "$archive.sha256"
+          }
+
+          $runtimeArchive = "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
+          $runtimeManifest = "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+          $sdkArchive = "Epoch2DWalkEngine-$tag-dev-windows-x64.zip"
+          $sdkManifest = "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+          Write-Archive $runtime $runtimeArchive $runtimeManifest
+          Write-Archive $sdk $sdkArchive $sdkManifest
+
+          $sourceRoot = "Epoch2DWalkEngine-$tag-source"
+          $sourceArchive = "$sourceRoot.zip"
+          git archive --format=zip --prefix="$sourceRoot/" --output=$sourceArchive HEAD
+          if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
           (Get-FileHash $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant() |
             Set-Content -Encoding ascii "$sourceArchive.sha256"
-          $sourceManifestRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-source-manifest"
-          if (Test-Path -LiteralPath $sourceManifestRoot) { Remove-Item -LiteralPath $sourceManifestRoot -Recurse -Force }
-          Expand-Archive $sourceArchive -DestinationPath $sourceManifestRoot
-          $extractedSource = Join-Path $sourceManifestRoot $sourceRootName
-          Get-ChildItem $extractedSource -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($sourceManifestRoot, $_.FullName).Replace('\', '/')
+          $sourceStage = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-manifest"
+          if (Test-Path -LiteralPath $sourceStage) { Remove-Item -LiteralPath $sourceStage -Recurse -Force }
+          Expand-Archive $sourceArchive -DestinationPath $sourceStage
+          Get-ChildItem (Join-Path $sourceStage $sourceRoot) -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+            $relative = [IO.Path]::GetRelativePath($sourceStage, $_.FullName).Replace('\', '/')
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
-          } | Set-Content -Encoding ascii "$sourceRootName.manifest.sha256"
-      - name: Audit installed and independently extracted launchers
+          } | Set-Content -Encoding ascii "$sourceRoot.manifest.sha256"
+          Copy-Item linux-assets/* -Destination $PWD -Force
+      - name: Audit independent Windows and source archives
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $package = Join-Path $PWD "package/Runner-$tag-windows-x64"
-          $archive = Join-Path $PWD "Runner-$tag-windows-x64.zip"
-          $manifest = Join-Path $PWD "Runner-$tag-windows-x64.manifest.sha256"
-          $auditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-independent"
-          New-Item -ItemType Directory -Force $auditRoot | Out-Null
-          function Invoke-RunnerAudit([string] $launcher) {
-            foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course", "--diagnose-hybrid-brain")) {
-              & $launcher $argument
-              if ($LASTEXITCODE -ne 0) { throw "$launcher $argument failed with exit code $LASTEXITCODE" }
+          function Test-Manifest([string] $root, [string] $manifest) {
+            $entries = @(Get-Content $manifest)
+            $files = @(Get-ChildItem $root -Recurse -File)
+            if ($files.Count -ne $entries.Count) { throw "Manifest file count mismatch for $root" }
+            $entries | ForEach-Object {
+              $hash, $relative = $_ -split '  ', 2
+              $target = Join-Path $root $relative
+              if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Missing $relative" }
+              if ((Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) { throw "Manifest mismatch: $relative" }
             }
           }
+          $runtimeArchive = "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
+          $runtimeManifest = "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+          $sdkArchive = "Epoch2DWalkEngine-$tag-dev-windows-x64.zip"
+          $sdkManifest = "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+          $runtimeAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-runtime-windows"
+          $sdkAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-sdk-windows"
+          foreach ($path in @($runtimeAudit, $sdkAudit)) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
+            New-Item -ItemType Directory -Force $path | Out-Null
+          }
+          Expand-Archive $runtimeArchive -DestinationPath $runtimeAudit
+          Expand-Archive $sdkArchive -DestinationPath $sdkAudit
+          Test-Manifest $runtimeAudit $runtimeManifest
+          Test-Manifest $sdkAudit $sdkManifest
           Push-Location $env:RUNNER_TEMP
-          Invoke-RunnerAudit (Join-Path $package "run.bat")
+          foreach ($argument in @("--version", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera")) {
+            & (Join-Path $runtimeAudit "run.bat") $argument
+            if ($LASTEXITCODE -ne 0) { throw "Extracted runtime failed $argument" }
+          }
           Pop-Location
-          Expand-Archive $archive -DestinationPath $auditRoot -Force
-          Push-Location $env:RUNNER_TEMP
-          Invoke-RunnerAudit (Join-Path $auditRoot "run.bat")
-          Pop-Location
-          $manifestEntries = @(Get-Content $manifest)
-          $extractedFiles = @(Get-ChildItem $auditRoot -Recurse -File)
-          if ($extractedFiles.Count -ne $manifestEntries.Count) {
-            throw "Manifest file count mismatch: expected $($manifestEntries.Count), extracted $($extractedFiles.Count)"
+          cmake -S examples/installed_consumer -B "$env:RUNNER_TEMP/epoch2d-consumer-windows" `
+            -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=$sdkAudit
+          cmake --build "$env:RUNNER_TEMP/epoch2d-consumer-windows" --config Release --parallel
+          & "$env:RUNNER_TEMP/epoch2d-consumer-windows/Release/Epoch2DWalkEngineInstalledConsumer.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Extracted SDK consumer failed" }
+
+          foreach ($archive in @($runtimeArchive, $sdkArchive, "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-source.zip")) {
+            $expected = (Get-Content "$archive.sha256").Trim()
+            if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Checksum mismatch: $archive" }
           }
-          $manifestEntries | ForEach-Object {
-            $hash, $relative = $_ -split '  ', 2
-            $target = Join-Path $auditRoot $relative
-            if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Manifest file missing: $relative" }
-            $actual = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $hash) { throw "Manifest mismatch: $relative" }
+          $sourceRoot = "Epoch2DWalkEngine-$tag-source"
+          $sourceAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-independent"
+          if (Test-Path -LiteralPath $sourceAudit) { Remove-Item -LiteralPath $sourceAudit -Recurse -Force }
+          Expand-Archive "$sourceRoot.zip" -DestinationPath $sourceAudit
+          $expectedFiles = @(git ls-files | Where-Object { $_ -notlike 'release-assets/*' } | ForEach-Object { "$sourceRoot/$($_.Replace('\', '/'))" })
+          $actualFiles = @(Get-ChildItem (Join-Path $sourceAudit $sourceRoot) -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($sourceAudit, $_.FullName).Replace('\', '/') })
+          if ($actualFiles.Count -ne $expectedFiles.Count) { throw "Source tracked-file count mismatch" }
+          foreach ($relative in $expectedFiles) {
+            if ($relative -notin $actualFiles) { throw "Tracked source missing from archive: $relative" }
           }
-          $runtimeChecksum = (Get-Content "$archive.sha256").Trim()
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $runtimeChecksum) {
-            throw "Runtime archive checksum mismatch"
-          }
-          $sourceRootName = "Runner-$tag-source"
-          $sourceArchive = Join-Path $PWD "$sourceRootName.zip"
-          $sourceManifest = Join-Path $PWD "$sourceRootName.manifest.sha256"
-          $sourceChecksum = (Get-Content "$sourceArchive.sha256").Trim()
-          if ((Get-FileHash $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $sourceChecksum) {
-            throw "Source archive checksum mismatch"
-          }
-          $sourceAuditRoot = Join-Path $env:RUNNER_TEMP "runner-$tag-source-independent"
-          if (Test-Path -LiteralPath $sourceAuditRoot) { Remove-Item -LiteralPath $sourceAuditRoot -Recurse -Force }
-          Expand-Archive $sourceArchive -DestinationPath $sourceAuditRoot
-          $sourceTree = Join-Path $sourceAuditRoot $sourceRootName
-          $expectedSourceFiles = @(git ls-files | Where-Object { $_ -notlike 'release-assets/*' } | ForEach-Object { "$sourceRootName/$($_.Replace('\', '/'))" })
-          $actualSourceFiles = @(Get-ChildItem $sourceTree -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($sourceAuditRoot, $_.FullName).Replace('\', '/') })
-          if ($actualSourceFiles.Count -ne $expectedSourceFiles.Count) { throw "Source tracked-file count mismatch" }
-          foreach ($relative in $expectedSourceFiles) {
-            if ($relative -notin $actualSourceFiles) { throw "Tracked source missing from archive: $relative" }
-          }
-          $sourceManifestEntries = @(Get-Content $sourceManifest)
-          if ($sourceManifestEntries.Count -ne $actualSourceFiles.Count) { throw "Source manifest file count mismatch" }
-          $sourceManifestEntries | ForEach-Object {
-            $hash, $relative = $_ -split '  ', 2
-            $target = Join-Path $sourceAuditRoot $relative
-            if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Source manifest file missing: $relative" }
-            $actual = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actual -ne $hash) { throw "Source manifest mismatch: $relative" }
-          }
+          Test-Manifest $sourceAudit "$sourceRoot.manifest.sha256"
       - name: Publish and re-download exact assets
         shell: pwsh
         env:
@@ -171,21 +280,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $archive = "Runner-$tag-windows-x64.zip"
-          $checksum = "$archive.sha256"
-          $manifest = "Runner-$tag-windows-x64.manifest.sha256"
-          $sourceArchive = "Runner-$tag-source.zip"
-          $sourceChecksum = "$sourceArchive.sha256"
-          $sourceManifest = "Runner-$tag-source.manifest.sha256"
+          $assets = @(
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip", "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256", "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256",
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256", "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256",
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip", "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256", "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256",
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256",
+            "Epoch2DWalkEngine-$tag-source.zip", "Epoch2DWalkEngine-$tag-source.zip.sha256", "Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          )
           $sourceSha = (git rev-parse HEAD).Trim()
-          gh release create $tag $archive $checksum $manifest $sourceArchive $sourceChecksum $sourceManifest `
-            --target $sourceSha --title "Runner $tag" --generate-notes --draft
-          $download = Join-Path $env:RUNNER_TEMP "runner-$tag-download"
+          gh release create $tag $assets --target $sourceSha --title "Epoch2DWalkEngine $tag" --generate-notes --draft
+          $download = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-download"
+          if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download -Recurse -Force }
           New-Item -ItemType Directory -Force $download | Out-Null
           gh release download $tag --dir $download
-          foreach ($asset in @($archive, $checksum, $manifest, $sourceArchive, $sourceChecksum, $sourceManifest)) {
-            $local = (Get-FileHash $asset -Algorithm SHA256).Hash
-            $remote = (Get-FileHash (Join-Path $download $asset) -Algorithm SHA256).Hash
-            if ($local -ne $remote) { throw "Published asset byte mismatch: $asset" }
+          foreach ($asset in $assets) {
+            if ((Get-FileHash $asset -Algorithm SHA256).Hash -ne (Get-FileHash (Join-Path $download $asset) -Algorithm SHA256).Hash) {
+              throw "Published asset byte mismatch: $asset"
+            }
           }
           gh release edit $tag --draft=false

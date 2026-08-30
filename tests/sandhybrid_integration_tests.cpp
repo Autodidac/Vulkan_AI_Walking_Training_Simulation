@@ -2,6 +2,7 @@
 #include "simulation.hpp"
 
 #include <sandhybrid/library.hpp>
+#include <sandhybrid/simulation_policy.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -51,11 +52,19 @@ int main()
 {
     using runner::sim::DeformableTerrain;
 
-    require(sandhybrid::library_api_version >= 3u
-            && sandhybrid::library_api_version <= 4u,
-        "unsupported SandHybrid library API version");
+    require(sandhybrid::library_api_version == 4u,
+        "linked EpochSimEngine is not the exact public API 4 contract");
     require(sandhybrid::library_name == "SandHybrid",
         "wrong linked SandHybrid library identity");
+    require(sizeof(sandhybrid::SceneCell) == 16u,
+        "canonical SceneCell is not the four-word 16-byte ABI");
+    require(sandhybrid::material_count == 68u
+            && static_cast<std::uint32_t>(sandhybrid::Material::empty) == 0u
+            && static_cast<std::uint32_t>(sandhybrid::Material::atmosphere) == 66u,
+        "append-only material IDs or atmosphere/vacuum identity diverged");
+    require(sandhybrid::policy::macro_tile_size == 8u
+            && sandhybrid::policy::chunk_size == 64u,
+        "8x8 macro-tile or 64x64 scheduling-chunk contract diverged");
     require(sandhybrid::core_library_capabilities.native_startup_owned_by_consumer,
         "SandHybrid attempted to own Runner startup");
     require(!sandhybrid::core_library_capabilities.vulkan_required,

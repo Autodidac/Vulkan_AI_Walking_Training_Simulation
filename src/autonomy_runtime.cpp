@@ -106,6 +106,7 @@ namespace runner::rl
             && snapshot.metrics.best_update != cached_metrics_.best_update;
         const bool course_changed = !hold_preview
             && (snapshot.status.stage != cached_status_.stage
+                || snapshot.status.gait_task != cached_status_.gait_task
                 || std::abs(snapshot.status.difficulty
                     - cached_status_.difficulty) > 1.0e-5f);
 
@@ -117,7 +118,10 @@ namespace runner::rl
             live_.set_blueprint(live_blueprint_, false);
         }
         if (decision.replace_course)
+        {
             live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
+            live_.set_gait_task(snapshot.status.gait_task, false);
+        }
         if (decision.adopt_controller)
             live_.policy().parameters() = snapshot.parameters;
         if (decision.reset_episode)
@@ -183,6 +187,7 @@ namespace runner::rl
         live_blueprint_ = snapshot.blueprint;
         live_.set_blueprint(live_blueprint_, false);
         live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
+        live_.set_gait_task(snapshot.status.gait_task, false);
         live_.policy().parameters() = snapshot.parameters;
         live_.set_preview_course_motion_enabled(false);
         live_morphology_preview_active_ = false;
@@ -195,6 +200,14 @@ namespace runner::rl
         command.optimization_mode = mode == RigOptimizationMode::morphology_evolve
             ? RigOptimizationMode::morphology_evolve
             : RigOptimizationMode::control_optimize;
+        enqueue_command(std::move(command));
+    }
+
+    void AutonomousTrainer::set_gait_task(sim::GaitTask task) noexcept
+    {
+        PendingCommand command{};
+        command.type = CommandType::set_gait_task;
+        command.gait_task = task;
         enqueue_command(std::move(command));
     }
 

@@ -200,8 +200,7 @@ namespace runner::diagnostics
             {
                 const auto& before = fine_cells[index];
                 const auto& after = subject.fine_cells()[index];
-                if (before.material_id != after.material_id
-                    || before.flags != after.flags || before.fill != after.fill)
+                if (!before.same_state(after))
                     return false;
             }
             return true;

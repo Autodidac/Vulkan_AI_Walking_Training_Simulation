@@ -14,7 +14,7 @@ namespace
     {
         if (condition)
             return;
-        std::cerr << "Runner v0.7.47 rig-training failure: " << message << '\n';
+        std::cerr << "Runner v0.7.48 rig-training failure: " << message << '\n';
         std::exit(EXIT_FAILURE);
     }
 
@@ -112,8 +112,9 @@ namespace
             runner::sim::CreatureBlueprint::chicken();
         const runner::sim::CreatureBlueprint hexapod =
             runner::sim::CreatureBlueprint::hexapod();
-        verify_gate(human, runner::rl::walk_mastery_distance,
-            runner::rl::walk_mastery_stride_events);
+        verify_gate(human,
+            runner::rl::gait_task_mastery_distance(runner::sim::GaitTask::walk),
+            runner::rl::gait_task_mastery_stride_events(runner::sim::GaitTask::walk));
         verify_gate(chicken, 10.0f, 14.0f);
         verify_gate(dog, runner::rl::multi_support_release_distance(dog),
             runner::rl::multi_support_release_stride_events(dog));
@@ -182,8 +183,7 @@ namespace
         {
             const auto& left = expected_terrain.fine_cells()[index];
             const auto& right = actual_terrain.fine_cells()[index];
-            require(left.material_id == right.material_id && left.flags == right.flags
-                    && left.fill == right.fill,
+            require(left.same_state(right),
                 "active terrain fine cell depends on render cadence");
         }
         for (std::size_t index = 0; index < expected_terrain.macro_tiles().size(); ++index)
@@ -299,7 +299,7 @@ namespace
             const bool human = test.rig.presentation_species()
                 == runner::sim::CreatureSpecies::human;
             const float minimum_distance = test.rig.avian_gait() ? 10.0f
-                : human ? 16.0f : paired_legs ? 18.0f
+                : human ? runner::rl::casual_walk_teacher_distance : paired_legs ? 18.0f
                 : std::min(10.0f,
                     runner::rl::multi_support_release_distance(test.rig));
             // The 20-second uneven-material probe counts only completed alternating
@@ -307,7 +307,8 @@ namespace
             // the intentionally adversarial repeated seeds.
             const std::uint32_t minimum_strides = test.rig.avian_gait() ? 14u
                 : paired_legs
-                ? (runner::rl::rig_has_manipulator_motors(test.rig) ? 12u : 16u)
+                ? (runner::rl::rig_has_manipulator_motors(test.rig)
+                    ? static_cast<std::uint32_t>(runner::rl::casual_walk_teacher_stride_events) : 16u)
                 : static_cast<std::uint32_t>(
                     runner::rl::multi_support_release_stride_events(test.rig));
             for (const std::uint64_t seed : seeds)
@@ -348,7 +349,7 @@ namespace
             require(all_sustained,
                 "walking teacher did not sustain the full probe");
             require(all_walked,
-                "v0.7.47 walking teacher regressed to the two-step plateau");
+                "v0.7.48 walking teacher regressed to the two-step plateau");
         }
     }
     void verify_frame_independent_preview()
@@ -405,7 +406,7 @@ int main(int argc, char** argv)
     const bool run_hexapod = mode == "--learner-hexapod";
     if (!run_references && !run_learner && !run_chicken && !run_hexapod)
     {
-        std::cerr << "Unknown v0.7.47 test mode: " << mode << '\n';
+        std::cerr << "Unknown v0.7.48 test mode: " << mode << '\n';
         return EXIT_FAILURE;
     }
     verify_retained_release_gate_contract();
@@ -415,7 +416,7 @@ int main(int argc, char** argv)
         verify_frame_independent_preview();
         if (!run_learner)
         {
-            std::cout << "Runner v0.7.47 four-rig reference gait and frame-independence checks passed\n";
+            std::cout << "Runner v0.7.48 four-rig reference gait and frame-independence checks passed\n";
             return EXIT_SUCCESS;
         }
     }
@@ -454,10 +455,10 @@ int main(int argc, char** argv)
                 rig, chicken);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.47 chicken training diagnostic failed\n";
+            std::cerr << "Runner v0.7.48 chicken training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.47 chicken training checks passed\n";
+        std::cout << "Runner v0.7.48 chicken training checks passed\n";
         return EXIT_SUCCESS;
     }
     if (run_hexapod)
@@ -492,10 +493,10 @@ int main(int argc, char** argv)
                 rig, hexapod);
         if (!passed)
         {
-            std::cerr << "Runner v0.7.47 hexapod training diagnostic failed\n";
+            std::cerr << "Runner v0.7.48 hexapod training diagnostic failed\n";
             return EXIT_FAILURE;
         }
-        std::cout << "Runner v0.7.47 hexapod training checks passed\n";
+        std::cout << "Runner v0.7.48 hexapod training checks passed\n";
         return EXIT_SUCCESS;
     }
 
@@ -551,12 +552,12 @@ int main(int argc, char** argv)
     }
     if (!report.passed)
     {
-        std::cerr << "Runner v0.7.47 four-rig training diagnostic failed\n";
+        std::cerr << "Runner v0.7.48 four-rig training diagnostic failed\n";
         return EXIT_FAILURE;
     }
     if (run_references)
-        std::cout << "Runner v0.7.47 four-rig training and frame-independence checks passed\n";
+        std::cout << "Runner v0.7.48 four-rig training and frame-independence checks passed\n";
     else
-        std::cout << "Runner v0.7.47 four-rig training checks passed\n";
+        std::cout << "Runner v0.7.48 four-rig training checks passed\n";
     return EXIT_SUCCESS;
 }

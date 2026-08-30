@@ -128,20 +128,30 @@ namespace runner
                 const font::BitmapGlyph glyph = font::default_glyph(character);
                 for (std::uint32_t row = 0; row < font::glyph_height; ++row)
                 {
-                    for (std::uint32_t column = 0;
-                        column < font::glyph_width; ++column)
+                    std::uint32_t column = 0;
+                    while (column < font::glyph_width)
                     {
-                        if (!font::pixel_on(glyph, column, row))
-                            continue;
+                        while (column < font::glyph_width
+                            && !font::pixel_on(glyph, column, row))
+                            ++column;
+                        if (column >= font::glyph_width)
+                            break;
+                        const std::uint32_t run_begin = column;
+                        while (column < font::glyph_width
+                            && font::pixel_on(glyph, column, row))
+                            ++column;
                         const Vec2 minimum{
-                            cursor.x + static_cast<float>(column)
+                            cursor.x + static_cast<float>(run_begin)
                                 * metrics.cell_size,
                             cursor.y + static_cast<float>(row)
                                 * metrics.cell_size
                         };
-                        canvas.quad(minimum,
-                            minimum + Vec2{ metrics.cell_size,
-                                metrics.cell_size }, color);
+                        const Vec2 maximum{
+                            cursor.x + static_cast<float>(column)
+                                * metrics.cell_size,
+                            minimum.y + metrics.cell_size
+                        };
+                        canvas.quad(minimum, maximum, color);
                     }
                 }
                 cursor.x += metrics.advance;
@@ -420,6 +430,9 @@ namespace runner
         bool art_eye_test{};
         bool walk_eye_test{};
         diagnostics::WalkEyeTestProof walk_eye_test_proof{};
+        rl::PolicyNetwork walk_eye_test_policy{ 0x7300u };
+        std::optional<sim::Environment> walk_eye_replay_start{};
+        double walk_eye_accumulator_seconds{};
         Mode mode{ Mode::live };
         RigPreset rig_preset{ RigPreset::humanoid };
         JointTestGroup joint_test_group{ JointTestGroup::selected };
@@ -1032,17 +1045,28 @@ namespace runner
                     if (end - begin < 2.0f)
                         return;
                     const float x = 0.5f * (begin + end);
+                    const float ground = environment.ground_height_at(x);
+                    const Vec2 ground_anchor = world_to_screen(
+                        { x, ground }, viewport, camera, scale);
                     const Vec2 anchor = world_to_screen(
-                        { x, environment.ground_height_at(x) + 0.42f
+                        { x, ground + 0.42f
                             + static_cast<float>(region_lane % 2) * 0.26f },
                         viewport, camera, scale);
-                    const Rect label{ { anchor.x + 4.0f, anchor.y - 11.0f },
-                        { 174.0f, 21.0f } };
-                    if (label.position.x >= viewport.position.x + 2.0f
-                        && label.position.x + label.size.x
-                            <= viewport.position.x + viewport.size.x - 2.0f
+                    constexpr float label_width = 150.0f;
+                    const float label_x = clamp(anchor.x - label_width * 0.5f,
+                        viewport.position.x + 4.0f,
+                        viewport.position.x + viewport.size.x - label_width - 4.0f);
+                    const Rect label{ { label_x, anchor.y - 22.0f },
+                        { label_width, 20.0f } };
+                    if (label.position.y >= viewport.position.y + 2.0f
                         && label.position.x >= previous_label_right + 8.0f)
                     {
+                        const Vec2 tether{ clamp(ground_anchor.x,
+                            label.position.x + 6.0f,
+                            label.position.x + label.size.x - 6.0f),
+                            label.position.y + label.size.y };
+                        canvas.line(ground_anchor, tether, 1.25f,
+                            region == sim::TerrainRegion::shallow_water ? accent_dim : yellow);
                         add_rounded_rect(canvas, label, 3.0f, rgb(0x101820, 0.86f),
                             region == sim::TerrainRegion::shallow_water ? accent : yellow, 1.0f);
                         add_text_fit(canvas, label.position + Vec2{ 5.0f, 4.0f },
@@ -1109,7 +1133,16 @@ namespace runner
                 const Vec2 base = world_to_screen({ x, ground }, viewport, camera, scale);
                 const Vec2 top = world_to_screen({ x, ground + 0.66f }, viewport, camera, scale);
                 canvas.line(base, top, 3.0f, accent_dim);
-                const Rect sign{ top + Vec2{ -46.0f, -25.0f }, { 92.0f, 25.0f } };
+                Vec2 sign_position = top + Vec2{
+                    -46.0f + ui_layout::course_reference_marker_label_offset_pixels(index),
+                    -25.0f };
+                sign_position.x = clamp(sign_position.x,
+                    viewport.position.x + 6.0f,
+                    viewport.position.x + viewport.size.x - 98.0f);
+                const Rect sign{ sign_position, { 92.0f, 25.0f } };
+                if (index == 0)
+                    canvas.line(top, sign.position + Vec2{ sign.size.x, 12.5f },
+                        2.0f, accent_dim);
                 add_rounded_rect(canvas, sign, 5.0f, rgb(0x102431, 0.97f), accent, 1.0f);
                 const std::string marker_label = index == 0 ? "START"
                     : distance_units == ui_layout::DistanceUnits::metric
@@ -1178,6 +1211,10 @@ namespace runner
                 const float y = viewport.position.y + 144.0f
                     + static_cast<float>(label_lane % 5) * 25.0f;
                 const Rect callout{ { x, y }, { 182.0f, 22.0f } };
+                const Vec2 tether{ clamp(feature_screen.x,
+                    callout.position.x + 6.0f,
+                    callout.position.x + callout.size.x - 6.0f), callout.position.y };
+                canvas.line(feature_screen, tether, 1.25f, trainer_feature ? accent_dim : yellow);
                 add_rounded_rect(canvas, callout, 4.0f, rgb(0x101820, 0.90f),
                     trainer_feature ? accent : yellow, 1.0f);
                 add_text_fit(canvas, callout.position + Vec2{ 5.0f, 4.0f },
@@ -1264,6 +1301,7 @@ namespace runner
             const SpeciesArtBundle* bundle = species_art_for(rig.presentation_species());
             const bool use_art = optional_art_enabled && bundle != nullptr && bundle->loaded();
             const sim::CreatureSpecies species = rig.presentation_species();
+            const art::SpeciesArtTopology topology = art::species_art_topology(species);
             const art::SpeciesArtProfile profile = art::species_art_profile(species);
             const bool mirrored = environment.facing_direction() < 0.0f;
             const bool transverse_mirror = art::presented_limb_transverse_mirror(
@@ -1345,9 +1383,10 @@ namespace runner
                     {
                         const float facing = environment.facing_direction();
                         const Vec2 contact = point(motor.c);
-                        const Vec2 toe = contact
-                            + Vec2{ facing * scale * profile.foot_length, 0.0f };
-                        draw_oriented_pixel_art(canvas, bundle->foot, contact, toe,
+                        const Vec2 foot_axis{ facing * scale * profile.foot_length, 0.0f };
+                        const Vec2 heel = contact - foot_axis * 0.28f;
+                        const Vec2 toe = contact + foot_axis * 0.72f;
+                        draw_oriented_pixel_art(canvas, bundle->foot, heel, toe,
                             std::max(thickness, scale * profile.foot_thickness),
                             near ? 0.98f : 0.72f, transverse_mirror, false);
                     }
@@ -1355,19 +1394,9 @@ namespace runner
             };
 
             draw_limb_pass(0);
-            std::size_t body_a = rig.root_node;
+            const std::size_t body_a = topology.body_rear;
+            const std::size_t body_b = topology.body_front;
             Vec2 body_direction{ environment.facing_direction(), 0.0f };
-            std::size_t body_b = rig.torso_node;
-            if (species == sim::CreatureSpecies::chicken && particles.size() > 5u)
-            {
-                body_a = 5u;
-                body_b = 2u;
-            }
-            else if (species == sim::CreatureSpecies::hexapod && particles.size() > 2u)
-            {
-                body_a = 0u;
-                body_b = 2u;
-            }
             if (body_a < particles.size() && body_b < particles.size())
             {
                 Vec2 beginning = point(body_a);
@@ -1387,43 +1416,49 @@ namespace runner
 
                 if (use_art && bundle->tail.loaded() && profile.tail_length > 0.0f)
                 {
-                    const Vec2 tail_anchor = beginning
+                    const Vec2 tail_anchor = point(body_a)
+                        - body_direction * scale * (profile.body_rear_overlap * 0.35f)
                         + Vec2{ 0.0f, -scale * profile.tail_anchor_up };
-                    draw_oriented_pixel_art(canvas, bundle->tail, tail_anchor,
-                        tail_anchor - body_direction * scale * profile.tail_length,
+                    Vec2 tail_ending = tail_anchor
+                        - body_direction * scale * profile.tail_length;
+                    if (topology.physical_tail
+                        && topology.tail_tip < particles.size())
+                    {
+                        const Vec2 physical_tip = point(topology.tail_tip);
+                        const Vec2 physical_axis = normalized(
+                            physical_tip - tail_anchor, -1.0f * body_direction);
+                        tail_ending = physical_tip
+                            + physical_axis * scale * profile.body_rear_overlap * 0.20f;
+                    }
+                    draw_oriented_pixel_art(canvas, bundle->tail,
+                        tail_anchor, tail_ending,
                         thickness * profile.tail_ratio, 0.90f,
                         art::tail_transverse_mirror(profile, transverse_mirror),
                         false);
                 }
             }
-            if (rig.head_node < particles.size())
+            if (rig.head_node < particles.size()
+                && topology.head_attachment < particles.size()
+                && topology.head_tip < particles.size())
             {
-                const Vec2 head = point(rig.head_node);
                 const float facing = environment.facing_direction();
-                const Vec2 raw_head_direction = rig.torso_node < particles.size()
-                    ? normalized(head - point(rig.torso_node),
-                        { facing, 0.0f })
-                    : body_direction;
-                const Vec2 head_direction = normalized({
-                    facing * std::max(0.20f, std::abs(raw_head_direction.x)),
-                    raw_head_direction.y
-                }, { facing, 0.0f });
+                const Vec2 attachment = point(topology.head_attachment);
+                const Vec2 physical_tip = point(topology.head_tip);
+                const Vec2 head_direction = normalized(
+                    physical_tip - attachment, { facing, 0.0f });
                 const float head_length = std::clamp(
                     particles[rig.head_node].radius * scale * profile.head_scale,
                     scale * profile.head_minimum, scale * profile.head_maximum);
-                const Vec2 head_anchor = head
-                    + head_direction * scale * profile.head_anchor_forward
+                const Vec2 beginning = attachment
+                    - head_direction * scale * profile.head_anchor_forward
                     + Vec2{ 0.0f, -scale * profile.head_anchor_up };
-                const Vec2 beginning = head_anchor
-                    - head_direction * head_length * 0.45f;
-                const Vec2 ending = head_anchor
-                    + head_direction * head_length * 0.55f;
+                const Vec2 ending = beginning + head_direction * head_length;
                 if (use_art && bundle->head.loaded())
                     draw_oriented_pixel_art(canvas, bundle->head,
                         beginning, ending, head_length * profile.head_ratio, 0.98f,
                         transverse_mirror, false);
                 else
-                    canvas.circle(head, std::max(3.0f,
+                    canvas.circle(point(rig.head_node), std::max(3.0f,
                         particles[rig.head_node].radius * scale), rgb(0xcdd6d9), 18);
             }
             draw_limb_pass(2);
@@ -1568,8 +1603,8 @@ namespace runner
                         // Authoritative graph bones stay visible beneath authored
                         // armor; generated body capsules and joint caps stay absent.
                         const Color bone_color = debug_skeleton_overlay
-                            ? rgb(0x55d7e9, near || side == 0 ? 0.92f : 0.54f)
-                            : rgb(0xb8c7cf, near || side == 0 ? 0.72f : 0.38f);
+                            ? rgb(0x55d7e9, near || side == 0 ? 0.92f : 0.32f)
+                            : rgb(0xb8c7cf, near || side == 0 ? 0.72f : 0.16f);
                         canvas.line(point(bone.a), point(bone.b),
                             debug_skeleton_overlay ? 2.0f : 1.35f, bone_color);
                     }
@@ -1610,41 +1645,56 @@ namespace runner
                         color = near ? leg : rgb(0x5f493b);
                     if (rig.is_support_seed(index))
                     {
-                        const Vec2 center = point(index);
-                        const Vec2 proximal = point(support_parent(index));
-                        if (optional_art_enabled)
+                        const bool primary_support = index == rig.left_contact_node
+                            || index == rig.right_contact_node;
+                        if (primary_support)
                         {
-                            if (optional_foot_art.loaded())
+                            const Vec2 center = point(index);
+                            const Vec2 proximal = point(support_parent(index));
+                            const bool left = index == rig.left_contact_node;
+                            const auto& extra = left
+                                ? rig.additional_left_contact_nodes
+                                : rig.additional_right_contact_nodes;
+                            const Vec2 toe = extra.size() >= 2u
+                                && extra[1] < particles.size()
+                                ? point(extra[1]) : center;
+                            if (optional_art_enabled)
                             {
-                                const float support_span = length(center - proximal);
-                                const float width = std::clamp(
-                                    std::max(radius * 2.40f, support_span * 0.42f)
-                                        * assembled_art_scale,
-                                    art::scaled_pixels(20.0f, art_pixel_scale),
-                                    art::scaled_pixels(38.0f, art_pixel_scale));
-                                const float height = width
-                                    * static_cast<float>(optional_foot_art.height)
-                                    / static_cast<float>(optional_foot_art.width);
-                                const art::OrientedArtTransform transform =
-                                    art::support_boot_transform(
-                                        proximal, center, width, height,
-                                        environment.facing_direction());
-                                draw_oriented_pixel_art(canvas, optional_foot_art,
-                                    transform.beginning, transform.ending,
-                                    transform.thickness,
-                                    near || side == 0 ? 1.0f : 0.58f,
-                                    mirrored_facing);
+                                if (optional_foot_art.loaded())
+                                {
+                                    const float support_span = length(center - proximal);
+                                    const float plate_span = length(toe - center);
+                                    const float width = std::clamp(
+                                        std::max({ radius * 2.20f,
+                                            support_span * 0.36f,
+                                            plate_span * 1.18f })
+                                            * assembled_art_scale,
+                                        art::scaled_pixels(20.0f, art_pixel_scale),
+                                        art::scaled_pixels(38.0f, art_pixel_scale));
+                                    const float height = width
+                                        * static_cast<float>(optional_foot_art.height)
+                                        / static_cast<float>(optional_foot_art.width);
+                                    const art::OrientedArtTransform transform =
+                                        art::articulated_boot_transform(center, toe,
+                                            width, height, environment.facing_direction());
+                                    draw_oriented_pixel_art(canvas, optional_foot_art,
+                                        transform.beginning, transform.ending,
+                                        transform.thickness,
+                                        art::human_limb_layer_opacity(
+                                            near || side == 0),
+                                        mirrored_facing);
+                                }
                             }
-                        }
-                        else
-                        {
-                            const float height = std::max(7.0f, radius * 0.55f);
-                            const art::OrientedArtTransform transform =
-                                art::support_boot_transform(proximal, center,
-                                    radius * 1.63f, height * 2.0f,
-                                    environment.facing_direction());
-                            canvas.capsule(transform.beginning, transform.ending,
-                                height, color, 14);
+                            else
+                            {
+                                const float height = std::max(7.0f, radius * 0.55f);
+                                const art::OrientedArtTransform transform =
+                                    art::articulated_boot_transform(center, toe,
+                                        radius * 1.63f, height * 2.0f,
+                                        environment.facing_direction());
+                                canvas.capsule(transform.beginning, transform.ending,
+                                    height, color, 14);
+                            }
                         }
                     }
                     else
@@ -1722,13 +1772,12 @@ namespace runner
                         continue;
                     const Vec2 axis = delta / span;
                     const bool support_limb = support_mask != 0u;
-                    const float thickness_ratio = support_limb
-                        ? (has_distal_motor ? 0.52f : 0.48f)
-                        : (has_distal_motor ? 0.52f : 0.34f);
+                    const float thickness_ratio = art::human_limb_thickness_ratio(
+                        support_limb, has_distal_motor);
                     const float minimum_thickness = support_limb
-                        ? 23.0f : 14.0f;
+                        ? 23.0f : has_distal_motor ? 9.0f : 8.0f;
                     const float maximum_thickness = support_limb
-                        ? 74.0f : 48.0f;
+                        ? 70.0f : has_distal_motor ? 30.0f : 26.0f;
                     const float thickness = std::clamp(
                         span * thickness_ratio * assembled_art_scale,
                         art::scaled_pixels(minimum_thickness, art_pixel_scale),
@@ -1744,7 +1793,8 @@ namespace runner
                         art::presented_limb_transverse_mirror(
                             environment.facing_direction());
                     draw_oriented_pixel_art(canvas, sprite, beginning, ending,
-                        thickness, near || side == 0 ? 0.98f : 0.56f,
+                        thickness, art::human_limb_layer_opacity(
+                            near || side == 0),
                         transverse_mirror);
                     if (support_mask == 0u && !has_distal_motor
                         && optional_hand_art.loaded())
@@ -1758,7 +1808,8 @@ namespace runner
                             terminal_joint + axis * (hand.length
                                 - hand.wrist_overlap),
                             hand.thickness,
-                            near || side == 0 ? 0.98f : 0.56f,
+                            art::human_limb_layer_opacity(
+                                near || side == 0),
                             transverse_mirror);
                     }
                 }
@@ -1874,10 +1925,10 @@ namespace runner
             const bool course_eye_test = fixed_eye_test && !art_eye_test && !walk_eye_test;
             add_rounded_rect(canvas, rect, 10.0f, rgb(0x071019, 0.99f), accent_dim, 1.5f);
             add_text(canvas, rect.position + Vec2{ 12.0f, 9.0f },
-                art_eye_test ? "ORTHOGRAPHIC ART CHECK"
-                    : walk_eye_test ? "RETAINED WALK PROOF - ZERO AUTHORITY"
-                    : course_eye_test ? "COURSE EYE TEST - SAFE START"
-                    : "LIVE TRAINING ENVIRONMENT",
+                art_eye_test ? "ART CHECK"
+                    : walk_eye_test ? "WALK PROOF"
+                    : course_eye_test ? "COURSE EYE TEST"
+                    : "LIVE TRAINING",
                 0.88f, accent);
             if (!fixed_eye_test && !trainer.has_training_preview())
             {
@@ -1906,7 +1957,9 @@ namespace runner
             const Color state_color = fixed_eye_test ? green : qualification.valid ? green
                 : intact && foot_only ? yellow : danger;
             const std::string_view state_text = art_eye_test ? std::string_view{ "SIDE PROFILE" }
-                : walk_eye_test ? std::string_view{ "ZERO AUTHORITY" }
+                : walk_eye_test ? (environment.raw_policy_audit()
+                    ? std::string_view{ "RAW POLICY" }
+                    : std::string_view{ "TEACHER 0 / ASSISTED" })
                 : course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
                 : qualification.valid ? "STAGE VALID" : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY CONTACT"
@@ -2025,20 +2078,82 @@ namespace runner
             add_text_fit(canvas, cursor, "AUTONOMOUS RIG TRAINER", 1.54f,
                 white, usable_width, 1.08f);
             cursor.y += 42.0f;
-            if (button({ cursor, { usable_width, 48.0f } },
-                trainer.background_enabled() ? "AUTOPILOT ON - CLICK TO PAUSE" : "AUTOPILOT PAUSED - CLICK TO RUN",
+            const float trainer_button_gap = 8.0f;
+            const float trainer_button_width =
+                (usable_width - trainer_button_gap) * 0.5f;
+            if (button({ cursor, { trainer_button_width, 48.0f } },
+                trainer.background_enabled() ? "AUTOPILOT ON - PAUSE" : "AUTOPILOT PAUSED - RUN",
                 input, trainer.background_enabled()))
             {
                 trainer.set_background_enabled(!trainer.background_enabled());
                 set_status(trainer.background_enabled() ? "BACKGROUND TRAINING RESUMED" : "BACKGROUND TRAINING PAUSED");
             }
+            const Rect guidance_button{
+                cursor + Vec2{ trainer_button_width + trainer_button_gap, 0.0f },
+                { trainer_button_width, 48.0f }
+            };
+            const sim::GuidanceMode active_guidance = walk_eye_test
+                && course_eye_test_environment.has_value()
+                ? course_eye_test_environment->guidance_mode()
+                : trainer.preview_guidance_mode();
+            const bool raw_audit = active_guidance
+                == sim::GuidanceMode::raw_policy_audit;
+            if (button(guidance_button, raw_audit ? "RAW AUDIT" : "ASSISTED",
+                input, raw_audit))
+            {
+                const sim::GuidanceMode new_mode = raw_audit
+                    ? sim::GuidanceMode::assisted
+                    : sim::GuidanceMode::raw_policy_audit;
+                if (walk_eye_test && course_eye_test_environment.has_value()
+                    && walk_eye_replay_start.has_value())
+                {
+                    walk_eye_replay_start->set_guidance_mode(new_mode);
+                    *course_eye_test_environment = *walk_eye_replay_start;
+                    walk_eye_accumulator_seconds = 0.0;
+                }
+                else
+                {
+                    trainer.set_preview_guidance_mode(new_mode);
+                    trainer.reset_preview();
+                }
+                set_status(new_mode == sim::GuidanceMode::raw_policy_audit
+                    ? "RAW POLICY AUDIT - OPTIONAL GUIDANCE DISABLED"
+                    : "ASSISTED GUIDANCE ENABLED");
+            }
+
             cursor.y += 64.0f;
 
             add_text(canvas, cursor, "CURRENT LESSON", 1.05f, muted);
             cursor.y += 23.0f;
-            add_text_fit(canvas, cursor, sim::course_stage_name(autonomy.stage), 2.05f,
+            const std::string lesson_name = autonomy.stage == sim::CourseStage::uneven
+                ? std::format("3. {}", sim::gait_task_name(autonomy.gait_task))
+                : std::string{ sim::course_stage_name(autonomy.stage) };
+            add_text_fit(canvas, cursor, lesson_name, 2.05f,
                 accent, usable_width, 1.30f);
             cursor.y += 38.0f;
+            const float gait_button_width = (usable_width - 12.0f) * 0.25f;
+            constexpr std::array gait_tasks{
+                sim::GaitTask::walk, sim::GaitTask::speed_walk,
+                sim::GaitTask::walk_run_transition, sim::GaitTask::run };
+            constexpr std::array<std::string_view, 4> gait_labels{
+                "WALK", "SPEED WALK", "TRANSITION", "RUN" };
+            for (std::size_t gait_index = 0; gait_index < gait_tasks.size(); ++gait_index)
+            {
+                if (button({ cursor + Vec2{
+                        static_cast<float>(gait_index) * (gait_button_width + 4.0f), 0.0f },
+                        { gait_button_width, 32.0f } }, gait_labels[gait_index], input,
+                    autonomy.stage == sim::CourseStage::uneven
+                        && autonomy.gait_task == gait_tasks[gait_index]))
+                {
+                    trainer.set_gait_task(gait_tasks[gait_index]);
+                    set_status(std::format("GAIT TASK SELECTED - {}",
+                        sim::gait_task_name(gait_tasks[gait_index])));
+                }
+            }
+            cursor.y += 39.0f;
+            add_text_fit(canvas, cursor, "TASK GRAPH  WALK > SPEED WALK > TRANSITION > RUN",
+                0.65f, muted, usable_width, 0.52f);
+            cursor.y += 19.0f;
             add_text_fit(canvas, cursor,
                 std::format("TRAINING LEVEL {:.0f}%", autonomy.difficulty * 100.0f),
                 0.98f, white, usable_width, 0.80f);
@@ -2363,7 +2478,7 @@ namespace runner
             else
             {
                 add_rounded_rect(canvas,
-                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 405.0f } },
+                    { cursor - Vec2{ 7.0f, 5.0f }, { usable_width + 14.0f, 470.0f } },
                     8.0f, panel_alt, border, 1.0f);
                 add_text(canvas, cursor, "ADVANCED DIAGNOSTICS", 1.08f, accent);
                 cursor.y += 27.0f;
@@ -2377,6 +2492,7 @@ namespace runner
                     ? std::string("NOT AVAILABLE")
                     : std::format("{:016X}", metrics.evaluation_quality_key);
                 const sim::Environment& debug_environment = trainer.preview();
+                const rl::GuidanceAuthorityReport authority = trainer.preview_authority_report();
                 float debug_root_x = 0.0f;
                 if (!debug_environment.particles().empty())
                     debug_root_x = debug_environment.particles()[
@@ -2393,7 +2509,35 @@ namespace runner
                     }
                 }
                 add_text_fit(canvas, cursor,
-                    std::format("RAW TEST SCORE {}   BEST RAW SCORE {}",
+                    std::format("MODE {}   TEACHER {:.2f}   CONTACT PHYSICS {:.2f}",
+                        sim::guidance_mode_name(authority.mode),
+                        authority.lesson_teacher, authority.physical_contact),
+                    0.70f, authority.optional_guidance_active() ? yellow : green,
+                    usable_width, 0.56f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("REFLEX S/B {:.2f}/{:.2f}   SAFETY S/B {:.2f}/{:.2f}",
+                        authority.topology_support, authority.topology_body,
+                        authority.safety_support, authority.safety_body),
+                    0.68f, muted, usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format(
+                        "POSTURE {:.2f}   SWING {:.2f}   LOCAL JOINT CLUSTER {:.2f}",
+                        authority.posture_guide, authority.swing_clearance,
+                        authority.mandatory_joint_cluster),
+                    0.68f, muted, usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("STANCE SLIP {:.3f} M/S   COURSE MOTION {}   GAIT CYCLES {}",
+                        debug_environment.stance_slip_speed(),
+                        debug_environment.course_motion_enabled() ? "ON" : "OFF",
+                        debug_environment.gait_cycles()),
+                    0.68f, debug_environment.course_motion_enabled() ? yellow : green,
+                    usable_width, 0.54f);
+                cursor.y += 21.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("ASSISTED EVALUATION {}   BEST ASSISTED {}",
                         raw_number(metrics.evaluation_score),
                         raw_number(metrics.best_evaluation_score)),
                     0.72f, muted, usable_width, 0.58f);
@@ -2498,7 +2642,40 @@ namespace runner
 
         void draw_live_world(Rect viewport, float dt, const InputState& input)
         {
-            if (!run_paused && !course_eye_test_environment.has_value())
+            if (!run_paused && walk_eye_test
+                && course_eye_test_environment.has_value()
+                && walk_eye_replay_start.has_value())
+            {
+                constexpr double fixed_step = 1.0 / 60.0;
+                walk_eye_accumulator_seconds += std::clamp(
+                    static_cast<double>(dt), 0.0, 0.10);
+                while (walk_eye_accumulator_seconds >= fixed_step)
+                {
+                    sim::Environment& replay = *course_eye_test_environment;
+                    const auto raw_action = walk_eye_test_policy.deterministic_action(
+                        replay.observation());
+                    const auto action = rl::effective_policy_action(replay,
+                        raw_action, sim::CourseStage::uneven, 0.0f,
+                        replay.guidance_mode());
+                    const sim::GuidanceMode replay_guidance = replay.guidance_mode();
+                    if (replay.step(action, static_cast<float>(fixed_step)).terminated)
+                    {
+                        replay = *walk_eye_replay_start;
+                        replay.set_guidance_mode(replay_guidance);
+                        const auto& reset_particles = replay.particles();
+                        const std::size_t reset_root = replay.blueprint().root_node;
+                        if (reset_root < reset_particles.size())
+                        {
+                            camera_x = reset_particles[reset_root].position.x
+                                + view_camera::lookahead_meters(
+                                    viewport.size.x, live_pixels_per_meter)
+                                    * replay.facing_direction();
+                        }
+                    }
+                    walk_eye_accumulator_seconds -= fixed_step;
+                }
+            }
+            else if (!run_paused && !course_eye_test_environment.has_value())
                 trainer.step_preview(dt);
             const sim::Environment& environment = course_eye_test_environment.has_value()
                 ? *course_eye_test_environment : trainer.preview();
@@ -2539,7 +2716,8 @@ namespace runner
                 live_pixels_per_meter = view_camera::smooth_zoom(
                     live_pixels_per_meter, target_pixels_per_meter, dt);
             }
-            if (!particles.empty() && !course_eye_test_environment.has_value())
+            if (!particles.empty() && view_camera::tracks_live_subject(
+                    course_eye_test_environment.has_value(), walk_eye_test))
             {
                 const std::size_t root = environment.blueprint().root_node;
                 if (root < particles.size())
@@ -2581,8 +2759,11 @@ namespace runner
             const float displayed_difficulty = environment.course_difficulty();
             const float text_width = telemetry.size.x - 24.0f;
             Vec2 line = telemetry.position + Vec2{ 12.0f, 11.0f };
+            const std::string displayed_lesson = displayed_stage == sim::CourseStage::uneven
+                ? std::format("3. {}", sim::gait_task_name(environment.gait_task()))
+                : std::string{ sim::course_stage_name(displayed_stage) };
             add_text_fit(canvas, line,
-                std::format("{}  /  {:.0f}%", sim::course_stage_name(displayed_stage),
+                std::format("{}  /  {:.0f}%", displayed_lesson,
                     displayed_difficulty * 100.0f),
                 1.42f, white, text_width, 1.00f);
             line.y += 31.0f;
@@ -2640,7 +2821,9 @@ namespace runner
             add_rounded_rect(canvas, bottom, 8.0f,
                 rgb(0x07111b, 0.96f), border, 1.0f);
             const std::string run_status = art_eye_test ? "FIXED SIDE PROFILE"
-                : walk_eye_test ? "ZERO-AUTHORITY LIFTED-STEP REPLAY"
+                : walk_eye_test ? (environment.raw_policy_audit()
+                    ? "RAW POLICY REPLAY - OPTIONAL GUIDANCE OFF"
+                    : "TEACHER-0 / ASSISTED REPLAY")
                 : course_eye_test_environment.has_value() ? "FIXED START FRAME"
                 : environment.shuttle_enabled()
                     ? std::format("SHUTTLE {} {}",
@@ -4059,17 +4242,26 @@ namespace runner
         {
             error = std::format(
                 "walk eye test failed: updates={} retained={} authority={:.3f} "
-                "mean={:.3f}m/{:.2f} steps invalid={}/6 displayed={:.3f}m/{} steps",
+                "mean={:.3f}m/{:.2f} steps invalid={}/6 displayed={:.3f}m/{} steps; "
+                "latest eval valid={} distance={:.3f}m steps={:.2f} survival={:.2f}s "
+                "quality={:016X} rejection={} invalid={}/6 reason={}",
                 proof.updates, proof.retained_update, proof.teacher_authority,
                 proof.retained_distance, proof.retained_stride_events,
                 proof.retained_invalid_runs, proof.displayed_distance,
-                proof.displayed_steps);
+                proof.displayed_steps, proof.evaluation_valid,
+                proof.evaluation_distance, proof.evaluation_stride_events,
+                proof.evaluation_survival, proof.evaluation_quality_key,
+                proof.evaluation_rejection_mask, proof.evaluation_invalid_runs,
+                sim::invalid_motion_name(proof.evaluation_invalid_reason));
             return false;
         }
 
-        impl_->course_eye_test_environment.emplace(proof.environment);
+        impl_->walk_eye_test_policy.parameters() = proof.retained_policy_parameters;
+        impl_->walk_eye_replay_start.emplace(proof.environment);
+        impl_->course_eye_test_environment.emplace(*impl_->walk_eye_replay_start);
         impl_->walk_eye_test = true;
-        impl_->run_paused = true;
+        impl_->walk_eye_accumulator_seconds = 0.0;
+        impl_->run_paused = false;
         const auto& particles = impl_->course_eye_test_environment->particles();
         const std::size_t root = impl_->course_eye_test_environment->blueprint().root_node;
         impl_->camera_x = root < particles.size()
@@ -4077,8 +4269,8 @@ namespace runner
         impl_->live_pixels_per_meter = 105.0f;
         impl_->live_zoom_factor = 1.0f;
         impl_->live_zoom_auto = false;
-        impl_->debug_skeleton_overlay = true;
-        impl_->status = "PACKAGED RETAINED WALK PROOF - FRESH TRAINING, ZERO AUTHORITY";
+        impl_->debug_skeleton_overlay = false;
+        impl_->status = "PACKAGED RETAINED WALK PROOF - FRESH TRAINING, TEACHER 0 / REFLEX ASSISTED";
         impl_->status_time = 30.0f;
         error.clear();
         return true;

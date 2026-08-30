@@ -29,6 +29,15 @@ int main()
 
     require(view_camera::default_pixels_per_meter > 22.0f,
         "default view still uses the overly distant v0.7.15 scale");
+    require(view_camera::tracks_live_subject(false, false),
+        "normal live view stopped tracking its subject");
+    require(view_camera::tracks_live_subject(true, true),
+        "retained Walk eye replay can leave the primary camera");
+    require(!view_camera::tracks_live_subject(true, false),
+        "fixed Course/Art eye tests stopped preserving their authored frame");
+    require(view_camera::tracks_live_subject(false, true),
+        "walk-eye mode disabled normal live subject tracking");
+
     require(view_camera::minimum_zoom_factor <= 0.28f
             && view_camera::maximum_zoom_factor >= 3.60f
             && view_camera::minimum_pixels_per_meter <= 12.0f

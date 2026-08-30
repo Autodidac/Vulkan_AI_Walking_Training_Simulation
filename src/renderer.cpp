@@ -24,6 +24,14 @@ namespace runner::render
 {
     namespace
     {
+        template <typename Structure>
+        [[nodiscard]] constexpr Structure vulkan_structure(
+            VkStructureType structure_type) noexcept
+        {
+            Structure structure{};
+            structure.sType = structure_type;
+            return structure;
+        }
         constexpr std::size_t frames_in_flight = 2;
 
         struct QueueFamilies
@@ -188,7 +196,8 @@ namespace runner::render
                 image_count = std::min(image_count, capabilities.maxImageCount);
 
             const std::array<std::uint32_t, 2> families{ graphics_family, present_family };
-            VkSwapchainCreateInfoKHR create_info{ VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
+            VkSwapchainCreateInfoKHR create_info = vulkan_structure<
+                VkSwapchainCreateInfoKHR>(VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR);
             create_info.surface = surface;
             create_info.minImageCount = image_count;
             create_info.imageFormat = swapchain_format;
@@ -216,7 +225,8 @@ namespace runner::render
             image_views.reserve(images.size());
             for (VkImage image : images)
             {
-                VkImageViewCreateInfo view_info{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+                VkImageViewCreateInfo view_info = vulkan_structure<
+                    VkImageViewCreateInfo>(VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
                 view_info.image = image;
                 view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
                 view_info.format = swapchain_format;
@@ -233,7 +243,8 @@ namespace runner::render
         [[nodiscard]] VkShaderModule create_shader_module(const std::filesystem::path& path)
         {
             const std::vector<std::byte> bytes = read_binary(path);
-            VkShaderModuleCreateInfo create_info{ VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
+            VkShaderModuleCreateInfo create_info = vulkan_structure<
+                VkShaderModuleCreateInfo>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO);
             create_info.codeSize = bytes.size();
             create_info.pCode = reinterpret_cast<const std::uint32_t*>(bytes.data());
             VkShaderModule module{};
@@ -255,26 +266,31 @@ namespace runner::render
                 VkVertexInputAttributeDescription{ 0, 0, VK_FORMAT_R32G32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, position)) },
                 VkVertexInputAttributeDescription{ 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, static_cast<std::uint32_t>(offsetof(Vertex, color)) }
             };
-            VkPipelineVertexInputStateCreateInfo vertex_input{ VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+            VkPipelineVertexInputStateCreateInfo vertex_input = vulkan_structure<
+                VkPipelineVertexInputStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO);
             vertex_input.vertexBindingDescriptionCount = 1;
             vertex_input.pVertexBindingDescriptions = &binding;
             vertex_input.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributes.size());
             vertex_input.pVertexAttributeDescriptions = attributes.data();
 
-            VkPipelineInputAssemblyStateCreateInfo assembly{ VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
+            VkPipelineInputAssemblyStateCreateInfo assembly = vulkan_structure<
+                VkPipelineInputAssemblyStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO);
             assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
-            VkPipelineViewportStateCreateInfo viewport_state{ VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO };
+            VkPipelineViewportStateCreateInfo viewport_state = vulkan_structure<
+                VkPipelineViewportStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO);
             viewport_state.viewportCount = 1;
             viewport_state.scissorCount = 1;
 
-            VkPipelineRasterizationStateCreateInfo rasterization{ VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
+            VkPipelineRasterizationStateCreateInfo rasterization = vulkan_structure<
+                VkPipelineRasterizationStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
             rasterization.polygonMode = VK_POLYGON_MODE_FILL;
             rasterization.cullMode = VK_CULL_MODE_NONE;
             rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
             rasterization.lineWidth = 1.0f;
 
-            VkPipelineMultisampleStateCreateInfo multisample{ VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO };
+            VkPipelineMultisampleStateCreateInfo multisample = vulkan_structure<
+                VkPipelineMultisampleStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO);
             multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
             VkPipelineColorBlendAttachmentState attachment{};
@@ -286,12 +302,14 @@ namespace runner::render
             attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
             attachment.alphaBlendOp = VK_BLEND_OP_ADD;
             attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            VkPipelineColorBlendStateCreateInfo blend{ VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
+            VkPipelineColorBlendStateCreateInfo blend = vulkan_structure<
+                VkPipelineColorBlendStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO);
             blend.attachmentCount = 1;
             blend.pAttachments = &attachment;
 
             const std::array<VkDynamicState, 2> dynamic_states{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-            VkPipelineDynamicStateCreateInfo dynamic{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
+            VkPipelineDynamicStateCreateInfo dynamic = vulkan_structure<
+                VkPipelineDynamicStateCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO);
             dynamic.dynamicStateCount = static_cast<std::uint32_t>(dynamic_states.size());
             dynamic.pDynamicStates = dynamic_states.data();
 
@@ -299,16 +317,19 @@ namespace runner::render
             const VkPushConstantRange push_range{ VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants) };
             if (pipeline_layout == VK_NULL_HANDLE)
             {
-                VkPipelineLayoutCreateInfo layout_info{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+                VkPipelineLayoutCreateInfo layout_info = vulkan_structure<
+                    VkPipelineLayoutCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO);
                 layout_info.pushConstantRangeCount = 1;
                 layout_info.pPushConstantRanges = &push_range;
                 require(vkCreatePipelineLayout(device, &layout_info, nullptr, &pipeline_layout), "vkCreatePipelineLayout");
             }
 
-            VkPipelineRenderingCreateInfo rendering_info{ VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+            VkPipelineRenderingCreateInfo rendering_info = vulkan_structure<
+                VkPipelineRenderingCreateInfo>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO);
             rendering_info.colorAttachmentCount = 1;
             rendering_info.pColorAttachmentFormats = &swapchain_format;
-            VkGraphicsPipelineCreateInfo pipeline_info{ VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+            VkGraphicsPipelineCreateInfo pipeline_info = vulkan_structure<
+                VkGraphicsPipelineCreateInfo>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO);
             pipeline_info.pNext = &rendering_info;
             pipeline_info.stageCount = static_cast<std::uint32_t>(stages.size());
             pipeline_info.pStages = stages.data();
@@ -356,13 +377,15 @@ namespace runner::render
             if (extensions == nullptr)
                 throw std::runtime_error(std::string("SDL_Vulkan_GetInstanceExtensions failed: ") + SDL_GetError());
 
-            VkApplicationInfo application{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
+            VkApplicationInfo application = vulkan_structure<VkApplicationInfo>(
+                VK_STRUCTURE_TYPE_APPLICATION_INFO);
             application.pApplicationName = "Runner";
             application.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
             application.pEngineName = "built-in bitmap UI";
             application.engineVersion = VK_MAKE_API_VERSION(0, 0, 88, 70);
             application.apiVersion = VK_API_VERSION_1_3;
-            VkInstanceCreateInfo instance_info{ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+            VkInstanceCreateInfo instance_info = vulkan_structure<VkInstanceCreateInfo>(
+                VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);
             instance_info.pApplicationInfo = &application;
             instance_info.enabledExtensionCount = extension_count;
             instance_info.ppEnabledExtensionNames = extensions;
@@ -407,16 +430,19 @@ namespace runner::render
             constexpr float priority = 1.0f;
             for (std::uint32_t family : unique_families)
             {
-                VkDeviceQueueCreateInfo queue_info{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+                VkDeviceQueueCreateInfo queue_info = vulkan_structure<
+                    VkDeviceQueueCreateInfo>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO);
                 queue_info.queueFamilyIndex = family;
                 queue_info.queueCount = 1;
                 queue_info.pQueuePriorities = &priority;
                 queue_infos.push_back(queue_info);
             }
-            VkPhysicalDeviceVulkan13Features features13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+            VkPhysicalDeviceVulkan13Features features13 = vulkan_structure<
+                VkPhysicalDeviceVulkan13Features>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES);
             features13.dynamicRendering = VK_TRUE;
             const char* device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-            VkDeviceCreateInfo device_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+            VkDeviceCreateInfo device_info = vulkan_structure<VkDeviceCreateInfo>(
+                VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
             device_info.pNext = &features13;
             device_info.queueCreateInfoCount = static_cast<std::uint32_t>(queue_infos.size());
             device_info.pQueueCreateInfos = queue_infos.data();
@@ -426,11 +452,13 @@ namespace runner::render
             vkGetDeviceQueue(impl.device, impl.graphics_family, 0, &impl.graphics_queue);
             vkGetDeviceQueue(impl.device, impl.present_family, 0, &impl.present_queue);
 
-            VkCommandPoolCreateInfo pool_info{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+            VkCommandPoolCreateInfo pool_info = vulkan_structure<
+                VkCommandPoolCreateInfo>(VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO);
             pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
             pool_info.queueFamilyIndex = impl.graphics_family;
             require(vkCreateCommandPool(impl.device, &pool_info, nullptr, &impl.command_pool), "vkCreateCommandPool");
-            VkCommandBufferAllocateInfo allocation{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+            VkCommandBufferAllocateInfo allocation = vulkan_structure<
+                VkCommandBufferAllocateInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
             allocation.commandPool = impl.command_pool;
             allocation.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocation.commandBufferCount = static_cast<std::uint32_t>(impl.command_buffers.size());
@@ -438,24 +466,28 @@ namespace runner::render
 
             for (std::size_t index = 0; index < frames_in_flight; ++index)
             {
-                const VkSemaphoreCreateInfo semaphore_info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+                const VkSemaphoreCreateInfo semaphore_info = vulkan_structure<
+                    VkSemaphoreCreateInfo>(VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
                 require(vkCreateSemaphore(impl.device, &semaphore_info, nullptr, &impl.image_available[index]), "vkCreateSemaphore");
                 require(vkCreateSemaphore(impl.device, &semaphore_info, nullptr, &impl.render_finished[index]), "vkCreateSemaphore");
-                VkFenceCreateInfo fence_info{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+                VkFenceCreateInfo fence_info = vulkan_structure<VkFenceCreateInfo>(
+                    VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
                 fence_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
                 require(vkCreateFence(impl.device, &fence_info, nullptr, &impl.in_flight[index]), "vkCreateFence");
             }
 
             for (std::size_t frame = 0; frame < frames_in_flight; ++frame)
             {
-                VkBufferCreateInfo buffer_info{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+                VkBufferCreateInfo buffer_info = vulkan_structure<VkBufferCreateInfo>(
+                    VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
                 buffer_info.size = maximum_frame_vertex_bytes;
                 buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
                 buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
                 require(vkCreateBuffer(impl.device, &buffer_info, nullptr, &impl.vertex_buffers[frame]), "vkCreateBuffer");
                 VkMemoryRequirements memory_requirements{};
                 vkGetBufferMemoryRequirements(impl.device, impl.vertex_buffers[frame], &memory_requirements);
-                VkMemoryAllocateInfo memory_info{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+                VkMemoryAllocateInfo memory_info = vulkan_structure<VkMemoryAllocateInfo>(
+                    VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
                 memory_info.allocationSize = memory_requirements.size;
                 memory_info.memoryTypeIndex = find_memory_type(impl.physical_device, memory_requirements.memoryTypeBits,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -561,11 +593,13 @@ namespace runner::render
                 std::memcpy(impl.mapped_vertices[frame], vertices.data(), vertices.size_bytes());
 
             VkCommandBuffer command_buffer = impl.command_buffers[frame];
-            VkCommandBufferBeginInfo begin_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+            VkCommandBufferBeginInfo begin_info = vulkan_structure<
+                VkCommandBufferBeginInfo>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
             begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             require(vkBeginCommandBuffer(command_buffer, &begin_info), "vkBeginCommandBuffer");
 
-            VkImageMemoryBarrier to_color{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            VkImageMemoryBarrier to_color = vulkan_structure<VkImageMemoryBarrier>(
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
             to_color.srcAccessMask = 0;
             to_color.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             to_color.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -580,13 +614,15 @@ namespace runner::render
                 0, 0, nullptr, 0, nullptr, 1, &to_color);
 
             const VkClearValue clear{ { { 0.032f, 0.039f, 0.052f, 1.0f } } };
-            VkRenderingAttachmentInfo color_attachment{ VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO };
+            VkRenderingAttachmentInfo color_attachment = vulkan_structure<
+                VkRenderingAttachmentInfo>(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO);
             color_attachment.imageView = impl.image_views[image_index];
             color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             color_attachment.clearValue = clear;
-            VkRenderingInfo rendering_info{ VK_STRUCTURE_TYPE_RENDERING_INFO };
+            VkRenderingInfo rendering_info = vulkan_structure<VkRenderingInfo>(
+                VK_STRUCTURE_TYPE_RENDERING_INFO);
             rendering_info.renderArea.extent = impl.extent;
             rendering_info.layerCount = 1;
             rendering_info.colorAttachmentCount = 1;
@@ -607,7 +643,8 @@ namespace runner::render
                 vkCmdDraw(command_buffer, static_cast<std::uint32_t>(vertices.size()), 1, 0, 0);
             vkCmdEndRendering(command_buffer);
 
-            VkImageMemoryBarrier to_present{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            VkImageMemoryBarrier to_present = vulkan_structure<VkImageMemoryBarrier>(
+                VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER);
             to_present.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             to_present.dstAccessMask = 0;
             to_present.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -623,7 +660,8 @@ namespace runner::render
             require(vkEndCommandBuffer(command_buffer), "vkEndCommandBuffer");
 
             const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            VkSubmitInfo submit{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+            VkSubmitInfo submit = vulkan_structure<VkSubmitInfo>(
+                VK_STRUCTURE_TYPE_SUBMIT_INFO);
             submit.waitSemaphoreCount = 1;
             submit.pWaitSemaphores = &impl.image_available[frame];
             submit.pWaitDstStageMask = &wait_stage;
@@ -633,7 +671,8 @@ namespace runner::render
             submit.pSignalSemaphores = &impl.render_finished[frame];
             require(vkQueueSubmit(impl.graphics_queue, 1, &submit, impl.in_flight[frame]), "vkQueueSubmit");
 
-            VkPresentInfoKHR present{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+            VkPresentInfoKHR present = vulkan_structure<VkPresentInfoKHR>(
+                VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
             present.waitSemaphoreCount = 1;
             present.pWaitSemaphores = &impl.render_finished[frame];
             present.swapchainCount = 1;

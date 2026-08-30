@@ -1,9 +1,19 @@
 if(NOT DEFINED RUNNER_SOURCE_DIR)
     message(FATAL_ERROR "RUNNER_SOURCE_DIR was not provided")
 endif()
+file(READ "${RUNNER_SOURCE_DIR}/run.sh" RUNNER_LINUX_LAUNCHER HEX)
+if(RUNNER_LINUX_LAUNCHER MATCHES "0d0a")
+    message(FATAL_ERROR "run.sh must use LF line endings for /usr/bin/env portability")
+endif()
 
 foreach(required IN ITEMS
         .gitattributes AGENTS.md CHANGELOG.md missioncache.md README.md
+        run.sh
+        include/Epoch2DWalkEngine/Engine.hpp
+        cmake/Epoch2DWalkEngineConfig.cmake.in
+        examples/library_probe.cpp
+        examples/installed_consumer/CMakeLists.txt
+        docs/EPOCH2D_WALK_ENGINE_LIBRARY.md
         docs/SANDHYBRID_INTEGRATION_BRIDGE.md
         docs/RUNNER_V0718_RUNTIME_RECOVERY.md
         docs/RUNNER_V0719_GENERAL_LOCOMOTION.md
@@ -35,6 +45,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md
         docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md
         docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md
+        docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md
         assets/optional/species_runtime/chicken_body_side.ppm
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
@@ -115,7 +126,12 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Runner VERSION 0.7.47 LANGUAGES CXX)"
+        "project(Epoch2DWalkEngine VERSION 0.7.48 LANGUAGES CXX)"
+        "Epoch2DWalkEngine::Epoch2DWalkEngine"
+        "Epoch2DWalkEngineTargets"
+        "Epoch2DWalkEngineDevelopment"
+        "Epoch2DWalkEngine.LibraryAPI"
+        "EPOCH2D_WALK_ENGINE_LIBRARY.md"
         "generate_runner_icon.py"
         "runner_icon_source.png"
         "runner_icon_source.sha256"
@@ -138,6 +154,8 @@ foreach(reference IN ITEMS
         "Runner.V0742SpeciesRig"
         "RunnerV0744DogArtRigTests"
         "Runner.V0744DogArtRig"
+        "RunnerV0748ContactArtTests"
+        "Runner.V0748ContactArt"
         "RunnerRigDefaults"
         "human.rig"
         "chicken.rig"
@@ -177,6 +195,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
         "RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
+        "RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -322,7 +341,15 @@ foreach(reference IN ITEMS
         "WALK-SPECIES-PRESENTATION-456"
         "WALK-RIGLAB-FULL-LIVE-457"
         "WALK-MASTERY-COMMIT-458"
-        "WALK-RELEASE-459")
+        "WALK-RELEASE-459"
+        "WALK-SPECIES-ART-TRUTH-460"
+        "WALK-HUMAN-CONTACT-GAIT-461"
+        "WALK-HUMAN-ARM-COUNTERSWING-462"
+        "WALK-V0748-ACCEPTANCE-463"
+        "WALK-ENGINE-LIBRARY-464"
+        "WALK-ENGINE-EXAMPLE-465"
+        "WALK-ENGINE-CROSSPLATFORM-466"
+        "WALK-ENGINE-SITE-467")
     string(FIND "${mission_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Mission cache continuity contract missing: ${reference}")
@@ -382,8 +409,8 @@ foreach(reference IN ITEMS
 endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/autonomy_persistence.cpp" autonomy_persistence_text)
 foreach(reference IN ITEMS
-        "RUNAUTONOMY 26"
-        "version != 16 && version != 17 && version != 18 && version != 19 && version != 20 && version != 21 && version != 22 && version != 23 && version != 24 && version != 25 && version != 26"
+        "RUNAUTONOMY 27"
+        "version < 16 || version > 27"
         "job.optimization_mode"
         "command.optimization_mode"
         "RigOptimizationMode::control_optimize"
@@ -396,7 +423,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4701u"
+        "training_semantics_version = 0x0007'4801u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -433,7 +460,9 @@ file(READ "${RUNNER_SOURCE_DIR}/src/deformable_terrain.hpp" terrain_text)
 foreach(reference IN ITEMS
         "launch_pad_half_width = 0.70f"
         "launch_transition_width = 0.55f"
-        "authored_flag = 0x02u"
+        "sandhybrid::SceneCell state"
+        "structural_aux = 0x04000000u"
+        "authored_metadata = 0x01u"
         "cells_[nearest_index(course_x)].height"
         "an observation only; it may not excavate, compact, or raise a berm"
         "TerrainRegion::shallow_water"
@@ -462,7 +491,7 @@ foreach(reference IN ITEMS
         "outbound.course_speed()==0.0f&&outbound.course_progress()==0.0f"
         "shuttle lesson inherited a moving course frame"
         "turn state did not physically reflect the articulated plant"
-        "facing-local teacher and physical plant diverged under reflection"
+        "facing-local teacher or a valid directed physical plant diverged under reflection"
         "post-handoff return moved left while backpedaling or without a real gait"
         "physical teacher shuttle traversed by dragging or backward bracing"
         "repeated return traversal accepted leftward backpedaling")
@@ -495,9 +524,9 @@ foreach(reference IN ITEMS
         "FEATURES CLEARED"
         "creature_species_paths"
         "PACKAGED COURSE EYE TEST"
-        "ORTHOGRAPHIC ART CHECK"
+        "PACKAGED ORTHOGRAPHIC ART TEST"
         "STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING"
-        "RETAINED WALK PROOF - ZERO AUTHORITY"
+        "PACKAGED RETAINED WALK PROOF"
         "run_walk_eye_test_proof"
         "draw_body_segments"
         "draw_fitted_armor"
@@ -524,7 +553,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0747-"
+        "runner-v0748-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -675,7 +704,7 @@ endforeach()
 
 foreach(reference IN ITEMS
         "draw_oriented_pixel_art(canvas, optional_torso_art"
-        "art::support_boot_transform"
+        "art::articulated_boot_transform"
         "rig.support_branch_mask(motor)"
         "rig.node_support_mask(index)"
         "prepare_art_diagnostic_rig"
@@ -832,12 +861,21 @@ if(hybrid_workflow_pos EQUAL -1)
     message(FATAL_ERROR "Release workflow does not run the v0.7.37 hybrid-brain diagnostic")
 endif()
 foreach(reference IN ITEMS
+        "name: Epoch2DWalkEngine audited cross-platform release"
+        "cmake --preset linux-release --fresh"
+        "ctest --preset linux-release"
+        "Epoch2DWalkEngineInstalledConsumer"
+        "run.sh"
         "git archive --format=zip"
-        "Runner-$tag-source.zip"
-        "Runner-$tag-source.manifest.sha256"
+        "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
+        "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
+        "Epoch2DWalkEngine-$tag-dev-windows-x64.zip"
+        "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
+        "Epoch2DWalkEngine-$tag-source.zip"
+        "Epoch2DWalkEngine-$tag-source.manifest.sha256"
         "release-assets/*"
         "Source tracked-file count mismatch"
-        "$sourceArchive $sourceChecksum $sourceManifest")
+        "Published asset byte mismatch")
     string(FIND "${release_workflow_text}" "${reference}" pos)
     if(pos EQUAL -1)
         message(FATAL_ERROR "Release workflow source-archive audit contract missing: ${reference}")
@@ -878,4 +916,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.47 repository hygiene passed")
+message(STATUS "Runner v0.7.48 repository hygiene passed")

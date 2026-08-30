@@ -322,9 +322,11 @@ namespace runner::rl
         for (sim::Environment& environment : environments_)
         {
             environment.set_course(course_stage_, course_difficulty_);
+            environment.set_gait_task(gait_task_);
             environment.set_course_motion_enabled(false);
         }
         preview_.set_course(course_stage_, course_difficulty_);
+        preview_.set_gait_task(gait_task_);
         preview_.set_course_motion_enabled(false);
         preview_accumulator_seconds_ = 0.0;
         refresh_foundational_teacher_prior();
@@ -371,6 +373,45 @@ namespace runner::rl
             metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
             metrics_.best_quality_key = 0u;
             metrics_.best_update = 0;
+        }
+    }
+
+    void PpoTrainer::set_gait_task(sim::GaitTask task, bool preserve_best)
+    {
+        if (task == gait_task_)
+            return;
+        gait_task_ = task;
+        lesson_update_ = 0u;
+        for (sim::Environment& environment : environments_)
+        {
+            environment.set_course(course_stage_, course_difficulty_);
+            environment.set_gait_task(gait_task_);
+            environment.set_course_motion_enabled(false);
+        }
+        preview_.set_course(course_stage_, course_difficulty_);
+        preview_.set_gait_task(gait_task_);
+        preview_.set_course_motion_enabled(false);
+        preview_accumulator_seconds_ = 0.0;
+        refresh_foundational_teacher_prior();
+        std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
+        std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
+        for (auto& action : rollout_previous_actions_)
+            action.fill(0.0f);
+        metrics_.evaluation_valid = false;
+        metrics_.evaluation_quality_key = 0u;
+        metrics_.evaluation_rejection_mask = 0u;
+        metrics_.evaluation_invalid_runs = 0u;
+        metrics_.evaluation_distance = 0.0f;
+        metrics_.evaluation_speed = 0.0f;
+        metrics_.evaluation_stride_events = 0.0f;
+        if (!preserve_best)
+        {
+            best_parameters_.clear();
+            clear_self_imitation_prior();
+            metrics_.best_evaluation_distance = -std::numeric_limits<float>::infinity();
+            metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
+            metrics_.best_quality_key = 0u;
+            metrics_.best_update = 0u;
         }
     }
 
@@ -903,7 +944,8 @@ namespace runner::rl
             auto action = effective_policy_action(
                 preview_, raw_action, course_stage_,
                 lesson_teacher_authority(
-                    lesson_update_, course_stage_, preview_.blueprint()));
+                    lesson_update_, course_stage_, preview_.blueprint()),
+                preview_guidance_mode_);
             if (preview_equipment_test_enabled_
                 && preview_.equipment_target().active)
             {
@@ -930,6 +972,7 @@ namespace runner::rl
                 ++preview_reset_sequence_;
                 preview_.reset(0xDEADBEEFu + metrics_.update
                     + preview_reset_sequence_ * 7919u);
+                preview_.set_guidance_mode(preview_guidance_mode_);
             }
         }
         preview_accumulator_seconds_ = std::max(0.0, preview_accumulator_seconds_);
@@ -941,6 +984,7 @@ namespace runner::rl
         preview_last_reset_reason_ = sim::InvalidMotion::none;
         preview_accumulator_seconds_ = 0.0;
         preview_.reset(seed);
+        preview_.set_guidance_mode(preview_guidance_mode_);
     }
 
     void PpoTrainer::append_history(std::vector<float>& history, float value)

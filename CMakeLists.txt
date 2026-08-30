@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Runner VERSION 0.7.47 LANGUAGES CXX)
+project(Epoch2DWalkEngine VERSION 0.7.48 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -29,30 +29,31 @@ set(RUNNER_ICON_BMP "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.bmp")
 set(RUNNER_ICON_ICO "${RUNNER_GENERATED_ASSET_DIR}/runner.ico")
 
 include(FetchContent)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 set(RUNNER_SANDHYBRID_PACKAGE_ROOT "$ENV{RUNNER_SANDHYBRID_PACKAGE_ROOT}"
-    CACHE PATH "Offline SandHybrid package root containing lib/cmake/SandHybrid.")
-set(RUNNER_SANDHYBRID_SOURCE_ID "99dd8acddfa9be1402981052b39cbf6284ed99ae")
+    CACHE PATH "Offline EpochSimEngine v2.5.26 package root containing lib/cmake/EpochSimEngine.")
+set(RUNNER_SANDHYBRID_SOURCE_ID "14f55d30df3e406215facf069c8b50082d7439eb")
 if(RUNNER_SANDHYBRID_PACKAGE_ROOT)
-    find_package(SandHybrid 2.5 CONFIG REQUIRED
+    find_package(EpochSimEngine 2.5.26 EXACT CONFIG REQUIRED
         PATHS "${RUNNER_SANDHYBRID_PACKAGE_ROOT}" NO_DEFAULT_PATH)
     set(runner_sandhybrid_SOURCE_DIR "${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
-    set(RUNNER_SANDHYBRID_SOURCE_ID "package-${SandHybrid_VERSION}")
-    message(STATUS "Using offline SandHybrid package ${SandHybrid_VERSION} at ${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
+    message(STATUS "Using offline EpochSimEngine ${EpochSimEngine_VERSION} at ${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
 else()
     set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
     set(SANDHYBRID_BUILD_VULKAN_RUNTIME OFF CACHE BOOL "" FORCE)
     set(SANDHYBRID_WARNINGS_AS_ERRORS ON CACHE BOOL "" FORCE)
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(runner_sandhybrid
-        GIT_REPOSITORY https://github.com/Autodidac/EpochSimEngine.git
-        GIT_TAG 99dd8acddfa9be1402981052b39cbf6284ed99ae
+        GIT_REPOSITORY https://epoch.adamrushford.chatgpt.site/git/simengine.git
+        GIT_TAG 14f55d30df3e406215facf069c8b50082d7439eb
         GIT_SHALLOW FALSE
         GIT_SUBMODULES ""
         GIT_SUBMODULES_RECURSE FALSE)
     FetchContent_MakeAvailable(runner_sandhybrid)
 endif()
-if(NOT TARGET SandHybrid::SandHybrid)
-    message(FATAL_ERROR "SandHybrid core target was not created")
+if(NOT TARGET EpochSimEngine::EpochSimEngine)
+    message(FATAL_ERROR "EpochSimEngine v2.5.26 core target was not created")
 endif()
 
 add_library(RunnerCore STATIC
@@ -72,12 +73,20 @@ add_library(RunnerCore STATIC
     src/autonomy_curriculum.cpp
     src/autonomy_persistence.cpp)
 add_library(Runner::Core ALIAS RunnerCore)
-target_include_directories(RunnerCore PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
-target_link_libraries(RunnerCore PUBLIC Threads::Threads SandHybrid::SandHybrid)
+add_library(Epoch2DWalkEngine::Epoch2DWalkEngine ALIAS RunnerCore)
+target_include_directories(RunnerCore PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine>")
+target_link_libraries(RunnerCore PUBLIC Threads::Threads EpochSimEngine::EpochSimEngine)
 target_compile_features(RunnerCore PUBLIC cxx_std_23)
 target_compile_definitions(RunnerCore PUBLIC
     RUNNER_SANDHYBRID_SOURCE_COMMIT="${RUNNER_SANDHYBRID_SOURCE_ID}")
-set_target_properties(RunnerCore PROPERTIES CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+set_target_properties(RunnerCore PROPERTIES
+    OUTPUT_NAME Epoch2DWalkEngine
+    EXPORT_NAME Epoch2DWalkEngine
+    CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
+    POSITION_INDEPENDENT_CODE ON)
 
 function(runner_enable_warnings target)
     if(MSVC)
@@ -220,6 +229,8 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md" "$<TARGET_FILE_DIR:Runner>/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         VERBATIM)
 
     install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
@@ -229,7 +240,11 @@ if(RUNNER_BUILD_APP)
             "$<TARGET_FILE_DIR:Runner>/vulkan-1.dll"
             DESTINATION . COMPONENT RunnerRuntime)
     endif()
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION . COMPONENT RunnerRuntime)
+    if(WIN32)
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/run.bat" DESTINATION . COMPONENT RunnerRuntime)
+    else()
+        install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/run.sh" DESTINATION . COMPONENT RunnerRuntime)
+    endif()
     install(FILES ${RUNNER_RIG_OUTPUTS} DESTINATION . COMPONENT RunnerRuntime)
     install(DIRECTORY "${RUNNER_SHADER_OUTPUT_DIR}/" DESTINATION shaders COMPONENT RunnerRuntime)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/" DESTINATION assets COMPONENT RunnerRuntime)
@@ -271,9 +286,60 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
+set(EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS
+    src/acceptance.hpp
+    src/autonomy.hpp
+    src/course_completion_diagnostic.hpp
+    src/deformable_terrain.hpp
+    src/hybrid_brain_diagnostic.hpp
+    src/locomotion_strategy.hpp
+    src/math.hpp
+    src/pixel_art.hpp
+    src/ppo.hpp
+    src/preview_sync.hpp
+    src/rig_training_diagnostic.hpp
+    src/simulation.hpp
+    src/species_art_layout.hpp
+    src/training_explainer.hpp)
+
+set(EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR
+    "${CMAKE_INSTALL_LIBDIR}/cmake/Epoch2DWalkEngine")
+configure_package_config_file(
+    cmake/Epoch2DWalkEngineConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/Epoch2DWalkEngineConfig.cmake"
+    INSTALL_DESTINATION "${EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR}")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/Epoch2DWalkEngineConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMinorVersion)
+install(TARGETS RunnerCore
+    EXPORT Epoch2DWalkEngineTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Epoch2DWalkEngineDevelopment
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Epoch2DWalkEngineDevelopment
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Epoch2DWalkEngineDevelopment
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine)
+install(FILES ${EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/Epoch2DWalkEngine/Engine.hpp"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine
+    COMPONENT Epoch2DWalkEngineDevelopment)
+install(EXPORT Epoch2DWalkEngineTargets
+    FILE Epoch2DWalkEngineTargets.cmake
+    NAMESPACE Epoch2DWalkEngine::
+    DESTINATION "${EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR}"
+    COMPONENT Epoch2DWalkEngineDevelopment)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/Epoch2DWalkEngineConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/Epoch2DWalkEngineConfigVersion.cmake"
+    DESTINATION "${EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR}"
+    COMPONENT Epoch2DWalkEngineDevelopment)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
+    DESTINATION docs COMPONENT Epoch2DWalkEngineDevelopment)
+
 
 if(RUNNER_BUILD_TESTS)
     include(CTest)
@@ -282,6 +348,16 @@ if(RUNNER_BUILD_TESTS)
         -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
     set_tests_properties(Runner.RepositoryHygiene PROPERTIES TIMEOUT 30)
+
+    add_executable(Epoch2DWalkEngineLibraryExample
+        examples/library_probe.cpp)
+    target_link_libraries(Epoch2DWalkEngineLibraryExample PRIVATE
+        Epoch2DWalkEngine::Epoch2DWalkEngine)
+    target_compile_features(Epoch2DWalkEngineLibraryExample PRIVATE cxx_std_23)
+    runner_enable_warnings(Epoch2DWalkEngineLibraryExample)
+    add_test(NAME Epoch2DWalkEngine.LibraryAPI
+        COMMAND Epoch2DWalkEngineLibraryExample)
+    set_tests_properties(Epoch2DWalkEngine.LibraryAPI PROPERTIES TIMEOUT 30)
 
     add_executable(RunnerPixelArtTests tests/pixel_art_tests.cpp)
     target_link_libraries(RunnerPixelArtTests PRIVATE Runner::Core)
@@ -545,6 +621,18 @@ if(RUNNER_BUILD_TESTS)
     runner_enable_warnings(RunnerV0744DogArtRigTests)
     add_test(NAME Runner.V0744DogArtRig COMMAND RunnerV0744DogArtRigTests)
     set_tests_properties(Runner.V0744DogArtRig PROPERTIES TIMEOUT 60)
+
+    add_executable(RunnerV0748ContactArtTests
+        tests/v0748_contact_art_tests.cpp)
+    target_link_libraries(RunnerV0748ContactArtTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0748ContactArtTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(RunnerV0748ContactArtTests PRIVATE
+        RUNNER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(RunnerV0748ContactArtTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0748ContactArtTests)
+    add_test(NAME Runner.V0748ContactArt COMMAND RunnerV0748ContactArtTests)
+    set_tests_properties(Runner.V0748ContactArt PROPERTIES TIMEOUT 180)
 
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)

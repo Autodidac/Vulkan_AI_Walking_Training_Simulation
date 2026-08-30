@@ -152,12 +152,14 @@ namespace runner::sim
         static bool guided_squat_is_valid(Environment& environment) noexcept
         {
             environment.set_course(CourseStage::duck_press, 0.50f);
+            CrouchPostureEvidence last{};
             for (int frame = 0; frame < 900; ++frame)
             {
                 const auto action = rl::duck_teacher_action(environment);
                 const StepResult step = environment.step(action);
                 const CrouchPostureEvidence evidence =
                     environment.current_crouch_posture();
+                last = evidence;
                 if (crouch_posture_qualified(evidence)
                     && evidence.pelvis_drop >= 0.22f
                     && evidence.left_knee_flex >= 0.12f
@@ -165,8 +167,18 @@ namespace runner::sim
                     && evidence.torso_pitch <= 0.65f)
                     return true;
                 if (step.terminated)
-                    return false;
+                {
+                    std::cerr << "guided squat terminated: invalid="
+                        << static_cast<int>(environment.invalid_reason()) << '\n';
+                    break;
+                }
             }
+            std::cerr << "guided squat evidence: paired=" << last.paired_leg_chains
+                << " feet=" << last.feet_supported << " nonfoot="
+                << last.non_foot_grounded << " drop=" << last.pelvis_drop
+                << " knees=" << last.left_knee_flex << ',' << last.right_knee_flex
+                << " pitch=" << last.torso_pitch << " margin="
+                << last.support_margin << '\n';
             return false;
         }
 
@@ -798,6 +810,12 @@ int main()
     require(std::abs(ui_layout::course_reference_marker_spacing_m(
             ui_layout::DistanceUnits::imperial) - 15.24f) < 0.001f,
         "imperial near-course markers are not 50 feet apart");
+    require(ui_layout::course_reference_marker_label_offset_pixels(0) == -116.0f,
+        "START placard remains centered over the spawned creature");
+    require(ui_layout::course_reference_marker_label_offset_pixels(1) == 0.0f
+            && ui_layout::course_reference_marker_label_offset_pixels(7) == 0.0f,
+        "ordinary distance placards were displaced with the START collision fix");
+
     require(ui_layout::lifetime_delta(120u, 20u) == 100u
             && ui_layout::lifetime_delta(20u, 120u) == 0u,
         "rig lifetime counters can underflow");
@@ -1464,7 +1482,7 @@ int main()
     sim::Environment crouch_environment(sim::CreatureBlueprint::humanoid(), 23);
     crouch_environment.set_course(sim::CourseStage::crouch_walk, 0.5f);
     require(std::abs(crouch_environment.ground_height_at(0.0f)
-            - crouch_environment.ground_height_at(1.25f)) > 0.005f,
+            - crouch_environment.ground_height_at(2.50f)) > 0.005f,
         "crouch-walk lesson ground remains flat and stable");
     const auto later_bar_iterator = std::ranges::find_if(
         crouch_environment.course_features(), [](const sim::CourseFeature& feature)
@@ -1663,16 +1681,16 @@ int main()
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
             && biped_foundational_gait.step_length <= 0.82f
-            && humanoid_foundational_gait.step_length >= 0.96f
-            && humanoid_foundational_gait.step_length <= 1.10f
-            && humanoid_foundational_gait.swing_lift >= 0.38f
-            && humanoid_foundational_gait.swing_lift <= 0.42f
-            && std::abs(humanoid_foundational_gait.cadence_hz - 1.04f) < 1.0e-6f
-            && humanoid_foundational_gait.transition_flex >= 0.14f
-            && humanoid_foundational_gait.transition_flex <= 0.18f,
+            && humanoid_foundational_gait.step_length >= 0.76f
+            && humanoid_foundational_gait.step_length <= 0.88f
+            && humanoid_foundational_gait.swing_lift >= 0.27f
+            && humanoid_foundational_gait.swing_lift <= 0.31f
+            && std::abs(humanoid_foundational_gait.cadence_hz - 0.82f) < 1.0e-6f
+            && humanoid_foundational_gait.transition_flex >= 0.065f
+            && humanoid_foundational_gait.transition_flex <= 0.080f,
         "foundational biped gait is not finite and anatomy-bounded");
     require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
-            && humanoid_foundational_gait.step_length <= 1.10f
+            && humanoid_foundational_gait.step_length <= 0.88f
             && humanoid_foundational_gait.swing_lift < 0.82f
             && std::abs(shifted_arm_gait.step_length
                 - humanoid_foundational_gait.step_length) < 1.0e-6f
@@ -1809,7 +1827,7 @@ int main()
             && std::abs(arm_forward.y - arm_backward.y) < 1.0e-5f
             && arm_forward.y < -1.20f
             && std::abs(casual_arm_rest.x) < 1.0e-6f
-            && std::abs(casual_arm_rest.y + 1.428f) < 1.0e-5f
+            && std::abs(casual_arm_rest.y + 1.598f) < 1.0e-5f
             && casual_arm_forward.x > 0.16f
             && casual_arm_backward.x < -0.16f
             && std::abs(casual_arm_forward.y - casual_arm_backward.y) < 1.0e-5f
@@ -1828,9 +1846,21 @@ int main()
             && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::hexapod()) == 1.50f,
         "foundational teacher and observed topology clocks diverged");
-    require(rl::walk_mastery_distance == 18.0f
+    require(rl::casual_walk_teacher_distance == 12.0f
+            && rl::casual_walk_teacher_stride_events == 12.0f
+            && rl::gait_task_mastery_distance(sim::GaitTask::walk) == 12.0f
+            && rl::gait_task_mastery_stride_events(sim::GaitTask::walk) == 12.0f
+            && rl::gait_task_mastery_distance(sim::GaitTask::speed_walk) == 18.0f
+            && rl::gait_task_mastery_stride_events(sim::GaitTask::speed_walk) == 14.0f
+            && rl::gait_task_mastery_distance(
+                sim::GaitTask::walk_run_transition) == 20.0f
+            && rl::gait_task_mastery_stride_events(
+                sim::GaitTask::walk_run_transition) == 14.0f
+            && rl::gait_task_mastery_distance(sim::GaitTask::run) == 24.0f
+            && rl::gait_task_mastery_stride_events(sim::GaitTask::run) == 16.0f
+            && rl::walk_mastery_distance == 18.0f
             && rl::walk_mastery_stride_events == 14.0f,
-        "cross-platform Walk mastery aggregate drifted");
+        "selected-gait or shuttle mastery evidence drifted");
     rl::TrainingMetrics turn_mastery{};
     turn_mastery.evaluation_valid = true;
     turn_mastery.evaluation_quality_key = 1u;
@@ -1908,7 +1938,7 @@ int main()
         sim::CreatureBlueprint::hexapod(), sim::CourseStage::uneven);
     require(monoped_reflex.support == 0.92f && monoped_reflex.body == 0.82f
             && chicken_reflex.support == 0.88f && chicken_reflex.body == 0.50f
-            && ordinary_reflex.support == 1.0f && ordinary_reflex.body == 0.84f
+            && ordinary_reflex.support == 1.0f && ordinary_reflex.body == 1.0f
             && out_of_scope_reflex.support == 0.0f
             && out_of_scope_reflex.body == 0.0f
             && human_shuttle_reflex.support == 1.0f
@@ -1930,8 +1960,6 @@ int main()
             human_reflex, positive, sim::CourseStage::uneven, 0.0f);
         const auto negative_effective = rl::effective_policy_action(
             human_reflex, negative, sim::CourseStage::uneven, 0.0f);
-        bool bounded_body_residual_visible = false;
-        float maximum_body_action{};
         for (std::size_t index = 0; index < humanoid_walk.active_motor_count; ++index)
         {
             if (index < 4u)
@@ -1941,18 +1969,11 @@ int main()
                     "post-handoff Human policy can override the opposed leg-transfer clock");
                 continue;
             }
-            require(std::abs(positive_effective[index]) <= 0.320001f
-                    && std::abs(negative_effective[index]) <= 0.320001f,
-                "post-handoff Human upper-body residual exceeds its gait bound");
-            maximum_body_action = std::max(maximum_body_action,
-                std::abs(positive_effective[index]));
-            bounded_body_residual_visible = bounded_body_residual_visible
-                || std::abs(positive_effective[index] - negative_effective[index]) > 0.02f;
+            const float expected = clamp(raw_support_teacher[index], -0.32f, 0.32f);
+            require(std::abs(positive_effective[index] - expected) < 1.0e-6f
+                    && std::abs(negative_effective[index] - expected) < 1.0e-6f,
+                "post-handoff Human policy can override the authored arm counter-swing");
         }
-        require(maximum_body_action > 0.10f,
-            "startup stability damping erased the Human code-brain body control");
-        require(bounded_body_residual_visible,
-            "post-handoff Human gait erased the learned upper-body residual");
     }
 
     require(rl::guided_rollout_imitation_weight(

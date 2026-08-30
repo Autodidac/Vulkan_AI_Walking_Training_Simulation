@@ -203,11 +203,12 @@ int main()
             "draw_oriented_pixel_art", "draw_fitted_armor", "draw_body_segments",
             "optional_upper_arm_art", "optional_forearm_art",
             "optional_thigh_art", "optional_shin_art",
-            "support_boot_transform", "rig.support_branch_mask(motor)",
+            "articulated_boot_transform", "rig.support_branch_mask(motor)",
             "rig.node_support_mask(index)", "art::oriented_box_transform",
             "art::SkinEnvelopeDimensions", "art::skin_envelope_dimensions",
             "minimum_shoulder", "envelope.chest_radius",
-            "assembled_art_scale", "scaled_pixels(minimum_thickness, art_pixel_scale)", "presentation_side",
+            "assembled_art_scale", "art::scaled_pixels", "presentation_side",
+            "art::hand_art_dimensions",
             "authored_joint_overlap", "has_distal_motor ? 0.42f : 0.30f",
             "Modular armor is the exclusive presentation",
             "Authoritative graph bones stay visible beneath authored",
@@ -316,16 +317,17 @@ int main()
         const runner::art::HandArtDimensions invalid =
             runner::art::hand_art_dimensions(
                 std::numeric_limits<float>::quiet_NaN(), 0, 0);
-        require(normal.thickness >= 39.0f && normal.length >= 40.0f
-                && normal.wrist_overlap > 6.0f
-                && normal.wrist_overlap < normal.length * 0.20f,
-            "supplied side-view glove still renders as fingertips");
+        require(normal.thickness <= 25.0f && normal.length <= 29.0f
+                && normal.length >= normal.thickness
+                && normal.wrist_overlap >= 3.0f
+                && normal.wrist_overlap <= normal.length * 0.18f,
+            "fitted side-view hand is oversized or disconnected at the wrist");
         for (const runner::art::HandArtDimensions hand :
             { compact, large, invalid })
             require(std::isfinite(hand.length) && std::isfinite(hand.thickness)
                     && std::isfinite(hand.wrist_overlap)
-                    && hand.length >= 40.0f && hand.length <= 92.0f
-                    && hand.thickness >= 28.0f && hand.thickness <= 64.0f,
+                    && hand.length >= 17.0f && hand.length <= 38.0f
+                    && hand.thickness >= 10.0f && hand.thickness <= 30.0f,
                 "hand fit escaped compact/large/malformed bounds");
         require(!runner::art::presented_limb_transverse_mirror(1.0f)
                 && runner::art::presented_limb_transverse_mirror(-1.0f),
@@ -432,7 +434,7 @@ int main()
             && app.find("set_diagnostic_rigid_rotation") != std::string::npos
             && app.find("HORIZONTAL ROTATION EVIDENCE") != std::string::npos,
         "all-rig or horizontal-pose Vulkan art diagnostic is missing");
-    require(app.find("ORTHOGRAPHIC ART CHECK") != std::string::npos
+    require(app.find("PACKAGED ORTHOGRAPHIC ART TEST") != std::string::npos
             && app.find("STRICT SIDE ELEVATION - NO PERSPECTIVE OR FORESHORTENING")
                 != std::string::npos
             && app.find("FIXED SIDE PROFILE") != std::string::npos,

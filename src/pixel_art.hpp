@@ -91,6 +91,24 @@ namespace runner::art
         return std::isfinite(facing_direction) && facing_direction < 0.0f;
     }
 
+    [[nodiscard]] inline float human_limb_layer_opacity(
+        bool foreground) noexcept
+    {
+        // Side-view anatomy still renders both physical chains, but the far
+        // chain must read as depth instead of a duplicate translucent rig.
+        return foreground ? 0.98f : 0.22f;
+    }
+
+    [[nodiscard]] inline float human_limb_thickness_ratio(
+        bool support_limb, bool has_distal_motor) noexcept
+    {
+        if (support_limb)
+            return has_distal_motor ? 0.50f : 0.46f;
+        // Human arms remain visibly articulated without letting the forearm
+        // and hand dominate the saved neutral silhouette.
+        return has_distal_motor ? 0.37f : 0.20f;
+    }
+
     [[nodiscard]] inline HelmetArtDimensions helmet_art_dimensions(
         float head_radius_pixels, float assembled_scale,
         float pixel_scale = 1.0f) noexcept
@@ -109,19 +127,19 @@ namespace runner::art
         float forearm_thickness, int source_width, int source_height,
         float pixel_scale = 1.0f) noexcept
     {
-        const float minimum_thickness = scaled_pixels(28.0f, pixel_scale);
-        const float maximum_thickness = scaled_pixels(64.0f, pixel_scale);
+        const float minimum_thickness = scaled_pixels(10.0f, pixel_scale);
+        const float maximum_thickness = scaled_pixels(30.0f, pixel_scale);
         const float thickness = std::clamp(
-            std::isfinite(forearm_thickness) ? forearm_thickness * 0.98f
-                : scaled_pixels(38.0f, pixel_scale),
+            std::isfinite(forearm_thickness) ? forearm_thickness * 0.52f
+                : scaled_pixels(16.0f, pixel_scale),
             minimum_thickness, maximum_thickness);
         const float aspect = source_width > 0 && source_height > 0
             ? std::clamp(static_cast<float>(source_width)
                 / static_cast<float>(source_height), 1.05f, 1.65f)
             : 1.40f;
         const float length = std::clamp(thickness * aspect,
-            scaled_pixels(40.0f, pixel_scale), scaled_pixels(92.0f, pixel_scale));
-        return { length, thickness, length * 0.16f };
+            scaled_pixels(17.0f, pixel_scale), scaled_pixels(38.0f, pixel_scale));
+        return { length, thickness, length * 0.18f };
     }
 
     [[nodiscard]] inline SkinEnvelopeDimensions skin_envelope_dimensions(
@@ -175,22 +193,48 @@ namespace runner::art
 
     [[nodiscard]] inline OrientedArtTransform support_boot_transform(
         Vec2 proximal, Vec2 support, float width, float height,
-        float facing_direction = 1.0f) noexcept
+        float facing_direction = 1.0f, bool grounded = false) noexcept
     {
         const Vec2 terminal = normalized(support - proximal, { 0.0f, 1.0f });
         const float facing = std::isfinite(facing_direction)
                 && facing_direction < 0.0f
             ? -1.0f : 1.0f;
-        const Vec2 forward = Vec2{ terminal.y, -terminal.x } * facing;
+        const Vec2 articulated_forward = Vec2{ terminal.y, -terminal.x } * facing;
+        const Vec2 forward = grounded
+            ? Vec2{ facing, 0.0f } : articulated_forward;
         const float bounded_width = std::max(0.0f, width);
         const float bounded_height = std::max(0.0f, height);
         // Terminal points toward the support surface and therefore remains the
         // vertical/sole reference when the toe direction reverses.
-        const Vec2 center = support - terminal * (bounded_height * 0.24f)
-            + forward * (bounded_width * 0.26f);
+        // A loaded boot has a physical sole: keep that sole horizontal and on
+        // the contact point instead of rotating the whole foot perpendicular
+        // to the shin. Airborne boots retain the articulated swing pitch.
+        const Vec2 center = grounded
+            ? support + forward * (bounded_width * 0.22f)
+                + Vec2{ 0.0f, -bounded_height * 0.48f }
+            : support - terminal * (bounded_height * 0.24f)
+                + forward * (bounded_width * 0.26f);
         return oriented_box_transform(center, forward, bounded_width, bounded_height);
     }
 
+
+    [[nodiscard]] inline OrientedArtTransform articulated_boot_transform(
+        Vec2 heel, Vec2 toe, float width, float height,
+        float facing_direction = 1.0f) noexcept
+    {
+        const float facing = std::isfinite(facing_direction)
+                && facing_direction < 0.0f ? -1.0f : 1.0f;
+        Vec2 forward = normalized(toe - heel, { facing, 0.0f });
+        if (forward.x * facing < 0.0f)
+            forward *= -1.0f;
+        const float bounded_width = std::max(0.0f, width);
+        const float bounded_height = std::max(0.0f, height);
+        const Vec2 physical_center = (heel + toe) * 0.5f;
+        const Vec2 center = physical_center + Vec2{ 0.0f,
+            -bounded_height * 0.48f };
+        return oriented_box_transform(center, forward,
+            bounded_width, bounded_height);
+    }
     [[nodiscard]] bool load_p3_pixel_art(const std::filesystem::path& path,
         PixelArt& art, std::string& error);
 }

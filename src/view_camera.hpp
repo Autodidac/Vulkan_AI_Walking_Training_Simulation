@@ -19,6 +19,12 @@ namespace runner::view_camera
     inline constexpr float lookahead_screen_fraction = 0.17f;
     inline constexpr float camera_dead_zone_pixels = 18.0f;
     inline constexpr float follow_response_per_second = 6.5f;
+    [[nodiscard]] constexpr bool tracks_live_subject(
+        bool fixed_eye_test, bool walk_eye_test) noexcept
+    {
+        return !fixed_eye_test || walk_eye_test;
+    }
+
     inline constexpr float zoom_response_per_second = 7.5f;
     inline constexpr float pip_minimum_pixels_per_meter = 24.0f;
     inline constexpr float pip_maximum_pixels_per_meter = 56.0f;

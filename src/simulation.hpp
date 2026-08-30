@@ -149,6 +149,84 @@ namespace runner::sim
         shuttle
     };
 
+    enum class GaitTask : std::uint8_t
+    {
+        walk,
+        speed_walk,
+        walk_run_transition,
+        run
+    };
+
+    enum class GuidanceMode : std::uint8_t
+    {
+        assisted,
+        raw_policy_audit
+    };
+
+    [[nodiscard]] inline std::string_view guidance_mode_name(
+        GuidanceMode mode) noexcept
+    {
+        return mode == GuidanceMode::raw_policy_audit
+            ? "RAW POLICY AUDIT" : "ASSISTED COMPOSITION";
+    }
+    inline constexpr std::size_t gait_task_count = 4u;
+
+    [[nodiscard]] inline constexpr std::size_t gait_task_index(
+        GaitTask task) noexcept
+    {
+        return static_cast<std::size_t>(task);
+    }
+
+    [[nodiscard]] inline constexpr GaitTask next_gait_task(
+        GaitTask task) noexcept
+    {
+        switch (task)
+        {
+        case GaitTask::walk: return GaitTask::speed_walk;
+        case GaitTask::speed_walk: return GaitTask::walk_run_transition;
+        case GaitTask::walk_run_transition: return GaitTask::run;
+        case GaitTask::run: return GaitTask::run;
+        }
+        return GaitTask::walk;
+    }
+
+    [[nodiscard]] inline std::string_view gait_task_name(GaitTask task) noexcept
+    {
+        switch (task)
+        {
+        case GaitTask::walk: return "WALK - CASUAL";
+        case GaitTask::speed_walk: return "SPEED WALK";
+        case GaitTask::walk_run_transition: return "WALK / RUN TRANSITION";
+        case GaitTask::run: return "RUN";
+        }
+        return "WALK - CASUAL";
+    }
+
+    [[nodiscard]] inline float gait_task_transition_mix(GaitTask task,
+        float elapsed_seconds) noexcept
+    {
+        if (task == GaitTask::walk)
+            return 0.0f;
+        if (task == GaitTask::speed_walk)
+            return 0.42f;
+        if (task == GaitTask::run)
+            return 1.0f;
+        if (!std::isfinite(elapsed_seconds))
+            return 0.0f;
+        float cycle = std::fmod(std::max(0.0f, elapsed_seconds), 12.0f) / 6.0f;
+        if (cycle > 1.0f)
+            cycle = 2.0f - cycle;
+        cycle = std::clamp(cycle, 0.0f, 1.0f);
+        return cycle * cycle * (3.0f - 2.0f * cycle);
+    }
+
+    [[nodiscard]] inline float gait_task_nominal_cadence_hz(GaitTask task,
+        float elapsed_seconds = 0.0f) noexcept
+    {
+        return std::lerp(0.82f, 1.55f,
+            gait_task_transition_mix(task, elapsed_seconds));
+    }
+
     inline constexpr std::size_t course_stage_count = 12;
 
     [[nodiscard]] inline constexpr std::size_t course_stage_curriculum_index(
@@ -919,6 +997,8 @@ namespace runner::sim
         bool paired_leg_chains{};
         bool horizontal_body{};
         bool feet_supported{};
+        bool left_supported{};
+        bool right_supported{};
         bool non_foot_grounded{};
         float pelvis_drop{};
         float left_knee_flex{};
@@ -949,6 +1029,25 @@ namespace runner::sim
         return evidence.pelvis_drop >= 0.22f
             && evidence.torso_pitch <= 0.65f
             && evidence.support_margin >= -0.10f;
+    }
+
+    [[nodiscard]] inline bool crouch_walk_posture_qualified(
+        const CrouchPostureEvidence& evidence) noexcept
+    {
+        const bool usable_support = evidence.left_supported
+            || evidence.right_supported;
+        if (!usable_support || evidence.non_foot_grounded)
+            return false;
+        if (!evidence.paired_leg_chains)
+            return crouch_posture_qualified(evidence);
+        return evidence.pelvis_drop >= 0.24f
+            && std::max(evidence.left_knee_flex,
+                evidence.right_knee_flex) >= 0.14f
+            && evidence.torso_pitch <= 0.48f
+            // A translating gait legitimately carries COM beyond the current
+            // single-foot interval before the next strike. Static crouch keeps
+            // the stricter margin in crouch_posture_qualified().
+            && evidence.support_margin >= -0.36f;
     }
 
     enum class InvalidMotion : std::uint8_t
@@ -1498,7 +1597,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0747-" + slug;
+        const std::string state_prefix = "runner-v0748-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -1740,8 +1839,29 @@ namespace runner::sim
         }
         [[nodiscard]] bool paired_leg_chains() const noexcept
         {
-            return support_seed_count() == 2u
-                && !monopedal_gait() && active_motor_count >= 4u
+            const bool point_feet = additional_left_contact_nodes.empty()
+                && additional_right_contact_nodes.empty();
+            const auto same_side_sole_connected = [this](bool left) noexcept
+            {
+                for (const DistanceConstraint& bone : bones)
+                {
+                    const bool a = left ? is_left_support_seed(bone.a)
+                                        : is_right_support_seed(bone.a);
+                    const bool b = left ? is_left_support_seed(bone.b)
+                                        : is_right_support_seed(bone.b);
+                    if (a && b)
+                        return true;
+                }
+                return false;
+            };
+            // Human heel/ball/toe nodes form one connected sole per side.
+            // Hexapod's equally sized side lists are independent leg branches.
+            const bool articulated_feet = additional_left_contact_nodes.size() == 2u
+                && additional_right_contact_nodes.size() == 2u
+                && same_side_sole_connected(true)
+                && same_side_sole_connected(false);
+            return (point_feet || articulated_feet) && !monopedal_gait()
+                && active_motor_count >= 4u
                 && motors[0].enabled && motors[1].enabled
                 && motors[2].enabled && motors[3].enabled
                 && motors[0].pivot == motors[2].pivot
@@ -1807,7 +1927,11 @@ namespace runner::sim
         }
         [[nodiscard]] bool horizontal_multi_support_plan() const noexcept
         {
-            return !monopedal_gait() && support_seed_count() >= 4u;
+            // Count independent semantic leg branches, not physical sole
+            // contacts. Human heel/ball/toe plates are two connected feet,
+            // whereas Dog and Hexapod supports remain independent branches.
+            return !monopedal_gait() && !paired_leg_chains()
+                && support_seed_count() >= 4u;
         }
         [[nodiscard]] CreatureSpecies inferred_species() const noexcept
         {
@@ -2103,6 +2227,82 @@ namespace runner::sim
             + clamp(limited - previous_action, -maximum_delta, maximum_delta);
     }
 
+    [[nodiscard]] inline float requested_leg_endpoint_height(
+        const CreatureBlueprint& blueprint, bool left,
+        std::span<const float, anatomy_action_count> actions,
+        float facing_direction = 1.0f) noexcept
+    {
+        const std::size_t hip_index = left ? 0u : 2u;
+        const std::size_t knee_index = hip_index + 1u;
+        if (knee_index >= blueprint.active_motor_count)
+            return std::numeric_limits<float>::quiet_NaN();
+        const MotorConstraint& hip = blueprint.motors[hip_index];
+        const MotorConstraint& knee = blueprint.motors[knee_index];
+        if (!hip.enabled || !knee.enabled || hip.pivot >= blueprint.nodes.size()
+            || hip.a >= blueprint.nodes.size() || hip.c >= blueprint.nodes.size()
+            || knee.pivot >= blueprint.nodes.size()
+            || knee.c >= blueprint.nodes.size())
+            return std::numeric_limits<float>::quiet_NaN();
+
+        const Vec2 hip_origin = blueprint.nodes[hip.pivot];
+        const Vec2 hip_reference = blueprint.nodes[hip.a] - hip_origin;
+        const float thigh_length = length(
+            blueprint.nodes[hip.c] - hip_origin);
+        const float shank_length = length(
+            blueprint.nodes[knee.c] - blueprint.nodes[knee.pivot]);
+        if (length(hip_reference) <= 1.0e-5f
+            || thigh_length <= 1.0e-5f || shank_length <= 1.0e-5f)
+            return std::numeric_limits<float>::quiet_NaN();
+        const float facing = std::isfinite(facing_direction)
+                && facing_direction < 0.0f ? -1.0f : 1.0f;
+        const Vec2 thigh = rotate(normalized(hip_reference, { 0.0f, 1.0f })
+                * thigh_length,
+            motor_target_angle(hip, actions[hip_index]) * facing);
+        const Vec2 shank = rotate(normalized(-thigh, { 0.0f, 1.0f })
+                * shank_length,
+            motor_target_angle(knee, actions[knee_index]) * facing);
+        return (hip_origin + thigh + shank).y;
+    }
+
+    [[nodiscard]] inline int action_requested_swing_side(
+        const CreatureBlueprint& blueprint,
+        std::span<const float, anatomy_action_count> actions,
+        float facing_direction = 1.0f, float minimum_lift = 0.055f) noexcept
+    {
+        std::array<float, anatomy_action_count> neutral_actions{};
+        const auto score = [&](bool left) noexcept
+        {
+            const std::size_t knee_index = left ? 1u : 3u;
+            const float endpoint = requested_leg_endpoint_height(
+                blueprint, left, actions, facing_direction);
+            const float neutral_endpoint = requested_leg_endpoint_height(
+                blueprint, left, neutral_actions, facing_direction);
+            if (!std::isfinite(endpoint) || !std::isfinite(neutral_endpoint)
+                || knee_index >= blueprint.active_motor_count)
+                return std::numeric_limits<float>::quiet_NaN();
+            const MotorConstraint& knee = blueprint.motors[knee_index];
+            const float shank = knee.pivot < blueprint.nodes.size()
+                    && knee.c < blueprint.nodes.size()
+                ? length(blueprint.nodes[knee.c] - blueprint.nodes[knee.pivot])
+                : 0.0f;
+            const float flexion = std::abs(wrap_angle(
+                motor_target_angle(knee, actions[knee_index])
+                    - knee.neutral_angle));
+            return std::max(0.0f, endpoint - neutral_endpoint)
+                + flexion * shank * 0.72f;
+        };
+        const float left = score(true);
+        const float right = score(false);
+        if (!std::isfinite(left) || !std::isfinite(right))
+            return 0;
+        const float threshold = std::max(0.0f, minimum_lift);
+        if (left > right + threshold)
+            return -1;
+        if (right > left + threshold)
+            return 1;
+        return 0;
+    }
+
     struct StepResult
     {
         float reward{};
@@ -2141,6 +2341,7 @@ namespace runner::sim
 
         void set_blueprint(const CreatureBlueprint& blueprint);
         void set_course(CourseStage stage, float difficulty = 0.25f);
+        void set_gait_task(GaitTask task) noexcept;
         void configure_equipment(WeaponClass weapon, float target_distance = 8.0f);
         void clear_equipment() noexcept;
         void disarm_equipment() noexcept;
@@ -2201,6 +2402,24 @@ namespace runner::sim
         }
         [[nodiscard]] CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
+        [[nodiscard]] GaitTask gait_task() const noexcept { return gait_task_; }
+        [[nodiscard]] float gait_transition_mix() const noexcept
+        {
+            return gait_task_transition_mix(gait_task_, elapsed_seconds_);
+        }
+        void set_guidance_mode(GuidanceMode mode) noexcept
+        {
+            guidance_mode_ = mode;
+        }
+        [[nodiscard]] GuidanceMode guidance_mode() const noexcept
+        {
+            return guidance_mode_;
+        }
+        [[nodiscard]] bool raw_policy_audit() const noexcept
+        {
+            return guidance_mode_ == GuidanceMode::raw_policy_audit;
+        }
+
         void set_course_motion_enabled(bool enabled) noexcept
         {
             course_motion_enabled_ = enabled;
@@ -2376,6 +2595,17 @@ namespace runner::sim
         [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
         [[nodiscard]] float body_rolling_seconds() const noexcept { return body_rolling_seconds_; }
         [[nodiscard]] float foot_pivot_rolling_seconds() const noexcept { return foot_pivot_rolling_seconds_; }
+        [[nodiscard]] float last_landing_air_seconds() const noexcept
+        { return last_landing_air_seconds_; }
+        [[nodiscard]] float last_landing_clearance() const noexcept
+        { return last_landing_clearance_; }
+        [[nodiscard]] float last_landing_displacement() const noexcept
+        { return last_landing_displacement_; }
+        [[nodiscard]] int last_landing_side() const noexcept { return last_landing_side_; }
+        [[nodiscard]] bool last_landing_qualified() const noexcept
+        { return last_landing_qualified_; }
+        [[nodiscard]] int action_support_unload_side() const noexcept
+        { return action_support_unload_side_; }
         [[nodiscard]] float zero_progress_seconds() const noexcept { return zero_progress_seconds_; }
         [[nodiscard]] float hazard_stall_seconds() const noexcept { return hazard_stall_seconds_; }
         [[nodiscard]] float obstacle_lift_clearance() const noexcept { return obstacle_lift_clearance_; }
@@ -2482,6 +2712,8 @@ namespace runner::sim
             float dt) const noexcept;
         [[nodiscard]] float contact_cluster_center_x(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] FootContactPhase detect_foot_contact_phase(bool left) const noexcept;
+        int action_support_unload_side_{};
+        int last_action_support_unload_side_{};
         [[nodiscard]] float contact_cluster_clearance(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] bool knee_before_foot_fault() const noexcept;
 
@@ -2489,6 +2721,8 @@ namespace runner::sim
         std::vector<Particle> particles_{};
         std::vector<std::uint8_t> support_contact_latch_{};
         std::vector<float> support_contact_anchor_x_{};
+        std::array<float, 2> support_cluster_release_hold_seconds_{};
+        std::array<float, 2> support_toe_roll_seconds_{};
         std::vector<CourseFeature> course_features_{};
         DeformableTerrain terrain_{};
         std::vector<MaterialParticle> material_particles_{};
@@ -2529,15 +2763,18 @@ namespace runner::sim
         std::array<float, anatomy_action_count> previous_applied_actions_{};
         std::array<float, 2> articulated_toe_commands_{};
         std::array<float, 2> previous_articulated_toe_angles_{};
+        GuidanceMode guidance_mode_{ GuidanceMode::assisted };
         Vec2 previous_pelvis_{};
         float elapsed_seconds_{};
         float last_step_dt_{ 1.0f / 60.0f };
+        bool crouch_posture_guide_applied_this_step_{};
         float distance_travelled_{};
         float forward_speed_{};
         float last_reward_{};
         bool fallen_{};
 
         CourseStage course_stage_{ CourseStage::balance };
+        GaitTask gait_task_{ GaitTask::walk };
         float course_difficulty_{ 0.25f };
         bool course_motion_enabled_{ true };
         ShuttleState shuttle_state_{};
@@ -2639,6 +2876,11 @@ namespace runner::sim
         float obstacle_clearance_target_{ 0.20f };
         bool non_foot_grounded_{};
         bool knee_first_this_step_{};
+        float last_landing_air_seconds_{};
+        float last_landing_clearance_{};
+        float last_landing_displacement_{};
+        int last_landing_side_{};
+        bool last_landing_qualified_{};
         int last_contact_side_{};
         bool previous_left_grounded_{};
         bool previous_right_grounded_{};

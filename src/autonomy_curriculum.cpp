@@ -23,11 +23,18 @@ namespace runner::rl
         case sim::CourseStage::shuttle:
             return shuttle_mastery_evidence(metrics);
         case sim::CourseStage::uneven:
-            return metrics.evaluation_distance >= walk_mastery_distance
-                && metrics.evaluation_stride_events >= walk_mastery_stride_events
-                && metrics.evaluation_speed >= 0.55f
+        {
+            const float required_speed = gait_task_ == sim::GaitTask::walk ? 0.32f
+                : gait_task_ == sim::GaitTask::speed_walk ? 0.72f
+                : gait_task_ == sim::GaitTask::walk_run_transition ? 0.62f
+                : 1.05f;
+            return metrics.evaluation_distance >= gait_task_mastery_distance(gait_task_)
+                && metrics.evaluation_stride_events
+                    >= gait_task_mastery_stride_events(gait_task_)
+                && metrics.evaluation_speed >= required_speed
                 && metrics.evaluation_survival >= 18.0f
                 && metrics.evaluation_collisions <= 1.0f;
+        }
         case sim::CourseStage::crouch_walk:
             return metrics.evaluation_duck_recoveries >= 1.0f
                 && metrics.evaluation_stride_events >= 8.0f
@@ -201,10 +208,22 @@ namespace runner::rl
             (void)worker_.restore_best_policy();
         mastery_streak_ = 0;
         degradation_streak_ = 0;
-        if (stage_ != sim::CourseStage::combat_course)
+        if (stage_ == sim::CourseStage::uneven
+            && gait_task_ != sim::GaitTask::run)
+        {
+            gait_task_ = sim::next_gait_task(gait_task_);
+            worker_.set_gait_task(gait_task_, false);
+            worker_message_ = std::format("GAIT LOCKED - ADVANCING TO {}",
+                sim::gait_task_name(gait_task_));
+        }
+        else if (stage_ != sim::CourseStage::combat_course)
         {
             stage_ = sim::next_course_stage(stage_);
+            if (stage_ == sim::CourseStage::uneven)
+                gait_task_ = sim::GaitTask::walk;
             difficulty_ = 0.30f;
+            worker_.set_course(stage_, difficulty_, false);
+            worker_.set_gait_task(gait_task_, false);
             worker_message_ = std::format("SKILL LOCKED - ADVANCING TO {}",
                 sim::course_stage_name(stage_));
         }
@@ -213,7 +232,6 @@ namespace runner::rl
             difficulty_ = std::min(1.0f, difficulty_ + 0.10f);
             worker_message_ = std::format("FULL COURSE MASTERED - DIFFICULTY {:.0f}%", difficulty_ * 100.0f);
         }
-        worker_.set_course(stage_, difficulty_, false);
         const TrainingMetrics& entered = worker_.metrics();
         stage_entry_total_updates_ = entered.total_updates;
         stage_entry_total_episodes_ = entered.total_episodes;

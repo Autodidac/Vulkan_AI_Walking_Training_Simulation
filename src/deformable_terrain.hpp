@@ -58,32 +58,51 @@ namespace runner::sim
 
         struct FineCell
         {
-            std::uint8_t material_id{};
-            std::uint8_t flags{};
+            sandhybrid::SceneCell state{
+                static_cast<std::uint32_t>(sandhybrid::Material::atmosphere),
+                0u, 20, 0u };
             float fill{};
+            std::uint8_t metadata{};
 
             [[nodiscard]] sandhybrid::Material material() const noexcept
             {
-                return static_cast<sandhybrid::Material>(material_id);
+                return static_cast<sandhybrid::Material>(state.material);
             }
 
             [[nodiscard]] bool occupied() const noexcept
             {
-                return material() != sandhybrid::Material::empty && fill > 1.0e-6f;
+                return material() != sandhybrid::Material::empty
+                    && material() != sandhybrid::Material::atmosphere
+                    && fill > 1.0e-6f;
             }
 
             [[nodiscard]] bool structural() const noexcept
             {
-                return (flags & structural_flag) != 0u;
+                return (state.aux & structural_aux) != 0u;
             }
 
             [[nodiscard]] bool authored() const noexcept
             {
-                return (flags & authored_flag) != 0u;
+                return (metadata & authored_metadata) != 0u;
             }
 
-            static constexpr std::uint8_t structural_flag = 0x01u;
-            static constexpr std::uint8_t authored_flag = 0x02u;
+            [[nodiscard]] const sandhybrid::SceneCell& canonical_cell() const noexcept
+            {
+                return state;
+            }
+
+            [[nodiscard]] bool same_state(const FineCell& other) const noexcept
+            {
+                return state.material == other.state.material
+                    && state.age == other.state.age
+                    && state.temperature == other.state.temperature
+                    && state.aux == other.state.aux
+                    && fill == other.fill && metadata == other.metadata;
+            }
+
+            static constexpr std::uint32_t structural_aux = 0x04000000u;
+            static constexpr std::uint32_t moved_aux = 0x01000000u;
+            static constexpr std::uint8_t authored_metadata = 0x01u;
         };
 
         struct MacroTile
@@ -733,17 +752,18 @@ namespace runner::sim
 
         static void clear_cell(FineCell& cell) noexcept
         {
-            cell.material_id = 0u;
-            cell.flags = 0u;
+            cell.state = { static_cast<std::uint32_t>(
+                sandhybrid::Material::atmosphere), 0u, 20, 0u };
             cell.fill = 0.0f;
+            cell.metadata = 0u;
         }
 
         static void set_cell(FineCell& cell, sandhybrid::Material material,
             bool structural, float fill, bool authored = false) noexcept
         {
-            cell.material_id = static_cast<std::uint8_t>(material);
-            cell.flags = (structural ? FineCell::structural_flag : 0u)
-                | (authored ? FineCell::authored_flag : 0u);
+            cell.state = { static_cast<std::uint32_t>(material), 0u, 20,
+                structural ? FineCell::structural_aux : 0u };
+            cell.metadata = authored ? FineCell::authored_metadata : 0u;
             cell.fill = std::clamp(fill, 0.0f, 1.0f);
             if (cell.fill <= 1.0e-6f)
                 clear_cell(cell);
@@ -780,7 +800,7 @@ namespace runner::sim
             Cell& surface = cells_[column];
             const FineCell* top_surface = top_cell(column);
             surface.surface_material = top_surface == nullptr
-                ? sandhybrid::Material::empty : top_surface->material();
+                ? sandhybrid::Material::atmosphere : top_surface->material();
             if (launch_pad_at(static_cast<float>(column) * fine_cell_spacing))
                 surface.region = TerrainRegion::firm;
             else if (surface.water_depth > 0.08f)
@@ -913,7 +933,8 @@ namespace runner::sim
         }
 
         [[nodiscard]] float add_volume(std::size_t column, float requested,
-            sandhybrid::Material material, bool structural) noexcept
+            sandhybrid::Material material, bool structural,
+            const sandhybrid::SceneCell* prototype = nullptr) noexcept
         {
             float remaining = std::max(0.0f, requested);
             float added = 0.0f;
@@ -935,9 +956,17 @@ namespace runner::sim
                 }
                 if (!target->occupied())
                 {
-                    target->material_id = static_cast<std::uint8_t>(material);
-                    target->flags = structural ? FineCell::structural_flag : 0u;
+                    target->state = prototype == nullptr
+                        ? sandhybrid::SceneCell{
+                            static_cast<std::uint32_t>(material), 0u, 20, 0u }
+                        : *prototype;
+                    target->state.material = static_cast<std::uint32_t>(material);
+                    target->state.aux &= ~(FineCell::structural_aux
+                        | FineCell::moved_aux);
+                    if (structural)
+                        target->state.aux |= FineCell::structural_aux;
                     target->fill = 0.0f;
+                    target->metadata = 0u;
                 }
                 const float capacity = (1.0f - target->fill) * fine_cell_spacing;
                 const float put = std::min(remaining, capacity);
@@ -956,13 +985,16 @@ namespace runner::sim
             if (source == nullptr || source->structural() || source->authored())
                 return 0.0f;
             const sandhybrid::Material material = source->material();
+            const sandhybrid::SceneCell source_state = source->canonical_cell();
             const float removed = remove_loose_volume(from, requested);
             if (removed <= 0.0f)
                 return 0.0f;
-            const float added = add_volume(to, removed, material, false);
+            const float added = add_volume(to, removed, material, false,
+                &source_state);
             const float remainder = removed - added;
             if (remainder > 0.0f)
-                static_cast<void>(add_volume(from, remainder, material, false));
+                static_cast<void>(add_volume(from, remainder, material, false,
+                    &source_state));
             return added;
         }
 

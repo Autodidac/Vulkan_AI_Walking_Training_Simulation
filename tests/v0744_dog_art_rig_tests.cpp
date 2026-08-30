@@ -96,12 +96,12 @@ int main()
         int height{};
     };
     constexpr std::array assets{
-        Asset{ "head", 76, 60 },
-        Asset{ "body", 96, 56 },
-        Asset{ "tail", 76, 34 },
-        Asset{ "upper_leg", 64, 36 },
-        Asset{ "lower_leg", 60, 34 },
-        Asset{ "foot", 56, 34 }
+        Asset{ "head", 60, 48 },
+        Asset{ "body", 76, 44 },
+        Asset{ "tail", 60, 28 },
+        Asset{ "upper_leg", 52, 28 },
+        Asset{ "lower_leg", 48, 28 },
+        Asset{ "foot", 44, 28 }
     };
     for (const Asset& asset : assets)
     {
@@ -171,10 +171,10 @@ int main()
     static_assert(chicken_art.head_scale >= 5.8f
         && chicken_art.head_minimum >= 0.48f
         && chicken_art.tail_length >= 0.64f
-        && chicken_art.tail_ratio >= 1.0f);
+        && chicken_art.tail_ratio >= 0.90f);
     static_assert(dog_art.head_scale >= 5.4f
         && dog_art.head_anchor_forward > chicken_art.head_anchor_forward
-        && dog_art.tail_length >= 0.72f
+        && dog_art.tail_length >= 0.58f
         && dog_art.tail_flip_vertical);
     static_assert(!chicken_art.tail_flip_vertical
         && !hexapod_art.tail_flip_vertical
@@ -182,11 +182,14 @@ int main()
     static_assert(runner::art::tail_transverse_mirror(dog_art, false)
         && !runner::art::tail_transverse_mirror(dog_art, true)
         && !runner::art::tail_transverse_mirror(chicken_art, false));
-    require(chicken_art.head_anchor_up > 0.0f
-            && chicken_art.tail_anchor_up > 0.0f
-            && dog_art.head_anchor_up > 0.0f
+    require(std::abs(chicken_art.head_anchor_up) < 0.001f
+            && std::abs(chicken_art.tail_anchor_up) < 0.001f
+            && std::abs(dog_art.head_anchor_up) < 0.001f
             && dog_art.tail_anchor_up > 0.0f,
-        "species head and tail modules lost their authored attachment offsets");
+        "physical head attachments must not retain detached visual offsets");
+    constexpr auto chicken_topology = runner::art::species_art_topology(
+        CreatureSpecies::chicken);
+    static_assert(chicken_topology.body_front == chicken_topology.head_attachment);
     require(chicken.valid() && chicken.avian_gait(),
         "Chicken factory rig must remain valid avian anatomy");
     require(hexapod.valid() && hexapod.horizontal_multi_support_plan()
@@ -236,6 +239,6 @@ int main()
             && hexapod.topology_compatible_with_species(CreatureSpecies::hexapod),
         "factory species anatomy fails its own semantic support contract");
 
-    std::cout << "Runner v0.7.47 species art and four-species rig checks passed\n";
+    std::cout << "Runner v0.7.48 species art and four-species rig checks passed\n";
     return 0;
 }

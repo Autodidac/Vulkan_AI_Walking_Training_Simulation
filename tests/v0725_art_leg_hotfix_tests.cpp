@@ -43,8 +43,11 @@ namespace runner::sim
 
             for (Particle& particle : environment.particles_)
                 particle.grounded = false;
-            environment.particles_[left_foot].grounded = true;
-            environment.particles_[right_foot].grounded = true;
+            for (std::size_t index = 0; index < environment.particles_.size(); ++index)
+            {
+                if (rig.is_support_seed(index))
+                    environment.particles_[index].grounded = true;
+            }
 
             const Vec2 left_support = environment.particles_[left_foot].position;
             const Vec2 right_support = environment.particles_[right_foot].position;
