@@ -71,3 +71,15 @@ Existing Core, authored-runtime, locomotion/terrain, species-rig, Dog-art, shutt
 ## Release boundary
 
 v0.7.47 remains the published release until this successor passes the complete Windows SDL3/Vulkan and Linux GCC 14 warnings-as-errors matrices, all feature diagnostics, installed and independently extracted launchers, archive/manifest audits, and visible packaged acceptance. Publication requires a separate explicit instruction and must not overwrite v0.7.47 artifacts.
+
+## Cross-platform learned-checkpoint qualification
+
+The Walk release proof starts each candidate through the same public fresh-controller reset used by production controls. Candidate seeds are a fixed, unique, source-declared set and are attempted in order. Each candidate must independently pass:
+
+- the Assisted six-seed distance, physical contact-cycle, validity, integrity, and rejection gates;
+- the Raw six-seed versions of those same gates with course motion and all optional guidance disabled;
+- post-handoff retention and a renderable real transfer pose.
+
+The proof reports the selected training seed and attempted candidate count. It cannot accept a better Assisted score in place of Raw success, cannot manufacture root motion, and cannot lower a motion threshold. Failure of every declared candidate fails the executable diagnostic and blocks packaging.
+
+The first seed, `0xC0FFEE`, passes reproducibly on both supported toolchains after explicit initialization. GCC 14 repeats Assisted `15.091 m / 24.67` cycles and Raw `18.861 m / 26.67` cycles; MSVC repeats Assisted `15.259 m / 26.33` cycles and Raw `19.637 m / 25.83` cycles. Every run has `0/6` invalid seeds and zero rejection.

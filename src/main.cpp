@@ -537,7 +537,7 @@ int main(int argc, char** argv)
             "Runner %s walk-eye proof: %s; updates=%llu retained=%llu "
             "authority=%.3f mean=%.3fm/%.2f steps invalid=%u/6 "
             "reject=0x%08X reason=%.*s display=%.3fm/%u steps/%u crossings "
-            "scissor=%.3fs seed=%u\n",
+            "scissor=%.3fs seed=%u training_seed=0x%llX candidates=%u\n",
             RUNNER_VERSION, proof.passed ? "passed" : "failed",
             static_cast<unsigned long long>(proof.updates),
             static_cast<unsigned long long>(proof.retained_update),
@@ -550,7 +550,9 @@ int main(int argc, char** argv)
                 proof.retained_invalid_reason).data(),
             proof.displayed_distance, proof.displayed_steps,
             proof.displayed_crossings, proof.displayed_max_scissor_seconds,
-            proof.selected_seed);
+            proof.selected_seed,
+            static_cast<unsigned long long>(proof.selected_training_seed),
+            proof.candidate_attempts);
         std::printf(
             "raw policy audit: mean=%.3fm/%.2f cycles invalid=%u/6 "
             "reject=0x%08X reason=%.*s course_motion=disabled "

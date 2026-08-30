@@ -13,6 +13,7 @@
 - Offset the START placard from the spawn silhouette with a visible leader while preserving its exact course coordinate and leaving ordinary distance markers unchanged.
 - Preserved the proven pelvis-local Human posture/contact physics while reducing far-side limb opacity so two physical arms/legs no longer read as duplicate art.
 - Reduced Human upper-arm, forearm, and hand presentation envelopes while retaining their physical endpoints and alternating motion.
+- Made Walk qualification initialize through the public fresh-controller boundary and search a fixed reported checkpoint seed set until the unchanged Assisted and six-seed Raw gates pass reproducibly on MSVC and GCC 14.
 
 ## 0.7.47
 

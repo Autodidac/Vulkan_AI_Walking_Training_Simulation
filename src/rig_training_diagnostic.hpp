@@ -67,6 +67,13 @@ namespace runner::diagnostics
         const RigTrainingResult& result,
         const sim::CreatureBlueprint& blueprint) noexcept;
 
+    inline constexpr std::array<std::uint64_t, 4> walk_eye_candidate_seeds{
+        0x00C0FFEEu,
+        0x74800001u,
+        0x74800002u,
+        0x74800003u,
+    };
+
     struct WalkEyeTestProof
     {
         sim::Environment environment{};
@@ -98,6 +105,8 @@ namespace runner::diagnostics
         std::uint32_t raw_policy_invalid_runs{};
         sim::InvalidMotion raw_policy_invalid_reason{ sim::InvalidMotion::none };
         std::vector<float> retained_policy_parameters{};
+        std::uint64_t selected_training_seed{};
+        std::uint32_t candidate_attempts{};
         bool passed{};
     };
     [[nodiscard]] RigTrainingResult run_rig_training_case(

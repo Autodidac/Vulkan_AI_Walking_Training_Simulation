@@ -1,5 +1,6 @@
 #include "pixel_art.hpp"
 #include "ppo.hpp"
+#include "rig_training_diagnostic.hpp"
 #include "simulation.hpp"
 #include "species_art_layout.hpp"
 
@@ -103,6 +104,16 @@ namespace
 int main()
 {
     using namespace runner;
+    {
+        const auto seeds = diagnostics::walk_eye_candidate_seeds;
+        require(seeds.front() == 0x00C0FFEEu && seeds.size() == 4u,
+            "walk-eye candidate set changed outside its release contract");
+        for (std::size_t left = 0; left < seeds.size(); ++left)
+            for (std::size_t right = left + 1u; right < seeds.size(); ++right)
+                require(seeds[left] != seeds[right],
+                    "walk-eye candidate search contains a duplicate seed");
+    }
+
     const std::filesystem::path root{ RUNNER_SOURCE_DIR };
     constexpr std::array species{ "chicken", "dog", "hexapod" };
     constexpr std::array parts{
