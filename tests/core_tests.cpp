@@ -2807,6 +2807,7 @@ int main()
         procedural.set_course(sim::CourseStage::moving_hazards, 0.75f);
         const float initial_progress = procedural.course_progress();
         const float initial_height = procedural.ground_height_at(29.0f);
+        const std::size_t initial_feature_count = procedural.course_features().size();
         const std::array<float, sim::action_count> zero_actions{};
         for (int frame = 0; frame < 90; ++frame)
         {
@@ -2814,10 +2815,13 @@ int main()
             require(std::isfinite(result.reward), "procedural obstacle reward is not finite");
             (void)result.terminated;
         }
-        require(procedural.course_progress() > initial_progress,
-            "procedural course does not advance when the creature is stationary");
-        require(std::abs(procedural.ground_height_at(29.0f) - initial_height) > 0.001f,
-            "procedural inclines and hills do not move through the training lane");
+        require(procedural.course_progress() == initial_progress
+                && !procedural.course_motion_enabled(),
+            "static physical course manufactured treadmill progress");
+        require(std::abs(procedural.ground_height_at(29.0f) - initial_height) <= 1.0e-6f,
+            "static terrain moved under a stationary creature");
+        require(procedural.course_features().size() == initial_feature_count,
+            "static physical course changed its obstacle population");
 
         std::array<bool, static_cast<std::size_t>(
             sim::CourseFeatureKind::projectile) + 1u> found{};

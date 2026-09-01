@@ -1,10 +1,12 @@
 #pragma once
 
+#include <sandhybrid/camera_policy.hpp>
 #include <sandhybrid/library.hpp>
 #include <sandhybrid/material.hpp>
 #include <sandhybrid/material_color.hpp>
 #include <sandhybrid/section_grid.hpp>
 #include <sandhybrid/terrain_generation.hpp>
+#include <sandhybrid/world_layout.hpp>
 
 #include <algorithm>
 #include <array>
@@ -119,8 +121,20 @@ namespace runner::sim
         static constexpr float cell_spacing = fine_cell_spacing;
         static constexpr float macro_tile_size = fine_cell_spacing
             * static_cast<float>(macro_cell_side);
-        static constexpr std::size_t cell_count = 448u;
-        static constexpr std::size_t vertical_cell_count = 96u;
+        static constexpr std::size_t cell_count =
+            sandhybrid::pre_expansion_world_width;
+        static constexpr std::size_t vertical_cell_count =
+            sandhybrid::pre_expansion_world_height;
+        static constexpr sandhybrid::WorldSizePreset training_world_preset =
+            sandhybrid::WorldSizePreset::compact;
+        static constexpr auto training_world_dimensions =
+            sandhybrid::world_dimensions(training_world_preset);
+        static constexpr std::uint32_t training_district = 0u;
+        static constexpr std::uint32_t training_district_origin_x =
+            sandhybrid::persistent_world_district_origin_x(
+                training_world_dimensions.width, training_district);
+        static constexpr std::uint32_t training_world_surface_y =
+            sandhybrid::persistent_world_surface_y(training_world_dimensions.height);
         static constexpr std::size_t fine_cell_count = cell_count * vertical_cell_count;
         static constexpr std::size_t macro_columns = cell_count / macro_cell_side;
         static constexpr std::size_t macro_rows = vertical_cell_count / macro_cell_side;
@@ -525,6 +539,27 @@ namespace runner::sim
         [[nodiscard]] static float row_world_bottom(std::size_t row) noexcept
         {
             return world_bottom + static_cast<float>(row) * fine_cell_spacing;
+        }
+
+        [[nodiscard]] static std::uint32_t global_cell_x(float course_x) noexcept
+        {
+            if (!std::isfinite(course_x))
+                return training_district_origin_x;
+            const auto local = static_cast<std::ptrdiff_t>(std::floor(
+                wrapped_course_x(course_x) / fine_cell_spacing));
+            return training_district_origin_x
+                + static_cast<std::uint32_t>(wrap_column(local));
+        }
+
+        [[nodiscard]] static std::uint32_t global_cell_y(float world_y) noexcept
+        {
+            if (!std::isfinite(world_y))
+                return training_world_surface_y;
+            const auto offset = static_cast<std::int32_t>(
+                std::lround(world_y / fine_cell_spacing));
+            return static_cast<std::uint32_t>(std::clamp(
+                static_cast<std::int32_t>(training_world_surface_y) - offset,
+                0, static_cast<std::int32_t>(training_world_dimensions.height - 1u)));
         }
 
     private:

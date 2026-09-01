@@ -6,13 +6,25 @@ Windows and Linux releases distinguish runnable Runner example packages, develop
 
 The release asset contract is explicit:
 
-- `Epoch2DWalkEngine-v0.7.48-runner-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.48-runner-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.48-dev-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.48-dev-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.48-source.zip`
+- `Epoch2DWalkEngine-v0.7.49-runner-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.49-runner-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.49-dev-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.49-dev-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.49-source.zip`
 
 Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The runtime packages contain the full Runner example; the development packages contain the installable library, public headers, dependency package, CMake target, documentation, and consumer example.
+
+## v0.7.49 Static SandHybrid cells, physical aiming, and fitted Human extremities
+
+- The course is a static physical world: training cannot enable conveyor motion, terrain sampling uses the creature's actual world displacement, and live diagnostics expose global SandHybrid cell coordinates.
+- Runner's 640x360 authored training footprint is stored as canonical 16-byte `SceneCell` material state and mapped into the 5120x1440 compact SandHybrid world at its exact global surface.
+- Equipment handling is now `safe carry -> gun stance -> aiming -> ready -> fire`. The creature must physically stop, settle its actual arm/barrel pose within weapon tolerance, and respect cooldown before a shot can exist.
+- Projectile hits use swept ballistic collision. A miss records its signed error and adjusts only the following physical aim request; projectiles are never steered after firing.
+- Human hands, forearms, and articulated boots are bounded by their actual bone spans, heel/toe endpoints, joint overlap, and contact plane instead of torso-sized art envelopes.
+- START and distance plaques are ground-anchored and compact; material-region overlays no longer float over the creature.
+- Speed Walk reports each unchanged mastery gate directly: distance, steps, mean speed, survival, collisions, and independent confirmations.
+- Training semantics advance to `0x0007'4901` under species-owned `runner-v0749-*` paths. v0.7.48 contributes lifetime totals only; saved `{species}.rig` anatomy remains compatible.
+- See `docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md`.
 
 ## v0.7.48 Contact-led Human gait and physical species art
 
@@ -303,6 +315,7 @@ Runner.exe --diagnose-ui
 Runner.exe --diagnose-art
 Runner.exe --diagnose-rig-training
 Runner.exe --diagnose-walk-eye
+Runner.exe --diagnose-speed-walk
 Runner.exe --diagnose-course
 Runner.exe --diagnose-hybrid-brain
 Runner.exe --course-eye-test
@@ -313,7 +326,9 @@ Runner.exe --art-eye-test=dog
 Runner.exe --art-eye-test=hexapod
 ```
 
-`--diagnose-rig-training` runs the v0.7.43 cold-start learner across the four production subjects: Human, Chicken, Dog, and Hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority. Chicken must exceed 10 m / 14 avian gait cycles, Human 18 m / 16 physical steps, Dog 10 m / 18 completed four-support transfers, and Hexapod 14 m / 22 completed six-support transfers after lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--walk-eye-test` independently cold-trains the default eight-motor Human, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, the 0.28x-3.60x manual range, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all four production orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, immutable authored fine/macro cells, explicit falling-cell mutation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--diagnose-hybrid-brain` verifies physics-observed falling-object dodges while walking, idle, and turning; harmless-object rejection; blocked-exit fallback; policy saturation bounds; hole escape; all multi-support topologies; and exact 20/60/240 Hz planning equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test=<human|chicken|dog|hexapod>` opens the selected production subject in frozen strict side elevation at one shared Human-referenced world scale; bare `--art-eye-test` remains the Human compatibility spelling.
+`--diagnose-rig-training` runs the v0.7.43 cold-start learner across the four production subjects: Human, Chicken, Dog, and Hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority. Chicken must exceed 10 m / 14 avian gait cycles, Human 18 m / 16 physical steps, Dog 10 m / 18 completed four-support transfers, and Hexapod 14 m / 22 completed six-support transfers after lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--diagnose-speed-walk` executes the real two-lesson graph: it retains a strict raw Walk controller, transfers those weights into Speed Walk, trains a fresh 1,200-update specialization, and requires six-seed raw/static-world distance, cadence, speed, survival, and collision mastery. `--walk-eye-test` independently cold-trains the default eight-motor Human, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, the 0.28x-3.60x manual range, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all four production orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, immutable authored fine/macro cells, explicit falling-cell mutation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--diagnose-hybrid-brain` verifies physics-observed falling-object dodges while walking, idle, and turning; harmless-object rejection; blocked-exit fallback; policy saturation bounds; hole escape; all multi-support topologies; and exact 20/60/240 Hz planning equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test=<human|chicken|dog|hexapod>` opens the selected production subject in frozen strict side elevation at one shared Human-referenced world scale; bare `--art-eye-test` remains the Human compatibility spelling.
+Speed Walk completion and `--diagnose-speed-walk` restore and replay the retained champion on fresh Raw/static-world seeds; later exploratory drift is never substituted for the controller the trainer actually keeps.
+
 
 ## Repository records
 

@@ -23,18 +23,7 @@ namespace runner::rl
         case sim::CourseStage::shuttle:
             return shuttle_mastery_evidence(metrics);
         case sim::CourseStage::uneven:
-        {
-            const float required_speed = gait_task_ == sim::GaitTask::walk ? 0.32f
-                : gait_task_ == sim::GaitTask::speed_walk ? 0.72f
-                : gait_task_ == sim::GaitTask::walk_run_transition ? 0.62f
-                : 1.05f;
-            return metrics.evaluation_distance >= gait_task_mastery_distance(gait_task_)
-                && metrics.evaluation_stride_events
-                    >= gait_task_mastery_stride_events(gait_task_)
-                && metrics.evaluation_speed >= required_speed
-                && metrics.evaluation_survival >= 18.0f
-                && metrics.evaluation_collisions <= 1.0f;
-        }
+            return gait_task_mastery_evidence(metrics, gait_task_);
         case sim::CourseStage::crouch_walk:
             return metrics.evaluation_duck_recoveries >= 1.0f
                 && metrics.evaluation_stride_events >= 8.0f

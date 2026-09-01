@@ -61,6 +61,10 @@ namespace runner::rl
             float candidate_strides{};
             float candidate_distance{};
             float candidate_survival{};
+            float minimum_distance{
+                std::numeric_limits<float>::infinity() };
+            float minimum_speed{
+                std::numeric_limits<float>::infinity() };
         };
 
         explicit ParallelState(PpoTrainer& trainer, std::size_t count)
@@ -106,8 +110,10 @@ namespace runner::rl
                 float current_value_coefficient{};
                 float current_entropy_coefficient{};
                 sim::CourseStage current_stage{ sim::CourseStage::balance };
+                sim::GaitTask current_gait_task{ sim::GaitTask::walk };
                 float current_difficulty{};
                 std::uint64_t current_evaluation_sequence{};
+                sim::GuidanceMode current_guidance_mode{ sim::GuidanceMode::assisted };
 
                 {
                     std::unique_lock lock(mutex);
@@ -128,8 +134,10 @@ namespace runner::rl
                     current_value_coefficient = value_coefficient;
                     current_entropy_coefficient = entropy_coefficient;
                     current_stage = stage;
+                    current_gait_task = gait_task;
                     current_difficulty = difficulty;
                     current_evaluation_sequence = evaluation_sequence;
+                    current_guidance_mode = guidance_mode;
                 }
 
                 if (current_job == Job::gradient)
@@ -193,22 +201,20 @@ namespace runner::rl
                             const std::uint64_t seed = evaluation_seed(
                                 agent, current_evaluation_sequence);
                             sim::Environment environment{ owner.blueprint_, seed };
-                            environment.set_course(current_stage, current_difficulty);
-                            // Evaluation and the visible preview answer the same
-                            // question: can this policy move its authored rig?
-                            // Curriculum conveyor pressure belongs only to rollouts.
-                            environment.set_course_motion_enabled(false);
+                            // After the Human gait handoff, retained candidates
+                            // answer the exact Raw question instead of being
+                            // selected through production topology filters.
+                            configure_policy_evaluation_environment(environment,
+                                current_stage, current_difficulty,
+                                current_gait_task, current_guidance_mode);
                             float episode_reward{};
                             for (int step = 0; step < maximum_steps; ++step)
                             {
                                 const auto raw_action = local.deterministic_action(
                                     environment.observation());
-                                // Mastery and preview must exercise the same shipped
-                                // controller. Zero authority removes curriculum
-                                // teaching while retaining production safety and
-                                // topology coordination around the learned policy.
                                 const auto action = effective_policy_action(
-                                    environment, raw_action, current_stage, 0.0f);
+                                    environment, raw_action, current_stage, 0.0f,
+                                    current_guidance_mode);
                                 const sim::StepResult result = environment.step(action);
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;
@@ -249,6 +255,14 @@ namespace runner::rl
                                     0.0f, environment.distance_travelled());
                                 totals.candidate_survival += environment.elapsed_seconds();
                             }
+                            const float environment_distance = std::max(
+                                0.0f, environment.distance_travelled());
+                            const float environment_speed = environment_distance
+                                / std::max(environment.elapsed_seconds(), 0.001f);
+                            totals.minimum_distance = std::min(
+                                totals.minimum_distance, environment_distance);
+                            totals.minimum_speed = std::min(
+                                totals.minimum_speed, environment_speed);
                             totals.reward += episode_reward;
                             totals.distance += environment.distance_travelled();
                             totals.survival += environment.elapsed_seconds();
@@ -311,8 +325,10 @@ namespace runner::rl
         float value_coefficient{};
         float entropy_coefficient{};
         sim::CourseStage stage{ sim::CourseStage::balance };
+        sim::GaitTask gait_task{ sim::GaitTask::walk };
         float difficulty{ 0.25f };
         std::uint64_t evaluation_sequence{};
+        sim::GuidanceMode guidance_mode{ sim::GuidanceMode::assisted };
     };
 
     void PpoTrainer::initialize_parallel_workers()
@@ -426,8 +442,13 @@ namespace runner::rl
             state.completed = 0;
             state.active_workers = std::min({ active_worker_count_, state.worker_count, evaluation_agents });
             state.stage = course_stage_;
+            state.gait_task = gait_task_;
             state.difficulty = course_difficulty_;
             state.evaluation_sequence = evaluation_sequence;
+            state.guidance_mode = foundational_walk_uses_raw_evaluation(
+                    lesson_update_, course_stage_, blueprint_)
+                ? sim::GuidanceMode::raw_policy_audit
+                : sim::GuidanceMode::assisted;
             ++state.generation;
         }
         state.start_cv.notify_all();
@@ -482,6 +503,10 @@ namespace runner::rl
             totals.candidate_strides += local.candidate_strides;
             totals.candidate_distance += local.candidate_distance;
             totals.candidate_survival += local.candidate_survival;
+            totals.minimum_distance = std::min(
+                totals.minimum_distance, local.minimum_distance);
+            totals.minimum_speed = std::min(
+                totals.minimum_speed, local.minimum_speed);
         }
 
         const float inverse_agents = 1.0f / static_cast<float>(evaluation_agents);
@@ -528,22 +553,18 @@ namespace runner::rl
         if (sim::stage_requires_forward_gait(course_stage_)
             && totals.candidate_runs > 0u && totals.candidate_strides >= 1.0f)
         {
-            const bool paired = blueprint_.paired_leg_chains();
-            incremental_quality = paired
-                ? pack_quality(
-                    static_cast<std::uint16_t>(std::min<float>(
-                        totals.candidate_strides, 65535.0f)),
-                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
-                        totals.candidate_runs, 65535u)),
-                    quality_bucket(totals.candidate_distance),
-                    quality_bucket(totals.candidate_survival))
-                : pack_quality(
-                    quality_bucket(totals.candidate_distance),
-                    static_cast<std::uint16_t>(std::min<std::uint32_t>(
-                        totals.candidate_runs, 65535u)),
-                    static_cast<std::uint16_t>(std::min<float>(
-                        totals.candidate_strides, 65535.0f)),
-                    quality_bucket(totals.candidate_survival));
+            const bool robust_translation_task = blueprint_.paired_leg_chains()
+                && gait_task_ != sim::GaitTask::walk;
+            const float ranked_distance = robust_translation_task
+                && std::isfinite(totals.minimum_distance)
+                ? totals.minimum_distance : totals.candidate_distance;
+            const float ranked_speed = robust_translation_task
+                && std::isfinite(totals.minimum_speed)
+                ? totals.minimum_speed : metrics_.evaluation_speed;
+            incremental_quality = gait_task_incremental_quality(gait_task_,
+                blueprint_.paired_leg_chains(), totals.candidate_runs,
+                totals.candidate_strides, ranked_distance,
+                totals.candidate_survival, ranked_speed);
         }
         metrics_.evaluation_quality_key = sim::stage_requires_forward_gait(course_stage_)
             ? (incremental_quality & ~strict_evaluation_quality_bit)

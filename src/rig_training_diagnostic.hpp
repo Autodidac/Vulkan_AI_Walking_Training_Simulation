@@ -116,4 +116,28 @@ namespace runner::diagnostics
         std::uint64_t updates = 1200u);
     [[nodiscard]] WalkEyeTestProof run_walk_eye_test_proof(
         std::uint64_t updates = 1200u);
+
+    struct SpeedWalkGraphProof
+    {
+        std::uint64_t walk_updates{};
+        std::uint64_t walk_retained_update{};
+        std::uint64_t speed_walk_updates{};
+        std::uint64_t speed_walk_retained_update{};
+        float speed_walk_retained_distance{};
+        float distance{};
+        float stride_events{};
+        float speed{};
+        float survival{};
+        float collisions{};
+        std::uint32_t invalid_runs{};
+        std::uint32_t rejection_mask{};
+        float teacher_authority{};
+        bool speed_walk_retained{};
+        bool walk_retained{};
+        bool raw_evaluation{};
+        bool course_motion_enabled{};
+        bool passed{};
+    };
+    [[nodiscard]] SpeedWalkGraphProof run_speed_walk_graph_proof(
+        std::uint64_t updates_per_lesson = 1200u);
 }

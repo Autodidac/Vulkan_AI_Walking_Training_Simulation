@@ -1003,6 +1003,71 @@ namespace runner
                 canvas.triangle(surface_a, band_b, band_a, band_color);
             }
 
+            // Draw the canonical 16-byte SandHybrid cells, not a decorative
+            // surface ribbon. Only the camera-visible rows and columns are
+            // visited; physics and presentation read the same cell storage.
+            const float ground_screen_y = viewport.position.y
+                + viewport.size.y * view_camera::live_ground_fraction;
+            const float visible_world_top =
+                (ground_screen_y - viewport.position.y) / scale;
+            const float visible_world_bottom =
+                (ground_screen_y - (viewport.position.y + viewport.size.y)) / scale;
+            const int first_row = std::clamp(static_cast<int>(std::floor(
+                (visible_world_bottom - sim::DeformableTerrain::world_bottom)
+                    / surface_step)), 0,
+                static_cast<int>(sim::DeformableTerrain::vertical_cell_count) - 1);
+            const int last_row = std::clamp(static_cast<int>(std::ceil(
+                (visible_world_top - sim::DeformableTerrain::world_bottom)
+                    / surface_step)), 0,
+                static_cast<int>(sim::DeformableTerrain::vertical_cell_count) - 1);
+            const int first_column = static_cast<int>(std::floor(left / surface_step));
+            const int last_column = static_cast<int>(std::ceil(right / surface_step));
+            for (int row = first_row; row <= last_row; ++row)
+            {
+                bool run_active = false;
+                int run_begin = first_column;
+                float run_fill = 0.0f;
+                sandhybrid::Material run_material = sandhybrid::Material::empty;
+                for (int signed_column = first_column;
+                    signed_column <= last_column + 1; ++signed_column)
+                {
+                    float fill = 0.0f;
+                    sandhybrid::Material material = sandhybrid::Material::empty;
+                    bool occupied = false;
+                    if (signed_column <= last_column)
+                    {
+                        const std::size_t column =
+                            sim::DeformableTerrain::wrap_column(
+                                static_cast<std::ptrdiff_t>(signed_column));
+                        const sim::DeformableTerrain::FineCell& cell =
+                            environment.terrain().fine_cell(column,
+                                static_cast<std::size_t>(row));
+                        fill = cell.fill;
+                        material = cell.material();
+                        occupied = fill > 1.0e-6f
+                            && material != sandhybrid::Material::empty
+                            && material != sandhybrid::Material::atmosphere;
+                    }
+                    if (run_active && occupied && material == run_material
+                        && std::abs(fill - run_fill) <= 1.0e-6f)
+                        continue;
+                    if (run_active)
+                    {
+                        const float x0 = static_cast<float>(run_begin) * surface_step;
+                        const float x1 = static_cast<float>(signed_column) * surface_step;
+                        const float y0 = sim::DeformableTerrain::row_world_bottom(
+                            static_cast<std::size_t>(row));
+                        draw_world_color(x0, y0, x1,
+                            y0 + surface_step * run_fill,
+                            material_color(run_material));
+                    }
+                    run_active = occupied;
+                    run_begin = signed_column;
+                    run_fill = fill;
+                    run_material = material;
+                }
+            }
+
             for (float x = first_surface_x; x < right; x += surface_step)
             {
                 const float next_x = x + surface_step;
@@ -1031,69 +1096,11 @@ namespace runner
                 const Vec2 b = world_to_screen({ next_x, surface }, viewport, camera, scale);
                 canvas.line(a, b, 1.5f, rgb(0x66d4ef, 0.90f));
             }
-
-            if (environment.course_stage() >= sim::CourseStage::uneven)
-            {
-                const float region_step = 0.35f;
-                float run_begin = left;
-                sim::TerrainRegion run_region = environment.terrain_region_at(left);
-                int region_lane = 0;
-                float previous_label_right = viewport.position.x - 100.0f;
-                auto draw_region_label = [&](float begin, float end,
-                    sim::TerrainRegion region)
-                {
-                    if (end - begin < 2.0f)
-                        return;
-                    const float x = 0.5f * (begin + end);
-                    const float ground = environment.ground_height_at(x);
-                    const Vec2 ground_anchor = world_to_screen(
-                        { x, ground }, viewport, camera, scale);
-                    const Vec2 anchor = world_to_screen(
-                        { x, ground + 0.42f
-                            + static_cast<float>(region_lane % 2) * 0.26f },
-                        viewport, camera, scale);
-                    constexpr float label_width = 150.0f;
-                    const float label_x = clamp(anchor.x - label_width * 0.5f,
-                        viewport.position.x + 4.0f,
-                        viewport.position.x + viewport.size.x - label_width - 4.0f);
-                    const Rect label{ { label_x, anchor.y - 22.0f },
-                        { label_width, 20.0f } };
-                    if (label.position.y >= viewport.position.y + 2.0f
-                        && label.position.x >= previous_label_right + 8.0f)
-                    {
-                        const Vec2 tether{ clamp(ground_anchor.x,
-                            label.position.x + 6.0f,
-                            label.position.x + label.size.x - 6.0f),
-                            label.position.y + label.size.y };
-                        canvas.line(ground_anchor, tether, 1.25f,
-                            region == sim::TerrainRegion::shallow_water ? accent_dim : yellow);
-                        add_rounded_rect(canvas, label, 3.0f, rgb(0x101820, 0.86f),
-                            region == sim::TerrainRegion::shallow_water ? accent : yellow, 1.0f);
-                        add_text_fit(canvas, label.position + Vec2{ 5.0f, 4.0f },
-                            sim::terrain_region_name(region), 0.66f,
-                            region == sim::TerrainRegion::shallow_water ? accent : yellow,
-                            label.size.x - 10.0f, 0.56f);
-                        previous_label_right = label.position.x + label.size.x;
-                        ++region_lane;
-                    }
-                };
-                for (float x = left + region_step; x <= right; x += region_step)
-                {
-                    const sim::TerrainRegion region = environment.terrain_region_at(x);
-                    if (region == run_region)
-                        continue;
-                    draw_region_label(run_begin, x, run_region);
-                    run_begin = x;
-                    run_region = region;
-                }
-                draw_region_label(run_begin, right, run_region);
-            }
         }
 
         void draw_course_reference(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
-            const float progress = environment.course_progress();
             const float half_view = viewport.size.x * 0.5f / scale;
             const float left = camera - half_view - 2.0f;
             const float right = camera + half_view + 2.0f;
@@ -1121,29 +1128,32 @@ namespace runner
                 return;
             }
             const float marker_spacing = ui_layout::course_reference_marker_spacing_m(distance_units);
-            const int first_marker = static_cast<int>(std::floor((left + progress) / marker_spacing));
-            const int last_marker = static_cast<int>(std::ceil((right + progress) / marker_spacing));
+            const int first_marker = static_cast<int>(std::floor(left / marker_spacing));
+            const int last_marker = static_cast<int>(std::ceil(right / marker_spacing));
             for (int index = first_marker; index <= last_marker; ++index)
             {
                 if (index < 0)
                     continue;
                 const float distance = static_cast<float>(index) * marker_spacing;
-                const float x = distance - progress;
+                const float x = distance;
                 const float ground = environment.ground_height_at(x);
                 const Vec2 base = world_to_screen({ x, ground }, viewport, camera, scale);
-                const Vec2 top = world_to_screen({ x, ground + 0.66f }, viewport, camera, scale);
-                canvas.line(base, top, 3.0f, accent_dim);
-                Vec2 sign_position = top + Vec2{
-                    -46.0f + ui_layout::course_reference_marker_label_offset_pixels(index),
-                    -25.0f };
+                const Vec2 tick = world_to_screen({ x, ground + 0.18f },
+                    viewport, camera, scale);
+                canvas.line(base, tick, 2.0f, accent_dim);
+                Vec2 sign_position = base + Vec2{
+                    (index == 0 ? -88.0f : -41.0f)
+                        + ui_layout::course_reference_marker_label_offset_pixels(index),
+                    -23.0f };
                 sign_position.x = clamp(sign_position.x,
                     viewport.position.x + 6.0f,
-                    viewport.position.x + viewport.size.x - 98.0f);
-                const Rect sign{ sign_position, { 92.0f, 25.0f } };
-                if (index == 0)
-                    canvas.line(top, sign.position + Vec2{ sign.size.x, 12.5f },
-                        2.0f, accent_dim);
-                add_rounded_rect(canvas, sign, 5.0f, rgb(0x102431, 0.97f), accent, 1.0f);
+                    viewport.position.x + viewport.size.x - 88.0f);
+                const Rect sign{ sign_position, { 82.0f, 22.0f } };
+                canvas.line(base, sign.position + Vec2{
+                    index == 0 ? sign.size.x : sign.size.x * 0.5f,
+                    sign.size.y }, 1.25f, accent_dim);
+                add_rounded_rect(canvas, sign, 4.0f,
+                    rgb(0x102431, 0.97f), accent, 1.0f);
                 const std::string marker_label = index == 0 ? "START"
                     : distance_units == ui_layout::DistanceUnits::metric
                         ? (distance >= 1000.0f
@@ -1152,8 +1162,8 @@ namespace runner
                         : (distance >= 1609.344f
                             ? std::format("{:.2f} MI", distance / 1609.344f)
                             : std::format("{:.0f} FT", distance * 3.2808399f));
-                add_text_fit(canvas, sign.position + Vec2{ 6.0f, 5.0f },
-                    marker_label, 0.88f, white, sign.size.x - 12.0f, 0.78f);
+                add_text_fit(canvas, sign.position + Vec2{ 5.0f, 4.0f },
+                    marker_label, 0.72f, white, sign.size.x - 10.0f, 0.64f);
             }
         }
 
@@ -1664,19 +1674,16 @@ namespace runner
                                 {
                                     const float support_span = length(center - proximal);
                                     const float plate_span = length(toe - center);
-                                    const float width = std::clamp(
-                                        std::max({ radius * 2.20f,
-                                            support_span * 0.36f,
-                                            plate_span * 1.18f })
-                                            * assembled_art_scale,
-                                        art::scaled_pixels(20.0f, art_pixel_scale),
-                                        art::scaled_pixels(38.0f, art_pixel_scale));
-                                    const float height = width
-                                        * static_cast<float>(optional_foot_art.height)
-                                        / static_cast<float>(optional_foot_art.width);
+                                    // Heel/ball/toe geometry owns boot size. Screen
+                                    // zoom and the torso assembly scale must never
+                                    // inflate the foot beyond its physical chain.
+                                    const art::BootArtDimensions boot =
+                                        art::articulated_boot_dimensions(
+                                            plate_span, support_span, radius);
                                     const art::OrientedArtTransform transform =
                                         art::articulated_boot_transform(center, toe,
-                                            width, height, environment.facing_direction());
+                                            boot.width, boot.height,
+                                            environment.facing_direction());
                                     draw_oriented_pixel_art(canvas, optional_foot_art,
                                         transform.beginning, transform.ending,
                                         transform.thickness,
@@ -1778,15 +1785,14 @@ namespace runner
                         ? 23.0f : has_distal_motor ? 9.0f : 8.0f;
                     const float maximum_thickness = support_limb
                         ? 70.0f : has_distal_motor ? 30.0f : 26.0f;
+                    const float limb_assembly_scale = support_limb
+                        ? assembled_art_scale : 1.0f;
                     const float thickness = std::clamp(
-                        span * thickness_ratio * assembled_art_scale,
+                        span * thickness_ratio * limb_assembly_scale,
                         art::scaled_pixels(minimum_thickness, art_pixel_scale),
                         art::scaled_pixels(maximum_thickness, art_pixel_scale));
-                    const float authored_joint_overlap = std::max(
-                        art::skin_envelope_dimensions(
-                            span, 0.0f, art_pixel_scale).joint_overlap,
-                        thickness * (support_limb ? 0.36f
-                            : has_distal_motor ? 0.42f : 0.30f));
+                    const float authored_joint_overlap =
+                        art::fitted_joint_overlap(span, thickness, support_limb);
                     beginning = beginning - axis * authored_joint_overlap;
                     ending = ending + axis * authored_joint_overlap;
                     const bool transverse_mirror =
@@ -1802,7 +1808,7 @@ namespace runner
                         const art::HandArtDimensions hand =
                             art::hand_art_dimensions(thickness,
                                 optional_hand_art.width, optional_hand_art.height,
-                                art_pixel_scale);
+                                art_pixel_scale, span);
                         draw_oriented_pixel_art(canvas, optional_hand_art,
                             terminal_joint - axis * hand.wrist_overlap,
                             terminal_joint + axis * (hand.length
@@ -2300,12 +2306,25 @@ namespace runner
                         metrics.evaluation_survival);
                     break;
                 case sim::CourseStage::shuttle:
-                case sim::CourseStage::uneven:
                     evidence = std::format(
                         "CURRENT EVIDENCE: DISTANCE {}   STRIDE EVENTS {:.0f}   SURVIVAL {:.1f} S",
                         format_distance(std::max(0.0f, metrics.evaluation_distance)),
                         metrics.evaluation_stride_events,
                         metrics.evaluation_survival);
+                    break;
+                case sim::CourseStage::uneven:
+                    evidence = std::format(
+                        "CURRENT: DIST {:.1f}/{:.0f} M   STEPS {:.0f}/{:.0f}   SPEED {:.2f}/{:.2f} M/S   SURV {:.1f}/18 S   COLL {:.0f}/1   CONFIRM {}/{}",
+                        std::max(0.0f, metrics.evaluation_distance),
+                        rl::gait_task_mastery_distance(autonomy.gait_task),
+                        metrics.evaluation_stride_events,
+                        rl::gait_task_mastery_stride_events(autonomy.gait_task),
+                        std::max(0.0f, metrics.evaluation_speed),
+                        rl::gait_task_mastery_speed(autonomy.gait_task),
+                        std::max(0.0f, metrics.evaluation_survival),
+                        std::max(0.0f, metrics.evaluation_collisions),
+                        autonomy.mastery_streak,
+                        rl::required_mastery_confirmations(autonomy.stage));
                     break;
                 case sim::CourseStage::crouch_walk:
                     evidence = std::format(
@@ -2528,18 +2547,45 @@ namespace runner
                         authority.mandatory_joint_cluster),
                     0.68f, muted, usable_width, 0.54f);
                 cursor.y += 21.0f;
+                const std::uint32_t global_cell_x =
+                    sim::DeformableTerrain::global_cell_x(debug_root_x);
+                const float debug_root_y = debug_environment.particles().empty()
+                    ? 0.0f : debug_environment.particles()[
+                        debug_environment.blueprint().root_node].position.y;
+                const std::uint32_t global_cell_y =
+                    sim::DeformableTerrain::global_cell_y(debug_root_y);
                 add_text_fit(canvas, cursor,
-                    std::format("STANCE SLIP {:.3f} M/S   COURSE MOTION {}   GAIT CYCLES {}",
+                    std::format("STANCE SLIP {:.3f} M/S   STATIC WORLD CELL {},{}   GAIT CYCLES {}",
                         debug_environment.stance_slip_speed(),
-                        debug_environment.course_motion_enabled() ? "ON" : "OFF",
+                        global_cell_x, global_cell_y,
                         debug_environment.gait_cycles()),
-                    0.68f, debug_environment.course_motion_enabled() ? yellow : green,
-                    usable_width, 0.54f);
+                    0.68f, green, usable_width, 0.54f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
-                    std::format("ASSISTED EVALUATION {}   BEST ASSISTED {}",
+                    std::format("WEAPON {}   STOPPED {}   AIM CMD/ACT {:+.1f}/{:+.1f} DEG   SETTLE {:.2f} S   MISSES {}",
+                        sim::equipment_state_name(debug_environment.equipment_state()),
+                        debug_environment.equipment_stopped() ? "YES" : "NO",
+                        debug_environment.equipment_commanded_aim_angle() * 180.0f / pi,
+                        debug_environment.equipment_aim_angle() * 180.0f / pi,
+                        debug_environment.equipment_aim_settle_seconds(),
+                        debug_environment.shots_missed()),
+                    0.68f, debug_environment.equipment_engagement_ready()
+                        ? green : muted, usable_width, 0.54f);
+                cursor.y += 21.0f;
+                const bool raw_evaluation =
+                    rl::foundational_walk_uses_raw_evaluation(
+                        autonomy.stage_fresh_updates, autonomy.stage,
+                        trainer.blueprint());
+                const std::size_t raw_rollouts =
+                    rl::foundational_walk_raw_rollout_count(
+                        autonomy.stage_fresh_updates, autonomy.stage,
+                        trainer.blueprint(), trainer.environment_count());
+                add_text_fit(canvas, cursor,
+                    std::format("ACTIVE {} EVALUATION {}   RETAINED BEST {}   RAW ROLLOUTS {}/{}",
+                        raw_evaluation ? "RAW POLICY" : "ASSISTED",
                         raw_number(metrics.evaluation_score),
-                        raw_number(metrics.best_evaluation_score)),
+                        raw_number(metrics.best_evaluation_score),
+                        raw_rollouts, trainer.environment_count()),
                     0.72f, muted, usable_width, 0.58f);
                 cursor.y += 21.0f;
                 add_text_fit(canvas, cursor,
@@ -2767,11 +2813,22 @@ namespace runner
                     displayed_difficulty * 100.0f),
                 1.42f, white, text_width, 1.00f);
             line.y += 31.0f;
+            float displayed_world_x = 0.0f;
+            float displayed_world_y = 0.0f;
+            if (!environment.particles().empty())
+            {
+                const sim::Particle& root = environment.particles()[
+                    environment.blueprint().root_node];
+                displayed_world_x = root.position.x;
+                displayed_world_y = root.position.y;
+            }
             add_text_fit(canvas, line,
-                std::format("SPEED {}   DIST {}   COURSE {}",
+                std::format("SPEED {}   DIST {}   WORLD X {:.2f} M   CELL {},{}",
                     format_speed(environment.forward_speed()),
                     format_distance(environment.distance_travelled()),
-                    format_distance(environment.course_progress())),
+                    displayed_world_x,
+                    sim::DeformableTerrain::global_cell_x(displayed_world_x),
+                    sim::DeformableTerrain::global_cell_y(displayed_world_y)),
                 0.92f, environment.valid_motion() ? green : danger, text_width);
             line.y += 24.0f;
             add_text_fit(canvas, line,

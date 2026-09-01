@@ -209,10 +209,10 @@ int main()
             "minimum_shoulder", "envelope.chest_radius",
             "assembled_art_scale", "art::scaled_pixels", "presentation_side",
             "art::hand_art_dimensions",
-            "authored_joint_overlap", "has_distal_motor ? 0.42f : 0.30f",
+            "authored_joint_overlap", "art::fitted_joint_overlap",
             "Modular armor is the exclusive presentation",
             "Authoritative graph bones stay visible beneath authored",
-            "Raw fine-cell bottoms never render." })
+            "canonical 16-byte SandHybrid cells" })
         require(app.find(reference) != std::string::npos,
             "topology-bound remade-art renderer contract is missing");
     require(app.find("draw_pixel_art(canvas, optional_foot_art")
@@ -221,7 +221,6 @@ int main()
                 == std::string::npos
             && app.find("draw_segment_art") == std::string::npos
             && app.find("rig.motors[4]") == std::string::npos
-            && app.find(".fine_cell(") == std::string::npos
             && app.find("neutral connected wrap") == std::string::npos
             && app.find("pelvis_center") == std::string::npos
             && app.find("rgb(0x202a31") == std::string::npos
@@ -457,13 +456,19 @@ int main()
             && policy.find("manipulator_chain_count == 2u")
                 != std::string::npos,
         "policy assistance still assigns manipulator roles by motor slot");
-    require(parallel.find("const auto action = effective_policy_action(")
+    require(parallel.find("configure_policy_evaluation_environment(environment,")
                 != std::string::npos
-            && parallel.find("environment, raw_action, current_stage, 0.0f)")
+            && parallel.find("current_gait_task, current_guidance_mode)")
+                != std::string::npos
+            && parallel.find("const auto action = effective_policy_action(")
+                != std::string::npos
+            && parallel.find("environment, raw_action, current_stage, 0.0f,")
+                != std::string::npos
+            && parallel.find("foundational_walk_uses_raw_evaluation(")
                 != std::string::npos
             && parallel.find("const auto action = raw_action;")
                 == std::string::npos,
-        "mastery evaluation does not use the zero-authority production controller");
+        "mastery evaluation lost its selected gait or staged Raw production controller");
 
     const std::string generator = read_text(
         root / "tools" / "generate_runner_armor_assets.py");

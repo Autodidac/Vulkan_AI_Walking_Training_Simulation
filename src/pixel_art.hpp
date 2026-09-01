@@ -60,6 +60,12 @@ namespace runner::art
         float wrist_overlap{};
     };
 
+    struct BootArtDimensions
+    {
+        float width{};
+        float height{};
+    };
+
     struct HelmetArtDimensions
     {
         float height{};
@@ -106,7 +112,18 @@ namespace runner::art
             return has_distal_motor ? 0.50f : 0.46f;
         // Human arms remain visibly articulated without letting the forearm
         // and hand dominate the saved neutral silhouette.
-        return has_distal_motor ? 0.37f : 0.20f;
+        return has_distal_motor ? 0.31f : 0.17f;
+    }
+
+    [[nodiscard]] inline float fitted_joint_overlap(float limb_span,
+        float limb_thickness, bool support_limb) noexcept
+    {
+        const float span = std::isfinite(limb_span) ? std::max(0.0f, limb_span) : 0.0f;
+        const float thickness = std::isfinite(limb_thickness)
+            ? std::max(0.0f, limb_thickness) : 0.0f;
+        const float span_limit = span * (support_limb ? 0.075f : 0.055f);
+        return std::min(span_limit,
+            thickness * (support_limb ? 0.22f : 0.16f));
     }
 
     [[nodiscard]] inline HelmetArtDimensions helmet_art_dimensions(
@@ -125,21 +142,51 @@ namespace runner::art
 
     [[nodiscard]] inline HandArtDimensions hand_art_dimensions(
         float forearm_thickness, int source_width, int source_height,
-        float pixel_scale = 1.0f) noexcept
+        float pixel_scale = 1.0f, float forearm_span = 0.0f) noexcept
     {
-        const float minimum_thickness = scaled_pixels(10.0f, pixel_scale);
-        const float maximum_thickness = scaled_pixels(30.0f, pixel_scale);
+        const bool fitted_to_bone = std::isfinite(forearm_span)
+            && forearm_span > 1.0e-4f;
+        const float minimum_thickness = fitted_to_bone
+            ? forearm_span * 0.10f : scaled_pixels(10.0f, pixel_scale);
+        const float maximum_thickness = fitted_to_bone
+            ? forearm_span * 0.27f : scaled_pixels(30.0f, pixel_scale);
         const float thickness = std::clamp(
-            std::isfinite(forearm_thickness) ? forearm_thickness * 0.52f
+            std::isfinite(forearm_thickness) ? forearm_thickness * 0.48f
                 : scaled_pixels(16.0f, pixel_scale),
             minimum_thickness, maximum_thickness);
         const float aspect = source_width > 0 && source_height > 0
             ? std::clamp(static_cast<float>(source_width)
                 / static_cast<float>(source_height), 1.05f, 1.65f)
             : 1.40f;
-        const float length = std::clamp(thickness * aspect,
-            scaled_pixels(17.0f, pixel_scale), scaled_pixels(38.0f, pixel_scale));
-        return { length, thickness, length * 0.18f };
+        const float minimum_length = fitted_to_bone
+            ? forearm_span * 0.20f : scaled_pixels(17.0f, pixel_scale);
+        const float maximum_length = fitted_to_bone
+            ? forearm_span * 0.43f : scaled_pixels(38.0f, pixel_scale);
+        const float hand_length = std::clamp(
+            thickness * aspect, minimum_length, maximum_length);
+        const float wrist_overlap = fitted_to_bone
+            ? hand_length * 0.14f
+            : std::min(hand_length * 0.18f,
+                std::max(scaled_pixels(3.0f, pixel_scale), hand_length * 0.14f));
+        return { hand_length, thickness, wrist_overlap };
+    }
+
+    [[nodiscard]] inline BootArtDimensions articulated_boot_dimensions(
+        float heel_to_toe_span, float lower_leg_span, float joint_radius) noexcept
+    {
+        const float plate = std::isfinite(heel_to_toe_span)
+            ? std::max(0.0f, heel_to_toe_span) : 0.0f;
+        const float lower = std::isfinite(lower_leg_span)
+            ? std::max(0.0f, lower_leg_span) : 0.0f;
+        const float radius = std::isfinite(joint_radius)
+            ? std::max(0.0f, joint_radius) : 0.0f;
+        const float maximum_width = std::max(radius * 1.42f, lower * 0.88f);
+        const float width = std::clamp(
+            std::max(plate * 1.08f, radius * 1.72f),
+            radius * 1.40f, maximum_width);
+        const float height = std::clamp(width * 0.46f,
+            radius * 0.82f, std::max(radius * 0.84f, lower * 0.40f));
+        return { width, height };
     }
 
     [[nodiscard]] inline SkinEnvelopeDimensions skin_envelope_dimensions(

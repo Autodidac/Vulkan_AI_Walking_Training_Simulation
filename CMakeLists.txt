@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Epoch2DWalkEngine VERSION 0.7.48 LANGUAGES CXX)
+project(Epoch2DWalkEngine VERSION 0.7.49 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -230,6 +230,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md" "$<TARGET_FILE_DIR:Runner>/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         VERBATIM)
 
@@ -287,6 +288,7 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
@@ -634,6 +636,18 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0748ContactArt COMMAND RunnerV0748ContactArtTests)
     set_tests_properties(Runner.V0748ContactArt PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerV0749PhysicalCombatTerrainTests
+        tests/v0749_physical_combat_terrain_tests.cpp)
+    target_link_libraries(RunnerV0749PhysicalCombatTerrainTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0749PhysicalCombatTerrainTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(RunnerV0749PhysicalCombatTerrainTests PRIVATE
+        RUNNER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(RunnerV0749PhysicalCombatTerrainTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0749PhysicalCombatTerrainTests)
+    add_test(NAME Runner.V0749PhysicalCombatTerrain
+        COMMAND RunnerV0749PhysicalCombatTerrainTests)
+    set_tests_properties(Runner.V0749PhysicalCombatTerrain PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

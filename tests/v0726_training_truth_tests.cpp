@@ -28,7 +28,9 @@ int main() {
     const auto duck = rl::effective_policy_action(quad, full, sim::CourseStage::duck_press);
     if (std::abs(duck[4]) < 0.02f || std::abs(duck[6]) < 0.02f) return fail("quadruped front legs still zeroed");
     sim::Environment preview{quadruped, 0x727u}; preview.set_course(sim::CourseStage::uneven, 0.30f);
-    if (preview.course_speed() <= 0.0f) return fail("training course motion missing");
+    preview.set_course_motion_enabled(true);
+    if (preview.course_motion_enabled() || preview.course_speed() != 0.0f)
+        return fail("training course can still enable conveyor motion");
     preview.set_course_motion_enabled(false);
     if (preview.course_speed() != 0.0f || preview.course_progress() != 0.0f) return fail("preview conveyor still moving");
     rl::PpoTrainer trainer{humanoid, 8u, true}; trainer.train_one_update();

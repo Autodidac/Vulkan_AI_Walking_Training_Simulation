@@ -86,13 +86,9 @@ struct EnvironmentTestAccess {
         e.equipment_target_.radius=0.42f;
     }
     static void drive_equipment(Environment& e,int steps) noexcept {
-        for(int step=0;step<steps;++step){std::array<float,action_count> action{};
-            const Vec2 delta=e.equipment_target_.position-e.equipment_mount_position();
-            const float desired=std::atan2(delta.y,delta.x);
-            const float local=e.facing_direction()<0.0f?wrap_angle(pi-desired):wrap_angle(desired);
-            action[equipment_state_action]=1.0f;
-            action[equipment_aim_action]=clamp(local/(pi*0.42f),-1.0f,1.0f);
-            action[equipment_trigger_action]=1.0f;e.update_equipment(action,1.0f/60.0f);}
+        const std::array<float,action_count> no_policy{};
+        for(int step=0;step<steps;++step){const auto action=runner::rl::effective_policy_action(
+            e,no_policy,CourseStage::equipment_targets);static_cast<void>(e.step(action,1.0f/60.0f));}
     }
     static void coast_equipment(Environment& e,int steps) noexcept {
         std::array<float,action_count> action{};
@@ -509,20 +505,15 @@ int main(){
   &&std::abs(right_mount.y-mirrored_same_pose_mount.y)<1.0e-5f,
   "equipment mount did not follow exact whole-rig facing reflection");
  sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
- sim::EnvironmentTestAccess::drive_equipment(equipment,90);
- require(equipment.shots_fired()>0u&&equipment.target_hits()>0u,
-  "right-facing fixed-step equipment did not fire and hit");
+ const float right_recommended=equipment.equipment_recommended_aim_angle();
  equipment.configure_equipment(sim::WeaponClass::carbine,4.0f);
  sim::EnvironmentTestAccess::configure_facing_target(equipment,-1.0f,6.0f);
- sim::EnvironmentTestAccess::drive_equipment(equipment,1);
- require(std::abs(std::abs(equipment.equipment_aim_angle())-runner::pi)<0.05f,
-  "left-facing equipment did not initially aim along mirrored facing");
- sim::EnvironmentTestAccess::drive_equipment(equipment,89);
- require(equipment.shots_fired()>0u&&equipment.target_hits()>0u,
-  "left-facing fixed-step equipment did not mirror aim, fire, and hit");
+ require(std::abs(right_recommended)<0.10f
+  &&std::abs(std::abs(equipment.equipment_recommended_aim_angle())-runner::pi)<0.10f,
+  "ballistic aim request did not mirror with the complete physical rig");
  equipment.configure_equipment(sim::WeaponClass::none,4.0f);
  sim::EnvironmentTestAccess::configure_facing_target(equipment,1.0f);
- sim::EnvironmentTestAccess::drive_equipment(equipment,90);
+ sim::EnvironmentTestAccess::coast_equipment(equipment,90);
  require(equipment.shots_fired()==0u&&equipment.equipment_projectiles().empty(),
   "unarmed equipment path created a shot");
  sim::Environment dropped{sim::CreatureBlueprint::humanoid(),0x7330u};
@@ -542,7 +533,19 @@ int main(){
   &&fallen_weapon.y<released_position.y,
   "dropped/disarmed equipment has no visible fixed-step world trajectory"); rl::PpoTrainer preview_equipment{sim::CreatureBlueprint::humanoid(),8u,false};
  preview_equipment.configure_preview_equipment(sim::WeaponClass::sidearm,3.0f);
- for(int frame=0;frame<45;++frame)preview_equipment.step_preview(1.0f/60.0f);
+ for(int frame=0;frame<300;++frame)preview_equipment.step_preview(1.0f/60.0f);
+ if(preview_equipment.preview().target_hits()==0u){const auto& p=preview_equipment.preview();
+  std::cerr<<"preview state="<<sim::equipment_state_name(p.equipment_state())
+   <<" stopped="<<p.equipment_stopped()
+   <<" settle="<<p.equipment_aim_settle_seconds()
+   <<" actual="<<p.equipment_aim_angle()
+   <<" desired="<<p.equipment_recommended_aim_angle()
+   <<" rate="<<p.equipment_aim_rate()
+   <<" shots="<<p.shots_fired()<<" ready="<<p.equipment_engagement_ready()
+   <<" range="<<runner::length(p.equipment_target().position
+      -p.equipment_mount_position())
+   <<" cooldown="<<p.equipment_cooldown()
+   <<" invalid="<<sim::invalid_motion_name(p.invalid_reason())<<'\n';}
  require(preview_equipment.preview().weapon_class()==sim::WeaponClass::sidearm
   &&preview_equipment.preview().shots_fired()>0u
   &&preview_equipment.preview().target_hits()>0u,

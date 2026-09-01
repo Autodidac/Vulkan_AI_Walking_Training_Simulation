@@ -35,7 +35,16 @@ namespace runner::sim
 
         static void set_terrain_progress(Environment& environment, float progress) noexcept
         {
-            environment.elapsed_seconds_ = progress / environment.course_speed();
+            environment.elapsed_seconds_ = progress;
+            // Static-world fixtures move the physical rig to the requested
+            // course location. Terrain itself never translates under it.
+            for (Particle& particle : environment.particles_)
+            {
+                particle.position.x += progress;
+                particle.previous.x += progress;
+            }
+            environment.previous_pelvis_.x += progress;
+            environment.previous_root_for_path_.x += progress;
         }
 
         static void add_material(Environment& environment, MaterialParticle item)

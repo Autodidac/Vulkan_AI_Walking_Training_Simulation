@@ -172,6 +172,13 @@ namespace runner::rl
             sim::Environment& environment = environments_[environment_index];
             for (std::size_t step = 0; step < rollout_horizon; ++step)
             {
+                const sim::GuidanceMode rollout_guidance =
+                    foundational_walk_raw_rollout_environment(lesson_update_,
+                        course_stage_, blueprint_, environment_index,
+                        environment_count)
+                    ? sim::GuidanceMode::raw_policy_audit
+                    : sim::GuidanceMode::assisted;
+                environment.set_guidance_mode(rollout_guidance);
                 Transition& transition = rollout_[step * environment_count + environment_index];
                 transition.observation = environment.observation();
                 const PolicyNetwork::Evaluation evaluation = policy_.evaluate(transition.observation);
@@ -201,7 +208,8 @@ namespace runner::rl
                 transition.action = effective_policy_action(
                     environment, transition.action, course_stage_,
                     lesson_teacher_authority(
-                        lesson_update_, course_stage_, environment.blueprint()));
+                        lesson_update_, course_stage_, environment.blueprint()),
+                    rollout_guidance);
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
                 const sim::StepResult result = environment.step(transition.action);
                 transition.reward = result.reward;
@@ -948,21 +956,11 @@ namespace runner::rl
                 preview_guidance_mode_);
             if (preview_equipment_test_enabled_
                 && preview_.equipment_target().active)
-            {
-                const Vec2 target_delta = preview_.equipment_target().position
-                    - preview_.equipment_mount_position();
-                const float desired_world_angle = std::atan2(
-                    target_delta.y, target_delta.x);
-                const float local_angle = preview_.facing_direction() < 0.0f
-                    ? wrap_angle(pi - desired_world_angle)
-                    : wrap_angle(desired_world_angle);
-                action[sim::equipment_state_action] = 1.0f;
-                action[sim::equipment_aim_action] = clamp(
-                    local_angle / (pi * 0.42f), -1.0f, 1.0f);
-                action[sim::equipment_trigger_action] =
-                    preview_.target_hits() < preview_.equipment_hit_goal()
-                        ? 1.0f : -1.0f;
-            }
+                // Rig Lab exercises the same stop/arm/barrel/fire path as an
+                // autonomous combat lesson, independent of the selected gait.
+                action = effective_policy_action(preview_, raw_action,
+                    sim::CourseStage::equipment_targets, 1.0f,
+                    sim::GuidanceMode::assisted);
             const sim::StepResult result = preview_.step(action,
                 static_cast<float>(fixed_step));
             preview_accumulator_seconds_ -= fixed_step;

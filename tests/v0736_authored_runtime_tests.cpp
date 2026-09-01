@@ -2,6 +2,7 @@
 #include "autonomy.hpp"
 #include "simulation.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -18,12 +19,16 @@ struct EnvironmentTestAccess {
         environment.equipment_state_ = EquipmentState::ready;
         environment.equipment_cooldown_seconds_ = 0.0f;
         environment.target_hits_ = hits;
-        environment.equipment_aim_angle_ = 0.0f;
         const Vec2 mount = environment.equipment_mount_position();
-        environment.equipment_target_.position = mount + Vec2{
-            std::cos(aim_offset) * distance, std::sin(aim_offset) * distance };
+        environment.equipment_target_.position = mount + Vec2{ distance, 0.0f };
         environment.equipment_target_.radius = 0.48f;
         environment.equipment_target_.active = true;
+        environment.equipment_aim_angle_ = wrap_angle(
+            environment.equipment_recommended_aim_angle() + aim_offset);
+        environment.previous_equipment_aim_angle_ = environment.equipment_aim_angle_;
+        environment.equipment_aim_rate_ = 0.0f;
+        environment.equipment_aim_settle_seconds_ = 1.0f;
+        environment.equipment_stopped_ = true;
     }
     static bool target_active(const Environment& environment) noexcept {
         return environment.equipment_target_.active;
@@ -218,14 +223,16 @@ int main() {
         equipment.configure_equipment(weapon,
             (profile.minimum_engagement_distance
                 + profile.maximum_engagement_distance) * 0.5f);
+        const float physical_muzzle_safety_distance = std::max(
+            0.75f, profile.projectile_radius * 4.0f);
         sim::EnvironmentTestAccess::prepare_target(equipment,
-            profile.minimum_engagement_distance - 0.01f);
+            physical_muzzle_safety_distance - 0.01f);
         require(!equipment.equipment_engagement_ready(),
-            "weapon fired inside its minimum engagement distance");
+            "weapon fired inside its physical muzzle safety distance");
         sim::EnvironmentTestAccess::prepare_target(equipment,
-            profile.minimum_engagement_distance);
+            physical_muzzle_safety_distance);
         require(equipment.equipment_engagement_ready(),
-            "weapon rejected its minimum engagement boundary");
+            "weapon rejected its physical muzzle safety boundary");
         sim::EnvironmentTestAccess::prepare_target(equipment,
             profile.maximum_engagement_distance);
         require(equipment.equipment_engagement_ready(),
@@ -251,19 +258,35 @@ int main() {
     sim::Environment bounded_fire{ humanoid, 0x7368u };
     bounded_fire.set_course(sim::CourseStage::balance, 0.30f);
     bounded_fire.configure_equipment(sim::WeaponClass::sidearm, 4.0f);
-    sim::EnvironmentTestAccess::prepare_target(bounded_fire, 4.0f);
-    std::array<float, sim::action_count> trigger{};
-    trigger[sim::equipment_state_action] = 1.0f;
-    trigger[sim::equipment_trigger_action] = 1.0f;
-    for (int step = 0; step < 120; ++step)
-        static_cast<void>(bounded_fire.step(trigger, 1.0f / 60.0f));
+    const std::array<float, sim::action_count> neutral{};
+    for (int step = 0; step < 240; ++step)
+    {
+        const auto physical_aim = rl::effective_policy_action(bounded_fire,
+            neutral, sim::CourseStage::equipment_targets);
+        static_cast<void>(bounded_fire.step(physical_aim, 1.0f / 60.0f));
+    }
     const std::uint32_t shots_at_goal = bounded_fire.shots_fired();
+    if (bounded_fire.target_hits() != bounded_fire.equipment_hit_goal())
+        std::cerr << "physical aim state="
+            << sim::equipment_state_name(bounded_fire.equipment_state())
+            << " stopped=" << bounded_fire.equipment_stopped()
+            << " aim=" << bounded_fire.equipment_aim_angle()
+            << " recommended=" << bounded_fire.equipment_recommended_aim_angle()
+            << " error=" << bounded_fire.equipment_aim_error()
+            << " rate=" << bounded_fire.equipment_aim_rate()
+            << " settle=" << bounded_fire.equipment_aim_settle_seconds()
+            << " shots=" << shots_at_goal << " hits=" << bounded_fire.target_hits()
+            << " misses=" << bounded_fire.shots_missed() << '\n';
     require(bounded_fire.target_hits() == bounded_fire.equipment_hit_goal()
             && !sim::EnvironmentTestAccess::target_active(bounded_fire)
             && shots_at_goal >= 1u && shots_at_goal <= 2u,
         "range-gated sidearm did not stop on its hit goal");
     for (int step = 0; step < 120; ++step)
-        static_cast<void>(bounded_fire.step(trigger, 1.0f / 60.0f));
+    {
+        const auto physical_aim = rl::effective_policy_action(bounded_fire,
+            neutral, sim::CourseStage::equipment_targets);
+        static_cast<void>(bounded_fire.step(physical_aim, 1.0f / 60.0f));
+    }
     require(bounded_fire.shots_fired() == shots_at_goal,
         "held trigger resumed nonstop firing after goal completion");
 

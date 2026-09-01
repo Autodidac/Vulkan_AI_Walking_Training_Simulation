@@ -162,6 +162,19 @@ namespace runner::rl
             && metrics.evaluation_collisions <= 1.0f;
     }
 
+    [[nodiscard]] inline bool gait_task_mastery_evidence(
+        const TrainingMetrics& metrics, sim::GaitTask task) noexcept
+    {
+        return metrics.evaluation_valid
+            && metrics.evaluation_quality_key != 0u
+            && metrics.evaluation_distance >= gait_task_mastery_distance(task)
+            && metrics.evaluation_stride_events
+                >= gait_task_mastery_stride_events(task)
+            && metrics.evaluation_speed >= gait_task_mastery_speed(task)
+            && metrics.evaluation_survival >= 18.0f
+            && metrics.evaluation_collisions <= 1.0f;
+    }
+
     struct AutonomyStatus
     {
         bool enabled{ false };

@@ -490,4 +490,74 @@ namespace runner::diagnostics
         best_failure.candidate_attempts = attempts;
         return best_failure;
     }
+
+    SpeedWalkGraphProof run_speed_walk_graph_proof(
+        std::uint64_t updates_per_lesson)
+    {
+        updates_per_lesson = std::max<std::uint64_t>(
+            1u, updates_per_lesson);
+        const sim::CreatureBlueprint blueprint =
+            sim::CreatureBlueprint::humanoid();
+        rl::PpoTrainer trainer{ blueprint, 8u, true };
+        trainer.reset_policy(0x00C0FFEEu, true);
+        trainer.set_course(sim::CourseStage::uneven, 0.30f, false);
+        for (std::uint64_t update = 0; update < updates_per_lesson; ++update)
+            trainer.train_one_update();
+
+        SpeedWalkGraphProof proof{};
+        proof.walk_updates = trainer.lesson_update();
+        proof.walk_retained_update = trainer.metrics().best_update;
+        proof.walk_retained = trainer.has_best_policy()
+            && rl::strict_evaluation_quality(
+                trainer.metrics().best_quality_key)
+            && trainer.restore_best_policy();
+        if (!proof.walk_retained)
+            return proof;
+
+        trainer.set_gait_task(sim::GaitTask::speed_walk, false);
+        for (std::uint64_t update = 0; update < updates_per_lesson; ++update)
+            trainer.train_one_update();
+        proof.speed_walk_updates = trainer.lesson_update();
+        proof.speed_walk_retained_update = trainer.metrics().best_update;
+        proof.speed_walk_retained_distance =
+            trainer.metrics().best_evaluation_distance;
+        proof.speed_walk_retained = trainer.has_best_policy()
+            && rl::strict_evaluation_quality(trainer.metrics().best_quality_key)
+            && trainer.evaluate_retained_policy();
+        const rl::TrainingMetrics& metrics = trainer.metrics();
+        proof.distance = metrics.evaluation_distance;
+        proof.stride_events = metrics.evaluation_stride_events;
+        proof.speed = metrics.evaluation_speed;
+        proof.survival = metrics.evaluation_survival;
+        proof.collisions = metrics.evaluation_collisions;
+        proof.invalid_runs = metrics.evaluation_invalid_runs;
+        proof.rejection_mask = metrics.evaluation_rejection_mask;
+        proof.teacher_authority = rl::foundational_walk_teacher_authority(
+            trainer.lesson_update(), blueprint);
+        proof.raw_evaluation = rl::foundational_walk_uses_raw_evaluation(
+            trainer.lesson_update(), trainer.course_stage(), blueprint);
+        for (const sim::Environment& environment : trainer.environments())
+            proof.course_motion_enabled = proof.course_motion_enabled
+                || environment.course_motion_enabled();
+        proof.passed = updates_per_lesson >= 1200u
+            && proof.walk_retained
+            && proof.walk_retained_update
+                >= rl::foundational_walk_teacher_handoff_update(blueprint)
+            && proof.speed_walk_retained
+            && proof.speed_walk_retained_update
+                >= rl::foundational_walk_teacher_handoff_update(blueprint)
+            && proof.teacher_authority == 0.0f
+            && proof.raw_evaluation && !proof.course_motion_enabled
+            && metrics.evaluation_valid
+            && metrics.evaluation_quality_key != 0u
+            && metrics.evaluation_distance
+                >= rl::gait_task_mastery_distance(sim::GaitTask::speed_walk)
+            && metrics.evaluation_stride_events
+                >= rl::gait_task_mastery_stride_events(sim::GaitTask::speed_walk)
+            && metrics.evaluation_speed
+                >= rl::gait_task_mastery_speed(sim::GaitTask::speed_walk)
+            && metrics.evaluation_survival >= 18.0f
+            && metrics.evaluation_collisions <= 1.0f;
+        return proof;
+    }
 }

@@ -1,3 +1,18 @@
+## 0.7.49
+
+- Removed the last course-motion/treadmill authority and made terrain, obstacles, odometry, and reference markers share static world coordinates.
+- Embedded the authored 640x360 canonical-cell footprint at the exact SandHybrid compact-world district/surface coordinates and exposed global cells in diagnostics.
+- Added physical stop, gun-stance, arm/barrel aiming, settle, ready, ballistic shot, swept-hit, and next-shot miss-correction states without projectile steering.
+- Refit Human forearm, hand, and boot art to physical bone and heel/toe geometry.
+- Ground-anchored compact reference plaques and removed floating material-region callouts.
+- Added exact Speed Walk gate telemetry plus physical weapon/world diagnostics.
+- Propagated the selected gait into fresh policy evaluations, shifted post-handoff Human rollout/evaluation to explicit Raw authority, and made faster-gait retention rank worst-seed translation before cadence-only shuffling.
+- Added a permanent `--diagnose-speed-walk` Walk-to-Speed-Walk task-graph proof with six-seed Raw/static-world mastery evidence.
+- Made final gait confirmations restore and replay the retained champion, preventing later exploratory drift from pinning Speed Walk at 80 percent, and recognized XCB/Xlib-only headless Vulkan hosts without masking real loader/package failures.
+
+- Added deterministic positive, negative, adversarial, repeated-seed, no-rail, aim-cheat, miss-correction, and art-envelope coverage.
+- Advanced isolated training state to semantics `0x0007'4901` and `runner-v0749-*` paths with lifetime-only v0.7.48 migration.
+
 ## 0.7.48
 
 - Replaced Human rail-sliding with contact-latched stance anchors and deterministic planted-foot coverage at 20, 60, and 240 Hz.

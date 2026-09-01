@@ -5,6 +5,7 @@
 #include "pixel_art.hpp"
 #include "renderer.hpp"
 #include "rig_training_diagnostic.hpp"
+#include "runtime_diagnostics.hpp"
 #include "simulation.hpp"
 #include "ui_layout.hpp"
 #include "ui_frame_probe.hpp"
@@ -154,6 +155,13 @@ namespace
             && argv[1] != nullptr
             && std::string_view(argv[1]) == "--diagnose-walk-eye";
     }
+    [[nodiscard]] bool wants_speed_walk_diagnostic(int argc, char** argv) noexcept
+    {
+        return argc > 1
+            && argv != nullptr
+            && argv[1] != nullptr
+            && std::string_view(argv[1]) == "--diagnose-speed-walk";
+    }
     [[nodiscard]] bool wants_rig_training_diagnostic(int argc, char** argv) noexcept
     {
         return argc > 1
@@ -212,6 +220,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md",
             std::filesystem::path{ "docs" } / "EPOCH2D_WALK_ENGINE_LIBRARY.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
@@ -361,13 +370,6 @@ namespace
         return true;
     }
 
-    [[nodiscard]] bool is_headless_surface_error(std::string_view error) noexcept
-    {
-        return error.find("VK_KHR_surface") != std::string_view::npos
-            || error.find("VK_KHR_win32_surface") != std::string_view::npos
-            || error.find("No available video device") != std::string_view::npos
-            || error.find("No dynamic Vulkan support") != std::string_view::npos;
-    }
 
     [[nodiscard]] bool visible_application_frames(int width, int height)
     {
@@ -565,6 +567,29 @@ int main(int argc, char** argv)
                 proof.raw_policy_invalid_reason).data());
         return proof.passed ? 0 : 1;
     }
+    if (wants_speed_walk_diagnostic(argc, argv))
+    {
+        const runner::diagnostics::SpeedWalkGraphProof proof =
+            runner::diagnostics::run_speed_walk_graph_proof();
+        std::printf(
+            "Runner %s Speed Walk graph diagnostic: %s; walk=%llu/%llu "
+            "speed_walk=%llu/%llu retained=%.3fm replay=%s %.3fm/%.2f "
+            "strides/%.3fmps/%.3fs collisions=%.2f invalid=%u/6 "
+            "reject=0x%08X authority=%.3f evaluation=%s course_motion=%s\n",
+            RUNNER_VERSION, proof.passed ? "passed" : "failed",
+            static_cast<unsigned long long>(proof.walk_updates),
+            static_cast<unsigned long long>(proof.walk_retained_update),
+            static_cast<unsigned long long>(proof.speed_walk_updates),
+            static_cast<unsigned long long>(proof.speed_walk_retained_update),
+            proof.speed_walk_retained_distance,
+            proof.speed_walk_retained ? "retained" : "missing", proof.distance,
+            proof.stride_events, proof.speed, proof.survival,
+            proof.collisions, proof.invalid_runs, proof.rejection_mask,
+            proof.teacher_authority,
+            proof.raw_evaluation ? "raw-policy" : "assisted",
+            proof.course_motion_enabled ? "enabled" : "disabled");
+        return proof.passed ? 0 : 1;
+    }
     if (wants_art_diagnostic(argc, argv))
         return run_art_diagnostic(invocation_directory(argc, argv));
 
@@ -741,7 +766,7 @@ if (wants_camera_diagnostic(argc, argv))
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
         const std::string video_error = SDL_GetError();
-        if (diagnostic && is_headless_surface_error(video_error))
+        if (diagnostic && runner::runtime::is_headless_surface_error(video_error))
         {
             std::printf("Runner %s SDL3 Vulkan diagnostic passed: linked backend "
                 "enabled; the host has no video surface (%s)\n",
@@ -761,7 +786,7 @@ if (wants_camera_diagnostic(argc, argv))
     if (!SDL_Vulkan_LoadLibrary(nullptr))
     {
         const std::string vulkan_error = SDL_GetError();
-        if (diagnostic && is_headless_surface_error(vulkan_error))
+        if (diagnostic && runner::runtime::is_headless_surface_error(vulkan_error))
         {
             const char* video_driver = SDL_GetCurrentVideoDriver();
             std::printf(

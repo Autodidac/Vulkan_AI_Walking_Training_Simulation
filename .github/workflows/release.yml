@@ -52,7 +52,8 @@ jobs:
           for argument in \
             --version --diagnose-vulkan --diagnose-package --diagnose-acceptance \
             --diagnose-camera --diagnose-ui --diagnose-art --diagnose-rig-training \
-            --diagnose-walk-eye --diagnose-course --diagnose-hybrid-brain; do
+            --diagnose-walk-eye --diagnose-speed-walk --diagnose-course \
+            --diagnose-hybrid-brain; do
             "$runner" "$argument"
           done
       - name: Build, install, and consume the Linux SDK
@@ -74,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          test "$tag" = "v0.7.48"
+          test "$tag" = "v0.7.49"
           runtime="package/Epoch2DWalkEngine-$tag-runner-linux-x86_64"
           sdk="package/epoch2d-dev-linux"
           rm -rf "$runtime"
@@ -87,10 +88,10 @@ jobs:
           sdk_manifest="Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
           (cd "$runtime" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$runtime_manifest"
           tar -C "$runtime" -czf "$runtime_archive" .
-          sha256sum "$runtime_archive" | awk '{print $1}' > "$runtime_archive.sha256"
+          sha256sum "$runtime_archive" > "$runtime_archive.sha256"
           (cd "$sdk" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$sdk_manifest"
           tar -C "$sdk" -czf "$sdk_archive" .
-          sha256sum "$sdk_archive" | awk '{print $1}' > "$sdk_archive.sha256"
+          sha256sum "$sdk_archive" > "$sdk_archive.sha256"
 
           runtime_audit="$RUNNER_TEMP/epoch2d-runtime-linux"
           sdk_audit="$RUNNER_TEMP/epoch2d-sdk-linux"
@@ -153,7 +154,7 @@ jobs:
         shell: pwsh
         run: |
           $runner = "build/windows-release/Release/Runner.exe"
-          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-course", "--diagnose-hybrid-brain")) {
+          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-speed-walk", "--diagnose-course", "--diagnose-hybrid-brain")) {
             & $runner $argument
             if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
           }
@@ -175,7 +176,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
-          if ($tag -ne "v0.7.48") { throw "Tag $tag does not match project version v0.7.48" }
+          if ($tag -ne "v0.7.49") { throw "Tag $tag does not match project version v0.7.49" }
           $runtime = Join-Path $PWD "package/Epoch2DWalkEngine-$tag-runner-windows-x64"
           $sdk = Join-Path $PWD "package/epoch2d-dev-windows"
           if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
@@ -189,11 +190,14 @@ jobs:
               "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
             } | Set-Content -Encoding ascii $output
           }
+          function Write-Checksum([string] $archive) {
+            $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+            [IO.File]::WriteAllText("$archive.sha256", "$hash  $([IO.Path]::GetFileName($archive))`n")
+          }
           function Write-Archive([string] $root, [string] $archive, [string] $manifest) {
             Write-Manifest $root $manifest
             Compress-Archive -Path "$root/*" -DestinationPath $archive -Force
-            (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
-              Set-Content -Encoding ascii "$archive.sha256"
+            Write-Checksum $archive
           }
 
           $runtimeArchive = "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
@@ -207,8 +211,7 @@ jobs:
           $sourceArchive = "$sourceRoot.zip"
           git archive --format=zip --prefix="$sourceRoot/" --output=$sourceArchive HEAD
           if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
-          (Get-FileHash $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant() |
-            Set-Content -Encoding ascii "$sourceArchive.sha256"
+          Write-Checksum $sourceArchive
           $sourceStage = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-manifest"
           if (Test-Path -LiteralPath $sourceStage) { Remove-Item -LiteralPath $sourceStage -Recurse -Force }
           Expand-Archive $sourceArchive -DestinationPath $sourceStage
@@ -259,7 +262,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Extracted SDK consumer failed" }
 
           foreach ($archive in @($runtimeArchive, $sdkArchive, "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-source.zip")) {
-            $expected = (Get-Content "$archive.sha256").Trim()
+            $expected = ((Get-Content "$archive.sha256").Trim() -split '\s+')[0]
             if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Checksum mismatch: $archive" }
           }
           $sourceRoot = "Epoch2DWalkEngine-$tag-source"

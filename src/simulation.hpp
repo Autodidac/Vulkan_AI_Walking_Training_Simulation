@@ -208,7 +208,7 @@ namespace runner::sim
         if (task == GaitTask::walk)
             return 0.0f;
         if (task == GaitTask::speed_walk)
-            return 0.42f;
+            return 0.62f;
         if (task == GaitTask::run)
             return 1.0f;
         if (!std::isfinite(elapsed_seconds))
@@ -283,26 +283,31 @@ namespace runner::sim
     [[nodiscard]] constexpr float terrain_sample_x(float world_x,
         float course_progress) noexcept
     {
-        return world_x + course_progress;
+        static_cast<void>(course_progress);
+        return world_x;
     }
 
     [[nodiscard]] constexpr float terrain_world_x(float terrain_x,
         float course_progress) noexcept
     {
-        return terrain_x - course_progress;
+        static_cast<void>(course_progress);
+        return terrain_x;
     }
 
     [[nodiscard]] constexpr float terrain_relative_distance(float world_x,
         float initial_world_x, float course_progress) noexcept
     {
-        return terrain_sample_x(world_x, course_progress) - initial_world_x;
+        static_cast<void>(course_progress);
+        return world_x - initial_world_x;
     }
 
     [[nodiscard]] constexpr float terrain_relative_frame_progress(
         float current_world_x, float previous_world_x,
         float course_speed, float dt) noexcept
     {
-        return (current_world_x - previous_world_x) + course_speed * dt;
+        static_cast<void>(course_speed);
+        static_cast<void>(dt);
+        return current_world_x - previous_world_x;
     }
 
     inline constexpr float odometer_speed_limit_mps = 50.0f / 3.6f;
@@ -1423,8 +1428,11 @@ namespace runner::sim
         safe_carry,
         ready,
         disarmed,
-        dropped
+        dropped,
+        gun_stance,
+        aiming
     };
+    inline constexpr std::size_t equipment_state_count = 7u;
 
     [[nodiscard]] inline std::string_view equipment_state_name(
         EquipmentState state) noexcept
@@ -1436,6 +1444,8 @@ namespace runner::sim
         case EquipmentState::ready: return "READY";
         case EquipmentState::disarmed: return "DISARMED";
         case EquipmentState::dropped: return "DROPPED";
+        case EquipmentState::gun_stance: return "GUN STANCE";
+        case EquipmentState::aiming: return "AIMING";
         }
         return "UNKNOWN";
     }
@@ -1496,6 +1506,7 @@ namespace runner::sim
         float radius{ 0.05f };
         std::uint32_t sequence{};
         bool active{ true };
+        bool miss_recorded{};
     };
 
     struct EquipmentTarget
@@ -1512,6 +1523,55 @@ namespace runner::sim
         anatomy_action_count + 1u;
     inline constexpr std::size_t equipment_trigger_action =
         anatomy_action_count + 2u;
+
+    [[nodiscard]] inline float ballistic_low_arc_angle(Vec2 origin, Vec2 target,
+        float projectile_speed, float gravity, float facing_direction = 1.0f) noexcept
+    {
+        const float facing = std::isfinite(facing_direction)
+                && facing_direction < 0.0f ? -1.0f : 1.0f;
+        const Vec2 delta = target - origin;
+        const float horizontal = delta.x * facing;
+        if (!std::isfinite(horizontal) || !std::isfinite(delta.y)
+            || !std::isfinite(projectile_speed) || projectile_speed <= 0.01f
+            || horizontal <= 0.001f)
+            return facing < 0.0f ? pi : 0.0f;
+        float local_angle = std::atan2(delta.y, horizontal);
+        if (std::isfinite(gravity) && gravity > 1.0e-5f)
+        {
+            const float speed_squared = projectile_speed * projectile_speed;
+            const float discriminant = speed_squared * speed_squared
+                - gravity * (gravity * horizontal * horizontal
+                    + 2.0f * delta.y * speed_squared);
+            if (discriminant >= 0.0f)
+                local_angle = std::atan((speed_squared - std::sqrt(discriminant))
+                    / (gravity * horizontal));
+        }
+        return wrap_angle(facing < 0.0f ? pi - local_angle : local_angle);
+    }
+
+    [[nodiscard]] inline bool swept_circle_hit(Vec2 beginning, Vec2 ending,
+        Vec2 center, float combined_radius) noexcept
+    {
+        if (!std::isfinite(combined_radius) || combined_radius < 0.0f)
+            return false;
+        const Vec2 segment = ending - beginning;
+        const float squared_length = dot(segment, segment);
+        const float fraction = squared_length > 1.0e-8f
+            ? clamp(dot(center - beginning, segment) / squared_length, 0.0f, 1.0f)
+            : 0.0f;
+        return length(beginning + segment * fraction - center) <= combined_radius;
+    }
+
+    [[nodiscard]] inline float aim_correction_from_miss(float current_correction,
+        float vertical_miss, float horizontal_range) noexcept
+    {
+        if (!std::isfinite(current_correction) || !std::isfinite(vertical_miss)
+            || !std::isfinite(horizontal_range) || horizontal_range <= 0.05f)
+            return 0.0f;
+        const float observed = -std::atan2(vertical_miss, horizontal_range);
+        return clamp(current_correction * 0.40f + observed * 0.60f,
+            -0.22f, 0.22f);
+    }
 
     struct DistanceConstraint
     {
@@ -1597,7 +1657,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0748-" + slug;
+        const std::string state_prefix = "runner-v0749-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -2377,6 +2437,32 @@ namespace runner::sim
         {
             return equipment_cooldown_seconds_;
         }
+        [[nodiscard]] float equipment_commanded_aim_angle() const noexcept
+        {
+            return equipment_commanded_aim_angle_;
+        }
+        [[nodiscard]] float equipment_aim_error() const noexcept
+        {
+            return std::abs(wrap_angle(
+                equipment_commanded_aim_angle_ - equipment_aim_angle_));
+        }
+        [[nodiscard]] float equipment_aim_rate() const noexcept
+        {
+            return equipment_aim_rate_;
+        }
+        [[nodiscard]] float equipment_aim_settle_seconds() const noexcept
+        {
+            return equipment_aim_settle_seconds_;
+        }
+        [[nodiscard]] bool equipment_stopped() const noexcept
+        {
+            return equipment_stopped_;
+        }
+        [[nodiscard]] float equipment_recommended_aim_angle() const noexcept;
+        [[nodiscard]] std::uint16_t equipment_mount_node_index() const noexcept
+        {
+            return equipment_mount_node();
+        }
         [[nodiscard]] std::uint32_t shots_fired() const noexcept { return shots_fired_; }
         [[nodiscard]] std::uint32_t target_hits() const noexcept { return target_hits_; }
         [[nodiscard]] std::uint32_t equipment_hit_goal() const noexcept;
@@ -2384,6 +2470,14 @@ namespace runner::sim
         [[nodiscard]] std::uint32_t equipment_transitions() const noexcept
         {
             return equipment_transition_count_;
+        }
+        [[nodiscard]] std::uint32_t shots_missed() const noexcept
+        {
+            return shots_missed_;
+        }
+        [[nodiscard]] float last_shot_miss_error() const noexcept
+        {
+            return last_shot_miss_error_;
         }
         [[nodiscard]] Vec2 equipment_mount_position() const noexcept;
         [[nodiscard]] Vec2 equipment_display_position() const noexcept;
@@ -2422,11 +2516,12 @@ namespace runner::sim
 
         void set_course_motion_enabled(bool enabled) noexcept
         {
-            course_motion_enabled_ = enabled;
+            static_cast<void>(enabled);
+            course_motion_enabled_ = false;
         }
         [[nodiscard]] bool course_motion_enabled() const noexcept
         {
-            return course_motion_enabled_;
+            return false;
         }
         [[nodiscard]] bool shuttle_enabled() const noexcept
         {
@@ -2513,27 +2608,11 @@ namespace runner::sim
         [[nodiscard]] std::uint8_t obstruction_mask() const noexcept { return obstruction_mask_; }
         [[nodiscard]] float course_speed() const noexcept
         {
-            if (!course_motion_enabled_)
-                return 0.0f;
-            if (course_stage_ == CourseStage::balance
-                || course_stage_ == CourseStage::duck_press
-                || course_stage_ == CourseStage::shuttle
-                || course_stage_ == CourseStage::ramps
-                || course_stage_ == CourseStage::duck_bars
-                || course_stage_ == CourseStage::climb_descent
-                || course_stage_ == CourseStage::equipment_targets)
-                return 0.0f;
-            if (course_stage_ == CourseStage::crouch_walk)
-                return 0.58f + course_difficulty_ * 0.18f;
-            if (course_stage_ == CourseStage::uneven)
-                return 0.82f + course_difficulty_ * 0.88f;
-            if (course_stage_ == CourseStage::hurdles)
-                return 1.05f + course_difficulty_ * 0.95f;
-            return 1.20f + course_difficulty_ * 1.05f;
+            return 0.0f;
         }
         [[nodiscard]] float course_progress() const noexcept
         {
-            return elapsed_seconds_ * course_speed();
+            return 0.0f;
         }
         [[nodiscard]] bool recovering() const noexcept { return recovery_active_; }
         [[nodiscard]] std::uint32_t recovery_events() const noexcept { return recovery_events_; }
@@ -2690,6 +2769,7 @@ namespace runner::sim
             float dt) noexcept;
         void update_climb_metrics(float dt) noexcept;
         [[nodiscard]] std::uint16_t equipment_mount_node() const noexcept;
+        [[nodiscard]] std::uint16_t equipment_mount_parent_node() const noexcept;
         void update_gait_metrics(float dt, float action_energy) noexcept;
         void invalidate(InvalidMotion reason) noexcept;
         [[nodiscard]] float joint_angle(const MotorConstraint& motor) const noexcept;
@@ -2739,12 +2819,20 @@ namespace runner::sim
         Vec2 dropped_equipment_velocity_{};
         std::uint32_t equipment_projectile_sequence_{};
         std::uint32_t shots_fired_{};
+        float previous_equipment_aim_angle_{};
+        float equipment_commanded_aim_angle_{};
+        float equipment_aim_rate_{};
+        float equipment_aim_settle_seconds_{};
+        float equipment_aim_correction_{};
+        float last_shot_miss_error_{};
+        bool equipment_stopped_{};
         std::uint32_t target_hits_{};
         std::uint32_t equipment_transition_count_{};
         bool target_hit_this_step_{};
         std::array<std::uint16_t, 2> ledge_grasp_nodes_{
             std::numeric_limits<std::uint16_t>::max(),
             std::numeric_limits<std::uint16_t>::max() };
+        std::uint32_t shots_missed_{};
         std::array<Vec2, 2> ledge_grasp_anchors_{};
         std::uint32_t hand_ledge_contacts_{};
         std::uint32_t climb_support_transfers_{};
@@ -2776,7 +2864,7 @@ namespace runner::sim
         CourseStage course_stage_{ CourseStage::balance };
         GaitTask gait_task_{ GaitTask::walk };
         float course_difficulty_{ 0.25f };
-        bool course_motion_enabled_{ true };
+        bool course_motion_enabled_{};
         ShuttleState shuttle_state_{};
         float shuttle_distance_travelled_{};
         float collision_count_{};

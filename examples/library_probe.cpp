@@ -30,6 +30,6 @@ int main()
         || !std::isfinite(environment.uprightness()))
         return 4;
 
-    std::cout << "Epoch2DWalkEngine 0.7.48 library API passed\n";
+    std::cout << "Epoch2DWalkEngine 0.7.49 library API passed\n";
     return 0;
 }

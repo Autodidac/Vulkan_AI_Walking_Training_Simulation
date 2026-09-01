@@ -30,8 +30,8 @@ namespace runner::rl
             {
                 std::filesystem::path previous_candidate = checkpoint;
                 std::string previous_name = previous_candidate.filename().string();
-                constexpr std::string_view current_prefix{ "runner-v0748-" };
-                constexpr std::string_view prior_prefix{ "runner-v0747-" };
+                constexpr std::string_view current_prefix{ "runner-v0749-" };
+                constexpr std::string_view prior_prefix{ "runner-v0748-" };
                 if (previous_name.starts_with(current_prefix))
                 {
                     previous_name.replace(0u, current_prefix.size(), prior_prefix);
@@ -42,7 +42,7 @@ namespace runner::rl
                     checkpoint = std::move(previous_candidate);
                     rig.clear();
                     state.clear();
-                    legacy_lifetime_version = "V0.7.47";
+                    legacy_lifetime_version = "V0.7.48";
                 }
             }
             if (!std::filesystem::exists(checkpoint))
@@ -99,7 +99,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.48 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.49 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -307,7 +307,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.48 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.49 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

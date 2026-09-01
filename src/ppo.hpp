@@ -21,13 +21,24 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4801u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'4901u;
 
     [[nodiscard]] inline constexpr std::uint64_t evaluation_seed(
         std::size_t agent, std::uint64_t sequence) noexcept
     {
         return 0xE000u + static_cast<std::uint64_t>(agent) * 4099u
             + sequence * 104729u;
+    }
+
+    inline void configure_policy_evaluation_environment(
+        sim::Environment& environment, sim::CourseStage stage,
+        float difficulty, sim::GaitTask gait_task,
+        sim::GuidanceMode guidance_mode) noexcept
+    {
+        environment.set_course(stage, difficulty);
+        environment.set_gait_task(gait_task);
+        environment.set_course_motion_enabled(false);
+        environment.set_guidance_mode(guidance_mode);
     }
 
     [[nodiscard]] inline bool motor_drives_support_branch(
@@ -1765,6 +1776,50 @@ namespace runner::rl
             && update < handoff + foundational_walk_consolidation_updates;
     }
 
+    [[nodiscard]] inline std::size_t foundational_walk_raw_rollout_count(
+        std::uint64_t update, sim::CourseStage stage,
+        const sim::CreatureBlueprint& blueprint,
+        std::size_t cohort_size) noexcept
+    {
+        if (cohort_size == 0u || stage != sim::CourseStage::uneven
+            || !blueprint.human_casual_gait_plan())
+            return 0u;
+        const std::uint64_t handoff =
+            foundational_walk_teacher_handoff_update(blueprint);
+        if (update < handoff)
+            return 0u;
+        const std::uint64_t elapsed = std::min<std::uint64_t>(
+            foundational_walk_consolidation_updates,
+            update - handoff + 1u);
+        const std::uint64_t numerator = elapsed
+            * static_cast<std::uint64_t>(cohort_size)
+            + foundational_walk_consolidation_updates - 1u;
+        return std::min<std::size_t>(cohort_size,
+            static_cast<std::size_t>(numerator
+                / foundational_walk_consolidation_updates));
+    }
+
+    [[nodiscard]] inline bool foundational_walk_raw_rollout_environment(
+        std::uint64_t update, sim::CourseStage stage,
+        const sim::CreatureBlueprint& blueprint,
+        std::size_t environment_index, std::size_t cohort_size) noexcept
+    {
+        const std::size_t raw_count = foundational_walk_raw_rollout_count(
+            update, stage, blueprint, cohort_size);
+        return raw_count > 0u && cohort_size > 0u
+            && (environment_index + static_cast<std::size_t>(update % cohort_size))
+                % cohort_size < raw_count;
+    }
+
+    [[nodiscard]] inline bool foundational_walk_uses_raw_evaluation(
+        std::uint64_t update, sim::CourseStage stage,
+        const sim::CreatureBlueprint& blueprint) noexcept
+    {
+        return stage == sim::CourseStage::uneven
+            && blueprint.human_casual_gait_plan()
+            && update >= foundational_walk_teacher_handoff_update(blueprint);
+    }
+
     inline constexpr std::uint64_t crouch_teacher_fade_begin_update = 60u;
     inline constexpr std::uint64_t crouch_teacher_handoff_update = 200u;
 
@@ -1974,33 +2029,64 @@ namespace runner::rl
             if (environment.weapon_class() == sim::WeaponClass::none || !target.active)
                 return;
 
-            const Vec2 delta = target.position
-                - environment.equipment_mount_position();
-            const float desired_angle = std::atan2(delta.y, delta.x);
+            // A combatant first arrests the same physical body used for
+            // locomotion. No target lock or projectile steering can substitute
+            // for establishing a supported gun stance.
+            const auto hold = balance_teacher_action(environment);
+            blend_teacher(hold, 0.96f, 0.92f);
+
+            const float desired_angle = environment.equipment_recommended_aim_angle();
             const float facing_angle = environment.facing_direction() < 0.0f
                 ? pi : 0.0f;
             const float local_desired_angle = std::remainder(
                 desired_angle - facing_angle, 2.0f * pi);
-            const float aim_error = std::remainder(
-                desired_angle - environment.equipment_aim_angle(), 2.0f * pi);
-            policy_action[sim::anatomy_action_count] = 0.72f;
-            policy_action[sim::anatomy_action_count + 1u] = clamp(
+            policy_action[sim::equipment_state_action] = 0.72f;
+            policy_action[sim::equipment_aim_action] = clamp(
                 local_desired_angle / (pi * 0.42f), -1.0f, 1.0f);
-            const sim::WeaponProfile profile =
-                sim::weapon_profile(environment.weapon_class());
-            const float distance = length(delta);
-            const bool engagement_window =
-                distance >= profile.minimum_engagement_distance
-                && distance <= profile.maximum_engagement_distance
-                && environment.target_hits() < environment.equipment_hit_goal()
-                && !(environment.granular_hazard_active()
-                    && !environment.granular_hazard_safe());
-            policy_action[sim::anatomy_action_count + 2u] =
-                environment.equipment_state() == sim::EquipmentState::ready
-                    && engagement_window
-                    && std::abs(aim_error) <= profile.aim_tolerance
-                    && environment.equipment_cooldown() <= 0.0f
-                ? 1.0f : -1.0f;
+
+            // Raise both authored arm chains. The distal link is the physical
+            // barrel direction consumed by Environment::update_equipment().
+            // Therefore a scalar aim request alone cannot produce a shot.
+            const Vec2 desired_lower{
+                std::cos(desired_angle), std::sin(desired_angle) };
+            std::size_t chain{};
+            for (std::size_t shoulder_index = 0;
+                shoulder_index < rig.active_motor_count; ++shoulder_index)
+            {
+                const sim::MotorConstraint& shoulder = rig.motors[shoulder_index];
+                if (motor_drives_support_branch(rig, shoulder)
+                    || shoulder.a != rig.torso_node
+                    || shoulder.pivot >= rig.nodes.size()
+                    || shoulder.c >= rig.nodes.size())
+                    continue;
+                for (std::size_t elbow_index = 0;
+                    elbow_index < rig.active_motor_count; ++elbow_index)
+                {
+                    const sim::MotorConstraint& elbow = rig.motors[elbow_index];
+                    if (elbow_index == shoulder_index
+                        || motor_drives_support_branch(rig, elbow)
+                        || elbow.pivot != shoulder.c
+                        || elbow.c >= rig.nodes.size())
+                        continue;
+                    const float facing = environment.facing_direction();
+                    const float vertical_bias = (chain++ & 1u) == 0u
+                        ? -0.74f : -0.58f;
+                    const Vec2 desired_upper = normalized(
+                        Vec2{ facing * 0.62f, vertical_bias },
+                        Vec2{ facing, 0.0f });
+                    const Vec2 shoulder_reference = rig.nodes[shoulder.a]
+                        - rig.nodes[shoulder.pivot];
+                    policy_action[shoulder_index] = motor_action_for_target_angle(
+                        shoulder, signed_angle(
+                            shoulder_reference, desired_upper));
+                    policy_action[elbow_index] = motor_action_for_target_angle(
+                        elbow, signed_angle(
+                            -1.0f * desired_upper, desired_lower));
+                    break;
+                }
+            }
+            policy_action[sim::equipment_trigger_action] =
+                environment.equipment_engagement_ready() ? 1.0f : -1.0f;
         };
         if (stage == sim::CourseStage::balance)
         {
@@ -2079,10 +2165,8 @@ namespace runner::rl
             blend_teacher(teacher, 0.58f, 0.66f);
         }
 
-        if (stage == sim::CourseStage::equipment_targets
-            || stage == sim::CourseStage::combat_course)
-            apply_equipment_teacher();
-        else
+        if (stage != sim::CourseStage::equipment_targets
+            && stage != sim::CourseStage::combat_course)
         {
             for (std::size_t index = sim::anatomy_action_count;
                 index < sim::action_count; ++index)
@@ -2160,6 +2244,10 @@ namespace runner::rl
         }
         constrain_human_manipulator_actions_to_body_envelope(
             environment, policy_action);
+        if (stage == sim::CourseStage::equipment_targets
+            || stage == sim::CourseStage::combat_course)
+            // Weapon stance owns the final support hold and arm IK.
+            apply_equipment_teacher();
         return policy_action;
     }
 
@@ -2339,6 +2427,19 @@ namespace runner::rl
         }
         return casual_walk_teacher_stride_events;
     }
+
+    [[nodiscard]] inline constexpr float gait_task_mastery_speed(
+        sim::GaitTask task) noexcept
+    {
+        switch (task)
+        {
+        case sim::GaitTask::walk: return 0.32f;
+        case sim::GaitTask::speed_walk: return 0.72f;
+        case sim::GaitTask::walk_run_transition: return 0.62f;
+        case sim::GaitTask::run: return 1.05f;
+        }
+        return 0.32f;
+    }
     inline constexpr float standing_neutral_arm_limit = 38.0f * pi / 180.0f;
     inline constexpr float standing_qualification_spin_limit = 0.16f;
     inline constexpr float standing_mastery_spin_limit = 0.08f;
@@ -2445,6 +2546,33 @@ namespace runner::rl
             | (static_cast<std::uint64_t>(secondary) << 32u)
             | (static_cast<std::uint64_t>(tertiary) << 16u)
             | static_cast<std::uint64_t>(quaternary);
+    }
+
+    [[nodiscard]] inline std::uint64_t gait_task_incremental_quality(
+        sim::GaitTask task, bool paired_legs, std::uint32_t candidate_runs,
+        float candidate_strides, float candidate_distance,
+        float candidate_survival, float mean_speed) noexcept
+    {
+        const auto runs = static_cast<std::uint16_t>(
+            std::min<std::uint32_t>(candidate_runs, 65535u));
+        const auto strides = static_cast<std::uint16_t>(
+            std::min<float>(candidate_strides, 65535.0f));
+        if (!paired_legs)
+            return pack_quality(quality_bucket(candidate_distance), runs,
+                strides, quality_bucket(candidate_survival));
+        if (task == sim::GaitTask::walk)
+            return pack_quality(strides, runs,
+                quality_bucket(candidate_distance),
+                quality_bucket(candidate_survival));
+
+        // Speed Walk, transition, and run must select real translation before
+        // cadence. Ranking strides first retains rapid in-place shuffling and
+        // can leave the mastery graph parked at 80 percent indefinitely.
+        return pack_quality(
+            quality_bucket(candidate_distance),
+            quality_bucket(std::max(0.0f, mean_speed), 100.0f),
+            runs,
+            strides);
     }
 
     [[nodiscard]] inline std::uint64_t shuttle_motion_quality(

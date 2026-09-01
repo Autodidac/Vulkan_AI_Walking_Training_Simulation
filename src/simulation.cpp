@@ -1274,8 +1274,10 @@ namespace runner::sim
 
     void Environment::disarm_equipment() noexcept
     {
-        if (equipment_state_ != EquipmentState::ready
-            && equipment_state_ != EquipmentState::safe_carry)
+        if (equipment_state_ != EquipmentState::safe_carry
+            && equipment_state_ != EquipmentState::gun_stance
+            && equipment_state_ != EquipmentState::aiming
+            && equipment_state_ != EquipmentState::ready)
             return;
         equipment_state_ = EquipmentState::disarmed;
         dropped_equipment_position_ = equipment_mount_position();
@@ -1323,6 +1325,31 @@ namespace runner::sim
         return best;
     }
 
+    std::uint16_t Environment::equipment_mount_parent_node() const noexcept
+    {
+        const std::uint16_t mount = equipment_mount_node();
+        std::uint16_t parent = blueprint_.torso_node;
+        float shortest = std::numeric_limits<float>::infinity();
+        for (const DistanceConstraint& constraint : blueprint_.bones)
+        {
+            const bool mount_is_a = constraint.a == mount;
+            const bool mount_is_b = constraint.b == mount;
+            if (!mount_is_a && !mount_is_b)
+                continue;
+            const std::uint16_t candidate = mount_is_a ? constraint.b : constraint.a;
+            if (candidate >= blueprint_.nodes.size())
+                continue;
+            const float authored_distance = length(
+                blueprint_.nodes[candidate] - blueprint_.nodes[mount]);
+            if (authored_distance < shortest)
+            {
+                shortest = authored_distance;
+                parent = candidate;
+            }
+        }
+        return parent;
+    }
+
     Vec2 Environment::equipment_mount_position() const noexcept
     {
         const std::uint16_t node = equipment_mount_node();
@@ -1339,6 +1366,16 @@ namespace runner::sim
         return equipment_mount_position();
     }
 
+    float Environment::equipment_recommended_aim_angle() const noexcept
+    {
+        if (weapon_class_ == WeaponClass::none || !equipment_target_.active)
+            return facing_direction() < 0.0f ? pi : 0.0f;
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        return wrap_angle(ballistic_low_arc_angle(equipment_mount_position(),
+            equipment_target_.position, profile.projectile_speed,
+            profile.gravity, facing_direction()) + equipment_aim_correction_);
+    }
+
     std::uint32_t Environment::equipment_hit_goal() const noexcept
     {
         if (course_stage_ == CourseStage::equipment_targets)
@@ -1352,6 +1389,9 @@ namespace runner::sim
     {
         if (weapon_class_ == WeaponClass::none
             || equipment_state_ != EquipmentState::ready
+            || !equipment_stopped_
+            || equipment_aim_settle_seconds_ < 0.30f
+            || equipment_aim_rate_ > 0.28f
             || !equipment_target_.active
             || target_hits_ >= equipment_hit_goal()
             || equipment_cooldown_seconds_ > 0.0f
@@ -1360,11 +1400,12 @@ namespace runner::sim
         const WeaponProfile profile = weapon_profile(weapon_class_);
         const Vec2 delta = equipment_target_.position - equipment_mount_position();
         const float distance = length(delta);
-        if (!std::isfinite(distance)
-            || distance < profile.minimum_engagement_distance
+        const float muzzle_safety_distance = std::max(
+            0.75f, profile.projectile_radius * 4.0f);
+        if (!std::isfinite(distance) || distance < muzzle_safety_distance
             || distance > profile.maximum_engagement_distance)
             return false;
-        const float desired = std::atan2(delta.y, delta.x);
+        const float desired = equipment_recommended_aim_angle();
         const float aim_error = std::abs(wrap_angle(desired - equipment_aim_angle_));
         return std::isfinite(aim_error) && aim_error <= profile.aim_tolerance;
     }
@@ -1378,6 +1419,14 @@ namespace runner::sim
         equipment_transition_count_ = 0u;
         target_hit_this_step_ = false;
         equipment_aim_angle_ = 0.0f;
+        previous_equipment_aim_angle_ = 0.0f;
+        equipment_commanded_aim_angle_ = 0.0f;
+        equipment_aim_rate_ = 0.0f;
+        equipment_aim_settle_seconds_ = 0.0f;
+        equipment_aim_correction_ = 0.0f;
+        last_shot_miss_error_ = 0.0f;
+        equipment_stopped_ = false;
+        shots_missed_ = 0u;
         equipment_cooldown_seconds_ = 0.0f;
         dropped_equipment_position_ = {};
         dropped_equipment_velocity_ = {};
@@ -1402,9 +1451,8 @@ namespace runner::sim
             ? configured_target_distance_
             : lerp(profile.minimum_engagement_distance,
                 profile.maximum_engagement_distance, range_fraction);
-        const float root_x = valid_node(blueprint_.root_node)
-            ? particles_[blueprint_.root_node].position.x : 0.0f;
-        equipment_target_.position.x = root_x + target_distance * facing_direction();
+        equipment_target_.position.x = equipment_mount_position().x
+            + target_distance * facing_direction();
         equipment_target_.position.y = ground_height_at(equipment_target_.position.x)
             + 0.85f + static_cast<float>((random_state_ >> 16u) % 4u) * 0.42f;
         equipment_target_.radius = 0.28f + course_difficulty_ * 0.08f;
@@ -1417,6 +1465,29 @@ namespace runner::sim
         target_hit_this_step_ = false;
         equipment_cooldown_seconds_ = std::max(0.0f,
             equipment_cooldown_seconds_ - dt);
+
+        const float local_aim = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
+            * (pi * 0.42f);
+        equipment_commanded_aim_angle_ = wrap_angle(facing_direction() < 0.0f
+            ? pi - local_aim : local_aim);
+        previous_equipment_aim_angle_ = equipment_aim_angle_;
+        const std::uint16_t mount = equipment_mount_node();
+        const std::uint16_t mount_parent = equipment_mount_parent_node();
+        if (valid_node(mount) && valid_node(mount_parent) && mount != mount_parent)
+        {
+            const Vec2 physical_barrel =
+                particles_[mount].position - particles_[mount_parent].position;
+            if (length(physical_barrel) > 1.0e-4f)
+                equipment_aim_angle_ = std::atan2(
+                    physical_barrel.y, physical_barrel.x);
+        }
+        equipment_aim_rate_ = dt > 1.0e-5f
+            ? std::abs(wrap_angle(equipment_aim_angle_
+                - previous_equipment_aim_angle_)) / dt
+            : 0.0f;
+        equipment_stopped_ = std::abs(forward_speed_) <= 0.18f
+            && (left_supported() || right_supported())
+            && torso_uprightness() >= 0.72f;
         auto transition = [&](EquipmentState next)
         {
             if (equipment_state_ == next)
@@ -1428,6 +1499,14 @@ namespace runner::sim
         const float state_action = clamp(actions[equipment_state_action], -1.0f, 1.0f);
         if (weapon_class_ != WeaponClass::none)
         {
+            const WeaponProfile profile = weapon_profile(weapon_class_);
+            const float physical_error = std::abs(wrap_angle(
+                equipment_recommended_aim_angle() - equipment_aim_angle_));
+            const bool settled = equipment_stopped_
+                && physical_error <= profile.aim_tolerance
+                && equipment_aim_rate_ <= 0.28f;
+            equipment_aim_settle_seconds_ = settled
+                ? equipment_aim_settle_seconds_ + dt : 0.0f;
             if (equipment_state_ == EquipmentState::disarmed
                 || equipment_state_ == EquipmentState::dropped)
             {
@@ -1442,16 +1521,17 @@ namespace runner::sim
                 dropped_equipment_position_ = equipment_mount_position();
                 dropped_equipment_velocity_ = { -0.25f, 0.65f };
             }
+            else if (state_action > 0.28f && !equipment_stopped_)
+                transition(EquipmentState::gun_stance);
+            else if (state_action > 0.28f
+                && (!settled || equipment_aim_settle_seconds_ < 0.30f))
+                transition(EquipmentState::aiming);
             else if (state_action > 0.28f)
                 transition(EquipmentState::ready);
             else if (state_action < -0.18f)
                 transition(EquipmentState::safe_carry);
         }
 
-        const float local_aim = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
-            * (pi * 0.42f);
-        equipment_aim_angle_ = wrap_angle(facing_direction() < 0.0f
-            ? pi - local_aim : local_aim);
         if ((equipment_state_ == EquipmentState::dropped
                 || equipment_state_ == EquipmentState::disarmed)
             && weapon_class_ != WeaponClass::none)
@@ -1477,10 +1557,9 @@ namespace runner::sim
             equipment_projectiles_.push_back({
                 weapon_class_, muzzle + direction * 0.24f,
                 direction * profile.projectile_speed, profile.projectile_radius,
-                ++equipment_projectile_sequence_, true });
+                ++equipment_projectile_sequence_, true, false });
             equipment_cooldown_seconds_ = profile.cooldown_seconds;
             ++shots_fired_;
-            const std::uint16_t mount = equipment_mount_node();
             if (valid_node(mount))
                 particles_[mount].previous += direction * (profile.recoil * dt);
         }
@@ -1489,40 +1568,88 @@ namespace runner::sim
         {
             if (!projectile.active)
                 continue;
+            const Vec2 beginning = projectile.position;
             const WeaponProfile projectile_profile = weapon_profile(projectile.weapon);
             projectile.velocity.y -= projectile_profile.gravity * dt;
             projectile.position += projectile.velocity * dt;
             if (equipment_target_.active
-                && length(projectile.position - equipment_target_.position)
-                    <= projectile.radius + equipment_target_.radius)
+                && swept_circle_hit(beginning, projectile.position,
+                    equipment_target_.position,
+                    projectile.radius + equipment_target_.radius))
             {
                 projectile.active = false;
                 ++target_hits_;
                 target_hit_this_step_ = true;
+                equipment_aim_correction_ *= 0.35f;
+                last_shot_miss_error_ = 0.0f;
                 ++equipment_target_.sequence;
                 if (target_hits_ >= equipment_hit_goal())
                 {
                     equipment_target_.active = false;
                     continue;
                 }
-                const float root_x = valid_node(blueprint_.root_node)
-                    ? particles_[blueprint_.root_node].position.x : 0.0f;
                 const float range_fraction = 0.20f
                     + static_cast<float>((equipment_target_.sequence
                         + static_cast<std::uint32_t>(random_state_)) % 4u) * 0.20f;
                 const float distance = lerp(profile.minimum_engagement_distance,
                     profile.maximum_engagement_distance, range_fraction);
-                equipment_target_.position.x = root_x + distance * facing_direction();
+                equipment_target_.position.x = equipment_mount_position().x
+                    + distance * facing_direction();
                 equipment_target_.position.y =
                     ground_height_at(equipment_target_.position.x)
                     + 0.75f + static_cast<float>(
                         equipment_target_.sequence % 5u) * 0.35f;
                 continue;
             }
+            if (equipment_target_.active && !projectile.miss_recorded)
+            {
+                const float facing = facing_direction();
+                const float before = (beginning.x - equipment_target_.position.x)
+                    * facing;
+                const float after = (projectile.position.x
+                    - equipment_target_.position.x) * facing;
+                if (before < 0.0f && after >= 0.0f)
+                {
+                    const float span = projectile.position.x - beginning.x;
+                    const float fraction = std::abs(span) > 1.0e-6f
+                        ? clamp((equipment_target_.position.x - beginning.x)
+                            / span, 0.0f, 1.0f) : 1.0f;
+                    const float crossing_y = lerp(
+                        beginning.y, projectile.position.y, fraction);
+                    last_shot_miss_error_ = crossing_y
+                        - equipment_target_.position.y;
+                    equipment_aim_correction_ = aim_correction_from_miss(
+                        equipment_aim_correction_, last_shot_miss_error_,
+                        std::abs(equipment_target_.position.x
+                            - equipment_mount_position().x));
+                    ++shots_missed_;
+                    projectile.miss_recorded = true;
+                }
+            }
             const float ground = ground_height_at(projectile.position.x);
             if (projectile.position.y < ground
                 || std::abs(projectile.position.x - equipment_mount_position().x) > 30.0f)
+            {
+                if (!projectile.miss_recorded)
+                {
+                    if (equipment_target_.active)
+                    {
+                        // A low round can strike terrain before reaching the
+                        // target plane. Its real impact is still observable
+                        // evidence for the next shot; the in-flight round is
+                        // never redirected.
+                        last_shot_miss_error_ = projectile.position.y
+                            - equipment_target_.position.y;
+                        equipment_aim_correction_ = aim_correction_from_miss(
+                            equipment_aim_correction_, last_shot_miss_error_,
+                            std::abs(equipment_target_.position.x
+                                - equipment_mount_position().x));
+                    }
+                    ++shots_missed_;
+                    projectile.miss_recorded = true;
+                }
                 projectile.active = false;
+            }
         }
         std::erase_if(equipment_projectiles_,
             [](const EquipmentProjectile& item) { return !item.active; });
@@ -1936,6 +2063,11 @@ namespace runner::sim
             particle.previous = particle.position;
         }
         equipment_aim_angle_ = wrap_angle(pi - equipment_aim_angle_);
+        equipment_commanded_aim_angle_ = wrap_angle(
+            pi - equipment_commanded_aim_angle_);
+        previous_equipment_aim_angle_ = equipment_aim_angle_;
+        equipment_aim_rate_ = 0.0f;
+        equipment_aim_settle_seconds_ = 0.0f;
         previous_pelvis_ = particles_[blueprint_.root_node].position;
         previous_root_for_path_ = previous_pelvis_;
         previous_torso_angle_ = torso_roll_angle();
@@ -6325,8 +6457,7 @@ namespace runner::sim
         }
         case CourseStage::equipment_targets:
         {
-            const Vec2 target_delta = equipment_target_.position - equipment_mount_position();
-            const float desired = std::atan2(target_delta.y, target_delta.x);
+            const float desired = equipment_recommended_aim_angle();
             const float aim_quality = clamp(1.0f
                 - std::abs(wrap_angle(desired - equipment_aim_angle_)) / 0.55f,
                 0.0f, 1.0f);
@@ -6341,8 +6472,7 @@ namespace runner::sim
         }
         case CourseStage::combat_course:
         {
-            const Vec2 target_delta = equipment_target_.position - equipment_mount_position();
-            const float desired = std::atan2(target_delta.y, target_delta.x);
+            const float desired = equipment_recommended_aim_angle();
             const float aim_quality = clamp(1.0f
                 - std::abs(wrap_angle(desired - equipment_aim_angle_)) / 0.70f,
                 0.0f, 1.0f);
@@ -6514,14 +6644,15 @@ namespace runner::sim
         result[48] = clamp(incoming_time_to_impact_ / 4.0f, 0.0f, 2.5f);
         result[49] = clamp(incoming_material_density_, 0.0f, 1.0f);
         result[50] = static_cast<float>(obstruction_mask_) / 7.0f;
-        result[51] = clamp(terrain_.slope_at(root.x + course_progress())
+        result[51] = clamp(terrain_.slope_at(
+            terrain_sample_x(root.x, course_progress()))
             * lookahead_direction, -2.0f, 2.0f);
         result[52] = clamp(water_depth_ / 0.80f, 0.0f, 2.0f);
         result[53] = clamp(water_submersion_, 0.0f, 1.0f);
         result[54] = static_cast<float>(terrain_region_at(root.x))
             / static_cast<float>(TerrainRegion::hole);
         result[55] = static_cast<float>(equipment_state_)
-            / static_cast<float>(EquipmentState::dropped);
+            / static_cast<float>(equipment_state_count - 1u);
         result[56] = static_cast<float>(weapon_class_)
             / static_cast<float>(WeaponClass::launcher);
         if (equipment_target_.active)
@@ -6529,7 +6660,7 @@ namespace runner::sim
             const Vec2 target_delta = equipment_target_.position - root;
             result[57] = clamp(target_delta.x * facing / 16.0f, -2.0f, 2.0f);
             result[58] = clamp(target_delta.y / 8.0f, -2.0f, 2.0f);
-            const float desired = std::atan2(target_delta.y, target_delta.x);
+            const float desired = equipment_recommended_aim_angle();
             result[59] = clamp(wrap_angle(desired - equipment_aim_angle_) / pi,
                 -1.0f, 1.0f);
         }
