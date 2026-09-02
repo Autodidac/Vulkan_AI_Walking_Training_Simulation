@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ai_director.hpp"
 #include "ppo.hpp"
 
 #include <atomic>
@@ -167,7 +168,7 @@ namespace runner::rl
     {
         return metrics.evaluation_valid
             && metrics.evaluation_quality_key != 0u
-            && metrics.evaluation_distance >= gait_task_mastery_distance(task)
+            && metrics.evaluation_distance >= gait_task_qualification_distance(task)
             && metrics.evaluation_stride_events
                 >= gait_task_mastery_stride_events(task)
             && metrics.evaluation_speed >= gait_task_mastery_speed(task)
@@ -180,6 +181,12 @@ namespace runner::rl
         bool enabled{ false };
         sim::CourseStage stage{ sim::CourseStage::balance };
         sim::GaitTask gait_task{ sim::GaitTask::walk };
+        sim::EquipmentDirective equipment_directive{ sim::EquipmentDirective::passive };
+        director::Profile director_profile{ director::Profile::curriculum };
+        director::TaskKind director_task{ director::TaskKind::stand };
+        director::ChallengeKind director_challenge{ director::ChallengeKind::flat };
+        director::SelectionReason director_reason{ director::SelectionReason::prerequisite_ready };
+        std::uint32_t director_stable_task_id{};
         float difficulty{ 0.25f };
         std::uint64_t rig_generation{};
         std::uint64_t accepted_rig_changes{};
@@ -202,6 +209,13 @@ namespace runner::rl
         std::string pipeline_stage{ "IDLE" };
         std::uint32_t pipeline_stage_mask{};
         std::string message{ "LEARNING TO BALANCE" };
+        bool training_preview_terminal{};
+        std::uint64_t training_preview_trial_id{};
+        sim::TrialTerminalCause training_preview_cause{ sim::TrialTerminalCause::none };
+        sim::InvalidMotion training_preview_reason{ sim::InvalidMotion::none };
+        Vec2 training_preview_position{};
+        sim::TerrainRegion training_preview_terrain{ sim::TerrainRegion::firm };
+        float training_preview_water_depth{};
     };
 
     enum class RigMutationKind : std::uint8_t
@@ -266,6 +280,7 @@ namespace runner::rl
         }
         void set_rig_optimization_mode(RigOptimizationMode mode) noexcept;
         void set_gait_task(sim::GaitTask task) noexcept;
+        void select_director_task(std::uint16_t task_index) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
         void train_one_update() noexcept;
@@ -300,6 +315,30 @@ namespace runner::rl
         {
             return live_.preview_last_reset_reason();
         }
+        [[nodiscard]] bool preview_terminal() const noexcept
+        {
+            return live_.preview_terminal();
+        }
+        [[nodiscard]] sim::TrialTerminalCause preview_terminal_cause() const noexcept
+        {
+            return live_.preview_terminal_cause();
+        }
+        [[nodiscard]] std::uint64_t preview_trial_id() const noexcept
+        {
+            return live_.preview_trial_id();
+        }
+        [[nodiscard]] Vec2 preview_terminal_position() const noexcept
+        {
+            return live_.preview_terminal_position();
+        }
+        [[nodiscard]] sim::TerrainRegion preview_terminal_terrain() const noexcept
+        {
+            return live_.preview_terminal_terrain();
+        }
+        [[nodiscard]] float preview_terminal_water_depth() const noexcept
+        {
+            return live_.preview_terminal_water_depth();
+        }
         [[nodiscard]] const sim::Environment& training_preview() const noexcept
         {
             return cached_training_preview_;
@@ -326,6 +365,7 @@ namespace runner::rl
             set_exploration,
             set_optimization_mode,
             set_gait_task,
+            set_director_task,
             restore_best,
             save_checkpoint,
             apply_checkpoint,
@@ -341,6 +381,7 @@ namespace runner::rl
             float scalar{};
             RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
             sim::GaitTask gait_task{ sim::GaitTask::walk };
+            std::uint16_t director_task_index{ director::invalid_task_index };
             std::filesystem::path path{};
             std::shared_ptr<PpoTrainer::CheckpointData> checkpoint{};
             bool transfer_only{};
@@ -500,6 +541,8 @@ namespace runner::rl
             sim::creature_species_paths(sim::CreatureSpecies::human).autonomy_state };
         sim::CourseStage stage_{ sim::CourseStage::balance };
         sim::GaitTask gait_task_{ sim::GaitTask::walk };
+        director::State director_state_{
+            director::make_state(director::Profile::curriculum) };
         float difficulty_{ 0.25f };
         std::uint64_t rig_generation_{};
         std::uint64_t accepted_rig_changes_{};

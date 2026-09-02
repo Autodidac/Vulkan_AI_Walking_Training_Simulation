@@ -210,6 +210,15 @@ int main()
     require(sim::action_requested_swing_side(articulated_human.blueprint(),
                 neutral_actions) == 0,
         "neutral motor geometry manufactured a timed swing-foot selection");
+    require(sim::rearm_support_unload_side(-1, 0, true) == 0
+            && sim::rearm_support_unload_side(1, 0, true) == 0,
+        "neutral geometry did not rearm a completed physical unload");
+    require(sim::rearm_support_unload_side(-1, 0, false) == -1
+            && sim::rearm_support_unload_side(1, -1, true) == 1,
+        "active release or a continuously requested side bypassed unload latching");
+    require(sim::rearm_support_unload_side(-1, 1, true) == -1
+            && sim::rearm_support_unload_side(1, -1, true) == 1,
+        "opposed policy geometry rewrote history instead of earning its release");
 
     const art::HandArtDimensions fitted_hand = art::hand_art_dimensions(
         32.0f, 40, 28);
@@ -239,9 +248,10 @@ int main()
     {
         sim::Environment environment{ sim::CreatureBlueprint::humanoid(),
             static_cast<std::uint64_t>(0x7480u + static_cast<unsigned>(hz)) };
-        require(sim::EnvironmentTestAccess::displaced_human_plant_error(
-                environment, 1.0f / hz) <= 1.0e-5f,
-            "a latched Human stance foot moved away from its world anchor");
+        const float remaining = sim::EnvironmentTestAccess::displaced_human_plant_error(
+            environment, 1.0f / hz);
+        require(remaining < 0.14f && remaining > 0.005f,
+            "a planted Human foot provided no resistance or became a root lock");
     }
 
     {
@@ -314,6 +324,7 @@ int main()
         }
         if (!raw_teacher.valid_motion()
             || !raw_teacher.body_integrity_valid()
+            || raw_teacher.alternating_steps() < 12u
             || raw_teacher.distance_travelled() < 10.0f
             || raw_teacher.gait_cycles() < static_cast<std::uint32_t>(
                 rl::casual_walk_teacher_stride_events))
@@ -321,6 +332,7 @@ int main()
             std::cerr << "raw teacher distance=" << raw_teacher.distance_travelled()
                 << " cycles=" << raw_teacher.gait_cycles()
                 << " elapsed=" << raw_teacher.elapsed_seconds()
+                << " alternating=" << raw_teacher.alternating_steps()
                 << " invalid=" << static_cast<int>(raw_teacher.invalid_reason())
                 << " upright=" << raw_teacher.uprightness() << '\n';
             const auto& raw_rig = raw_teacher.blueprint();
@@ -364,6 +376,7 @@ int main()
                 && raw_teacher.body_integrity_valid()
                 && raw_teacher.distance_travelled()
                     >= 10.0f
+                && raw_teacher.alternating_steps() >= 12u
                 && raw_teacher.gait_cycles()
                     >= static_cast<std::uint32_t>(
                         rl::casual_walk_teacher_stride_events),
@@ -479,7 +492,7 @@ int main()
 
     require(std::abs(art::human_limb_layer_opacity(true) - 0.98f)
                 <= 1.0e-6f
-            && std::abs(art::human_limb_layer_opacity(false) - 0.22f)
+            && std::abs(art::human_limb_layer_opacity(false) - 0.44f)
                 <= 1.0e-6f,
         "Human near/far limb depth policy regressed into duplicate art");
     require(art::human_limb_thickness_ratio(false, false)
@@ -546,7 +559,9 @@ int main()
                 environment.duck_clearance_margin());
         }
         if (environment.crouch_walk_distance() < 1.50f
-            || environment.gait_cycles() < 8u)
+            || environment.gait_cycles() < 8u
+            || environment.duck_seconds() < 3.5f
+            || maximum_pelvis_drop < 0.30f)
             std::cerr << "Crouch walk evidence " << hz << " Hz: distance="
                 << environment.crouch_walk_distance() << " cycles="
                 << environment.gait_cycles() << " duck="

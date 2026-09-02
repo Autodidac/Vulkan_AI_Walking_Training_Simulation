@@ -1305,8 +1305,8 @@ int main()
     sim::Environment fused_feet(sim::CreatureBlueprint::humanoid(), 19);
     sim::EnvironmentTestAccess::force_fused_supports(fused_feet);
     sim::EnvironmentTestAccess::separate_supports(fused_feet);
-    require(sim::EnvironmentTestAccess::primary_support_gap(fused_feet) > 0.18f,
-        "left and right feet can remain fused into one support blob");
+    require(sim::EnvironmentTestAccess::primary_support_gap(fused_feet) <= 0.005f,
+        "side-view Human soles are separated by a fake physics impulse");
 
     const std::array<sim::CreatureBlueprint, 4> support_presets{
         sim::CreatureBlueprint::humanoid(),
@@ -1324,8 +1324,12 @@ int main()
             sim::EnvironmentTestAccess::semantic_support_cluster_gap(environment);
         const std::string support_message =
             "production rig index " + std::to_string(preset)
-            + " retained fused support clusters; gap=" + std::to_string(support_gap);
-        require(support_gap > 0.040f, support_message);
+            + " violated semantic support-cluster separation; gap="
+            + std::to_string(support_gap);
+        if (support_presets[preset].human_casual_gait_plan())
+            require(support_gap <= 0.005f, support_message);
+        else
+            require(support_gap > 0.040f, support_message);
     }
 
     sim::CreatureBlueprint editor_bone_rig = sim::CreatureBlueprint::scaffold();
@@ -1618,10 +1622,10 @@ int main()
         "zero movement is not classified for reset");
     require(!sim::zero_progress_window(0.08f, 0u, 0.0f, false),
         "meaningful translation is incorrectly classified as zero movement");
-    require(!sim::zero_progress_window(0.0f, 1u, 0.0f, false),
-        "a new gait step is incorrectly classified as zero movement");
-    require(!sim::zero_progress_window(0.0f, 0u, 0.18f, false),
-        "useful leg lift is incorrectly classified as zero movement");
+    require(sim::zero_progress_window(0.0f, 8u, 0.18f, false),
+        "cycle-in-place gait events incorrectly bypass zero-progress recovery");
+    require(!sim::zero_progress_window(0.08f, 8u, 0.18f, false),
+        "translated gait is incorrectly classified as zero movement");
     require(!sim::zero_progress_window(0.0f, 0u, 0.0f, true),
         "active recovery is incorrectly reset as idle");
     require(sim::update_zero_progress_seconds(1.0f, true, 1.0f)
@@ -1634,13 +1638,14 @@ int main()
             && sim::micro_motion_window(
                 0.17f, 0.10f, 0.30f, 0u, true, false),
         "high-energy no-gait vibration bypasses the micro-motion gate");
+    require(sim::micro_motion_window(
+                0.17f, 0.02f, 0.30f, 8u, true, false),
+        "high-energy cycle-in-place gait events bypass the micro-motion gate");
     require(!sim::micro_motion_window(
-                0.17f, 0.02f, 0.30f, 1u, true, false)
-            && !sim::micro_motion_window(
                 0.17f, 0.13f, 0.40f, 0u, true, false)
             && !sim::micro_motion_window(
                 0.17f, 0.02f, 0.30f, 0u, true, true),
-        "real gait, useful progress, or active recovery is micro-motion");
+        "useful progress or active recovery is micro-motion");
     require(rl::self_imitation_prior_weight(0, 128) > rl::self_imitation_prior_weight(500, 128)
             && rl::self_imitation_prior_weight(500, 128) > 0.0f,
         "best-result imitation guide does not decay into a light prior");
@@ -1681,22 +1686,33 @@ int main()
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
             && biped_foundational_gait.step_length <= 0.82f
-            && humanoid_foundational_gait.step_length >= 0.76f
-            && humanoid_foundational_gait.step_length <= 0.88f
-            && humanoid_foundational_gait.swing_lift >= 0.27f
-            && humanoid_foundational_gait.swing_lift <= 0.31f
-            && std::abs(humanoid_foundational_gait.cadence_hz - 0.82f) < 1.0e-6f
-            && humanoid_foundational_gait.transition_flex >= 0.065f
-            && humanoid_foundational_gait.transition_flex <= 0.080f,
+            && std::abs(humanoid_foundational_gait.step_length - 0.74f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.swing_lift - 0.14f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.cadence_hz - 0.90f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.transition_flex - 0.055f)
+                < 1.0e-6f,
         "foundational biped gait is not finite and anatomy-bounded");
-    require(humanoid_foundational_gait.step_length > biped_foundational_gait.step_length
-            && humanoid_foundational_gait.step_length <= 0.88f
-            && humanoid_foundational_gait.swing_lift < 0.82f
+    require(humanoid_foundational_gait.step_length <= 0.82f
+            && humanoid_foundational_gait.swing_lift <= 0.22f
             && std::abs(shifted_arm_gait.step_length
                 - humanoid_foundational_gait.step_length) < 1.0e-6f
             && std::abs(shifted_arm_gait.swing_lift
                 - humanoid_foundational_gait.swing_lift) < 1.0e-6f,
         "foundational stride still depends on arm presence or geometry");
+    const rl::BipedGaitParameters humanoid_speed_walk =
+        rl::anatomy_scaled_foundational_gait(humanoid_walk,
+            sim::GaitTask::speed_walk);
+    require(humanoid_speed_walk.step_length
+                > humanoid_foundational_gait.step_length
+            && humanoid_speed_walk.swing_lift
+                > humanoid_foundational_gait.swing_lift
+            && humanoid_speed_walk.cadence_hz
+                > humanoid_foundational_gait.cadence_hz
+            && humanoid_speed_walk.transition_flex
+                > humanoid_foundational_gait.transition_flex
+            && rl::biped_gait_target_within_reach(
+                humanoid_speed_walk, humanoid_leg_length),
+        "Speed Walk does not own a distinct finite-contact gait band");
     require(rl::authored_gait_startup_blend(-1.0f) == 0.0f
             && rl::authored_gait_startup_blend(0.0f) == 0.0f
             && std::abs(rl::authored_gait_startup_blend(0.075f) - 0.5f) < 1.0e-6f
@@ -1713,10 +1729,10 @@ int main()
         - humanoid_walk.nodes[humanoid_walk.motors[2].pivot].x;
     const float authored_gait_progress = humanoid_foundational_gait.phase_offset / pi;
     const float gait_left_foot_offset = humanoid_foundational_gait.stance_center_x
-        + rl::sagittal_step_x(humanoid_foundational_gait.step_length,
+        + rl::sagittal_step_x(rl::human_authored_stance_step,
             authored_gait_progress, false);
     const float gait_right_foot_offset = humanoid_foundational_gait.stance_center_x
-        + rl::sagittal_step_x(humanoid_foundational_gait.step_length,
+        + rl::sagittal_step_x(rl::human_authored_stance_step,
             authored_gait_progress, true);
     require(humanoid_foundational_gait.phase_offset > 0.0f
             && humanoid_foundational_gait.phase_offset < pi
@@ -1844,6 +1860,8 @@ int main()
             && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::crawler4()) == 1.44f
             && sim::authored_foundational_gait_cadence_hz(
+                sim::CreatureBlueprint::monoped()) == 1.44f
+            && sim::authored_foundational_gait_cadence_hz(
                 sim::CreatureBlueprint::hexapod()) == 1.50f,
         "foundational teacher and observed topology clocks diverged");
     require(rl::casual_walk_teacher_distance == 12.0f
@@ -1852,6 +1870,8 @@ int main()
             && rl::gait_task_mastery_stride_events(sim::GaitTask::walk) == 12.0f
             && rl::gait_task_mastery_distance(sim::GaitTask::speed_walk) == 18.0f
             && rl::gait_task_mastery_stride_events(sim::GaitTask::speed_walk) == 14.0f
+            && rl::gait_task_qualification_distance(
+                sim::GaitTask::speed_walk) == 17.5f
             && rl::gait_task_mastery_distance(
                 sim::GaitTask::walk_run_transition) == 20.0f
             && rl::gait_task_mastery_stride_events(
@@ -2382,9 +2402,9 @@ int main()
     {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
-        static_assert(sim::observation_count == 62);
-        require(observation.size() == 62u,
-            "anatomy, shuttle, material, water, and equipment observation layout is not sixty-two floats");
+        static_assert(sim::observation_count == 63);
+        require(observation.size() == 63u,
+            "anatomy, shuttle, material, water, equipment, and task observation layout is not sixty-three floats");
         require(observation[20] == 0.0f && observation[21] == 0.0f,
             "contact channels overlap motor channels at reset");
         require(std::isfinite(observation[18]) && std::isfinite(observation[19]),

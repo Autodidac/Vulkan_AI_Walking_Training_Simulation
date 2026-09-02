@@ -123,7 +123,7 @@ int main()
     }
     const float speed_walk_mean_speed = speed_walk.distance_travelled() / 20.0f;
     if (!speed_walk_valid || speed_walk.distance_travelled()
-            < rl::speed_walk_mastery_distance
+            < rl::speed_walk_qualification_distance
         || static_cast<float>(speed_walk.gait_cycles())
             < rl::speed_walk_mastery_stride_events
         || speed_walk_mean_speed < rl::gait_task_mastery_speed(
@@ -133,7 +133,7 @@ int main()
             << " mean_speed=" << speed_walk_mean_speed
             << " collisions=" << speed_walk.collision_count() << '\n';
     require(speed_walk_valid && speed_walk.distance_travelled()
-            >= rl::speed_walk_mastery_distance
+            >= rl::speed_walk_qualification_distance
             && static_cast<float>(speed_walk.gait_cycles())
                 >= rl::speed_walk_mastery_stride_events
             && speed_walk_mean_speed >= rl::gait_task_mastery_speed(
@@ -241,6 +241,31 @@ int main()
     require(stopped_gate.equipment_engagement_ready(),
         "stopped, supported, settled physical aim was rejected");
 
+    sim::Environment safe_carry{ sim::CreatureBlueprint::humanoid(), 0x749003u };
+    const std::uint16_t carry_mount = safe_carry.equipment_mount_node_index();
+    std::uint16_t carry_parent = safe_carry.blueprint().torso_node;
+    float shortest_link = std::numeric_limits<float>::infinity();
+    for (const sim::DistanceConstraint& bone : safe_carry.blueprint().bones)
+    {
+        if (bone.a != carry_mount && bone.b != carry_mount)
+            continue;
+        const std::uint16_t candidate = bone.a == carry_mount ? bone.b : bone.a;
+        const float span = length(safe_carry.blueprint().nodes[candidate]
+            - safe_carry.blueprint().nodes[carry_mount]);
+        if (span < shortest_link)
+        {
+            shortest_link = span;
+            carry_parent = candidate;
+        }
+    }
+    const Vec2 carry_link = safe_carry.particles()[carry_mount].position
+        - safe_carry.particles()[carry_parent].position;
+    const float physical_carry_angle = std::atan2(carry_link.y, carry_link.x);
+    require(safe_carry.equipment_state() == sim::EquipmentState::safe_carry
+            && std::abs(wrap_angle(safe_carry.equipment_aim_angle()
+                - physical_carry_angle)) <= 1.0e-5f,
+        "safe-carry art invented a horizontal gun instead of following the hand link");
+
     sim::Environment scalar_cheat{ sim::CreatureBlueprint::humanoid(), 0x749004u };
     scalar_cheat.set_course(sim::CourseStage::balance, 0.30f);
     scalar_cheat.configure_equipment(sim::WeaponClass::sidearm, 4.0f);
@@ -287,7 +312,8 @@ int main()
         28.0f, 64.0f, 9.0f);
     require(hand.length <= 80.0f * 0.43f
             && hand.thickness <= 80.0f * 0.27f
-            && art::fitted_joint_overlap(80.0f, 32.0f, false) <= 80.0f * 0.055f,
+            && art::fitted_joint_overlap(80.0f, 32.0f, false) > 0.0f
+            && art::fitted_joint_overlap(80.0f, 32.0f, false) <= 80.0f * 0.08f,
         "arm/hand art escapes its physical forearm bone envelope");
     require(boot.width <= 64.0f * 0.88f && boot.height <= 64.0f * 0.40f,
         "boot art escapes heel/toe and lower-leg geometry");

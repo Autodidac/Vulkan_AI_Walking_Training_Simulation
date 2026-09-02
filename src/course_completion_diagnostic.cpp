@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <set>
 
@@ -301,12 +302,13 @@ namespace runner::diagnostics
         sim::Environment equipment{ sim::CreatureBlueprint::humanoid(), 0x728500u };
         equipment.set_course(sim::CourseStage::equipment_targets, 0.55f);
         equipment.configure_equipment(sim::WeaponClass::sidearm, 6.0f);
-        for (int frame = 0; frame < 240 && equipment.target_hits() == 0u; ++frame)
+        for (int frame = 0; frame < 1200 && equipment.target_hits() == 0u; ++frame)
         {
             const auto action = rl::effective_policy_action(equipment,
                 std::array<float, sim::action_count>{},
                 sim::CourseStage::equipment_targets);
-            static_cast<void>(equipment.step(action));
+            if (equipment.step(action).terminated)
+                break;
         }
         report.equipment_contract = equipment.weapon_class() == sim::WeaponClass::sidearm
             && equipment.equipment_state() == sim::EquipmentState::ready
@@ -315,10 +317,27 @@ namespace runner::diagnostics
             && equipment.target_hits() >= 1u;
 
         sim::Environment off_a{ sim::CreatureBlueprint::humanoid(), 0x728600u };
+        if (!report.equipment_contract)
+            std::cerr << "equipment diagnostic state="
+                << sim::equipment_state_name(equipment.equipment_state())
+                << " transitions=" << equipment.equipment_transitions()
+                << " shots=" << equipment.shots_fired()
+                << " hits=" << equipment.target_hits()
+                << " misses=" << equipment.shots_missed()
+                << " aim_error=" << equipment.equipment_aim_error()
+                << " speed=" << equipment.forward_speed()
+                << " upright=" << equipment.uprightness()
+                << " left=" << equipment.left_supported()
+                << " right=" << equipment.right_supported()
+                << " elapsed=" << equipment.elapsed_seconds()
+                << " invalid=" << sim::invalid_motion_name(equipment.invalid_reason())
+                << " stopped=" << equipment.equipment_stopped() << '\n';
         sim::Environment off_b{ sim::CreatureBlueprint::humanoid(), 0x728600u };
         off_a.set_course(sim::CourseStage::uneven, 0.55f);
         off_b.set_course(sim::CourseStage::uneven, 0.55f);
         bool identical = true;
+        off_a.clear_equipment();
+        off_b.clear_equipment();
         for (int frame = 0; frame < 120; ++frame)
         {
             std::array<float, sim::action_count> a{};

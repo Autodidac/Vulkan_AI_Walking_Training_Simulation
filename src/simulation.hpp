@@ -21,7 +21,7 @@ namespace runner::sim
     inline constexpr std::size_t equipment_action_count = 3;
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
-    inline constexpr std::size_t observation_count = 62;
+    inline constexpr std::size_t observation_count = 63;
     inline constexpr float foundational_gait_cadence_hz = 1.24f;
 
     enum class ShuttlePhase : std::uint8_t
@@ -163,6 +163,18 @@ namespace runner::sim
         raw_policy_audit
     };
 
+    [[nodiscard]] inline constexpr float default_trial_time_limit_seconds(
+        CourseStage stage) noexcept
+    {
+        return stage == CourseStage::balance ? 12.0f
+            : stage == CourseStage::duck_press ? 36.0f
+            : stage == CourseStage::ramps || stage == CourseStage::duck_bars ? 20.0f
+            : stage == CourseStage::moving_hazards
+                || stage == CourseStage::combat_course ? 48.0f
+            : stage == CourseStage::climb_descent ? 44.0f
+            : stage == CourseStage::equipment_targets ? 32.0f : 36.0f;
+    }
+
     [[nodiscard]] inline std::string_view guidance_mode_name(
         GuidanceMode mode) noexcept
     {
@@ -223,8 +235,16 @@ namespace runner::sim
     [[nodiscard]] inline float gait_task_nominal_cadence_hz(GaitTask task,
         float elapsed_seconds = 0.0f) noexcept
     {
-        return std::lerp(0.82f, 1.55f,
-            gait_task_transition_mix(task, elapsed_seconds));
+        switch (task)
+        {
+        case GaitTask::walk: return 0.90f;
+        case GaitTask::speed_walk: return std::lerp(0.82f, 1.55f, 0.62f);
+        case GaitTask::run: return 1.55f;
+        case GaitTask::walk_run_transition:
+            return std::lerp(0.90f, 1.55f,
+                gait_task_transition_mix(task, elapsed_seconds));
+        }
+        return 0.90f;
     }
 
     inline constexpr std::size_t course_stage_count = 12;
@@ -848,16 +868,19 @@ namespace runner::sim
     [[nodiscard]] inline bool zero_progress_window(float net_progress,
         std::uint32_t new_steps, float useful_foot_lift, bool recovering) noexcept
     {
-        return !recovering && net_progress < 0.045f
-            && new_steps == 0u && useful_foot_lift < 0.11f;
+        static_cast<void>(new_steps);
+        static_cast<void>(useful_foot_lift);
+        // Contact phase changes and leg lift prove articulation, not travel.
+        // A rig cycling in place must still activate bounded physical recovery.
+        return !recovering && net_progress < 0.045f;
     }
 
     [[nodiscard]] inline bool micro_motion_window(float average_energy,
         float net_progress, float root_path, std::uint32_t new_gait_events,
         bool locomotion_required, bool recovery_or_terrain_step) noexcept
     {
-        if (!locomotion_required || recovery_or_terrain_step
-            || new_gait_events > 0u)
+        static_cast<void>(new_gait_events);
+        if (!locomotion_required || recovery_or_terrain_step)
             return false;
         const bool high_energy_stall = average_energy > 0.10f
             && net_progress < 0.05f;
@@ -1217,6 +1240,53 @@ namespace runner::sim
         return clamp(retention, 0.0f, 0.42f);
     }
 
+    struct ContactTraction
+    {
+        float static_coefficient{};
+        float dynamic_coefficient{};
+        float static_capture_distance{};
+        float maximum_static_correction{};
+        float maximum_dynamic_correction{};
+        float normal_load{};
+        float contact_area{};
+    };
+
+    [[nodiscard]] inline ContactTraction contact_traction(
+        float firmness, float looseness, float water_depth,
+        float contact_radius, float inverse_mass, float dt) noexcept
+    {
+        firmness = clamp(firmness, 0.0f, 1.0f);
+        looseness = clamp(looseness, 0.0f, 1.0f);
+        water_depth = std::max(0.0f, water_depth);
+        contact_radius = std::max(0.02f, contact_radius);
+        const float saturation = clamp(water_depth / 0.35f, 0.0f, 1.0f);
+        static_cast<void>(inverse_mass);
+        const float normal_load = clamp(
+            1.0f / std::max(0.15f, inverse_mass), 0.35f, 4.0f);
+        const float area = pi * contact_radius * contact_radius;
+        const float static_coefficient = clamp(
+            (0.22f + firmness * 0.86f)
+                * (1.0f - looseness * 0.38f)
+                * (1.0f - saturation * 0.58f),
+            0.08f, 1.10f);
+        const float dynamic_coefficient = static_coefficient * 0.68f;
+        const float safe_dt = std::max(1.0e-5f, dt);
+        const float reference_radius = 0.11f;
+        const float area_scale = clamp(contact_radius / reference_radius,
+            0.55f, 1.55f);
+        const float positional_gravity_step = 9.81f * safe_dt * safe_dt
+            * area_scale;
+        return {
+            static_coefficient,
+            dynamic_coefficient,
+            (0.018f + contact_radius * 0.12f) * static_coefficient,
+            static_coefficient * positional_gravity_step * 4.0f,
+            dynamic_coefficient * positional_gravity_step * 2.5f,
+            normal_load,
+            area
+        };
+    }
+
     inline constexpr float moving_contact_slop_m = 0.032f;
     // A support must unlatch as soon as an articulated gait deliberately
     // raises it. Waiting for root-level jump velocity pins both feet and lets
@@ -1382,6 +1452,29 @@ namespace runner::sim
         }
         return "UNKNOWN";
     }
+    enum class WaterTraversalPhase : std::uint8_t
+    {
+        dry,
+        approach,
+        wading,
+        swimming,
+        shore_exit
+    };
+
+    [[nodiscard]] inline std::string_view water_traversal_phase_name(
+        WaterTraversalPhase phase) noexcept
+    {
+        switch (phase)
+        {
+        case WaterTraversalPhase::dry: return "DRY";
+        case WaterTraversalPhase::approach: return "WATER APPROACH";
+        case WaterTraversalPhase::wading: return "WADING";
+        case WaterTraversalPhase::swimming: return "SWIMMING";
+        case WaterTraversalPhase::shore_exit: return "SHORE EXIT";
+        }
+        return "UNKNOWN WATER PHASE";
+    }
+
 
     [[nodiscard]] inline FootContactPhase classify_foot_contact_phase(
         bool heel, bool ball, bool toe) noexcept
@@ -1426,13 +1519,14 @@ namespace runner::sim
     {
         unarmed,
         safe_carry,
+        low_ready,
         ready,
         disarmed,
         dropped,
         gun_stance,
         aiming
     };
-    inline constexpr std::size_t equipment_state_count = 7u;
+    inline constexpr std::size_t equipment_state_count = 8u;
 
     [[nodiscard]] inline std::string_view equipment_state_name(
         EquipmentState state) noexcept
@@ -1441,11 +1535,42 @@ namespace runner::sim
         {
         case EquipmentState::unarmed: return "UNARMED";
         case EquipmentState::safe_carry: return "SAFE CARRY";
+        case EquipmentState::low_ready: return "LOW READY";
         case EquipmentState::ready: return "READY";
         case EquipmentState::disarmed: return "DISARMED";
         case EquipmentState::dropped: return "DROPPED";
         case EquipmentState::gun_stance: return "GUN STANCE";
         case EquipmentState::aiming: return "AIMING";
+        }
+        return "UNKNOWN";
+    }
+
+    enum class EquipmentDirective : std::uint8_t
+    {
+        passive,
+        safe_carry_walk,
+        low_ready_walk,
+        stop_and_plant,
+        gun_stance,
+        acquire_and_aim,
+        fire_and_correct,
+        break_contact
+    };
+    inline constexpr std::size_t equipment_directive_count = 8u;
+
+    [[nodiscard]] inline std::string_view equipment_directive_name(
+        EquipmentDirective directive) noexcept
+    {
+        switch (directive)
+        {
+        case EquipmentDirective::passive: return "PASSIVE";
+        case EquipmentDirective::safe_carry_walk: return "SAFE CARRY WALK";
+        case EquipmentDirective::low_ready_walk: return "LOW READY WALK";
+        case EquipmentDirective::stop_and_plant: return "STOP AND PLANT";
+        case EquipmentDirective::gun_stance: return "GUN STANCE";
+        case EquipmentDirective::acquire_and_aim: return "ACQUIRE AND AIM";
+        case EquipmentDirective::fire_and_correct: return "FIRE AND CORRECT";
+        case EquipmentDirective::break_contact: return "BREAK CONTACT";
         }
         return "UNKNOWN";
     }
@@ -1627,6 +1752,20 @@ namespace runner::sim
         return "custom";
     }
 
+    [[nodiscard]] inline constexpr std::string_view creature_species_name(
+        CreatureSpecies species) noexcept
+    {
+        switch (species)
+        {
+        case CreatureSpecies::human: return "HUMAN";
+        case CreatureSpecies::chicken: return "CHICKEN";
+        case CreatureSpecies::dog: return "DOG";
+        case CreatureSpecies::hexapod: return "HEXAPOD";
+        case CreatureSpecies::custom: return "CUSTOM";
+        }
+        return "CUSTOM";
+    }
+
     [[nodiscard]] inline std::optional<CreatureSpecies> creature_species_from_slug(
         std::string_view slug) noexcept
     {
@@ -1657,7 +1796,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0749-" + slug;
+        const std::string state_prefix = "runner-v0750-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -2197,6 +2336,8 @@ namespace runner::sim
     {
         if (blueprint.paired_leg_chains())
             return foundational_gait_cadence_hz;
+        if (blueprint.monopedal_gait())
+            return 1.44f;
         if (blueprint.support_seed_count() >= 6u)
             return 1.50f;
         float support_height = std::numeric_limits<float>::infinity();
@@ -2363,6 +2504,36 @@ namespace runner::sim
         return 0;
     }
 
+    [[nodiscard]] inline int rearm_support_unload_side(int last_side,
+        int requested_side, bool release_windows_idle) noexcept
+    {
+        // A completed physical release is armed again only after the policy
+        // returns both legs to neutral geometry. This permits a missed plant
+        // to be retried later without a gait clock selecting a foot, while a
+        // held or continuously requested leg cannot chatter its contact.
+        return release_windows_idle && requested_side == 0 ? 0 : last_side;
+    }
+
+    enum class TrialTerminalCause : std::uint8_t
+    {
+        none,
+        invalid_motion,
+        time_limit
+    };
+
+    [[nodiscard]] inline std::string_view trial_terminal_cause_name(
+        TrialTerminalCause cause, InvalidMotion invalid_reason) noexcept
+    {
+        switch (cause)
+        {
+        case TrialTerminalCause::none: return "ACTIVE";
+        case TrialTerminalCause::invalid_motion:
+            return invalid_motion_name(invalid_reason);
+        case TrialTerminalCause::time_limit: return "TIME LIMIT";
+        }
+        return "UNKNOWN TERMINAL";
+    }
+
     struct StepResult
     {
         float reward{};
@@ -2371,6 +2542,7 @@ namespace runner::sim
         bool terminated{};
         bool valid_motion{ true };
         InvalidMotion invalid_reason{ InvalidMotion::none };
+        TrialTerminalCause terminal_cause{ TrialTerminalCause::none };
     };
 
     struct MotorDiagnostic
@@ -2407,6 +2579,21 @@ namespace runner::sim
         void disarm_equipment() noexcept;
         void set_diagnostic_rigid_rotation(float radians) noexcept;
         void reset(std::uint64_t seed = 0);
+        void set_trial_time_limit(float seconds) noexcept
+        {
+            trial_time_limit_override_seconds_ = std::isfinite(seconds)
+                ? std::max(0.0f, seconds) : 0.0f;
+        }
+        [[nodiscard]] float trial_time_limit() const noexcept
+        {
+            return trial_time_limit_override_seconds_ > 0.0f
+                ? trial_time_limit_override_seconds_
+                : default_trial_time_limit_seconds(course_stage_);
+        }
+        [[nodiscard]] bool uses_trial_time_limit_override() const noexcept
+        {
+            return trial_time_limit_override_seconds_ > 0.0f;
+        }
         [[nodiscard]] StepResult step(std::span<const float, action_count> actions, float dt = 1.0f / 60.0f);
         [[nodiscard]] std::array<float, observation_count> observation() const noexcept;
         [[nodiscard]] MotorDiagnostic motor_diagnostic(
@@ -2431,7 +2618,19 @@ namespace runner::sim
         {
             return equipment_state_;
         }
+        void set_equipment_directive(EquipmentDirective directive) noexcept
+        {
+            equipment_directive_ = directive;
+        }
+        [[nodiscard]] EquipmentDirective equipment_directive() const noexcept
+        {
+            return equipment_directive_;
+        }
         [[nodiscard]] WeaponClass weapon_class() const noexcept { return weapon_class_; }
+        [[nodiscard]] bool equipment_capable() const noexcept
+        {
+            return equipment_mount_node() != blueprint_.torso_node;
+        }
         [[nodiscard]] float equipment_aim_angle() const noexcept { return equipment_aim_angle_; }
         [[nodiscard]] float equipment_cooldown() const noexcept
         {
@@ -2542,6 +2741,14 @@ namespace runner::sim
         [[nodiscard]] std::uint32_t completed_shuttle_turns() const noexcept
         {
             return shuttle_state_.completed_turns;
+        }
+        [[nodiscard]] WaterTraversalPhase water_traversal_phase() const noexcept
+        {
+            return water_traversal_phase_;
+        }
+        [[nodiscard]] float water_phase_seconds() const noexcept
+        {
+            return water_phase_seconds_;
         }
         [[nodiscard]] float shuttle_phase_seconds() const noexcept
         {
@@ -2671,6 +2878,18 @@ namespace runner::sim
         [[nodiscard]] std::uint32_t obstacles_passed() const noexcept { return obstacles_passed_; }
         [[nodiscard]] std::uint32_t knee_first_faults() const noexcept { return knee_first_faults_; }
         [[nodiscard]] float stance_slip_speed() const noexcept { return stance_slip_speed_; }
+        [[nodiscard]] float stance_slip_distance() const noexcept
+        {
+            return stance_slip_distance_;
+        }
+        [[nodiscard]] float available_traction() const noexcept
+        {
+            return available_traction_;
+        }
+        [[nodiscard]] float used_traction() const noexcept
+        {
+            return used_traction_;
+        }
         [[nodiscard]] bool non_foot_grounded() const noexcept { return non_foot_grounded_; }
         [[nodiscard]] float body_rolling_seconds() const noexcept { return body_rolling_seconds_; }
         [[nodiscard]] float foot_pivot_rolling_seconds() const noexcept { return foot_pivot_rolling_seconds_; }
@@ -2686,6 +2905,8 @@ namespace runner::sim
         [[nodiscard]] int action_support_unload_side() const noexcept
         { return action_support_unload_side_; }
         [[nodiscard]] float zero_progress_seconds() const noexcept { return zero_progress_seconds_; }
+        [[nodiscard]] float micro_motion_seconds() const noexcept
+        { return micro_motion_seconds_; }
         [[nodiscard]] float hazard_stall_seconds() const noexcept { return hazard_stall_seconds_; }
         [[nodiscard]] float obstacle_lift_clearance() const noexcept { return obstacle_lift_clearance_; }
         [[nodiscard]] float stable_stance_seconds() const noexcept { return stable_stance_seconds_; }
@@ -2801,6 +3022,8 @@ namespace runner::sim
         std::vector<Particle> particles_{};
         std::vector<std::uint8_t> support_contact_latch_{};
         std::vector<float> support_contact_anchor_x_{};
+        std::vector<float> support_traction_capacity_{};
+        std::vector<float> support_traction_used_{};
         std::array<float, 2> support_cluster_release_hold_seconds_{};
         std::array<float, 2> support_toe_roll_seconds_{};
         std::vector<CourseFeature> course_features_{};
@@ -2809,8 +3032,9 @@ namespace runner::sim
         std::vector<EquipmentProjectile> equipment_projectiles_{};
         EquipmentTarget equipment_target_{};
         EquipmentState equipment_state_{ EquipmentState::unarmed };
+        EquipmentDirective equipment_directive_{ EquipmentDirective::passive };
         WeaponClass weapon_class_{ WeaponClass::none };
-        WeaponClass configured_weapon_class_{ WeaponClass::none };
+        WeaponClass configured_weapon_class_{ WeaponClass::carbine };
         bool equipment_override_{};
         float configured_target_distance_{ 8.0f };
         float equipment_aim_angle_{};
@@ -2943,6 +3167,9 @@ namespace runner::sim
         bool alternating_step_this_step_{};
         bool single_leg_cycle_this_step_{};
         bool limb_crossing_this_step_{};
+        float previous_water_depth_{};
+        WaterTraversalPhase water_traversal_phase_{ WaterTraversalPhase::dry };
+        float water_phase_seconds_{};
         float maximum_speed_kmh_{};
         std::uint32_t alternating_steps_{};
         std::uint32_t single_leg_cycles_{};
@@ -2958,6 +3185,9 @@ namespace runner::sim
         float last_support_transfer_seconds_{ -100.0f };
         float torso_turn_speed_{};
         float stance_slip_speed_{};
+        float stance_slip_distance_{};
+        float available_traction_{};
+        float used_traction_{};
         float hazard_stall_seconds_{};
         float obstacle_approach_weight_{};
         float obstacle_lift_clearance_{};
@@ -3005,5 +3235,6 @@ namespace runner::sim
         float incoming_material_density_{};
         std::uint8_t obstruction_mask_{};
         InvalidMotion invalid_reason_{ InvalidMotion::none };
+        float trial_time_limit_override_seconds_{};
     };
 }

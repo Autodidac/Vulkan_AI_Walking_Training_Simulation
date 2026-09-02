@@ -1,10 +1,14 @@
 #pragma once
 
 #include "acceptance.hpp"
+#include "ai_director.hpp"
+#include <ai_director_io.hpp>
+#include "art_authoring.hpp"
 #include "autonomy.hpp"
 #include "course_completion_diagnostic.hpp"
 #include "deformable_terrain.hpp"
 #include "hybrid_brain_diagnostic.hpp"
+#include "integration.hpp"
 #include "locomotion_strategy.hpp"
 #include "math.hpp"
 #include "pixel_art.hpp"

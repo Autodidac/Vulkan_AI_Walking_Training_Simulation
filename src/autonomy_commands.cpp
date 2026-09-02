@@ -1,4 +1,5 @@
 #include "autonomy.hpp"
+#include "integration.hpp"
 
 #include <algorithm>
 #include <format>
@@ -30,8 +31,8 @@ namespace runner::rl
             {
                 std::filesystem::path previous_candidate = checkpoint;
                 std::string previous_name = previous_candidate.filename().string();
-                constexpr std::string_view current_prefix{ "runner-v0749-" };
-                constexpr std::string_view prior_prefix{ "runner-v0748-" };
+                constexpr std::string_view current_prefix{ "runner-v0750-" };
+                constexpr std::string_view prior_prefix{ "runner-v0749-" };
                 if (previous_name.starts_with(current_prefix))
                 {
                     previous_name.replace(0u, current_prefix.size(), prior_prefix);
@@ -42,7 +43,7 @@ namespace runner::rl
                     checkpoint = std::move(previous_candidate);
                     rig.clear();
                     state.clear();
-                    legacy_lifetime_version = "V0.7.48";
+                    legacy_lifetime_version = "V0.7.49";
                 }
             }
             if (!std::filesystem::exists(checkpoint))
@@ -99,7 +100,7 @@ namespace runner::rl
         }
         if (!std::filesystem::exists(checkpoint))
         {
-            message = "NO V0.7.49 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
+            message = "NO V0.7.50 AUTOSAVE FOUND - STARTING WITH STAND TRAINING";
             return false;
         }
         queue_autosave_load(std::move(checkpoint), std::move(rig), std::move(state));
@@ -193,6 +194,7 @@ namespace runner::rl
             worker_.set_blueprint(command.blueprint, command.preserve_policy);
             worker_.set_course(stage_, difficulty_, false);
             worker_.set_gait_task(gait_task_, false);
+            worker_.set_equipment_directive(sim::EquipmentDirective::passive);
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             last_evaluation_count_ = worker_.metrics().evaluation_count;
@@ -237,6 +239,16 @@ namespace runner::rl
 
         case CommandType::set_gait_task:
             gait_task_ = command.gait_task;
+            {
+                const std::uint16_t task_index = gait_task_ == sim::GaitTask::walk
+                    ? 1u : gait_task_ == sim::GaitTask::speed_walk
+                    ? 7u : gait_task_ == sim::GaitTask::walk_run_transition
+                    ? 8u : 9u;
+                director_state_.evidence.requested_goal = task_index;
+                director_state_.current = { task_index,
+                    director::SelectionReason::requested_goal,
+                    director_state_.graph.nodes[task_index].stable_id };
+            }
             if (stage_ != sim::CourseStage::uneven)
             {
                 stage_ = sim::CourseStage::uneven;
@@ -244,6 +256,7 @@ namespace runner::rl
                 worker_.set_course(stage_, difficulty_, false);
             }
             worker_.set_gait_task(gait_task_, false);
+            worker_.set_equipment_directive(sim::EquipmentDirective::passive);
             mastery_streak_ = 0;
             degradation_streak_ = 0;
             last_evaluation_count_ = worker_.metrics().evaluation_count;
@@ -256,6 +269,53 @@ namespace runner::rl
                 sim::gait_task_name(gait_task_));
             queue_autosave();
             break;
+
+        case CommandType::set_director_task:
+        {
+            const std::uint16_t index = command.director_task_index;
+            if (index >= director_state_.graph.count)
+            {
+                worker_message_ = "DIRECTOR TASK REJECTED - INVALID STABLE INDEX";
+                break;
+            }
+            const director::TaskNode& node = director_state_.graph.nodes[index];
+            const integration::DesiredTaskState desired =
+                integration::desired_task_state(node.task);
+            if (!node.enabled || !director::task_supported(node.task)
+                || !desired.valid)
+            {
+                worker_message_ = std::format("DIRECTOR TASK UNAVAILABLE - {}",
+                    director::task_name(node.task));
+                break;
+            }
+            if (desired.equipment_task && !worker_.preview().equipment_capable())
+            {
+                worker_message_ = "DIRECTOR GUN TASK REJECTED - RIG HAS NO PHYSICAL MOUNT";
+                break;
+            }
+            director_state_.evidence.requested_goal = index;
+            director_state_.current = { index,
+                director::SelectionReason::requested_goal, node.stable_id };
+            stage_ = desired.stage;
+            gait_task_ = desired.gait;
+            difficulty_ = clamp(node.difficulty, 0.10f, 1.0f);
+            worker_.set_course(stage_, difficulty_, false);
+            worker_.set_gait_task(gait_task_, false);
+            worker_.set_equipment_directive(desired.equipment);
+            mastery_streak_ = 0;
+            degradation_streak_ = 0;
+            last_evaluation_count_ = worker_.metrics().evaluation_count;
+            last_saved_best_update_ = 0u;
+            stage_entry_total_updates_ = worker_.metrics().total_updates;
+            stage_entry_total_episodes_ = worker_.metrics().total_episodes;
+            stage_entry_evaluation_count_ = worker_.metrics().evaluation_count;
+            stage_entry_baseline_initialized_ = true;
+            worker_message_ = std::format("DIRECTOR TASK SELECTED - {} / {}",
+                director::task_name(node.task),
+                director::challenge_name(node.challenge));
+            queue_autosave();
+            break;
+        }
 
         case CommandType::restore_best:
             if (worker_.restore_best_policy())
@@ -307,7 +367,7 @@ namespace runner::rl
                     rejected_rig_changes_ = command.rejected_rig_changes;
                     rollback_count_ = command.rollback_count;
                     optimization_mode_ = command.optimization_mode;
-                    worker_message_ = std::format("V0.7.49 AUTOSAVE RESUMED - {}",
+                    worker_message_ = std::format("V0.7.50 AUTOSAVE RESUMED - {}",
                         rig_optimization_mode_name(optimization_mode_));
                 }
                 else if (worker_.import_lifetime_ledger(lifetime, error))

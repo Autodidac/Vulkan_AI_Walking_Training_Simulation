@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Epoch2DWalkEngine VERSION 0.7.49 LANGUAGES CXX)
+project(Epoch2DWalkEngine VERSION 0.7.50 LANGUAGES CXX)
 
 option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
 option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
@@ -154,7 +154,7 @@ if(RUNNER_BUILD_APP)
         src/main.cpp
         src/app.cpp
         src/canvas.cpp src/renderer.cpp
-        src/app.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
+        src/app.hpp src/art_authoring.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
         src/ui_font.hpp src/ui_layout.hpp src/view_camera.hpp
         src/locomotion_strategy.hpp src/preview_sync.hpp
         src/species_art_layout.hpp
@@ -231,6 +231,7 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md" "$<TARGET_FILE_DIR:Runner>/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         VERBATIM)
 
@@ -289,16 +290,21 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         DESTINATION docs COMPONENT RunnerRuntime)
     install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
 endif()
 set(EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS
     src/acceptance.hpp
+    src/ai_director.hpp
+    src/ai_director_io.hpp
+    src/art_authoring.hpp
     src/autonomy.hpp
     src/course_completion_diagnostic.hpp
     src/deformable_terrain.hpp
     src/hybrid_brain_diagnostic.hpp
+    src/integration.hpp
     src/locomotion_strategy.hpp
     src/math.hpp
     src/pixel_art.hpp
@@ -648,6 +654,19 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0749PhysicalCombatTerrain
         COMMAND RunnerV0749PhysicalCombatTerrainTests)
     set_tests_properties(Runner.V0749PhysicalCombatTerrain PROPERTIES TIMEOUT 180)
+
+    add_executable(RunnerV0750PersistentDirectorArtTests
+        tests/v0750_persistent_director_art_tests.cpp)
+    target_link_libraries(RunnerV0750PersistentDirectorArtTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0750PersistentDirectorArtTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_definitions(RunnerV0750PersistentDirectorArtTests PRIVATE
+        RUNNER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_features(RunnerV0750PersistentDirectorArtTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0750PersistentDirectorArtTests)
+    add_test(NAME Runner.V0750PersistentDirectorArt
+        COMMAND RunnerV0750PersistentDirectorArtTests)
+    set_tests_properties(Runner.V0750PersistentDirectorArt PROPERTIES TIMEOUT 180)
 
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)

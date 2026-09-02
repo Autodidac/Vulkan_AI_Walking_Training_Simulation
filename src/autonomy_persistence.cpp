@@ -150,7 +150,19 @@ namespace runner::rl
                 representative_tiebreak = tiebreak;
             }
         }
-        if (representative != nullptr)
+        if (worker_.has_training_terminal_preview())
+        {
+            snapshot.training_preview = worker_.training_terminal_preview();
+            snapshot.has_training_preview = true;
+            snapshot.status.training_preview_terminal = true;
+            snapshot.status.training_preview_trial_id = worker_.training_terminal_trial_id();
+            snapshot.status.training_preview_cause = worker_.training_terminal_cause();
+            snapshot.status.training_preview_reason = worker_.training_terminal_reason();
+            snapshot.status.training_preview_position = worker_.training_terminal_position();
+            snapshot.status.training_preview_terrain = worker_.training_terminal_terrain();
+            snapshot.status.training_preview_water_depth = worker_.training_terminal_water_depth();
+        }
+        else if (representative != nullptr)
         {
             snapshot.training_preview = *representative;
             snapshot.has_training_preview = true;
@@ -158,6 +170,18 @@ namespace runner::rl
         snapshot.status.enabled = enabled_.load(std::memory_order_relaxed);
         snapshot.status.stage = stage_;
         snapshot.status.gait_task = gait_task_;
+        snapshot.status.equipment_directive = worker_.equipment_directive();
+        snapshot.status.director_profile = director_state_.profile;
+        snapshot.status.director_reason = director_state_.current.reason;
+        snapshot.status.director_stable_task_id = director_state_.current.stable_id;
+        if (director_state_.current.selected()
+            && director_state_.current.task_index < director_state_.graph.count)
+        {
+            const director::TaskNode& task = director_state_.graph.nodes[
+                director_state_.current.task_index];
+            snapshot.status.director_task = task.task;
+            snapshot.status.director_challenge = task.challenge;
+        }
         snapshot.status.difficulty = difficulty_;
         snapshot.status.rig_generation = rig_generation_;
         snapshot.status.accepted_rig_changes = accepted_rig_changes_;

@@ -131,6 +131,10 @@ namespace runner::diagnostics
         float collisions{};
         std::uint32_t invalid_runs{};
         std::uint32_t rejection_mask{};
+        std::uint64_t failed_seed{};
+        float failed_distance{};
+        float failed_survival{};
+        sim::InvalidMotion failed_reason{ sim::InvalidMotion::none };
         float teacher_authority{};
         bool speed_walk_retained{};
         bool walk_retained{};

@@ -111,6 +111,7 @@ namespace runner::rl
                 float current_entropy_coefficient{};
                 sim::CourseStage current_stage{ sim::CourseStage::balance };
                 sim::GaitTask current_gait_task{ sim::GaitTask::walk };
+                sim::EquipmentDirective current_equipment_directive{ sim::EquipmentDirective::safe_carry_walk };
                 float current_difficulty{};
                 std::uint64_t current_evaluation_sequence{};
                 sim::GuidanceMode current_guidance_mode{ sim::GuidanceMode::assisted };
@@ -135,6 +136,7 @@ namespace runner::rl
                     current_entropy_coefficient = entropy_coefficient;
                     current_stage = stage;
                     current_gait_task = gait_task;
+                    current_equipment_directive = equipment_directive;
                     current_difficulty = difficulty;
                     current_evaluation_sequence = evaluation_sequence;
                     current_guidance_mode = guidance_mode;
@@ -207,6 +209,8 @@ namespace runner::rl
                             configure_policy_evaluation_environment(environment,
                                 current_stage, current_difficulty,
                                 current_gait_task, current_guidance_mode);
+                            environment.set_equipment_directive(
+                                current_equipment_directive);
                             float episode_reward{};
                             for (int step = 0; step < maximum_steps; ++step)
                             {
@@ -326,6 +330,7 @@ namespace runner::rl
         float entropy_coefficient{};
         sim::CourseStage stage{ sim::CourseStage::balance };
         sim::GaitTask gait_task{ sim::GaitTask::walk };
+        sim::EquipmentDirective equipment_directive{ sim::EquipmentDirective::safe_carry_walk };
         float difficulty{ 0.25f };
         std::uint64_t evaluation_sequence{};
         sim::GuidanceMode guidance_mode{ sim::GuidanceMode::assisted };
@@ -443,6 +448,7 @@ namespace runner::rl
             state.active_workers = std::min({ active_worker_count_, state.worker_count, evaluation_agents });
             state.stage = course_stage_;
             state.gait_task = gait_task_;
+            state.equipment_directive = equipment_directive_;
             state.difficulty = course_difficulty_;
             state.evaluation_sequence = evaluation_sequence;
             state.guidance_mode = foundational_walk_uses_raw_evaluation(
@@ -685,8 +691,9 @@ namespace runner::rl
         {
             best_parameters_ = policy_.parameters();
             preview_policy_.parameters() = best_parameters_;
-            preview_reset_sequence_ = 0u;
-            preview_.reset(0xDEADBEEFu + metrics_.update);
+            // A better controller is retained without teleporting the visible
+            // physical trial back to spawn. Explicit retry or task transition
+            // owns the next preview reset.
             metrics_.best_evaluation_distance = metrics_.evaluation_distance;
             metrics_.best_evaluation_score = metrics_.evaluation_score;
             metrics_.best_quality_key = metrics_.evaluation_quality_key;

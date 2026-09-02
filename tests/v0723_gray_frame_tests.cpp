@@ -101,7 +101,7 @@ int main()
         require_visible(application.vertices(), rig_live, "Rig Lab Live viewport");
 
     const float usable_width = rig_panel.width - 36.0f;
-    const float tab_width = (usable_width - 18.0f) * 0.25f;
+    const float tab_width = (usable_width - 24.0f) * 0.20f;
     const float tab_y = rig_panel.y + 16.0f + 38.0f + 17.5f;
     const auto select_page = [&](int slot, std::string_view name)
     {
@@ -115,12 +115,15 @@ int main()
         };
         application.frame(click, dt, width, height);
         require_visible(application.vertices(), rig_panel, name);
+        require_visible(application.vertices(), rig_trainer,
+            "complete trainer retained while switching Rig Lab pages");
         require_visible(application.vertices(), rig_world, "Rig Lab viewport after page switch");
     };
 
     select_page(1, "Rig Lab STRUCTURE page");
     select_page(2, "Rig Lab MOTORS page");
-    select_page(3, "Rig Lab TEST page");
+    select_page(3, "Rig Lab ART page");
+    select_page(4, "Rig Lab TEST page");
     select_page(0, "Rig Lab PRESETS page after repeated switching");
 
     std::cout << "Runner v0.7.23 rounded-outline and final-frame tests passed\n";

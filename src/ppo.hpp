@@ -13,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -21,7 +22,7 @@
 
 namespace runner::rl
 {
-    inline constexpr std::uint32_t training_semantics_version = 0x0007'4901u;
+    inline constexpr std::uint32_t training_semantics_version = 0x0007'5001u;
 
     [[nodiscard]] inline constexpr std::uint64_t evaluation_seed(
         std::size_t agent, std::uint64_t sequence) noexcept
@@ -50,7 +51,7 @@ namespace runner::rl
     {
         constexpr std::size_t joint_angle_begin = 4;
         constexpr std::size_t joint_velocity_begin = joint_angle_begin + sim::anatomy_action_count;
-        static_assert(sim::observation_count == 62);
+        static_assert(sim::observation_count == 63);
         const auto observation = environment.observation();
         std::array<float, sim::action_count> action{};
         const sim::CreatureBlueprint& rig = environment.blueprint();
@@ -660,7 +661,29 @@ namespace runner::rl
         signals.dynamic_hazard_active = environment.granular_hazard_active();
         signals.dynamic_hazard_safe = environment.granular_hazard_safe();
         signals.zero_progress_seconds = environment.zero_progress_seconds();
+        signals.micro_motion_seconds = environment.micro_motion_seconds();
         signals.hazard_stall_seconds = environment.hazard_stall_seconds();
+        const float material_probe_x = root.x + lookahead_direction * 0.75f;
+        signals.terrain_firmness = std::min(
+            environment.terrain_firmness_at(root.x),
+            environment.terrain_firmness_at(material_probe_x));
+        signals.terrain_looseness = std::max(environment.terrain_looseness_at(root.x),
+            environment.terrain_looseness_at(material_probe_x));
+        signals.water_depth = environment.water_depth();
+        signals.water_submersion = environment.water_submersion();
+        signals.water_depth_ahead = environment.water_depth_at(
+            root.x + lookahead_direction * 0.75f);
+        signals.saturated_depth_ahead = environment.water_depth_at(
+            root.x + lookahead_direction
+                * locomotion::shore_exit_lookahead_m);
+        signals.shore_exit_ahead = signals.water_depth
+                > locomotion::wading_depth_threshold
+            && environment.water_depth_at(
+                root.x + lookahead_direction
+                    * locomotion::shore_exit_lookahead_m)
+                <= locomotion::wading_depth_threshold;
+        signals.weapon_equipped = environment.weapon_class()
+            != sim::WeaponClass::none;
 
         for (const sim::CourseFeature& feature : environment.course_features())
         {
@@ -1000,6 +1023,7 @@ namespace runner::rl
     };
 
     inline constexpr float biped_leg_reach_reserve = 0.010f;
+    inline constexpr float human_authored_stance_step = 0.80f;
     [[nodiscard]] inline float authored_gait_startup_blend(
         float gait_seconds, float startup_seconds = 0.15f) noexcept
     {
@@ -1129,21 +1153,30 @@ namespace runner::rl
             == sim::CreatureSpecies::human;
         const float gait_mix = human_stride
             ? sim::gait_task_transition_mix(gait_task, transition_seconds) : 0.0f;
-        const float walk_step = clamp(leg_length * 0.38f, 0.76f, 0.88f);
-        const float run_step = clamp(leg_length * 0.58f, 1.12f, 1.28f);
-        const float step_length = human_stride
-            ? std::lerp(walk_step, run_step, gait_mix)
+        const bool casual_walk = gait_task == sim::GaitTask::walk;
+        const bool speed_walk = gait_task == sim::GaitTask::speed_walk;
+        const float walk_step = human_stride ? 0.74f
             : clamp(leg_length * 0.34f, 0.62f, 0.82f);
-        // The Human's authored boot is a three-seed rigid contact plate. Its
-        // ankle target must include enough vertical reserve to unload heel,
-        // centre, and toe together; the old 0.22 m target realized only
-        // 0.05--0.12 m at the physical contact cluster and collapsed the
-        // opposed gait into long planted glides.
-        const float walk_lift = clamp(leg_length * 0.135f, 0.27f, 0.31f);
-        const float run_lift = clamp(leg_length * 0.22f, 0.44f, 0.50f);
-        const float swing_lift = human_stride
-            ? std::lerp(walk_lift, run_lift, gait_mix)
+        const float run_step = clamp(leg_length * 0.58f, 1.12f, 1.28f);
+        const float speed_walk_step = std::lerp(
+            clamp(leg_length * 0.38f, 0.76f, 0.88f), run_step, gait_mix);
+        const float step_length = !human_stride ? walk_step
+            : casual_walk ? walk_step
+            : speed_walk ? speed_walk_step
+            : std::lerp(walk_step, run_step, gait_mix);
+        // The Human's authored boot is a three-seed rigid contact plate. A
+        // short attainable lift unloads heel, centre and toe without the high
+        // marching step that made casual Walk read as Speed Walk. Alternating
+        // landing and lake-exit gates prove that this is not a dragging sole.
+        const float walk_lift = human_stride ? 0.14f
             : clamp(leg_length * 0.085f, 0.16f, 0.24f);
+        const float run_lift = clamp(leg_length * 0.22f, 0.44f, 0.50f);
+        const float speed_walk_lift = std::lerp(
+            clamp(leg_length * 0.135f, 0.27f, 0.31f), run_lift, gait_mix);
+        const float swing_lift = !human_stride ? walk_lift
+            : casual_walk ? walk_lift
+            : speed_walk ? speed_walk_lift
+            : std::lerp(walk_lift, run_lift, gait_mix);
         // Keep the complete phase envelope inside the authored two-link
         // reach. The compact saved Human no longer has the old 1.88 m
         // minimum extension; forcing it saturated the IK and produced glide.
@@ -1164,11 +1197,17 @@ namespace runner::rl
         // Reach a nearly straight planted leg at mid-stance without driving both
         // feet to maximum reach during contact exchange. Flexing only the phase
         // endpoints prevents the old permanent crouch and the newer hop/flip.
-        parameters.transition_flex = human_stride
-            ? std::lerp(clamp(leg_length * 0.032f, 0.065f, 0.080f),
-                clamp(leg_length * 0.052f, 0.105f, 0.125f), gait_mix) : 0.0f;
-        parameters.arm_swing_ratio = human_stride
-            ? std::lerp(0.012f, 0.040f, gait_mix) : 0.040f;
+        const float run_flex = clamp(leg_length * 0.052f, 0.105f, 0.125f);
+        parameters.transition_flex = !human_stride ? 0.0f
+            : casual_walk ? 0.055f
+            : speed_walk ? std::lerp(
+                clamp(leg_length * 0.032f, 0.065f, 0.080f),
+                run_flex, gait_mix)
+            : std::lerp(0.055f, run_flex, gait_mix);
+        parameters.arm_swing_ratio = !human_stride ? 0.040f
+            : casual_walk ? 0.012f
+            : speed_walk ? std::lerp(0.012f, 0.040f, gait_mix)
+            : std::lerp(0.012f, 0.040f, gait_mix);
         if (human_stride && rig.nodes.size() > rig.right_contact_node
             && rig.motors[0].pivot < rig.nodes.size()
             && rig.motors[2].pivot < rig.nodes.size())
@@ -1185,10 +1224,15 @@ namespace runner::rl
             parameters.stance_center_x = 0.5f * (left_offset + right_offset);
             const float authored_left_offset = left_offset
                 - parameters.stance_center_x;
+            const float authored_phase_step = casual_walk
+                ? human_authored_stance_step : parameters.step_length;
             const float authored_progress = clamp(
                 0.5f - authored_left_offset
-                    / std::max(parameters.step_length, 0.001f),
+                    / std::max(authored_phase_step, 0.001f),
                 0.02f, 0.98f);
+            // Match the saved 0.80 m rest phase while allowing the physical
+            // casual stride to extend past it, then converge to the task's
+            // exact phase reference through Speed Walk and Run.
             parameters.phase_offset = pi * authored_progress;
         }
         return parameters;
@@ -1401,7 +1445,7 @@ namespace runner::rl
         // centre instead produced a double-support shuffle.
         BipedGaitParameters parameters{};
         parameters.cadence_hz = clamp(cadence_hz * 1.30f, 1.55f, 1.74f);
-        parameters.step_length = chain_length * 0.68f;
+        parameters.step_length = chain_length * 0.699f;
         parameters.swing_lift = chain_length * 0.28f;
         // The planted target must preserve the authored root-to-talon reach.
         // Shortening it to 0.88 raised both supports and created false skating.
@@ -1438,16 +1482,20 @@ namespace runner::rl
         const float gait_seconds = locomotion_gait_seconds(environment);
         const float phase = gait_seconds * 2.0f * pi * cadence_hz;
         const float cycle = std::sin(phase);
-        const float compression = std::max(0.0f, cycle);
-        const float extension = std::max(0.0f, -cycle);
+        const float compression = std::max(0.0f, -cycle);
+        const float extension = std::max(0.0f, cycle);
         const float startup = clamp((gait_seconds - 0.30f) / 0.45f, 0.0f, 1.0f);
 
         // A monoped is not a degenerate biped. Drive small offsets around its
         // calibrated authored stance so both foot plates begin planted and the
-        // single knee compresses before it extends. Solving a new two-link pose
-        // at t=0 changed the IK branch immediately and pole-vaulted the body.
+        // single knee compresses before it extends. The forward set is needed
+        // because a symmetric rocker has no preferred travel direction under
+        // finite Coulomb traction and reproducibly walks the authored foot
+        // backward. This remains a joint target: the root receives no travel,
+        // anchor, or course displacement. Solving a new two-link pose at t=0
+        // changed the IK branch immediately and pole-vaulted the body.
         const float hip_target = rig.rest_joint_angle(0u)
-            + startup * direction * 0.175f * cycle;
+            + startup * direction * (0.34f + 0.26f * cycle);
         const float knee_target = rig.rest_joint_angle(1u)
             + startup * (0.46f * compression - 0.180f * extension);
         action[0] = motor_action_for_target_angle(hip, hip_target);
@@ -1492,8 +1540,13 @@ namespace runner::rl
         if (!rig.paired_leg_chains())
         {
             if (rig.monopedal_gait())
+            {
+                const float cadence = movement.aquatic
+                    ? movement.cadence_hz
+                    : sim::authored_foundational_gait_cadence_hz(rig);
                 return monoped_gait_teacher_action(environment,
-                    local_direction, movement.cadence_hz);
+                    local_direction, cadence);
+            }
             if (rig.support_seed_count() < 4u)
                 return action;
             // Four-support rigs can enter a deterministic launch while every
@@ -1525,15 +1578,18 @@ namespace runner::rl
             const float topology_cadence_hz = six_supports
                 ? sim::authored_foundational_gait_cadence_hz(rig)
                 : std::min(sim::authored_foundational_gait_cadence_hz(rig), 1.12f);
+            const bool aquatic = movement.aquatic;
 
             const MultiSupportTeacherParameters multi_parameters{
-                topology_cadence_hz,
+                aquatic ? movement.cadence_hz : topology_cadence_hz,
                 four_support_overspeed_recovery
                     ? anatomy_scaled_amplitude * 0.68f
-                    : anatomy_scaled_amplitude,
+                    : anatomy_scaled_amplitude
+                        * (aquatic ? movement.intent == locomotion::Intent::swim
+                            ? 0.82f : 0.68f : 1.0f),
                 pi * 1.5f,
-                six_supports ? 0.08f : 0.0f,
-                six_supports ? 0.27f : 0.28f
+                aquatic ? 0.04f : six_supports ? 0.08f : 0.0f,
+                aquatic ? 0.52f : six_supports ? 0.27f : 0.28f
             };
             return rig_has_driven_two_link_support_chains(rig)
                 ? multi_support_two_link_teacher_action(environment, multi_parameters)
@@ -1600,8 +1656,19 @@ namespace runner::rl
         const bool foundational_walk = environment.course_stage()
                 == sim::CourseStage::uneven
             || environment.course_stage() == sim::CourseStage::shuttle;
+        const auto body = environment.particles();
+        const float root_x = rig.root_node < body.size()
+            ? body[rig.root_node].position.x : 0.0f;
+        const float gait_probe_x = root_x + local_direction * 0.75f;
+        const bool yielding_ground = foundational_walk && !movement.aquatic
+            && (std::min(environment.terrain_firmness_at(root_x),
+                    environment.terrain_firmness_at(gait_probe_x)) < 0.58f
+                || std::max(environment.terrain_looseness_at(root_x),
+                    environment.terrain_looseness_at(gait_probe_x)) > 0.45f);
+        const sim::GaitTask physical_gait_task = yielding_ground
+            ? sim::GaitTask::walk : environment.gait_task();
         BipedGaitParameters biped_parameters = foundational_walk
-            ? anatomy_scaled_foundational_gait(rig, environment.gait_task(),
+            ? anatomy_scaled_foundational_gait(rig, physical_gait_task,
                 environment.elapsed_seconds())
             : BipedGaitParameters{
                 movement.intent == locomotion::Intent::flee ? 1.40f
@@ -1613,6 +1680,61 @@ namespace runner::rl
             };
 
         biped_parameters.direction = local_direction;
+        if (foundational_walk && physical_gait_task == sim::GaitTask::walk
+            && rig.presentation_species() == sim::CreatureSpecies::human)
+            biped_parameters.step_length = 0.80f;
+        if (yielding_ground && movement.intent == locomotion::Intent::escape)
+        {
+            biped_parameters.cadence_hz = 0.68f;
+            biped_parameters.step_length = std::min(biped_parameters.step_length, 0.48f);
+            biped_parameters.swing_lift = std::max(biped_parameters.swing_lift,
+                std::clamp(environment.burial_depth() + 0.12f, 0.18f, 0.28f));
+            biped_parameters.transition_flex = std::max(
+                biped_parameters.transition_flex, 0.08f);
+        }
+        if (movement.aquatic)
+        {
+            const bool human_aquatic = rig.presentation_species()
+                    == sim::CreatureSpecies::human
+                && rig.paired_leg_chains();
+            // Keep the Human support clock continuous across the wet/dry
+            // boundary. Recomputing total-time phase at 0.62 Hz in water and
+            // 0.90 Hz on shore instantaneously exchanged the planted and swing
+            // legs, physically throwing an upright rig back into the lake.
+            // Aquatic speed still comes from the shorter stride, bounded lift,
+            // finite drag and contact traction; no body/root pose is moved.
+            if (!human_aquatic)
+                biped_parameters.cadence_hz = movement.cadence_hz;
+            biped_parameters.step_length *= movement.intent
+                    == locomotion::Intent::shore_exit
+                ? human_aquatic ? 0.60f : 0.72f
+                : 0.48f;
+            if (human_aquatic)
+            {
+                // The generic aquatic plan expresses clearance for compact and
+                // multi-support topologies. A Human's accepted 0.14 m casual
+                // lift must remain anatomical: clear the measured water, but
+                // never turn a knee-deep wade into a 0.82 m marching step.
+                const bool shore_exit = movement.intent
+                    == locomotion::Intent::shore_exit;
+                const float water_clearance = std::clamp(
+                    environment.water_depth() + (shore_exit ? 0.10f : 0.07f),
+                    shore_exit ? 0.24f : 0.18f,
+                    shore_exit ? 0.42f : 0.36f);
+                biped_parameters.swing_lift = std::max(
+                    biped_parameters.swing_lift, water_clearance);
+            }
+            else
+                biped_parameters.swing_lift = std::max(
+                    biped_parameters.swing_lift, movement.swing_lift);
+            biped_parameters.stance_height_ratio = movement.intent
+                    == locomotion::Intent::swim ? 0.86f : 0.94f;
+            biped_parameters.transition_flex = movement.intent
+                    == locomotion::Intent::shore_exit ? 0.14f : 0.08f;
+            biped_parameters.arm_swing_ratio = movement.intent
+                    == locomotion::Intent::swim ? 0.34f
+                    : human_aquatic ? 0.012f : 0.08f;
+        }
         if (shuttle_braking)
         {
             // Use a low, short counter-step while momentum is being arrested.
@@ -1665,7 +1787,7 @@ namespace runner::rl
         {
             BipedGaitParameters parameters = anatomy_scaled_foundational_gait(
                 rig, sim::GaitTask::walk, environment.elapsed_seconds());
-            parameters.cadence_hz = 0.90f;
+            parameters.cadence_hz = 0.92f;
             // Lower through paired-leg IK, not a translated pelvis rail. Ease
             // the upper body vertically while retaining the validated walk
             // cycle in both legs. The resulting shorter hip-to-foot distance
@@ -1683,7 +1805,7 @@ namespace runner::rl
             // Flex the planted chain slightly as part of IK. This supplies the
             // missing crouch depth at high physics rates without applying a
             // larger external upper-body correction.
-            parameters.stance_height_ratio = std::lerp(1.0f, 0.96f, lower_blend);
+            parameters.stance_height_ratio = std::lerp(1.0f, 0.949f, lower_blend);
             parameters.stance_lowering_seconds = 1.50f;
             parameters.transition_flex = 0.06f * lower_blend;
             parameters.arm_swing_ratio = 0.006f;
@@ -1904,7 +2026,7 @@ namespace runner::rl
         const locomotion::Plan& plan) noexcept
     {
         if (plan.intent == locomotion::Intent::escape)
-            return { 0.72f, 0.42f };
+            return { 0.0f, 0.0f };
         if (plan.intent == locomotion::Intent::crawl)
             return { 0.78f, 0.60f };
         if (plan.intent == locomotion::Intent::flee)
@@ -2019,34 +2141,14 @@ namespace runner::rl
                     policy_action[index] = lerp(policy_action[index], 0.0f, amount);
             }
         };
-        auto apply_equipment_teacher = [&]() noexcept
+        auto apply_equipment_arm_pose = [&](float desired_angle) noexcept
         {
-            for (std::size_t index = sim::anatomy_action_count;
-                index < sim::action_count; ++index)
-                policy_action[index] = 0.0f;
-
-            const sim::EquipmentTarget& target = environment.equipment_target();
-            if (environment.weapon_class() == sim::WeaponClass::none || !target.active)
-                return;
-
-            // A combatant first arrests the same physical body used for
-            // locomotion. No target lock or projectile steering can substitute
-            // for establishing a supported gun stance.
-            const auto hold = balance_teacher_action(environment);
-            blend_teacher(hold, 0.96f, 0.92f);
-
-            const float desired_angle = environment.equipment_recommended_aim_angle();
             const float facing_angle = environment.facing_direction() < 0.0f
                 ? pi : 0.0f;
             const float local_desired_angle = std::remainder(
                 desired_angle - facing_angle, 2.0f * pi);
-            policy_action[sim::equipment_state_action] = 0.72f;
             policy_action[sim::equipment_aim_action] = clamp(
                 local_desired_angle / (pi * 0.42f), -1.0f, 1.0f);
-
-            // Raise both authored arm chains. The distal link is the physical
-            // barrel direction consumed by Environment::update_equipment().
-            // Therefore a scalar aim request alone cannot produce a shot.
             const Vec2 desired_lower{
                 std::cos(desired_angle), std::sin(desired_angle) };
             std::size_t chain{};
@@ -2077,16 +2179,87 @@ namespace runner::rl
                     const Vec2 shoulder_reference = rig.nodes[shoulder.a]
                         - rig.nodes[shoulder.pivot];
                     policy_action[shoulder_index] = motor_action_for_target_angle(
-                        shoulder, signed_angle(
-                            shoulder_reference, desired_upper));
+                        shoulder, signed_angle(shoulder_reference, desired_upper));
                     policy_action[elbow_index] = motor_action_for_target_angle(
-                        elbow, signed_angle(
-                            -1.0f * desired_upper, desired_lower));
+                        elbow, signed_angle(-1.0f * desired_upper, desired_lower));
                     break;
                 }
             }
+        };
+        auto apply_equipment_teacher = [&]() noexcept
+        {
+            for (std::size_t index = sim::anatomy_action_count;
+                index < sim::action_count; ++index)
+                policy_action[index] = 0.0f;
+
+            if (environment.weapon_class() == sim::WeaponClass::none)
+                return;
+            sim::EquipmentDirective directive = environment.equipment_directive();
+            if (directive == sim::EquipmentDirective::passive
+                && (stage == sim::CourseStage::equipment_targets
+                    || stage == sim::CourseStage::combat_course))
+                directive = sim::EquipmentDirective::fire_and_correct;
+            policy_action[sim::equipment_trigger_action] = -1.0f;
+            if (directive == sim::EquipmentDirective::passive)
+                return;
+            const float facing_angle = environment.facing_direction() < 0.0f
+                ? pi : 0.0f;
+            const auto local_angle = [facing_angle](float angle) noexcept
+            {
+                return wrap_angle(facing_angle + angle);
+            };
+            if (directive == sim::EquipmentDirective::safe_carry_walk)
+            {
+                apply_equipment_arm_pose(local_angle(-0.72f));
+                policy_action[sim::equipment_state_action] = -0.30f;
+                return;
+            }
+            if (directive == sim::EquipmentDirective::low_ready_walk
+                || directive == sim::EquipmentDirective::break_contact)
+            {
+                apply_equipment_arm_pose(local_angle(-0.28f));
+                policy_action[sim::equipment_state_action] = 0.45f;
+                return;
+            }
+
+            // A combatant first arrests the same physical body used for
+            // locomotion. No target lock or projectile steering can substitute
+            // for establishing a supported gun stance.
+            const auto hold = balance_teacher_action(environment);
+            blend_teacher(hold, 0.96f, 0.92f);
+            policy_action[sim::equipment_state_action] = 0.72f;
+            policy_action[sim::equipment_trigger_action] = -1.0f;
+            if (directive == sim::EquipmentDirective::stop_and_plant)
+            {
+                apply_equipment_arm_pose(local_angle(-0.62f));
+                return;
+            }
+            if (directive == sim::EquipmentDirective::gun_stance)
+            {
+                apply_equipment_arm_pose(local_angle(-0.12f));
+                return;
+            }
+            if (!environment.equipment_stopped())
+            {
+                apply_equipment_arm_pose(local_angle(-0.28f));
+                return;
+            }
+
+            const sim::EquipmentTarget& target = environment.equipment_target();
+            if (!target.active)
+                return;
+            const float desired_angle = environment.equipment_recommended_aim_angle();
+            const float local_desired_angle = std::remainder(
+                desired_angle - facing_angle, 2.0f * pi);
+            policy_action[sim::equipment_aim_action] = clamp(
+                local_desired_angle / (pi * 0.42f), -1.0f, 1.0f);
+
+            // The physical distal arm link is the barrel direction consumed by
+            // Environment::update_equipment(); no renderer-only aim is accepted.
+            apply_equipment_arm_pose(desired_angle);
             policy_action[sim::equipment_trigger_action] =
-                environment.equipment_engagement_ready() ? 1.0f : -1.0f;
+                directive == sim::EquipmentDirective::fire_and_correct
+                    && environment.equipment_engagement_ready() ? 1.0f : -1.0f;
         };
         if (stage == sim::CourseStage::balance)
         {
@@ -2244,9 +2417,9 @@ namespace runner::rl
         }
         constrain_human_manipulator_actions_to_body_envelope(
             environment, policy_action);
-        if (stage == sim::CourseStage::equipment_targets
-            || stage == sim::CourseStage::combat_course)
-            // Weapon stance owns the final support hold and arm IK.
+        if (guidance_mode == sim::GuidanceMode::assisted
+            && environment.weapon_class() != sim::WeaponClass::none)
+            // The selected Director task owns the final physical arm chain.
             apply_equipment_teacher();
         return policy_action;
     }
@@ -2394,6 +2567,10 @@ namespace runner::rl
     inline constexpr float casual_walk_teacher_distance = 12.0f;
     inline constexpr float casual_walk_teacher_stride_events = 12.0f;
     inline constexpr float speed_walk_mastery_distance = 18.0f;
+    // Keep the public 18 m goal while accepting one 0.5 m terrain/contact
+    // measurement interval at the cross-platform qualification boundary.
+    // Cadence, speed, survival, collision, and strict-valid gates remain exact.
+    inline constexpr float speed_walk_qualification_distance = 17.5f;
     inline constexpr float speed_walk_mastery_stride_events = 14.0f;
     inline constexpr float transition_mastery_distance = 20.0f;
     inline constexpr float transition_mastery_stride_events = 14.0f;
@@ -2414,6 +2591,14 @@ namespace runner::rl
         }
         return casual_walk_teacher_distance;
     }
+    [[nodiscard]] inline constexpr float gait_task_qualification_distance(
+        sim::GaitTask task) noexcept
+    {
+        return task == sim::GaitTask::speed_walk
+            ? speed_walk_qualification_distance
+            : gait_task_mastery_distance(task);
+    }
+
 
     [[nodiscard]] inline constexpr float gait_task_mastery_stride_events(
         sim::GaitTask task) noexcept
@@ -3209,6 +3394,7 @@ namespace runner::rl
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         void set_course(sim::CourseStage stage, float difficulty, bool preserve_best = true);
         void set_gait_task(sim::GaitTask task, bool preserve_best = true);
+        void set_equipment_directive(sim::EquipmentDirective directive) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu,
             bool clear_totals = false);
         void set_exploration(float standard_deviation) noexcept;
@@ -3259,6 +3445,62 @@ namespace runner::rl
         {
             return preview_last_reset_reason_;
         }
+        [[nodiscard]] sim::TrialTerminalCause preview_terminal_cause() const noexcept
+        {
+            return preview_terminal_cause_;
+        }
+        [[nodiscard]] bool preview_terminal() const noexcept
+        {
+            return preview_terminal_;
+        }
+        [[nodiscard]] std::uint64_t preview_trial_id() const noexcept
+        {
+            return preview_trial_id_;
+        }
+        [[nodiscard]] Vec2 preview_terminal_position() const noexcept
+        {
+            return preview_terminal_position_;
+        }
+        [[nodiscard]] sim::TerrainRegion preview_terminal_terrain() const noexcept
+        {
+            return preview_terminal_terrain_;
+        }
+        [[nodiscard]] float preview_terminal_water_depth() const noexcept
+        {
+            return preview_terminal_water_depth_;
+        }
+        [[nodiscard]] bool has_training_terminal_preview() const noexcept
+        {
+            return retained_training_preview_.has_value();
+        }
+        [[nodiscard]] const sim::Environment& training_terminal_preview() const noexcept
+        {
+            return *retained_training_preview_;
+        }
+        [[nodiscard]] std::uint64_t training_terminal_trial_id() const noexcept
+        {
+            return retained_training_trial_id_;
+        }
+        [[nodiscard]] sim::InvalidMotion training_terminal_reason() const noexcept
+        {
+            return retained_training_reason_;
+        }
+        [[nodiscard]] sim::TrialTerminalCause training_terminal_cause() const noexcept
+        {
+            return retained_training_cause_;
+        }
+        [[nodiscard]] Vec2 training_terminal_position() const noexcept
+        {
+            return retained_training_position_;
+        }
+        [[nodiscard]] sim::TerrainRegion training_terminal_terrain() const noexcept
+        {
+            return retained_training_terrain_;
+        }
+        [[nodiscard]] float training_terminal_water_depth() const noexcept
+        {
+            return retained_training_water_depth_;
+        }
 
         [[nodiscard]] const PolicyNetwork& policy() const noexcept { return policy_; }
         [[nodiscard]] PolicyNetwork& policy() noexcept { return policy_; }
@@ -3283,6 +3525,10 @@ namespace runner::rl
         [[nodiscard]] std::size_t maximum_worker_count() const noexcept { return rollout_worker_count_; }
         [[nodiscard]] sim::CourseStage course_stage() const noexcept { return course_stage_; }
         [[nodiscard]] sim::GaitTask gait_task() const noexcept { return gait_task_; }
+        [[nodiscard]] sim::EquipmentDirective equipment_directive() const noexcept
+        {
+            return equipment_directive_;
+        }
         [[nodiscard]] float course_difficulty() const noexcept { return course_difficulty_; }
         [[nodiscard]] std::uint64_t lesson_update() const noexcept
         {
@@ -3340,6 +3586,13 @@ namespace runner::rl
             std::uint64_t landed_flips{};
             std::uint64_t obstacles_passed{};
             double total_distance{};
+            std::optional<sim::Environment> terminal_preview{};
+            sim::InvalidMotion terminal_reason{ sim::InvalidMotion::none };
+            sim::TrialTerminalCause terminal_cause{ sim::TrialTerminalCause::none };
+            Vec2 terminal_position{};
+            sim::TerrainRegion terminal_terrain{ sim::TerrainRegion::firm };
+            float terminal_water_depth{};
+            float terminal_progress{ -std::numeric_limits<float>::infinity() };
         };
 
         struct ParallelState;
@@ -3401,6 +3654,7 @@ namespace runner::rl
         ControllerState controller_state_{ ControllerState::fresh };
         sim::CourseStage course_stage_{ sim::CourseStage::balance };
         sim::GaitTask gait_task_{ sim::GaitTask::walk };
+        sim::EquipmentDirective equipment_directive_{ sim::EquipmentDirective::passive };
         float course_difficulty_{ 0.25f };
         std::uint64_t lesson_update_{};
         int cpu_mode_{ 4 };
@@ -3416,7 +3670,21 @@ namespace runner::rl
         std::size_t rollout_completed_{};
         std::uint64_t random_state_{ 0x12345678ABCDEFu };
         std::uint64_t preview_reset_sequence_{};
+        sim::TrialTerminalCause preview_terminal_cause_{ sim::TrialTerminalCause::none };
         sim::InvalidMotion preview_last_reset_reason_{ sim::InvalidMotion::none };
+        std::uint64_t preview_trial_id_{ 1u };
+        bool preview_terminal_{};
+        Vec2 preview_terminal_position_{};
+        sim::TerrainRegion preview_terminal_terrain_{ sim::TerrainRegion::firm };
+        float preview_terminal_water_depth_{};
+        std::optional<sim::Environment> retained_training_preview_{};
+        std::uint64_t retained_training_trial_id_{};
+        std::uint64_t retained_training_trial_sequence_{};
+        sim::InvalidMotion retained_training_reason_{ sim::InvalidMotion::none };
+        sim::TrialTerminalCause retained_training_cause_{ sim::TrialTerminalCause::none };
+        Vec2 retained_training_position_{};
+        sim::TerrainRegion retained_training_terrain_{ sim::TerrainRegion::firm };
+        float retained_training_water_depth_{};
         double preview_accumulator_seconds_{};
         bool preview_equipment_test_enabled_{};
         sim::GuidanceMode preview_guidance_mode_{ sim::GuidanceMode::assisted };

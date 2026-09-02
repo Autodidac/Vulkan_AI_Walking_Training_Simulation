@@ -210,8 +210,7 @@ int main()
     require(app.find("PRIOR LINEAGE") != std::string::npos
             && app.find("DISCARDED") == std::string::npos
             && app.find("presentation_pixel_scale(scale)") != std::string::npos
-            && app.find("scaled_pixels(42.0f, art_pixel_scale)")
-                != std::string::npos
+            && app.find("draw_authored_pixel_art") != std::string::npos
             && app.find("BACKWARD BRACE PREVIEW") != std::string::npos,
         "packaged renderer/diagnostics source lost the v0.7.35 contracts");
 

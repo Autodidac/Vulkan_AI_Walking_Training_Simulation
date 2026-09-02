@@ -221,7 +221,7 @@ int main()
     {
         const std::filesystem::path source_root{ RUNNER_SOURCE_ROOT };
         const std::string app = read_text(source_root / "src/app.cpp");
-        require(app.find("draw_oriented_pixel_art(canvas, optional_torso_art")
+        require(app.find("art::Module::body, optional_torso_art")
                 != std::string::npos
                 && app.find("art::oriented_box_transform(center, body_right")
                     != std::string::npos

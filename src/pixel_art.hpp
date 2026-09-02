@@ -38,6 +38,42 @@ namespace runner::art
         }
     };
 
+    struct OpaquePixelBounds
+    {
+        int left{};
+        int top{};
+        int right{};
+        int bottom{};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return right > left && bottom > top;
+        }
+    };
+
+    [[nodiscard]] inline OpaquePixelBounds opaque_pixel_bounds(
+        const PixelArt& art) noexcept
+    {
+        if (!art.loaded())
+            return {};
+        OpaquePixelBounds bounds{ art.width, art.height, 0, 0 };
+        for (int y = 0; y < art.height; ++y)
+        {
+            for (int x = 0; x < art.width; ++x)
+            {
+                const Color color = art.pixels[static_cast<std::size_t>(
+                    y * art.width + x)];
+                if (art.transparent(color))
+                    continue;
+                bounds.left = std::min(bounds.left, x);
+                bounds.top = std::min(bounds.top, y);
+                bounds.right = std::max(bounds.right, x + 1);
+                bounds.bottom = std::max(bounds.bottom, y + 1);
+            }
+        }
+        return bounds.valid() ? bounds : OpaquePixelBounds{};
+    }
+
     struct OrientedArtTransform
     {
         Vec2 beginning{};
@@ -102,17 +138,17 @@ namespace runner::art
     {
         // Side-view anatomy still renders both physical chains, but the far
         // chain must read as depth instead of a duplicate translucent rig.
-        return foreground ? 0.98f : 0.22f;
+        return foreground ? 0.98f : 0.44f;
     }
 
     [[nodiscard]] inline float human_limb_thickness_ratio(
         bool support_limb, bool has_distal_motor) noexcept
     {
         if (support_limb)
-            return has_distal_motor ? 0.50f : 0.46f;
+            return has_distal_motor ? 0.48f : 0.43f;
         // Human arms remain visibly articulated without letting the forearm
         // and hand dominate the saved neutral silhouette.
-        return has_distal_motor ? 0.31f : 0.17f;
+        return has_distal_motor ? 0.34f : 0.24f;
     }
 
     [[nodiscard]] inline float fitted_joint_overlap(float limb_span,
@@ -121,9 +157,9 @@ namespace runner::art
         const float span = std::isfinite(limb_span) ? std::max(0.0f, limb_span) : 0.0f;
         const float thickness = std::isfinite(limb_thickness)
             ? std::max(0.0f, limb_thickness) : 0.0f;
-        const float span_limit = span * (support_limb ? 0.075f : 0.055f);
+        const float span_limit = span * (support_limb ? 0.10f : 0.08f);
         return std::min(span_limit,
-            thickness * (support_limb ? 0.22f : 0.16f));
+            thickness * (support_limb ? 0.34f : 0.28f));
     }
 
     [[nodiscard]] inline HelmetArtDimensions helmet_art_dimensions(
@@ -149,9 +185,10 @@ namespace runner::art
         const float minimum_thickness = fitted_to_bone
             ? forearm_span * 0.10f : scaled_pixels(10.0f, pixel_scale);
         const float maximum_thickness = fitted_to_bone
-            ? forearm_span * 0.27f : scaled_pixels(30.0f, pixel_scale);
+            ? forearm_span * 0.24f : scaled_pixels(30.0f, pixel_scale);
+        const float fitted_factor = fitted_to_bone ? 0.68f : 0.52f;
         const float thickness = std::clamp(
-            std::isfinite(forearm_thickness) ? forearm_thickness * 0.48f
+            std::isfinite(forearm_thickness) ? forearm_thickness * fitted_factor
                 : scaled_pixels(16.0f, pixel_scale),
             minimum_thickness, maximum_thickness);
         const float aspect = source_width > 0 && source_height > 0
@@ -161,7 +198,7 @@ namespace runner::art
         const float minimum_length = fitted_to_bone
             ? forearm_span * 0.20f : scaled_pixels(17.0f, pixel_scale);
         const float maximum_length = fitted_to_bone
-            ? forearm_span * 0.43f : scaled_pixels(38.0f, pixel_scale);
+            ? forearm_span * 0.38f : scaled_pixels(38.0f, pixel_scale);
         const float hand_length = std::clamp(
             thickness * aspect, minimum_length, maximum_length);
         const float wrist_overlap = fitted_to_bone
@@ -180,12 +217,12 @@ namespace runner::art
             ? std::max(0.0f, lower_leg_span) : 0.0f;
         const float radius = std::isfinite(joint_radius)
             ? std::max(0.0f, joint_radius) : 0.0f;
-        const float maximum_width = std::max(radius * 1.42f, lower * 0.88f);
+        const float maximum_width = std::max(radius * 1.34f, lower * 0.72f);
         const float width = std::clamp(
-            std::max(plate * 1.08f, radius * 1.72f),
-            radius * 1.40f, maximum_width);
-        const float height = std::clamp(width * 0.46f,
-            radius * 0.82f, std::max(radius * 0.84f, lower * 0.40f));
+            std::max(plate * 1.08f, radius * 1.60f),
+            radius * 1.32f, maximum_width);
+        const float height = std::clamp(width * 0.43f,
+            radius * 0.78f, std::max(radius * 0.84f, lower * 0.34f));
         return { width, height };
     }
 

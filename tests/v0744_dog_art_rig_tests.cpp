@@ -169,13 +169,20 @@ int main()
     constexpr runner::art::SpeciesArtProfile hexapod_art =
         runner::art::species_art_profile(CreatureSpecies::hexapod);
     static_assert(chicken_art.head_scale >= 5.8f
-        && chicken_art.head_minimum >= 0.48f
+        && chicken_art.head_minimum >= 0.46f
+        && chicken_art.head_maximum <= 0.68f
+        && chicken_art.foot_length >= 0.27f
         && chicken_art.tail_length >= 0.64f
         && chicken_art.tail_ratio >= 0.90f);
     static_assert(dog_art.head_scale >= 5.4f
         && dog_art.head_anchor_forward > chicken_art.head_anchor_forward
+        && dog_art.body_front_overlap >= 0.12f
+        && dog_art.foot_length >= 0.32f
         && dog_art.tail_length >= 0.58f
         && dog_art.tail_flip_vertical);
+    static_assert(hexapod_art.limb_minimum >= 0.07f
+        && hexapod_art.foot_length >= 0.25f
+        && hexapod_art.head_anchor_forward >= 0.085f);
     static_assert(!chicken_art.tail_flip_vertical
         && !hexapod_art.tail_flip_vertical
         && hexapod_art.tail_length == 0.0f);

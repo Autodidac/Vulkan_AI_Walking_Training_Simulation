@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "art_authoring.hpp"
 #include "autonomy.hpp"
 #include "pixel_art.hpp"
 #include "rig_training_diagnostic.hpp"
@@ -161,12 +162,16 @@ namespace runner
         void draw_oriented_pixel_art(render::Canvas& canvas,
             const art::PixelArt& art, Vec2 beginning, Vec2 ending,
             float thickness, float alpha = 1.0f, bool mirror_vertical = false,
-            bool mirror_horizontal = false)
+            bool mirror_horizontal = false, bool fit_opaque_horizontal = false)
         {
             const Vec2 delta = ending - beginning;
             const float span = length(delta);
             if (!art.loaded() || span <= 1.0f || thickness <= 1.0f)
                 return;
+            const art::OpaquePixelBounds opaque = art::opaque_pixel_bounds(art);
+            if (!opaque.valid())
+                return;
+
             const Vec2 axis = delta / span;
             Vec2 normal{ -axis.y, axis.x };
             if (mirror_vertical)
@@ -174,7 +179,13 @@ namespace runner
 
             auto point = [&](float u, float v) noexcept
             {
-                const float mapped_u = mirror_horizontal ? 1.0f - u : u;
+                const float opaque_u0 = static_cast<float>(opaque.left)
+                    / static_cast<float>(art.width);
+                const float opaque_u1 = static_cast<float>(opaque.right)
+                    / static_cast<float>(art.width);
+                const float visible_u = fit_opaque_horizontal
+                    ? (u - opaque_u0) / (opaque_u1 - opaque_u0) : u;
+                const float mapped_u = mirror_horizontal ? 1.0f - visible_u : visible_u;
                 return beginning + axis * (mapped_u * span)
                     + normal * ((v - 0.5f) * thickness);
             };
@@ -400,7 +411,7 @@ namespace runner
         enum class RigPreset : std::uint8_t {
             scaffold, humanoid, biped, chicken, quadruped, crawler4, hexapod, monoped, custom
         };
-        enum class RigPanelPage : std::uint8_t { presets, structure, motors, test };
+        enum class RigPanelPage : std::uint8_t { presets, structure, motors, art, test };
         enum class LivePanelPage : std::uint8_t { summary, totals, advanced };
         enum class JointTestGroup : std::uint8_t { selected, pair_a, pair_b, all };
 
@@ -441,6 +452,7 @@ namespace runner
         int selected_node{ -1 };
         int selected_bone{ -1 };
         int selected_motor{};
+        std::uint16_t director_browser_index{};
         bool dragging_node{};
         bool joint_auto_sweep{};
         bool right_leg_near{ true };
@@ -473,13 +485,27 @@ namespace runner
         std::string rig_edit_reason{};
         float joint_test_input{};
         float joint_test_phase{};
-        sim::WeaponClass editor_weapon_class{ sim::WeaponClass::none };
+        sim::WeaponClass editor_weapon_class{ sim::WeaponClass::carbine };
         float editor_target_distance{ 8.0f };
         float camera_x{};
         float live_pixels_per_meter{ view_camera::default_pixels_per_meter };
         float live_zoom_factor{ 1.0f };
         bool live_zoom_auto{ true };
         art::PixelArt original_runner_art{};
+        std::filesystem::path art_layout_directory{};
+        std::array<art::Layout, 4> art_layouts{
+            art::default_layout(sim::CreatureSpecies::human),
+            art::default_layout(sim::CreatureSpecies::chicken),
+            art::default_layout(sim::CreatureSpecies::dog),
+            art::default_layout(sim::CreatureSpecies::hexapod)
+        };
+        std::array<art::LayoutHistory, 4> art_layout_history{};
+        art::Module selected_art_module{ art::Module::body };
+        bool art_edit_pending{};
+        bool art_preview_frozen{};
+        std::optional<sim::Environment> frozen_art_environment{};
+        float art_editor_zoom{ 1.0f };
+        bool art_editor_high_contrast{};
         art::PixelArt optional_foot_art{};
         art::PixelArt optional_helmet_art{};
         art::PixelArt optional_torso_art{};
@@ -1098,6 +1124,72 @@ namespace runner
             }
         }
 
+        void draw_terrain_challenges(const sim::Environment& environment, Rect viewport,
+            float camera, float scale)
+        {
+            if (!sim::stage_uses_deformable_terrain(environment.course_stage())
+                || viewport.size.y < 260.0f || scale < 12.0f)
+                return;
+            const float half_view = viewport.size.x * 0.5f / scale;
+            const float left = camera - half_view;
+            const float right = camera + half_view;
+            const int first_cycle = static_cast<int>(std::floor(
+                left / sim::DeformableTerrain::period));
+            const int last_cycle = static_cast<int>(std::floor(
+                right / sim::DeformableTerrain::period));
+            const auto challenges = environment.terrain().terrain_challenges();
+            for (int cycle = first_cycle; cycle <= last_cycle; ++cycle)
+            {
+                const float cycle_offset = static_cast<float>(cycle)
+                    * sim::DeformableTerrain::period;
+                for (const sim::TerrainChallenge& challenge : challenges)
+                {
+                    const float begin = challenge.begin + cycle_offset;
+                    const float end = challenge.end + cycle_offset;
+                    if (end < left || begin > right)
+                        continue;
+                    const float visible_begin = std::max(begin, left);
+                    const float visible_end = std::min(end, right);
+                    if ((visible_end - visible_begin) * scale < 72.0f)
+                        continue;
+                    const float anchor_x = std::clamp(challenge.center() + cycle_offset,
+                        visible_begin + sim::DeformableTerrain::fine_cell_spacing,
+                        visible_end - sim::DeformableTerrain::fine_cell_spacing);
+                    const float water = environment.water_depth_at(anchor_x);
+                    const float anchor_y = water > 0.002f
+                        ? environment.water_surface_at(anchor_x)
+                        : environment.ground_height_at(anchor_x);
+                    const Vec2 anchor = world_to_screen(
+                        { anchor_x, anchor_y }, viewport, camera, scale);
+                    constexpr float label_width = 154.0f;
+                    constexpr float label_height = 21.0f;
+                    const float lift = 38.0f
+                        + static_cast<float>(challenge.sequence & 1u) * 24.0f;
+                    const float label_x = clamp(anchor.x - label_width * 0.5f,
+                        viewport.position.x + 6.0f,
+                        viewport.position.x + viewport.size.x - label_width - 6.0f);
+                    const float label_y = clamp(anchor.y - lift - label_height,
+                        viewport.position.y + 8.0f,
+                        viewport.position.y + viewport.size.y - label_height - 8.0f);
+                    const Rect sign{ { label_x, label_y },
+                        { label_width, label_height } };
+                    const Color tone = challenge.region == sim::TerrainRegion::firm
+                        ? accent : challenge.region == sim::TerrainRegion::shallow_water
+                            ? rgb(0x66d4ef) : yellow;
+                    const Vec2 tether{ clamp(anchor.x, sign.position.x + 5.0f,
+                        sign.position.x + sign.size.x - 5.0f),
+                        sign.position.y + sign.size.y };
+                    canvas.line(anchor, tether, 1.15f, tone);
+                    add_rounded_rect(canvas, sign, 4.0f,
+                        rgb(0x102431, 0.92f), tone, 1.0f);
+                    add_text_fit(canvas, sign.position + Vec2{ 5.0f, 4.0f },
+                        std::format("C{:02}  {}", challenge.sequence + 1u,
+                            sim::terrain_region_name(challenge.region)),
+                        0.68f, tone, sign.size.x - 10.0f, 0.58f);
+                }
+            }
+        }
+
         void draw_course_reference(const sim::Environment& environment, Rect viewport,
             float camera, float scale)
         {
@@ -1164,6 +1256,118 @@ namespace runner
                             : std::format("{:.0f} FT", distance * 3.2808399f));
                 add_text_fit(canvas, sign.position + Vec2{ 5.0f, 4.0f },
                     marker_label, 0.72f, white, sign.size.x - 10.0f, 0.64f);
+            }
+        }
+
+        [[nodiscard]] static std::size_t art_species_index(
+            sim::CreatureSpecies species) noexcept
+        {
+            switch (species)
+            {
+            case sim::CreatureSpecies::human: return 0u;
+            case sim::CreatureSpecies::chicken: return 1u;
+            case sim::CreatureSpecies::dog: return 2u;
+            case sim::CreatureSpecies::hexapod: return 3u;
+            case sim::CreatureSpecies::custom: return 0u;
+            }
+            return 0u;
+        }
+
+        [[nodiscard]] art::Layout& active_art_layout() noexcept
+        {
+            return art_layouts[art_species_index(
+                blueprint.presentation_species())];
+        }
+
+        [[nodiscard]] art::LayoutHistory& active_art_history() noexcept
+        {
+            return art_layout_history[art_species_index(
+                blueprint.presentation_species())];
+        }
+
+        [[nodiscard]] std::filesystem::path active_art_layout_path() const
+        {
+            std::string_view stem = "human";
+            switch (blueprint.presentation_species())
+            {
+            case sim::CreatureSpecies::chicken: stem = "chicken"; break;
+            case sim::CreatureSpecies::dog: stem = "dog"; break;
+            case sim::CreatureSpecies::hexapod: stem = "hexapod"; break;
+            case sim::CreatureSpecies::human:
+            case sim::CreatureSpecies::custom: break;
+            }
+            return art_layout_directory / std::format("{}.artlayout", stem);
+        }
+
+        void draw_authored_pixel_art(sim::CreatureSpecies species,
+            art::Module module, const art::PixelArt& sprite,
+            Vec2 beginning, Vec2 ending, float thickness, float alpha = 1.0f,
+            bool flip_vertical = false, bool flip_horizontal = false,
+            bool fit_opaque_horizontal = false)
+        {
+            const art::Layout& layout = art_layouts[art_species_index(species)];
+            const art::AdjustedTransform adjusted = art::adjust_transform(
+                beginning, ending, thickness, layout.at(module),
+                flip_vertical, flip_horizontal);
+            float depth_alpha = alpha;
+            if (adjusted.layer < 0)
+                depth_alpha *= adjusted.layer == -1 ? 0.80f : 0.62f;
+            else if (adjusted.layer > 0)
+                depth_alpha = std::min(1.0f, depth_alpha
+                    + static_cast<float>(adjusted.layer) * 0.03f);
+            draw_oriented_pixel_art(canvas, sprite,
+                adjusted.beginning, adjusted.ending, adjusted.thickness,
+                depth_alpha, adjusted.flip_vertical,
+                adjusted.flip_horizontal, fit_opaque_horizontal);
+        }
+
+        void draw_equipment(const sim::Environment& environment, Rect viewport,
+            float camera, float scale, bool held_pass)
+        {
+            if (environment.weapon_class() == sim::WeaponClass::none)
+                return;
+            const bool loose = environment.equipment_state()
+                == sim::EquipmentState::dropped
+                || environment.equipment_state() == sim::EquipmentState::disarmed;
+            if (held_pass == loose)
+                return;
+            const Vec2 mount = environment.equipment_display_position();
+            const Vec2 direction{ std::cos(environment.equipment_aim_angle()),
+                std::sin(environment.equipment_aim_angle()) };
+            const float alpha = loose ? 0.86f
+                : environment.equipment_state() == sim::EquipmentState::ready
+                    ? 0.98f : 0.90f;
+            if (optional_art_enabled && optional_weapon_art.loaded())
+            {
+                const bool carried = environment.equipment_state()
+                    == sim::EquipmentState::safe_carry
+                    || environment.equipment_state() == sim::EquipmentState::low_ready;
+                // Safe carry remains on the real hand/forearm axis, but the
+                // stock extends back along that link instead of hiding the
+                // complete weapon below the hand and inside the support leg.
+                const float rear = carried ? 0.46f : 0.12f;
+                const float front = carried ? 0.34f : 0.68f;
+                const Vec2 beginning = world_to_screen(
+                    mount - direction * rear, viewport, camera, scale);
+                const Vec2 ending = world_to_screen(
+                    mount + direction * front, viewport, camera, scale);
+                const float art_pixel_scale = art::presentation_pixel_scale(scale);
+                const float thickness = std::clamp(scale * 0.24f,
+                    art::scaled_pixels(16.0f, art_pixel_scale),
+                    art::scaled_pixels(28.0f, art_pixel_scale));
+                draw_authored_pixel_art(
+                    environment.blueprint().presentation_species(),
+                    art::Module::equipment, optional_weapon_art,
+                    beginning, ending, thickness, alpha,
+                    environment.facing_direction() < 0.0f, false, true);
+            }
+            else
+            {
+                canvas.line(world_to_screen(mount, viewport, camera, scale),
+                    world_to_screen(mount + direction * 0.55f,
+                        viewport, camera, scale),
+                    5.0f, loose ? danger : environment.equipment_state()
+                        == sim::EquipmentState::ready ? accent : muted);
             }
         }
 
@@ -1257,39 +1461,7 @@ namespace runner
                     canvas.circle(world_to_screen(projectile.position, viewport, camera, scale),
                         projectile.radius * scale, yellow, 12);
             }
-            if (environment.weapon_class() != sim::WeaponClass::none)
-            {
-                const bool loose = environment.equipment_state()
-                    == sim::EquipmentState::dropped
-                    || environment.equipment_state() == sim::EquipmentState::disarmed;
-                const Vec2 mount = environment.equipment_display_position();
-                const Vec2 direction{ std::cos(environment.equipment_aim_angle()),
-                    std::sin(environment.equipment_aim_angle()) };
-                const float alpha = loose ? 0.86f
-                    : environment.equipment_state() == sim::EquipmentState::ready
-                        ? 0.98f : 0.76f;
-                if (optional_art_enabled && optional_weapon_art.loaded())
-                {
-                    const Vec2 beginning = world_to_screen(
-                        mount - direction * 0.12f, viewport, camera, scale);
-                    const Vec2 ending = world_to_screen(
-                        mount + direction * 0.68f, viewport, camera, scale);
-                    const float art_pixel_scale = art::presentation_pixel_scale(scale);
-                    const float thickness = std::clamp(scale * 0.42f,
-                        art::scaled_pixels(24.0f, art_pixel_scale),
-                        art::scaled_pixels(42.0f, art_pixel_scale));
-                    draw_oriented_pixel_art(canvas, optional_weapon_art,
-                        beginning, ending, thickness, alpha,
-                        environment.facing_direction() < 0.0f);
-                }
-                else
-                {
-                    canvas.line(world_to_screen(mount, viewport, camera, scale),
-                        world_to_screen(mount + direction * 0.55f, viewport, camera, scale),
-                        5.0f, loose ? danger : environment.equipment_state()
-                            == sim::EquipmentState::ready ? accent : muted);
-                }
-            }
+            draw_equipment(environment, viewport, camera, scale, false);
         }
         [[nodiscard]] const SpeciesArtBundle* species_art_for(
             sim::CreatureSpecies species) const noexcept
@@ -1376,9 +1548,12 @@ namespace runner
                     const float thickness = std::clamp(span * profile.limb_ratio,
                         scale * profile.limb_minimum, scale * profile.limb_maximum);
                     if (sprite != nullptr && sprite->loaded())
-                        draw_oriented_pixel_art(canvas, *sprite, beginning, ending,
-                            thickness, near ? 0.98f : 0.72f,
-                            transverse_mirror, false);
+                        draw_authored_pixel_art(species,
+                            has_distal_motor ? art::Module::upper_limb
+                                : art::Module::lower_limb,
+                            *sprite, beginning, ending, thickness,
+                            near ? 0.98f : 0.46f,
+                            transverse_mirror, false, true);
                     else
                         canvas.line(beginning, ending, thickness,
                             near ? rgb(0xcdd6d9) : rgb(0x73828b));
@@ -1393,12 +1568,16 @@ namespace runner
                     {
                         const float facing = environment.facing_direction();
                         const Vec2 contact = point(motor.c);
-                        const Vec2 foot_axis{ facing * scale * profile.foot_length, 0.0f };
-                        const Vec2 heel = contact - foot_axis * 0.28f;
-                        const Vec2 toe = contact + foot_axis * 0.72f;
-                        draw_oriented_pixel_art(canvas, bundle->foot, heel, toe,
-                            std::max(thickness, scale * profile.foot_thickness),
-                            near ? 0.98f : 0.72f, transverse_mirror, false);
+                        const art::OrientedArtTransform foot =
+                            art::support_boot_transform(point(motor.pivot), contact,
+                                scale * profile.foot_length,
+                                std::max(thickness * 0.72f,
+                                    scale * profile.foot_thickness),
+                                facing, particles[motor.c].grounded);
+                        draw_authored_pixel_art(species,
+                            art::Module::terminal, bundle->foot,
+                            foot.beginning, foot.ending, foot.thickness,
+                            near ? 0.98f : 0.46f, transverse_mirror, false, true);
                     }
                 }
             };
@@ -1419,8 +1598,9 @@ namespace runner
                 const float thickness = std::clamp(body_span * profile.body_ratio,
                     scale * profile.body_minimum, scale * profile.body_maximum);
                 if (use_art && bundle->body.loaded())
-                    draw_oriented_pixel_art(canvas, bundle->body, beginning, ending,
-                        thickness, 0.98f, transverse_mirror, false);
+                    draw_authored_pixel_art(species,
+                        art::Module::body, bundle->body, beginning, ending,
+                        thickness, 0.98f, transverse_mirror, false, true);
                 else
                     canvas.line(beginning, ending, thickness, rgb(0x8ba0aa));
 
@@ -1440,11 +1620,12 @@ namespace runner
                         tail_ending = physical_tip
                             + physical_axis * scale * profile.body_rear_overlap * 0.20f;
                     }
-                    draw_oriented_pixel_art(canvas, bundle->tail,
+                    draw_authored_pixel_art(species,
+                        art::Module::tail, bundle->tail,
                         tail_anchor, tail_ending,
                         thickness * profile.tail_ratio, 0.90f,
                         art::tail_transverse_mirror(profile, transverse_mirror),
-                        false);
+                        false, true);
                 }
             }
             if (rig.head_node < particles.size()
@@ -1464,9 +1645,10 @@ namespace runner
                     + Vec2{ 0.0f, -scale * profile.head_anchor_up };
                 const Vec2 ending = beginning + head_direction * head_length;
                 if (use_art && bundle->head.loaded())
-                    draw_oriented_pixel_art(canvas, bundle->head,
+                    draw_authored_pixel_art(species,
+                        art::Module::head, bundle->head,
                         beginning, ending, head_length * profile.head_ratio, 0.98f,
-                        transverse_mirror, false);
+                        transverse_mirror, false, true);
                 else
                     canvas.circle(point(rig.head_node), std::max(3.0f,
                         particles[rig.head_node].radius * scale), rgb(0xcdd6d9), 18);
@@ -1684,12 +1866,14 @@ namespace runner
                                         art::articulated_boot_transform(center, toe,
                                             boot.width, boot.height,
                                             environment.facing_direction());
-                                    draw_oriented_pixel_art(canvas, optional_foot_art,
+                                    draw_authored_pixel_art(
+                                        sim::CreatureSpecies::human,
+                                        art::Module::terminal, optional_foot_art,
                                         transform.beginning, transform.ending,
                                         transform.thickness,
                                         art::human_limb_layer_opacity(
                                             near || side == 0),
-                                        mirrored_facing);
+                                        mirrored_facing, false, true);
                                 }
                             }
                             else
@@ -1798,10 +1982,16 @@ namespace runner
                     const bool transverse_mirror =
                         art::presented_limb_transverse_mirror(
                             environment.facing_direction());
-                    draw_oriented_pixel_art(canvas, sprite, beginning, ending,
+                    draw_authored_pixel_art(sim::CreatureSpecies::human,
+                        support_limb
+                            ? (has_distal_motor ? art::Module::upper_limb
+                                : art::Module::lower_limb)
+                            : (has_distal_motor ? art::Module::upper_limb
+                                : art::Module::lower_limb),
+                        sprite, beginning, ending,
                         thickness, art::human_limb_layer_opacity(
                             near || side == 0),
-                        transverse_mirror);
+                        transverse_mirror, false, true);
                     if (support_mask == 0u && !has_distal_motor
                         && optional_hand_art.loaded())
                     {
@@ -1809,14 +1999,16 @@ namespace runner
                             art::hand_art_dimensions(thickness,
                                 optional_hand_art.width, optional_hand_art.height,
                                 art_pixel_scale, span);
-                        draw_oriented_pixel_art(canvas, optional_hand_art,
+                        draw_authored_pixel_art(
+                            sim::CreatureSpecies::human,
+                            art::Module::hand, optional_hand_art,
                             terminal_joint - axis * hand.wrist_overlap,
                             terminal_joint + axis * (hand.length
                                 - hand.wrist_overlap),
                             hand.thickness,
                             art::human_limb_layer_opacity(
                                 near || side == 0),
-                            transverse_mirror);
+                            transverse_mirror, false, true);
                     }
                 }
             };
@@ -1882,7 +2074,9 @@ namespace runner
                         torso_length * 1.45f);
                     const art::OrientedArtTransform transform =
                         art::oriented_box_transform(center, body_right, width, height);
-                    draw_oriented_pixel_art(canvas, optional_torso_art,
+                    draw_authored_pixel_art(
+                        sim::CreatureSpecies::human,
+                        art::Module::body, optional_torso_art,
                         transform.beginning, transform.ending,
                         transform.thickness, 0.96f, false, mirrored_facing);
                 }
@@ -1914,7 +2108,9 @@ namespace runner
                     / static_cast<float>(optional_helmet_art.height);
                 const art::OrientedArtTransform transform =
                     art::oriented_box_transform(center, head_right, width, height);
-                draw_oriented_pixel_art(canvas, optional_helmet_art,
+                draw_authored_pixel_art(
+                    sim::CreatureSpecies::human,
+                    art::Module::head, optional_helmet_art,
                     transform.beginning, transform.ending, transform.thickness,
                     0.92f, false, mirrored_facing);
             }
@@ -1960,13 +2156,18 @@ namespace runner
                 rl::stage_motion_qualification(environment.course_stage(), environment);
             const bool foot_only = !environment.non_foot_grounded();
             const bool intact = environment.body_integrity_valid();
-            const Color state_color = fixed_eye_test ? green : qualification.valid ? green
+            const rl::AutonomyStatus& preview_status = trainer.autonomy_status();
+            const bool retained_terminal = !fixed_eye_test
+                && preview_status.training_preview_terminal;
+            const Color state_color = fixed_eye_test ? green
+                : retained_terminal ? yellow : qualification.valid ? green
                 : intact && foot_only ? yellow : danger;
             const std::string_view state_text = art_eye_test ? std::string_view{ "SIDE PROFILE" }
                 : walk_eye_test ? (environment.raw_policy_audit()
                     ? std::string_view{ "RAW POLICY" }
                     : std::string_view{ "TEACHER 0 / ASSISTED" })
                 : course_eye_test ? std::string_view{ "RUNWAY CLEAR" }
+                : retained_terminal ? std::string_view{ "TRIAL FROZEN" }
                 : qualification.valid ? "STAGE VALID" : !intact ? "BROKEN RIG"
                 : !foot_only ? "BODY CONTACT"
                 : rl::primary_motion_rejection_name(qualification.rejection_mask);
@@ -2000,41 +2201,12 @@ namespace runner
             const float camera = (view_min_x + view_max_x) * 0.5f;
 
             canvas.push_clip(inner.position, inner.position + inner.size);
-            std::vector<Vec2> ground_points{};
-            ground_points.reserve(81);
-            for (int sample = 0; sample <= 80; ++sample)
-            {
-                const float fraction = static_cast<float>(sample) / 80.0f;
-                const float world_x = camera + (fraction - 0.5f) * inner.size.x / scale;
-                ground_points.push_back(world_to_screen(
-                    { world_x, environment.ground_height_at(world_x) },
-                    inner, camera, scale, 0.82f));
-            }
-            canvas.polyline(ground_points, 3.0f, rgb(0x65727d));
-            for (const sim::CourseFeature& feature : environment.course_features())
-            {
-                const Vec2 point = world_to_screen(feature.center,
-                    inner, camera, scale, 0.82f);
-                if (feature.kind == sim::CourseFeatureKind::rock
-                    || feature.kind == sim::CourseFeatureKind::moving_hazard
-                    || feature.kind == sim::CourseFeatureKind::projectile)
-                {
-                    canvas.circle(point, std::max(3.0f, feature.radius * scale),
-                        feature.kind == sim::CourseFeatureKind::projectile ? danger : yellow, 18);
-                }
-                else
-                {
-                    const Vec2 minimum = world_to_screen(feature.center - feature.half_extent,
-                        inner, camera, scale, 0.82f);
-                    const Vec2 maximum = world_to_screen(feature.center + feature.half_extent,
-                        inner, camera, scale, 0.82f);
-                    add_rounded_rect(canvas,
-                        { { minimum.x, maximum.y },
-                          { maximum.x - minimum.x, minimum.y - maximum.y } },
-                        3.0f, accent_dim, accent, 1.0f);
-                }
-            }
+            draw_course_ground(environment, inner, camera, scale);
+            draw_terrain_challenges(environment, inner, camera, scale);
+            draw_course_reference(environment, inner, camera, scale);
+            draw_course_features(environment, inner, camera, scale);
             draw_creature(environment, inner, camera, scale);
+            draw_equipment(environment, inner, camera, scale, true);
             canvas.pop_clip();
 
             const std::string pip_metrics = art_eye_test
@@ -2049,6 +2221,17 @@ namespace runner
                         walk_eye_test_proof.displayed_max_scissor_seconds)
                 : course_eye_test
                     ? std::string("NO FALLING OBJECTS BEFORE 8-12 M + 2 REAL GAIT CYCLES")
+                : retained_terminal
+                    ? std::format(
+                        "TRIAL {} FROZEN: {}  X {:.2f} M  CELL {}  {}  WATER {:.2f} M",
+                        preview_status.training_preview_trial_id,
+                        sim::trial_terminal_cause_name(
+                            preview_status.training_preview_cause, preview_status.training_preview_reason),
+                        preview_status.training_preview_position.x,
+                        sim::DeformableTerrain::global_cell_x(
+                            preview_status.training_preview_position.x),
+                        sim::terrain_region_name(preview_status.training_preview_terrain),
+                        preview_status.training_preview_water_depth)
                     : std::format(
                     "RIG UPDATES {}  POLICY AGE {}  PRIOR LINEAGE {}  DIST {:.1f} M  STEPS {}",
                     trainer.metrics().total_updates, trainer.metrics().update,
@@ -2157,9 +2340,40 @@ namespace runner
                 }
             }
             cursor.y += 39.0f;
-            add_text_fit(canvas, cursor, "TASK GRAPH  WALK > SPEED WALK > TRANSITION > RUN",
-                0.65f, muted, usable_width, 0.52f);
-            cursor.y += 19.0f;
+            constexpr director::TaskGraph task_graph =
+                director::default_training_graph();
+            director_browser_index = std::min<std::uint16_t>(
+                director_browser_index,
+                static_cast<std::uint16_t>(task_graph.count - 1u));
+            const float director_width = (usable_width - 12.0f) / 3.0f;
+            if (button({ cursor, { director_width, 29.0f } }, "< TASK", input))
+                director_browser_index = director_browser_index == 0u
+                    ? static_cast<std::uint16_t>(task_graph.count - 1u)
+                    : static_cast<std::uint16_t>(director_browser_index - 1u);
+            const director::TaskNode& browsed = task_graph.nodes[director_browser_index];
+            if (button({ cursor + Vec2{ director_width + 6.0f, 0.0f },
+                    { director_width, 29.0f } },
+                browsed.enabled ? "SELECT TASK" : "NOT IMPLEMENTED", input,
+                autonomy.director_stable_task_id == browsed.stable_id,
+                browsed.enabled))
+            {
+                trainer.select_director_task(director_browser_index);
+                set_status(std::format("DIRECTOR REQUEST - {}",
+                    director::task_name(browsed.task)));
+            }
+            if (button({ cursor + Vec2{ (director_width + 6.0f) * 2.0f, 0.0f },
+                    { director_width, 29.0f } }, "TASK >", input))
+                director_browser_index = static_cast<std::uint16_t>(
+                    (director_browser_index + 1u) % task_graph.count);
+            cursor.y += 35.0f;
+            add_text_fit(canvas, cursor,
+                std::format("DIRECTOR {:02}/{:02}  {} / {}{}",
+                    director_browser_index + 1u, task_graph.count,
+                    director::task_name(browsed.task),
+                    director::challenge_name(browsed.challenge),
+                    browsed.enabled ? "" : "  LOCKED"),
+                0.65f, browsed.enabled ? muted : yellow, usable_width, 0.50f);
+            cursor.y += 18.0f;
             add_text_fit(canvas, cursor,
                 std::format("TRAINING LEVEL {:.0f}%", autonomy.difficulty * 100.0f),
                 0.98f, white, usable_width, 0.80f);
@@ -2785,9 +2999,11 @@ namespace runner
             canvas.push_clip(viewport.position + Vec2{ 1.0f, 1.0f },
                 viewport.position + viewport.size - Vec2{ 1.0f, 1.0f });
             draw_course_ground(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_terrain_challenges(environment, viewport, camera_x, live_pixels_per_meter);
             draw_course_reference(environment, viewport, camera_x, live_pixels_per_meter);
             draw_course_features(environment, viewport, camera_x, live_pixels_per_meter);
             draw_creature(environment, viewport, camera_x, live_pixels_per_meter);
+            draw_equipment(environment, viewport, camera_x, live_pixels_per_meter, true);
 
             const ui_layout::Box world_box{
                 viewport.position.x, viewport.position.y,
@@ -2860,6 +3076,7 @@ namespace runner
             line.y += 21.0f;
             const std::uint64_t preview_restarts = trainer.preview_reset_count();
             const sim::InvalidMotion preview_reason = trainer.preview_last_reset_reason();
+            const bool preview_terminal = trainer.preview_terminal();
             add_text_fit(canvas, line,
                 walk_eye_test
                     ? std::format(
@@ -2867,11 +3084,22 @@ namespace runner
                         walk_eye_test_proof.retained_distance,
                         walk_eye_test_proof.retained_stride_events,
                         walk_eye_test_proof.selected_seed)
+                    : preview_terminal
+                    ? std::format("TRIAL {} FROZEN: {} AT X {:.2f} M / CELL {} / {} / WATER {:.2f} M - R RETRY",
+                        trainer.preview_trial_id(), sim::trial_terminal_cause_name(
+                            trainer.preview_terminal_cause(), preview_reason),
+                        trainer.preview_terminal_position().x,
+                        sim::DeformableTerrain::global_cell_x(
+                            trainer.preview_terminal_position().x),
+                        sim::terrain_region_name(trainer.preview_terminal_terrain()),
+                        trainer.preview_terminal_water_depth())
                     : preview_restarts == 0u
-                    ? "PREVIEW RESTARTS 0 - REAL STATIC COURSE"
-                    : std::format("PREVIEW RESTARTS {}   LAST {}",
-                        preview_restarts, sim::invalid_motion_name(preview_reason)),
-                0.72f, walk_eye_test || preview_restarts == 0u ? muted : yellow, text_width);
+                    ? std::format("TRIAL {} ACTIVE - REAL STATIC COURSE",
+                        trainer.preview_trial_id())
+                    : std::format("TRIAL {} ACTIVE   PRIOR TERMINALS {}",
+                        trainer.preview_trial_id(), preview_restarts),
+                0.72f, walk_eye_test || (!preview_terminal
+                    && preview_restarts == 0u) ? muted : yellow, text_width);
 
             draw_training_pip({ { pip_box.x, pip_box.y },
                 { pip_box.width, pip_box.height } });
@@ -2989,6 +3217,58 @@ namespace runner
             joint_test_input = slider({ { layout.manual_slider.x, layout.manual_slider.y },
                 { layout.manual_slider.width, layout.manual_slider.height } },
                 "MANUAL INPUT", joint_test_input, -1.0f, 1.0f, input);
+        }
+
+        void draw_art_editor_world(Rect viewport)
+        {
+            const sim::Environment& environment = art_preview_frozen
+                    && frozen_art_environment.has_value()
+                ? *frozen_art_environment : trainer.preview();
+            if (art_editor_high_contrast)
+                canvas.quad(viewport.position, viewport.position + viewport.size,
+                    rgb(0x03070a));
+            const auto& particles = environment.particles();
+            float camera = 0.0f;
+            float minimum_y = std::numeric_limits<float>::infinity();
+            float maximum_y = -std::numeric_limits<float>::infinity();
+            if (!particles.empty())
+            {
+                const std::size_t root = environment.blueprint().root_node;
+                if (root < particles.size())
+                    camera = particles[root].position.x;
+                for (const sim::Particle& particle : particles)
+                {
+                    minimum_y = std::min(minimum_y,
+                        particle.position.y - particle.radius);
+                    maximum_y = std::max(maximum_y,
+                        particle.position.y + particle.radius);
+                }
+            }
+            const float rig_height = std::isfinite(minimum_y)
+                    && std::isfinite(maximum_y)
+                ? std::max(0.75f, maximum_y - minimum_y) : 2.4f;
+            const float scale = art_editor_zoom * std::clamp(view_camera::fitted_pixels_per_meter(
+                viewport.size.y, std::max(rig_height, 1.0f), 1.20f),
+                28.0f, 150.0f);
+            draw_course_ground(environment, viewport, camera, scale);
+            draw_terrain_challenges(environment, viewport, camera, scale);
+            draw_course_reference(environment, viewport, camera, scale);
+            draw_course_features(environment, viewport, camera, scale);
+            draw_creature(environment, viewport, camera, scale,
+                debug_skeleton_overlay);
+            draw_equipment(environment, viewport, camera, scale, true);
+            add_text_fit(canvas, viewport.position + Vec2{ 18.0f, 16.0f },
+                art_preview_frozen
+                    ? "PRODUCTION ART VIEW   FROZEN PHYSICAL POSE / LIVE TRAINING CONTINUES"
+                    : "PRODUCTION ART VIEW   SAME POSE / SCALE / CONTACTS AS LIVE PREVIEW",
+                0.80f, accent, viewport.size.x - 36.0f, 0.68f);
+            add_text_fit(canvas,
+                viewport.position + Vec2{ 18.0f, viewport.size.y - 31.0f },
+                std::format("{}   WATER {}   SLIP {:.3f} M/S   TRACTION {:.2f}/{:.2f}",
+                    sim::water_traversal_phase_name(environment.water_traversal_phase()),
+                    environment.water_depth(), environment.stance_slip_speed(),
+                    environment.used_traction(), environment.available_traction()),
+                0.74f, muted, viewport.size.x - 36.0f, 0.62f);
         }
 
         void draw_blueprint(Rect viewport, const InputState& input)
@@ -3301,7 +3581,7 @@ namespace runner
                         draw_oriented_pixel_art(canvas, optional_weapon_art,
                             anchor - Vec2{ weapon_length * 0.12f, 0.0f },
                             anchor + Vec2{ weapon_length * 0.88f, 0.0f },
-                            weapon_thickness, 0.98f);
+                            weapon_thickness, 0.98f, false, false, true);
                     else
                         canvas.line(anchor, anchor + Vec2{ weapon_length, 0.0f },
                             6.0f, accent);
@@ -3491,7 +3771,7 @@ namespace runner
             Vec2 cursor = rect.position + Vec2{ 18.0f, 16.0f };
             add_text_fit(canvas, cursor, "RIG LAB", 1.70f, white, usable, 1.10f);
             cursor.y += 38.0f;
-            const float tab = (usable - 18.0f) * 0.25f;
+            const float tab = (usable - 24.0f) * 0.20f;
             auto page_button = [&](int slot, std::string_view label, RigPanelPage page)
             {
                 if (button({ cursor + Vec2{ static_cast<float>(slot) * (tab + 6.0f), 0.0f },
@@ -3501,7 +3781,8 @@ namespace runner
             page_button(0, "PRESETS", RigPanelPage::presets);
             page_button(1, "STRUCTURE", RigPanelPage::structure);
             page_button(2, "MOTORS", RigPanelPage::motors);
-            page_button(3, "TEST", RigPanelPage::test);
+            page_button(3, "ART", RigPanelPage::art);
+            page_button(4, "TEST", RigPanelPage::test);
             cursor.y += 48.0f;
 
             if (rig_panel_page == RigPanelPage::presets)
@@ -3889,6 +4170,196 @@ namespace runner
                         ? "MOTOR ENABLED" : "MOTOR DISABLED");
                 }
             }
+            else if (rig_panel_page == RigPanelPage::art)
+            {
+                add_text(canvas, cursor, "LIVE MODULE ART AUTHORING", 1.02f, accent);
+                cursor.y += 27.0f;
+                const float quarter = (usable - 18.0f) * 0.25f;
+                if (button({ cursor, { quarter, 33.0f } },
+                    optional_art_enabled ? "ART: ON" : "ART: OFF", input,
+                    optional_art_enabled))
+                    optional_art_enabled = !optional_art_enabled;
+                if (button({ cursor + Vec2{ quarter + 6.0f, 0.0f },
+                    { quarter, 33.0f } },
+                    debug_skeleton_overlay ? "RIG: ON" : "RIG: OFF", input,
+                    debug_skeleton_overlay))
+                    debug_skeleton_overlay = !debug_skeleton_overlay;
+                if (button({ cursor + Vec2{ (quarter + 6.0f) * 2.0f, 0.0f },
+                    { quarter, 33.0f } }, art_preview_frozen ? "PLAY" : "FREEZE",
+                    input, art_preview_frozen))
+                {
+                    art_preview_frozen = !art_preview_frozen;
+                    if (art_preview_frozen)
+                        frozen_art_environment = trainer.preview();
+                    else
+                        frozen_art_environment.reset();
+                }
+                if (button({ cursor + Vec2{ (quarter + 6.0f) * 3.0f, 0.0f },
+                    { quarter, 33.0f } }, art_editor_high_contrast
+                        ? "BG: BLACK" : "BG: WORLD", input,
+                    art_editor_high_contrast))
+                    art_editor_high_contrast = !art_editor_high_contrast;
+                cursor.y += 43.0f;
+
+                constexpr std::array modules{
+                    art::Module::body, art::Module::head,
+                    art::Module::tail, art::Module::equipment,
+                    art::Module::upper_limb, art::Module::lower_limb,
+                    art::Module::terminal, art::Module::hand
+                };
+                for (std::size_t index = 0u; index < modules.size(); ++index)
+                {
+                    const float x = static_cast<float>(index % 4u)
+                        * (quarter + 6.0f);
+                    const float y = static_cast<float>(index / 4u) * 35.0f;
+                    if (button({ cursor + Vec2{ x, y }, { quarter, 29.0f } },
+                        art::module_name(modules[index]), input,
+                        selected_art_module == modules[index]))
+                        selected_art_module = modules[index];
+                }
+                cursor.y += 77.0f;
+                art::Layout& layout = active_art_layout();
+                art::ModuleAdjustment& module = layout.at(selected_art_module);
+                add_text_fit(canvas, cursor,
+                    std::format("{} / {}   PIVOT {:.2f}   DEPTH {:+d}",
+                        sim::creature_species_name(layout.species),
+                        art::module_name(selected_art_module), module.pivot,
+                        static_cast<int>(module.layer)),
+                    0.72f, green, usable, 0.58f);
+                cursor.y += 25.0f;
+                auto update = [&](float& target, float value)
+                {
+                    if (std::abs(target - value) <= 1.0e-5f)
+                        return;
+                    target = value;
+                    art_edit_pending = true;
+                };
+                float value = slider({ cursor, { usable, 34.0f } },
+                    "ANCHOR ALONG", module.anchor_along,
+                    -0.30f, 0.30f, input);
+                update(module.anchor_along, value);
+                cursor.y += 43.0f;
+                value = slider({ cursor, { usable, 34.0f } },
+                    "ANCHOR NORMAL", module.anchor_normal,
+                    -0.30f, 0.30f, input);
+                update(module.anchor_normal, value);
+                cursor.y += 43.0f;
+                value = slider({ cursor, { usable, 34.0f } },
+                    "PIVOT", module.pivot, 0.0f, 1.0f, input);
+                update(module.pivot, value);
+                cursor.y += 43.0f;
+                value = slider({ cursor, { usable, 34.0f } },
+                    "LENGTH", module.length_scale, 0.65f, 1.35f, input);
+                update(module.length_scale, value);
+                cursor.y += 43.0f;
+                value = slider({ cursor, { usable, 34.0f } },
+                    "THICKNESS", module.thickness_scale, 0.65f, 1.35f, input);
+                update(module.thickness_scale, value);
+                cursor.y += 43.0f;
+                const float rotation = angle_slider(
+                    { cursor, { usable, 34.0f } }, "ROTATION", module.rotation,
+                    -35.0f, 35.0f, input);
+                update(module.rotation, rotation);
+                cursor.y += 43.0f;
+                const float prior_zoom = art_editor_zoom;
+                art_editor_zoom = slider({ cursor, { usable, 34.0f } },
+                    "EDITOR ZOOM", art_editor_zoom, 0.65f, 1.80f, input);
+                if (std::abs(prior_zoom - art_editor_zoom) > 1.0e-5f)
+                    frozen_art_environment = art_preview_frozen
+                        ? std::optional<sim::Environment>{ trainer.preview() }
+                        : std::nullopt;
+                cursor.y += 45.0f;
+                const float fifth = (usable - 24.0f) * 0.20f;
+                auto commit_now = [&](std::string_view message)
+                {
+                    active_art_history().commit(layout);
+                    set_status(std::string{ message });
+                };
+                if (button({ cursor, { fifth, 31.0f } },
+                    module.flip_vertical ? "FLIP V: ON" : "FLIP V", input,
+                    module.flip_vertical))
+                {
+                    module.flip_vertical = !module.flip_vertical;
+                    commit_now("ART VERTICAL FLIP UPDATED");
+                }
+                if (button({ cursor + Vec2{ fifth + 6.0f, 0.0f },
+                    { fifth, 31.0f } }, module.flip_horizontal
+                        ? "FLIP H: ON" : "FLIP H", input,
+                    module.flip_horizontal))
+                {
+                    module.flip_horizontal = !module.flip_horizontal;
+                    commit_now("ART HORIZONTAL FLIP UPDATED");
+                }
+                if (button({ cursor + Vec2{ (fifth + 6.0f) * 2.0f, 0.0f },
+                    { fifth, 31.0f } }, "DEPTH -", input, false,
+                    module.layer > -2))
+                {
+                    --module.layer;
+                    commit_now("ART DEPTH UPDATED");
+                }
+                if (button({ cursor + Vec2{ (fifth + 6.0f) * 3.0f, 0.0f },
+                    { fifth, 31.0f } }, "DEPTH +", input, false,
+                    module.layer < 2))
+                {
+                    ++module.layer;
+                    commit_now("ART DEPTH UPDATED");
+                }
+                if (button({ cursor + Vec2{ (fifth + 6.0f) * 4.0f, 0.0f },
+                    { fifth, 31.0f } }, "RESET", input))
+                {
+                    module = {};
+                    commit_now("SELECTED ART MODULE RESET");
+                }
+                cursor.y += 40.0f;
+                const float third = (usable - 12.0f) / 3.0f;
+                if (button({ cursor, { third, 31.0f } }, "UNDO", input,
+                    false, active_art_history().can_undo()))
+                    static_cast<void>(active_art_history().undo(layout));
+                if (button({ cursor + Vec2{ third + 6.0f, 0.0f },
+                    { third, 31.0f } }, "REDO", input,
+                    false, active_art_history().can_redo()))
+                    static_cast<void>(active_art_history().redo(layout));
+                if (button({ cursor + Vec2{ (third + 6.0f) * 2.0f, 0.0f },
+                    { third, 31.0f } }, right_leg_near
+                        ? "NEAR: RIGHT" : "NEAR: LEFT", input,
+                    right_leg_near))
+                    right_leg_near = !right_leg_near;
+                cursor.y += 40.0f;
+                const float half = (usable - 6.0f) * 0.5f;
+                if (button({ cursor, { half, 31.0f } }, "SAVE LAYOUT", input))
+                {
+                    std::error_code directory_error{};
+                    std::filesystem::create_directories(
+                        art_layout_directory, directory_error);
+                    std::string error{};
+                    set_status(!directory_error
+                            && art::save_layout(active_art_layout_path(), layout, error)
+                        ? "SPECIES ART LAYOUT SAVED"
+                        : "ART SAVE FAILED - " + error);
+                }
+                if (button({ cursor + Vec2{ half + 6.0f, 0.0f },
+                    { half, 31.0f } }, "LOAD LAYOUT", input))
+                {
+                    art::Layout loaded{};
+                    std::string error{};
+                    if (art::load_layout(active_art_layout_path(),
+                        layout.species, loaded, error))
+                    {
+                        layout = loaded;
+                        active_art_history().reset(layout);
+                        set_status("SPECIES ART LAYOUT LOADED");
+                    }
+                    else
+                        set_status("ART LOAD FAILED - " + error);
+                }
+                cursor.y += 40.0f;
+                add_text_fit(canvas, cursor,
+                    std::format("CONTACT SLIP {:.3f} M   WATER {}   LIVE STATS RETAINED",
+                        trainer.preview().stance_slip_distance(),
+                        sim::water_traversal_phase_name(
+                            trainer.preview().water_traversal_phase())),
+                    0.75f, green, usable, 0.62f);
+            }
             else
             {
                 add_text(canvas, cursor, "JOINT AND TRACTION TESTS", 1.02f, accent);
@@ -4086,11 +4557,15 @@ namespace runner
                 add_rounded_rect(canvas, world, 11.0f, rgb(0x0a131d), border, 1.0f);
                 canvas.push_clip(world.position + Vec2{ 1.0f, 1.0f },
                     world.position + world.size - Vec2{ 1.0f, 1.0f });
-                draw_blueprint(world, input);
+                if (rig_panel_page == RigPanelPage::art)
+                    draw_art_editor_world(world);
+                else
+                    draw_blueprint(world, input);
                 canvas.pop_clip();
-                add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
-                    "SIDE VIEW   DRAG NODE   SHIFT ADD   CTRL CONNECT   ALT SELECT BONE",
-                    0.80f, muted, world.size.x - 36.0f, 0.68f);
+                if (rig_panel_page != RigPanelPage::art)
+                    add_text_fit(canvas, world.position + Vec2{ 18.0f, 16.0f },
+                        "SIDE VIEW   DRAG NODE   SHIFT ADD   CTRL CONNECT   ALT SELECT BONE",
+                        0.80f, muted, world.size.x - 36.0f, 0.68f);
                 add_rounded_rect(canvas, world, 11.0f, ui_render::transparent_fill, border, 1.0f);
             }
 
@@ -4100,6 +4575,12 @@ namespace runner
                 rig_edit_pending = false;
                 rig_edit_reason.clear();
                 apply_small_rig_change(reason);
+            }
+            if (input.left_released && art_edit_pending)
+            {
+                art_edit_pending = false;
+                active_art_history().commit(active_art_layout());
+                set_status("ART TRANSFORM COMMITTED TO SHARED LIVE RENDERER");
             }
 
             if (status_time > 0.0f)
@@ -4127,6 +4608,9 @@ namespace runner
     bool Application::initialize(const std::filesystem::path& asset_directory,
         std::string& error)
     {
+        impl_->art_layout_directory = asset_directory / "optional" / "layouts";
+        for (std::size_t index = 0u; index < impl_->art_layouts.size(); ++index)
+            impl_->art_layout_history[index].reset(impl_->art_layouts[index]);
         std::string artwork_error{};
         if (!art::load_p3_pixel_art(asset_directory / "chicken.ppm",
                 impl_->original_runner_art, artwork_error))
@@ -4185,6 +4669,25 @@ namespace runner
             || impl_->chicken_art.loaded()
             || impl_->dog_art.loaded()
             || impl_->hexapod_art.loaded();
+        constexpr std::array layout_species{
+            sim::CreatureSpecies::human, sim::CreatureSpecies::chicken,
+            sim::CreatureSpecies::dog, sim::CreatureSpecies::hexapod
+        };
+        constexpr std::array layout_stems{
+            std::string_view{ "human" }, std::string_view{ "chicken" },
+            std::string_view{ "dog" }, std::string_view{ "hexapod" }
+        };
+        for (std::size_t index = 0u; index < layout_species.size(); ++index)
+        {
+            art::Layout loaded{};
+            std::string layout_error{};
+            const std::filesystem::path path = impl_->art_layout_directory
+                / std::format("{}.artlayout", layout_stems[index]);
+            if (std::filesystem::exists(path)
+                && art::load_layout(path, layout_species[index], loaded, layout_error))
+                impl_->art_layouts[index] = loaded;
+            impl_->art_layout_history[index].reset(impl_->art_layouts[index]);
+        }
 
         impl_->trainer.set_autosave_paths(impl_->autosave_policy_path,
             impl_->autosave_rig_path, impl_->autosave_state_path);
@@ -4252,6 +4755,17 @@ namespace runner
         {
             impl_->course_eye_test_environment->configure_equipment(
                 sim::WeaponClass::carbine, 8.0f);
+            impl_->course_eye_test_environment->set_equipment_directive(
+                sim::EquipmentDirective::safe_carry_walk);
+            const std::array<float, sim::action_count> neutral{};
+            for (std::size_t frame = 0; frame < 72u; ++frame)
+            {
+                const auto action = rl::effective_policy_action(
+                    *impl_->course_eye_test_environment, neutral,
+                    sim::CourseStage::balance, 1.0f,
+                    sim::GuidanceMode::assisted);
+                static_cast<void>(impl_->course_eye_test_environment->step(action));
+            }
         }
         impl_->course_eye_test_environment->set_course_motion_enabled(false);
         impl_->run_paused = true;

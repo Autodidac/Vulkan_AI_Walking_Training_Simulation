@@ -12,6 +12,7 @@ namespace runner::rl
     namespace
     {
         constexpr float epsilon = 1.0e-8f;
+        constexpr float persistent_preview_time_limit_seconds = 96.0f;
 
         [[nodiscard]] float next_uniform(std::uint64_t& state) noexcept
         {
@@ -130,6 +131,7 @@ namespace runner::rl
                 environments_.back().set_course_motion_enabled(false);
             }
             preview_.set_course(course_stage_, course_difficulty_);
+            preview_.set_trial_time_limit(persistent_preview_time_limit_seconds);
             preview_.set_course_motion_enabled(false);
             preview_accumulator_seconds_ = 0.0;
             episode_rewards_.assign(environment_count, 0.0f);
@@ -236,6 +238,28 @@ namespace runner::rl
                     totals.landed_jumps += environment.landed_jumps();
                     totals.landed_flips += environment.spin_landings();
                     totals.obstacles_passed += environment.obstacles_passed();
+                    const sim::CreatureBlueprint& terminal_rig = environment.blueprint();
+                    const auto terminal_particles = environment.particles();
+                    Vec2 terminal_position{};
+                    if (terminal_rig.root_node < terminal_particles.size())
+                        terminal_position = terminal_particles[terminal_rig.root_node].position;
+                    const float terminal_progress = environment.distance_travelled()
+                        + static_cast<float>(environment.obstacles_passed()) * 1000.0f;
+                    if (!totals.terminal_preview.has_value()
+                        || terminal_progress > totals.terminal_progress)
+                    {
+                        // Preserve the exact physical terminal world before
+                        // the rollout worker starts its declared next trial.
+                        totals.terminal_preview = environment;
+                        totals.terminal_reason = result.invalid_reason;
+                        totals.terminal_cause = result.terminal_cause;
+                        totals.terminal_position = terminal_position;
+                        totals.terminal_terrain = environment.terrain_region_at(
+                            terminal_position.x);
+                        totals.terminal_water_depth = environment.water_depth_at(
+                            terminal_position.x);
+                        totals.terminal_progress = terminal_progress;
+                    }
                     if (result.invalid_reason == sim::InvalidMotion::fallen
                         || result.invalid_reason == sim::InvalidMotion::collapsed_posture
                         || result.invalid_reason == sim::InvalidMotion::body_rolling)
@@ -322,6 +346,9 @@ namespace runner::rl
         preview_policy_.set_equipment_enabled(equipment_enabled);
         if (stage == course_stage_ && std::abs(difficulty - course_difficulty_) < 1.0e-5f)
             return;
+        retained_training_preview_.reset();
+        retained_training_reason_ = sim::InvalidMotion::none;
+        retained_training_cause_ = sim::TrialTerminalCause::none;
         const bool stage_changed = stage != course_stage_;
         course_stage_ = stage;
         if (stage_changed)
@@ -388,6 +415,9 @@ namespace runner::rl
     {
         if (task == gait_task_)
             return;
+        retained_training_preview_.reset();
+        retained_training_reason_ = sim::InvalidMotion::none;
+        retained_training_cause_ = sim::TrialTerminalCause::none;
         gait_task_ = task;
         lesson_update_ = 0u;
         for (sim::Environment& environment : environments_)
@@ -423,9 +453,40 @@ namespace runner::rl
         }
     }
 
+    void PpoTrainer::set_equipment_directive(
+        sim::EquipmentDirective directive) noexcept
+    {
+        if (directive == equipment_directive_)
+            return;
+        equipment_directive_ = directive;
+        retained_training_preview_.reset();
+        retained_training_reason_ = sim::InvalidMotion::none;
+        retained_training_cause_ = sim::TrialTerminalCause::none;
+        lesson_update_ = 0u;
+        for (sim::Environment& environment : environments_)
+            environment.set_equipment_directive(equipment_directive_);
+        preview_.set_equipment_directive(equipment_directive_);
+        preview_accumulator_seconds_ = 0.0;
+        refresh_foundational_teacher_prior();
+        std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
+        std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
+        for (auto& action : rollout_previous_actions_)
+            action.fill(0.0f);
+        metrics_.evaluation_valid = false;
+        metrics_.evaluation_quality_key = 0u;
+        metrics_.evaluation_rejection_mask = 0u;
+        metrics_.evaluation_invalid_runs = 0u;
+    }
+
     void PpoTrainer::reset_training_state(bool clear_best,
         bool clear_totals) noexcept
     {
+        retained_training_preview_.reset();
+        retained_training_reason_ = sim::InvalidMotion::none;
+        retained_training_cause_ = sim::TrialTerminalCause::none;
+        retained_training_position_ = {};
+        retained_training_terrain_ = sim::TerrainRegion::firm;
+        retained_training_water_depth_ = 0.0f;
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
@@ -580,6 +641,35 @@ namespace runner::rl
                 staged_totals_.landed_flips += worker.landed_flips;
                 staged_totals_.obstacles_passed += worker.obstacles_passed;
                 staged_totals_.total_distance += worker.total_distance;
+                if (worker.terminal_preview.has_value()
+                    && worker.terminal_progress > staged_totals_.terminal_progress)
+                {
+                    staged_totals_.terminal_preview = worker.terminal_preview;
+                    staged_totals_.terminal_reason = worker.terminal_reason;
+                    staged_totals_.terminal_cause = worker.terminal_cause;
+                    staged_totals_.terminal_position = worker.terminal_position;
+                    staged_totals_.terminal_terrain = worker.terminal_terrain;
+                    staged_totals_.terminal_water_depth = worker.terminal_water_depth;
+                    staged_totals_.terminal_progress = worker.terminal_progress;
+                }
+            }
+        }
+        if (staged_totals_.terminal_preview.has_value())
+        {
+            const float retained_progress = retained_training_preview_.has_value()
+                ? retained_training_preview_->distance_travelled()
+                    + static_cast<float>(retained_training_preview_->obstacles_passed()) * 1000.0f
+                : -std::numeric_limits<float>::infinity();
+            if (!retained_training_preview_.has_value()
+                || staged_totals_.terminal_progress >= retained_progress)
+            {
+                retained_training_preview_ = std::move(staged_totals_.terminal_preview);
+                retained_training_reason_ = staged_totals_.terminal_reason;
+                retained_training_cause_ = staged_totals_.terminal_cause;
+                retained_training_position_ = staged_totals_.terminal_position;
+                retained_training_terrain_ = staged_totals_.terminal_terrain;
+                retained_training_water_depth_ = staged_totals_.terminal_water_depth;
+                retained_training_trial_id_ = ++retained_training_trial_sequence_;
             }
         }
         random_state_ ^= update_seed + 0xA0761D6478BD642FULL;
@@ -937,6 +1027,8 @@ namespace runner::rl
     }
     void PpoTrainer::step_preview(float dt)
     {
+        if (preview_terminal_)
+            return;
         if (!std::isfinite(dt) || dt <= 0.0f)
             return;
         constexpr double fixed_step = static_cast<double>(1.0f / 60.0f);
@@ -967,10 +1059,19 @@ namespace runner::rl
             if (result.terminated)
             {
                 preview_last_reset_reason_ = result.invalid_reason;
+                preview_terminal_cause_ = result.terminal_cause;
+                preview_terminal_ = true;
                 ++preview_reset_sequence_;
-                preview_.reset(0xDEADBEEFu + metrics_.update
-                    + preview_reset_sequence_ * 7919u);
-                preview_.set_guidance_mode(preview_guidance_mode_);
+                const sim::CreatureBlueprint& rig = preview_.blueprint();
+                const auto particles = preview_.particles();
+                if (rig.root_node < particles.size())
+                    preview_terminal_position_ = particles[rig.root_node].position;
+                preview_terminal_terrain_ = preview_.terrain_region_at(
+                    preview_terminal_position_.x);
+                preview_terminal_water_depth_ = preview_.water_depth_at(
+                    preview_terminal_position_.x);
+                preview_accumulator_seconds_ = 0.0;
+                break;
             }
         }
         preview_accumulator_seconds_ = std::max(0.0, preview_accumulator_seconds_);
@@ -978,8 +1079,13 @@ namespace runner::rl
 
     void PpoTrainer::reset_preview(std::uint64_t seed) noexcept
     {
-        preview_reset_sequence_ = 0u;
+        ++preview_trial_id_;
+        preview_terminal_ = false;
+        preview_terminal_cause_ = sim::TrialTerminalCause::none;
         preview_last_reset_reason_ = sim::InvalidMotion::none;
+        preview_terminal_position_ = {};
+        preview_terminal_terrain_ = sim::TerrainRegion::firm;
+        preview_terminal_water_depth_ = 0.0f;
         preview_accumulator_seconds_ = 0.0;
         preview_.reset(seed);
         preview_.set_guidance_mode(preview_guidance_mode_);

@@ -221,6 +221,7 @@ namespace
             std::filesystem::path{ "docs" } / "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md",
             std::filesystem::path{ "docs" } / "RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md",
+            std::filesystem::path{ "docs" } / "RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md",
             std::filesystem::path{ "docs" } / "EPOCH2D_WALK_ENGINE_LIBRARY.md",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_head_side.ppm",
             std::filesystem::path{ "assets" } / "optional" / "species_runtime" / "chicken_upper_leg_side.ppm",
@@ -575,7 +576,8 @@ int main(int argc, char** argv)
             "Runner %s Speed Walk graph diagnostic: %s; walk=%llu/%llu "
             "speed_walk=%llu/%llu retained=%.3fm replay=%s %.3fm/%.2f "
             "strides/%.3fmps/%.3fs collisions=%.2f invalid=%u/6 "
-            "reject=0x%08X authority=%.3f evaluation=%s course_motion=%s\n",
+            "reject=0x%08X failed_seed=%llu failed=%.3fm/%.3fs/%.*s "
+            "authority=%.3f evaluation=%s course_motion=%s\n",
             RUNNER_VERSION, proof.passed ? "passed" : "failed",
             static_cast<unsigned long long>(proof.walk_updates),
             static_cast<unsigned long long>(proof.walk_retained_update),
@@ -585,6 +587,11 @@ int main(int argc, char** argv)
             proof.speed_walk_retained ? "retained" : "missing", proof.distance,
             proof.stride_events, proof.speed, proof.survival,
             proof.collisions, proof.invalid_runs, proof.rejection_mask,
+            static_cast<unsigned long long>(proof.failed_seed),
+            proof.failed_distance, proof.failed_survival,
+            static_cast<int>(runner::sim::invalid_motion_name(
+                proof.failed_reason).size()),
+            runner::sim::invalid_motion_name(proof.failed_reason).data(),
             proof.teacher_authority,
             proof.raw_evaluation ? "raw-policy" : "assisted",
             proof.course_motion_enabled ? "enabled" : "disabled");

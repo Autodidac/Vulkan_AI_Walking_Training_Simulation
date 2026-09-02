@@ -45,6 +45,16 @@ int main()
 
 The package also requires `Threads` and `SandHybrid 2.5`; its generated config resolves both before loading the exported target.
 
+## External host and authoring API
+
+The v0.7.50 umbrella header exports `director::TaskGraph`, `director::State`, `integration::TaskCommand`, `integration::ControlRequest`, `integration::CanonicalSnapshot`, `integration::FixedStepResult`, and `integration::DiagnosticEvents`. `integration::fixed_step()` applies a supported task only at an explicit host boundary and otherwise advances the caller-owned physical environment exactly once. Curriculum, autonomous-NPC, and player-guided hosts therefore share the same contacts, materials, equipment state, projectiles, terminal causes, and fixed-step clock.
+
+The Director never owns a renderer or grants motion. Its stable task/challenge identity and selection reason can be sent to another project beside the canonical snapshot and action request. Unsupported construction/tool nodes are rejected rather than simulated with placeholder authority.
+
+`art::Layout` is renderer-neutral, species-owned authoring data. `art::adjust_transform()` applies bounded module anchor, pivot, length, thickness, rotation, flip, and depth settings to the same physical transforms Runner renders in Live, PIP, and Rig Lab. Layout save/load validates schema and species identity; undo/redo is deterministic and bounded.
+
+The public integration API version is `3`. Consumers should compare `integration::api_version` at compile time when they persist or transmit these contracts.
+
 ## Release packages
 
 A complete release contains:

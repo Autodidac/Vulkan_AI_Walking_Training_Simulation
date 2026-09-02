@@ -107,6 +107,8 @@ namespace runner::rl
         const bool course_changed = !hold_preview
             && (snapshot.status.stage != cached_status_.stage
                 || snapshot.status.gait_task != cached_status_.gait_task
+                || snapshot.status.equipment_directive
+                    != cached_status_.equipment_directive
                 || std::abs(snapshot.status.difficulty
                     - cached_status_.difficulty) > 1.0e-5f);
 
@@ -121,6 +123,8 @@ namespace runner::rl
         {
             live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
             live_.set_gait_task(snapshot.status.gait_task, false);
+            live_.set_equipment_directive(
+                snapshot.status.equipment_directive);
         }
         if (decision.adopt_controller)
             live_.policy().parameters() = snapshot.parameters;
@@ -188,6 +192,7 @@ namespace runner::rl
         live_.set_blueprint(live_blueprint_, false);
         live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
         live_.set_gait_task(snapshot.status.gait_task, false);
+        live_.set_equipment_directive(snapshot.status.equipment_directive);
         live_.policy().parameters() = snapshot.parameters;
         live_.set_preview_course_motion_enabled(false);
         live_morphology_preview_active_ = false;
@@ -208,6 +213,15 @@ namespace runner::rl
         PendingCommand command{};
         command.type = CommandType::set_gait_task;
         command.gait_task = task;
+        enqueue_command(std::move(command));
+    }
+
+    void AutonomousTrainer::select_director_task(
+        std::uint16_t task_index) noexcept
+    {
+        PendingCommand command{};
+        command.type = CommandType::set_director_task;
+        command.director_task_index = task_index;
         enqueue_command(std::move(command));
     }
 

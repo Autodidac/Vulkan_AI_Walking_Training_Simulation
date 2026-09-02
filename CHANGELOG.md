@@ -1,3 +1,17 @@
+## 0.7.50
+
+- Retained truthful terminal trial previews and separated time-limit, invalid-motion, completion, retry, and automatic-next-trial ownership.
+- Added stable course challenge identities and deterministic lake-crossing evidence for all four production species.
+- Kept the 18 m Speed Walk goal while adding a 0.5 m cross-platform contact-integration qualification interval; cadence, speed, survival, collisions, and strict-valid evidence remain exact.
+- Replaced repeated exact planted correction with one material-, water-, load-, and foot-geometry-aware finite Coulomb budget per contact per fixed tick.
+- Added explicit Walk, Speed Walk, transition, Run, crouch, wade, swim, shore-exit, and physical gun-task directives.
+- Added a selectable AI Director task graph for curriculum, autonomous-NPC, and player-guided profiles without movement, contact, hit, or completion authority.
+- Exported renderer-free external-host fixed-step, task, snapshot, and diagnostic contracts through the installed library and headless consumer.
+- Added the production-renderer Rig Lab ART page with live/frozen pose, module transforms, overlays, zoom/contrast, undo/redo, and species-owned persistence.
+- Preserved the accepted sprite silhouettes while correcting opaque-bound endpoint fit, feet, hands, weapon alignment, and near/far readability.
+- Added deterministic positive, negative, adversarial, repeated-seed, no-rail, lake, traction-budget, Director, external-host, art-transform, history, and save/load coverage.
+- Advanced isolated training state to semantics `0x0007'5001` and `runner-v0750-*` paths with lifetime-only v0.7.49 migration.
+
 ## 0.7.49
 
 - Removed the last course-motion/treadmill authority and made terrain, obstacles, odometry, and reference markers share static world coordinates.

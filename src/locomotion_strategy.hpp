@@ -11,11 +11,20 @@ namespace runner::locomotion
         hold,
         walk,
         run,
+        wade,
+        swim,
+        shore_exit,
         recover,
         crawl,
         flee,
         escape
     };
+
+    inline constexpr float water_approach_depth_threshold = 0.08f;
+    inline constexpr float wading_depth_threshold = 0.06f;
+    inline constexpr float swimming_body_submersion_threshold = 0.58f;
+    inline constexpr float saturated_film_depth_threshold = 0.001f;
+    inline constexpr float shore_exit_lookahead_m = 2.00f;
 
     struct Signals
     {
@@ -47,6 +56,15 @@ namespace runner::locomotion
         bool dynamic_hazard_safe{};
         float zero_progress_seconds{};
         float hazard_stall_seconds{};
+        float micro_motion_seconds{};
+        float terrain_firmness{ 1.0f };
+        float terrain_looseness{};
+        float water_depth{};
+        float water_submersion{};
+        float water_depth_ahead{};
+        float saturated_depth_ahead{};
+        bool shore_exit_ahead{};
+        bool weapon_equipped{};
     };
 
     struct Plan
@@ -63,6 +81,7 @@ namespace runner::locomotion
         bool step_up{};
         bool brake{};
         bool emergency_crawl{};
+        bool aquatic{};
     };
 
     [[nodiscard]] inline float support_margin(const Signals& signals) noexcept
@@ -105,9 +124,12 @@ namespace runner::locomotion
             signals.mid_rise * 0.85f, signals.far_rise * 0.55f });
         const float drop = std::max({ 0.0f, -signals.near_rise,
             -signals.mid_rise * 0.70f });
+        const float yielding = (1.0f - std::clamp(signals.terrain_firmness,
+            0.0f, 1.0f)) * 0.32f
+            + std::clamp(signals.terrain_looseness, 0.0f, 1.0f) * 0.28f;
         return std::clamp(positive_step / 1.10f
             + drop / 1.45f
-            + std::abs(signals.slope) * 0.28f, 0.0f, 1.0f);
+            + std::abs(signals.slope) * 0.28f + yielding, 0.0f, 1.0f);
     }
 
     [[nodiscard]] inline bool urgent_threat(const Signals& signals) noexcept
@@ -132,6 +154,8 @@ namespace runner::locomotion
     [[nodiscard]] inline bool stuck_escape_required(const Signals& signals) noexcept
     {
         const bool stalled = signals.zero_progress_seconds >= 0.60f
+            || (signals.micro_motion_seconds >= 0.60f
+                && signals.micro_motion_seconds < 1.25f)
             || signals.hazard_stall_seconds >= 0.60f;
         const bool constrained = signals.burial_depth >= 0.04f
             || signals.obstruction_mask != 0u
@@ -195,6 +219,94 @@ namespace runner::locomotion
             result.brake = signals.forward_speed * result.direction < -0.25f;
             return result;
         }
+        // A thin waterlogged-sand film changes contact traction and drag, but
+        // does not replace an ordinary gait with a full aquatic gait.
+        const bool water_approach = signals.water_depth_ahead
+            > water_approach_depth_threshold;
+        const bool in_water = signals.water_depth > wading_depth_threshold
+            || signals.water_submersion > 0.12f;
+        const bool yielding_ground = signals.terrain_firmness < 0.58f
+            || signals.terrain_looseness > 0.45f
+            || signals.saturated_depth_ahead
+                > saturated_film_depth_threshold;
+        if (yielding_ground && !in_water && stuck_escape_required(signals)
+            && result.balance_reserve >= 0.18f)
+        {
+            result.intent = Intent::escape;
+            // Extraction serves the active traversal objective; it is not flee.
+            // It must run before the water-approach gait so a planted wet sole
+            // can recover instead of cycling forever at the shoreline.
+            result.direction = signals.requested_direction < 0.0f ? -1.0f : 1.0f;
+            result.target_speed = 0.34f;
+            result.cadence_hz = 0.78f;
+            result.stride_scale = 0.44f;
+            result.swing_lift = 0.32f;
+            result.stance_extension = 0.58f;
+            result.step_up = true;
+            result.brake = false;
+            return result;
+        }
+        if (water_approach && !in_water)
+        {
+            result.intent = Intent::walk;
+            result.target_speed = 0.46f;
+            result.cadence_hz = 0.72f;
+            result.stride_scale = 0.44f;
+            result.swing_lift = 0.68f;
+            result.stance_extension = 0.66f;
+            result.step_up = true;
+            result.brake = std::abs(signals.forward_speed)
+                > result.target_speed * 1.45f;
+            return result;
+        }
+        if (in_water)
+        {
+            result.aquatic = true;
+            result.step_up = signals.shore_exit_ahead;
+            if (signals.shore_exit_ahead && in_water)
+            {
+                result.intent = Intent::shore_exit;
+                result.target_speed = 0.38f;
+                result.cadence_hz = 0.68f;
+                result.stride_scale = 0.46f;
+                result.swing_lift = 0.64f;
+                result.stance_extension = 0.82f;
+            }
+            else if (signals.water_submersion >= swimming_body_submersion_threshold)
+            {
+                result.intent = Intent::swim;
+                result.target_speed = 0.30f;
+                result.cadence_hz = 0.74f;
+                result.stride_scale = 0.58f;
+                result.swing_lift = 0.72f;
+                result.stance_extension = 0.34f;
+            }
+            else
+            {
+                result.intent = Intent::wade;
+                result.target_speed = 0.26f;
+                result.cadence_hz = 0.62f;
+                result.stride_scale = 0.38f;
+                result.swing_lift = 0.82f;
+                result.stance_extension = 0.68f;
+            }
+            result.brake = std::abs(signals.forward_speed)
+                > result.target_speed * 1.35f;
+            return result;
+        }
+        if (yielding_ground)
+        {
+            result.intent = Intent::walk;
+            result.target_speed = 0.58f;
+            result.cadence_hz = 0.84f;
+            result.stride_scale = 0.52f;
+            result.swing_lift = 0.56f;
+            result.stance_extension = 0.64f;
+            result.step_up = signals.near_rise >= 0.10f;
+            result.brake = std::abs(signals.forward_speed)
+                > result.target_speed * 1.45f;
+            return result;
+        }
         result.step_up = signals.near_rise >= 0.14f
             && signals.near_rise <= 1.20f;
         result.emergency_crawl = emergency_crawl_allowed(signals,
@@ -213,7 +325,11 @@ namespace runner::locomotion
             return result;
         }
 
-        if (stuck_escape_required(signals) && result.balance_reserve >= 0.18f)
+        const bool hard_escape_constraint = (signals.obstruction_mask & 0x3u) != 0u
+            || (signals.left_escape_rise >= 0.12f
+                && signals.right_escape_rise >= 0.12f);
+        if (hard_escape_constraint && stuck_escape_required(signals)
+            && result.balance_reserve >= 0.18f)
         {
             result.intent = Intent::escape;
             result.direction = escape_direction(signals);

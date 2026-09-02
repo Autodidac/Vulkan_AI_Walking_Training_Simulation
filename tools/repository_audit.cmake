@@ -6,8 +6,8 @@ if(RUNNER_LINUX_LAUNCHER MATCHES "0d0a")
     message(FATAL_ERROR "run.sh must use LF line endings for /usr/bin/env portability")
 endif()
 file(READ "${RUNNER_SOURCE_DIR}/examples/library_probe.cpp" RUNNER_LIBRARY_PROBE)
-if(NOT RUNNER_LIBRARY_PROBE MATCHES "Epoch2DWalkEngine 0\\.7\\.49 library API passed")
-    message(FATAL_ERROR "Installed library example does not report v0.7.49")
+if(NOT RUNNER_LIBRARY_PROBE MATCHES "Epoch2DWalkEngine 0\\.7\\.50 library API, task graph")
+    message(FATAL_ERROR "Installed library example does not report v0.7.50")
 endif()
 
 foreach(required IN ITEMS
@@ -52,6 +52,7 @@ foreach(required IN ITEMS
         docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md
         assets/optional/species_runtime/chicken_body_side.ppm
         docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md
+        docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md
         assets/optional/species_runtime/chicken_head_side.ppm
         assets/optional/species_runtime/chicken_upper_leg_side.ppm
         assets/optional/species_runtime/chicken_lower_leg_side.ppm
@@ -105,6 +106,7 @@ foreach(required IN ITEMS
         tools/art_sources/runner_v0744_dog_modules_source.png
         tools/generate_species_art_assets.py
         tests/v0744_dog_art_rig_tests.cpp
+        tests/v0750_persistent_director_art_tests.cpp
         tests/v0718_runtime_recovery_tests.cpp
         tests/v0719_general_locomotion_tests.cpp
         tests/v0720_ui_tests.cpp
@@ -112,6 +114,10 @@ foreach(required IN ITEMS
         tests/v0721_rig_gait_tests.cpp
         tests/v0723_gray_frame_tests.cpp
         tests/v0724_structural_metrics_icon_tests.cpp
+        src/ai_director.hpp
+        src/ai_director_io.hpp
+        src/art_authoring.hpp
+        src/integration.hpp
         src/locomotion_strategy.hpp
         src/preview_sync.hpp
         src/species_art_layout.hpp
@@ -131,7 +137,7 @@ endif()
 
 file(READ "${RUNNER_SOURCE_DIR}/CMakeLists.txt" cmake_text)
 foreach(reference IN ITEMS
-        "project(Epoch2DWalkEngine VERSION 0.7.49 LANGUAGES CXX)"
+        "project(Epoch2DWalkEngine VERSION 0.7.50 LANGUAGES CXX)"
         "Epoch2DWalkEngine::Epoch2DWalkEngine"
         "Epoch2DWalkEngineTargets"
         "Epoch2DWalkEngineDevelopment"
@@ -164,6 +170,8 @@ foreach(reference IN ITEMS
         "RunnerRigDefaults"
         "RunnerV0749PhysicalCombatTerrainTests"
         "Runner.V0749PhysicalCombatTerrain"
+        RunnerV0750PersistentDirectorArtTests
+        Runner.V0750PersistentDirectorArt
         "human.rig"
         "chicken.rig"
         "dog.rig"
@@ -204,6 +212,7 @@ foreach(reference IN ITEMS
         "RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         "RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         "RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
+        RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md
         "runner_icon.rc")
     string(FIND "${cmake_text}" "${reference}" pos)
     if(pos EQUAL -1)
@@ -431,7 +440,7 @@ endforeach()
 
 file(READ "${RUNNER_SOURCE_DIR}/src/ppo.hpp" ppo_text)
 foreach(reference IN ITEMS
-        "training_semantics_version = 0x0007'4901u"
+        "training_semantics_version = 0x0007'5001u"
         "lesson_teacher_authority"
         "crouch_teacher_handoff_update"
         "lesson_update() const noexcept"
@@ -561,7 +570,7 @@ endforeach()
 file(READ "${RUNNER_SOURCE_DIR}/src/simulation.hpp" species_paths_text)
 foreach(reference IN ITEMS
         "struct CreatureSpeciesPaths"
-        "runner-v0749-"
+        "runner-v0750-"
         "-autosave.eppo"
         "-evolved.rig"
         "-autonomy.state")
@@ -644,7 +653,7 @@ if(hybrid_brain_diagnostic_pos EQUAL -1)
 endif()
 string(FIND "${main_text}" "--diagnose-speed-walk" speed_walk_diagnostic_pos)
 if(speed_walk_diagnostic_pos EQUAL -1)
-    message(FATAL_ERROR "v0.7.49 packaged Speed Walk graph diagnostic launch contract missing")
+    message(FATAL_ERROR "v0.7.50 packaged Speed Walk graph diagnostic launch contract missing")
 endif()
 string(FIND "${main_text}" "application.prepare_walk_eye_test(error)" walk_eye_prepare_pos)
 string(FIND "${main_text}" "SDL_CreateWindow(" window_create_pos)
@@ -715,7 +724,7 @@ foreach(forbidden IN ITEMS "rounded_background" "polygon(" "gold =" "cyan =")
 endforeach()
 
 foreach(reference IN ITEMS
-        "draw_oriented_pixel_art(canvas, optional_torso_art"
+        "draw_authored_pixel_art"
         "art::articulated_boot_transform"
         "rig.support_branch_mask(motor)"
         "rig.node_support_mask(index)"
@@ -866,7 +875,7 @@ if(walk_eye_workflow_pos EQUAL -1)
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-speed-walk" speed_walk_workflow_pos)
 if(speed_walk_workflow_pos EQUAL -1)
-    message(FATAL_ERROR "Release workflow does not run the v0.7.49 Speed Walk graph diagnostic")
+    message(FATAL_ERROR "Release workflow does not run the v0.7.50 Speed Walk graph diagnostic")
 endif()
 string(FIND "${release_workflow_text}" "--diagnose-course" course_workflow_pos)
 if(course_workflow_pos EQUAL -1)
@@ -932,4 +941,4 @@ foreach(stale IN ITEMS
     endif()
 endforeach()
 
-message(STATUS "Runner v0.7.49 repository hygiene passed")
+message(STATUS "Runner v0.7.50 repository hygiene passed")

@@ -521,6 +521,8 @@ namespace runner::diagnostics
         proof.speed_walk_retained_update = trainer.metrics().best_update;
         proof.speed_walk_retained_distance =
             trainer.metrics().best_evaluation_distance;
+        const std::uint64_t retained_evaluation_sequence =
+            std::max<std::uint64_t>(1u, trainer.metrics().evaluation_count);
         proof.speed_walk_retained = trainer.has_best_policy()
             && rl::strict_evaluation_quality(trainer.metrics().best_quality_key)
             && trainer.evaluate_retained_policy();
@@ -539,6 +541,37 @@ namespace runner::diagnostics
         for (const sim::Environment& environment : trainer.environments())
             proof.course_motion_enabled = proof.course_motion_enabled
                 || environment.course_motion_enabled();
+        for (std::size_t agent = 0; agent < 6u; ++agent)
+        {
+            const std::uint64_t seed = rl::evaluation_seed(
+                agent, retained_evaluation_sequence);
+            sim::Environment environment{ blueprint, seed };
+            rl::configure_policy_evaluation_environment(environment,
+                sim::CourseStage::uneven, 0.30f, sim::GaitTask::speed_walk,
+                sim::GuidanceMode::raw_policy_audit);
+            environment.set_equipment_directive(trainer.equipment_directive());
+            for (int step = 0; step < 1200; ++step)
+            {
+                const auto raw_action = trainer.policy().deterministic_action(
+                    environment.observation());
+                const auto action = rl::effective_policy_action(environment,
+                    raw_action, sim::CourseStage::uneven, 0.0f,
+                    sim::GuidanceMode::raw_policy_audit);
+                if (environment.step(action).terminated)
+                    break;
+            }
+            const rl::StageMotionQualification qualification =
+                rl::stage_motion_qualification(
+                    sim::CourseStage::uneven, environment);
+            if ((!qualification.valid || !environment.body_integrity_valid())
+                && proof.failed_seed == 0u)
+            {
+                proof.failed_seed = seed;
+                proof.failed_distance = environment.distance_travelled();
+                proof.failed_survival = environment.elapsed_seconds();
+                proof.failed_reason = environment.invalid_reason();
+            }
+        }
         proof.passed = updates_per_lesson >= 1200u
             && proof.walk_retained
             && proof.walk_retained_update

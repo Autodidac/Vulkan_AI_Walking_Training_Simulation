@@ -43,6 +43,30 @@ namespace runner::sim
         return "UNKNOWN TERRAIN";
     }
 
+    struct TerrainChallenge
+    {
+        std::uint32_t stable_id{};
+        std::uint16_t sequence{};
+        TerrainRegion region{ TerrainRegion::firm };
+        float begin{};
+        float end{};
+
+        [[nodiscard]] float center() const noexcept
+        {
+            return 0.5f * (begin + end);
+        }
+
+        [[nodiscard]] float length() const noexcept
+        {
+            return std::max(0.0f, end - begin);
+        }
+
+        [[nodiscard]] bool contains(float local_x) const noexcept
+        {
+            return local_x >= begin && local_x < end;
+        }
+    };
+
     class DeformableTerrain
     {
     public:
@@ -140,6 +164,7 @@ namespace runner::sim
         static constexpr std::size_t macro_rows = vertical_cell_count / macro_cell_side;
         static constexpr std::size_t macro_tile_count = macro_columns * macro_rows;
         static constexpr float period = static_cast<float>(cell_count) * fine_cell_spacing;
+        static constexpr std::size_t terrain_challenge_count = 9u;
         static constexpr float launch_pad_half_width = 0.70f;
         static constexpr float launch_transition_width = 0.55f;
         static constexpr float world_bottom = -4.5f;
@@ -260,6 +285,55 @@ namespace runner::sim
         [[nodiscard]] float water_surface_at(float course_x) const noexcept
         {
             return cells_[nearest_index(course_x)].water_surface;
+        }
+
+        [[nodiscard]] std::array<TerrainChallenge, terrain_challenge_count>
+            terrain_challenges() const noexcept
+        {
+            const CourseBoundaries boundaries = course_boundaries();
+            std::array<TerrainRegion, 3> middle_regions{
+                TerrainRegion::firm, TerrainRegion::waterlogged,
+                TerrainRegion::shallow_water };
+            if ((mix(seed_ ^ 0x7315a9d3u) & 1u) != 0u)
+                std::swap(middle_regions[1], middle_regions[2]);
+            return {{
+                { 0xE2D00001u, 0u, TerrainRegion::firm,
+                    0.0f, boundaries.first },
+                { 0xE2D00002u, 1u, TerrainRegion::dry_sand,
+                    boundaries.first, boundaries.second },
+                { 0xE2D00003u, 2u, middle_regions[0],
+                    boundaries.second, boundaries.third },
+                { 0xE2D00004u, 3u, middle_regions[1],
+                    boundaries.third, boundaries.fourth },
+                { 0xE2D00005u, 4u, middle_regions[2],
+                    boundaries.fourth, boundaries.fifth },
+                { 0xE2D00006u, 5u, TerrainRegion::hole,
+                    boundaries.fifth, boundaries.sixth },
+                { 0xE2D00007u, 6u, boundaries.sand_first
+                        ? TerrainRegion::dry_sand : TerrainRegion::firm,
+                    boundaries.sixth, boundaries.tail_split },
+                { 0xE2D00008u, 7u, boundaries.sand_first
+                        ? TerrainRegion::firm : TerrainRegion::dry_sand,
+                    boundaries.tail_split, boundaries.tail_end },
+                { 0xE2D00009u, 8u, TerrainRegion::firm,
+                    boundaries.tail_end, period }
+            }};
+        }
+
+        [[nodiscard]] TerrainChallenge challenge_at(float course_x) const noexcept
+        {
+            const float local = wrapped_course_x(course_x);
+            for (const TerrainChallenge& challenge : terrain_challenges())
+                if (challenge.contains(local))
+                    return challenge;
+            return terrain_challenges().back();
+        }
+
+        [[nodiscard]] float challenge_progress_at(float course_x) const noexcept
+        {
+            const TerrainChallenge challenge = challenge_at(course_x);
+            return std::clamp((wrapped_course_x(course_x) - challenge.begin)
+                / std::max(challenge.length(), fine_cell_spacing), 0.0f, 1.0f);
         }
 
         [[nodiscard]] float slope_at(float course_x) const noexcept
@@ -579,6 +653,19 @@ namespace runner::sim
             float water_surface{};
         };
 
+        struct CourseBoundaries
+        {
+            float first{};
+            float second{};
+            float third{};
+            float fourth{};
+            float fifth{};
+            float sixth{};
+            float tail_split{};
+            float tail_end{};
+            bool sand_first{};
+        };
+
         [[nodiscard]] static std::uint64_t mix(std::uint64_t value) noexcept
         {
             value ^= value >> 30u;
@@ -596,28 +683,43 @@ namespace runner::sim
                 / denominator);
         }
 
+        [[nodiscard]] CourseBoundaries course_boundaries() const noexcept
+        {
+            CourseBoundaries boundaries{};
+            boundaries.first = launch_pad_half_width + launch_transition_width
+                + 0.15f + unit_hash(seed_ ^ 0x10a2u) * 0.65f;
+            boundaries.second = boundaries.first + 7.0f
+                + unit_hash(seed_ ^ 0x20b3u) * 2.5f;
+            boundaries.third = boundaries.second + 6.0f
+                + unit_hash(seed_ ^ 0x30c4u) * 2.5f;
+            boundaries.fourth = boundaries.third + 6.0f
+                + unit_hash(seed_ ^ 0x40d5u) * 2.5f;
+            boundaries.fifth = boundaries.fourth + 7.0f
+                + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
+            boundaries.sixth = boundaries.fifth + 5.0f
+                + unit_hash(seed_ ^ 0x60f7u) * 2.0f;
+            boundaries.tail_end = period - 5.0f;
+            boundaries.tail_split = std::lerp(boundaries.sixth,
+                boundaries.tail_end, 0.42f + unit_hash(seed_ ^ 0x70a8u) * 0.16f);
+            boundaries.sand_first = (mix(seed_ ^ 0x80b9u) & 1u) == 0u;
+            return boundaries;
+        }
+
         [[nodiscard]] SurfaceProfile authored_surface(float course_x) const noexcept
         {
             float local = std::fmod(course_x, period);
             if (local < 0.0f)
                 local += period;
 
-            const float first_boundary = launch_pad_half_width
-                + launch_transition_width + 0.15f
-                + unit_hash(seed_ ^ 0x10a2u) * 0.65f;
-            const float second_boundary = first_boundary + 7.0f
-                + unit_hash(seed_ ^ 0x20b3u) * 2.5f;
-            const float third_boundary = second_boundary + 6.0f
-                + unit_hash(seed_ ^ 0x30c4u) * 2.5f;
-            const float fourth_boundary = third_boundary + 6.0f
-                + unit_hash(seed_ ^ 0x40d5u) * 2.5f;
-            const float fifth_boundary = fourth_boundary + 7.0f
-                + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
-            const float sixth_boundary = fifth_boundary + 5.0f
-                + unit_hash(seed_ ^ 0x60f7u) * 2.0f;
-            const float tail_end = period - 5.0f;
-            const float tail_split = std::lerp(sixth_boundary, tail_end,
-                0.42f + unit_hash(seed_ ^ 0x70a8u) * 0.16f);
+            const CourseBoundaries boundaries = course_boundaries();
+            const float first_boundary = boundaries.first;
+            const float second_boundary = boundaries.second;
+            const float third_boundary = boundaries.third;
+            const float fourth_boundary = boundaries.fourth;
+            const float fifth_boundary = boundaries.fifth;
+            const float sixth_boundary = boundaries.sixth;
+            const float tail_end = boundaries.tail_end;
+            const float tail_split = boundaries.tail_split;
             const bool return_pad = local > tail_end;
             const float distance_from_launch = std::min(local, period - local);
             const bool launch_pad = distance_from_launch <= launch_pad_half_width;
@@ -664,7 +766,7 @@ namespace runner::sim
             }
             else if (!return_pad && local >= sixth_boundary)
             {
-                const bool sand_first = (mix(seed_ ^ 0x80b9u) & 1u) == 0u;
+                const bool sand_first = boundaries.sand_first;
                 const bool first_tail = local < tail_split;
                 region = (first_tail == sand_first)
                     ? TerrainRegion::dry_sand : TerrainRegion::firm;

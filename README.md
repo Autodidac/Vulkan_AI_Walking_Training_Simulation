@@ -6,13 +6,28 @@ Windows and Linux releases distinguish runnable Runner example packages, develop
 
 The release asset contract is explicit:
 
-- `Epoch2DWalkEngine-v0.7.49-runner-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.49-runner-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.49-dev-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.49-dev-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.49-source.zip`
+- `Epoch2DWalkEngine-v0.7.50-runner-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.50-runner-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.50-dev-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.50-dev-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.50-source.zip`
 
 Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The runtime packages contain the full Runner example; the development packages contain the installable library, public headers, dependency package, CMake target, documentation, and consumer example.
+
+## v0.7.50 persistent physical trials, AI Director, and shared art authoring
+
+- Retains an exact terminal preview with trial ID, terminal cause, physical world position, material, water depth, and explicit retry instead of silently jumping back to spawn.
+- Gives the fixed SandHybrid-derived course stable challenge identities across firm ground, loose and waterlogged cells, shallow water, shore exit, steps, ramps, gaps, ledges, low clearance, and aim ranges.
+- Uses one finite per-contact traction budget across solver passes. Human, Chicken, Dog, and Hexapod repeated-seed physical teachers cross the shared lake without root translation, treadmills, or infinite planted locks.
+- Keeps Speed Walk's visible 18 m goal and accepts only a 0.5 m terrain/contact integration interval at qualification, preventing a physically valid Windows replay from remaining at 80% while every other mastery gate stays exact.
+- Separates Walk, Speed Walk, Walk/Run Transition, Run, Crouch Walk, Wade, Swim, and Shore Exit into explicit physical gait/task requests instead of treating Speed Walk as the universal gait.
+- Adds a selectable AI Director graph for curriculum, autonomous-NPC, and player-guided hosts. It selects goals and reports why; it cannot move a root, invent a contact, steer a projectile, or grant completion.
+- Adds safe-carry, low-ready, stop-and-plant, gun-stance, acquire/settle/fire, miss-correct, and break-contact equipment directives. A shot exists only after the real rig stops, plants, aims, and satisfies angular/rate tolerances.
+- Exports renderer-free Director, task-command, canonical snapshot, control-request, fixed-step-result, and diagnostic-event contracts through the installed Epoch2DWalkEngine library and its headless consumer example.
+- Adds a Rig Lab ART page using the production renderer and live physical pose, with module selection, anchor/pivot/scale/rotation/flip/depth controls, skeleton/contact overlay, freeze/play, zoom, contrast, undo/redo, and validated species-owned save/load.
+- Preserves the accepted pixel-art silhouettes while fitting opaque module extents to physical endpoints, keeping near/far limbs readable, seating feet on contacts, and deriving Human safe-carry hands and weapon orientation from the real arm chain.
+- Isolates incompatible learned state under semantics `0x0007'5001` and species-owned `runner-v0750-*` paths. v0.7.49 may contribute validated lifetime totals only; authored `{species}.rig` files remain compatible.
+- See `docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md`.
 
 ## v0.7.49 Static SandHybrid cells, physical aiming, and fitted Human extremities
 

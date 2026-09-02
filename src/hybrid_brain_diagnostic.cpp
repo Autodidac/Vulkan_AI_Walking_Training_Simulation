@@ -125,12 +125,12 @@ namespace runner::diagnostics
         const rl::RuntimeSafetyAuthority flee_authority =
             rl::runtime_safety_authority(dodge);
         const float saturated_policy = 1.0f;
-        const float bounded_escape = lerp(saturated_policy, -1.0f,
-            escape_authority.support);
-        report.policy_bounds = escape_authority.support >= 0.70f
-            && escape_authority.body > 0.0f
+        const float bounded_flee = lerp(saturated_policy, -1.0f,
+            flee_authority.support);
+        report.policy_bounds = escape_authority.support == 0.0f
+            && escape_authority.body == 0.0f
             && flee_authority.support > flee_authority.body
-            && bounded_escape < 0.0f && bounded_escape >= -1.0f;
+            && bounded_flee < 0.0f && bounded_flee >= -1.0f;
 
         report.multi_topology = sustained_multi_topology();
 
