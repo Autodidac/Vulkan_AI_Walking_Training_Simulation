@@ -1,4 +1,4 @@
-# Runner agent instructions
+# Epoch2DWalkEngine agent instructions
 
 ## Authoritative workflow
 

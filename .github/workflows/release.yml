@@ -1,141 +1,341 @@
 name: Epoch2DWalkEngine audited cross-platform release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Build one immutable candidate first; promote only a completed build run after native review
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - promote
+      commit_sha:
+        description: Full immutable source commit (40 lowercase hexadecimal characters)
+        required: true
+        type: string
+      release_tag:
+        description: Proposed tag; this workflow accepts only the uncreated v0.7.51 tag
+        required: true
+        default: v0.7.51
+        type: string
+      publication_target:
+        description: Site handoff is the default; GitHub publication is an explicit availability-probed opt-in
+        required: true
+        default: site
+        type: choice
+        options:
+          - site
+          - github
+      github_status:
+        description: Promotion-only GitHub status; GitHub publication requires a fresh probe
+        required: true
+        default: unavailable-http-403
+        type: choice
+        options:
+          - unavailable-http-403
+          - not-probed
+          - probe-required
+      build_run_id:
+        description: "Promotion only: successful build-phase workflow run whose immutable artifacts were captured"
+        required: false
+        default: ""
+        type: string
+      native_capture_bundle_url:
+        description: "Promotion only: exact-commit Site candidate URL for the native capture ZIP"
+        required: false
+        default: ""
+        type: string
+      native_capture_bundle_sha256:
+        description: "Promotion only: exact lowercase SHA-256 of the native capture ZIP"
+        required: false
+        default: ""
+        type: string
 
 permissions:
-  contents: write
+  actions: read
+  contents: read
+
+concurrency:
+  group: epoch2dwalk-v0751-${{ inputs.phase }}-${{ inputs.commit_sha }}
+  cancel-in-progress: false
 
 env:
   VCPKG_ROOT: ${{ github.workspace }}/vcpkg
   VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
+  RUNNER_CANDIDATE_SHA: ${{ inputs.commit_sha }}
+  RUNNER_PROPOSED_TAG: ${{ inputs.release_tag }}
+  RUNNER_BUILD_RUN_ID: ${{ inputs.build_run_id }}
+  RUNNER_CAPTURE_BUNDLE_URL: ${{ inputs.native_capture_bundle_url }}
+  RUNNER_CAPTURE_BUNDLE_SHA256: ${{ inputs.native_capture_bundle_sha256 }}
 
 jobs:
-  linux-release:
+  validate-source:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout exact tagged source
-        uses: actions/checkout@v4
+      - name: Checkout the explicit immutable candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
+      - name: Validate dispatch identity and candidate contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUNNER_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$RUNNER_PROPOSED_TAG" = "v0.7.51"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_SHA" = "$RUNNER_CANDIDATE_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$RUNNER_CANDIDATE_SHA"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          test "$(git rev-parse HEAD)" = "$RUNNER_CANDIDATE_SHA"
+          test "$(git rev-parse "$RUNNER_CANDIDATE_SHA^{commit}")" = "$RUNNER_CANDIDATE_SHA"
+          test -z "$(git tag --list "$RUNNER_PROPOSED_TAG")"
+          if [[ "${{ inputs.phase }}" = build ]]; then
+            test -z "$RUNNER_BUILD_RUN_ID"
+            test -z "$RUNNER_CAPTURE_BUNDLE_URL"
+            test -z "$RUNNER_CAPTURE_BUNDLE_SHA256"
+          else
+            [[ "$RUNNER_BUILD_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+            [[ "$RUNNER_CAPTURE_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+            if [[ "${{ inputs.publication_target }}" = github ]]; then
+              test "${{ inputs.github_status }}" = probe-required
+            else
+              test "${{ inputs.github_status }}" != probe-required
+            fi
+          fi
+          git diff --check "$RUNNER_CANDIDATE_SHA^" "$RUNNER_CANDIDATE_SHA"
+          python3 tests/strict_sha256_manifest_tests.py -v
+          cmake -DRUNNER_SOURCE_DIR="$PWD" \
+            -DRUNNER_RELEASE_AUDIT_MODE=candidate \
+            -P tools/repository_audit.cmake
+
+  linux-release:
+    if: inputs.phase == 'build'
+    needs: validate-source
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify exact Linux source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RUNNER_CANDIDATE_SHA"
+          test "$RUNNER_PROPOSED_TAG" = v0.7.51
       - name: Checkout pinned vcpkg
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
           path: vcpkg
-      - name: Install GCC 14 and Linux graphics prerequisites
+      - name: Install GCC 14, Xvfb, and Mesa lavapipe
+        shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf automake gcc-14 g++-14 libtool ninja-build pkg-config \
+            autoconf automake gcc-14 g++-14 libtool ninja-build pkg-config python3 \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
             libxi-dev libxss-dev libwayland-dev libxkbcommon-dev libdrm-dev \
-            libgbm-dev libgl1-mesa-dev libvulkan1 mesa-vulkan-drivers vulkan-tools
+            libgbm-dev libgl1-mesa-dev libvulkan1 mesa-vulkan-drivers vulkan-tools \
+            xvfb xauth binutils unzip
       - name: Bootstrap pinned vcpkg
+        shell: bash
         run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
-      - name: Configure full GCC 14 release
+      - name: Configure, build, and test the full GCC 14 release
+        shell: bash
         env:
           CC: gcc-14
           CXX: g++-14
         run: |
+          set -euo pipefail
           mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
           cmake --preset linux-release --fresh
-      - name: Build and test full Linux example and library
-        run: |
           cmake --build --preset linux-release --parallel
           ctest --preset linux-release --output-on-failure -V
-      - name: Run every Linux feature diagnostic
+      - name: Run every build-tree diagnostic through Xvfb and lavapipe
+        shell: bash
         run: |
-          runner=build/linux-release/Runner
-          for argument in \
-            --version --diagnose-vulkan --diagnose-package --diagnose-acceptance \
-            --diagnose-camera --diagnose-ui --diagnose-art --diagnose-rig-training \
-            --diagnose-walk-eye --diagnose-speed-walk --diagnose-course \
-            --diagnose-hybrid-brain; do
-            "$runner" "$argument"
+          set -euo pipefail
+          export DISPLAY=:99
+          export SDL_VIDEODRIVER=x11
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          test -f "$VK_DRIVER_FILES"
+          Xvfb "$DISPLAY" -screen 0 2048x1152x24 -nolisten tcp >"$RUNNER_TEMP/xvfb-build.log" 2>&1 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
+          vulkaninfo --summary | tee "$RUNNER_TEMP/vulkan-build-summary.txt"
+          grep -Eiq 'llvmpipe|lavapipe' "$RUNNER_TEMP/vulkan-build-summary.txt"
+          diagnostics=(
+            --version --diagnose-vulkan --diagnose-package --diagnose-acceptance
+            --diagnose-camera --diagnose-ui --diagnose-art --diagnose-rig-training
+            --diagnose-walk-eye --diagnose-raw-inference --diagnose-speed-walk
+            --diagnose-course --diagnose-hybrid-brain
+          )
+          for argument in "${diagnostics[@]}"; do
+            build/linux-release/Runner "$argument"
           done
       - name: Build, install, and consume the Linux SDK
+        shell: bash
         env:
           CC: gcc-14
           CXX: g++-14
         run: |
+          set -euo pipefail
           cmake -S . -B build/linux-sdk -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DRUNNER_BUILD_APP=OFF -DRUNNER_BUILD_TESTS=OFF
           cmake --build build/linux-sdk --parallel
           rm -rf package/epoch2d-dev-linux build/linux-installed-consumer
           cmake --install build/linux-sdk --prefix package/epoch2d-dev-linux
-          cmake -S examples/installed_consumer -B build/linux-installed-consumer -G Ninja \
+          cmake -S package/epoch2d-dev-linux/examples/installed_consumer \
+            -B build/linux-installed-consumer -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/package/epoch2d-dev-linux"
           cmake --build build/linux-installed-consumer --parallel
           build/linux-installed-consumer/Epoch2DWalkEngineInstalledConsumer
+          walk_prefix="$RUNNER_TEMP/epoch2d-walk-prefix-linux"
+          dependency_prefix="$RUNNER_TEMP/epoch2d-sim-prefix-linux"
+          rm -rf "$walk_prefix" "$dependency_prefix" build/linux-split-prefix-consumer
+          cmake --install build/linux-sdk --component Epoch2DWalkEngineDevelopment --prefix "$walk_prefix"
+          cmake --install build/linux-sdk --component Unspecified --prefix "$dependency_prefix"
+          cmake -S "$walk_prefix/examples/installed_consumer" \
+            -B build/linux-split-prefix-consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$walk_prefix;$dependency_prefix"
+          cmake --build build/linux-split-prefix-consumer --parallel
+          build/linux-split-prefix-consumer/Epoch2DWalkEngineInstalledConsumer
       - name: Package and independently audit Linux runtime and SDK
+        shell: bash
         run: |
           set -euo pipefail
-          tag="$GITHUB_REF_NAME"
-          test "$tag" = "v0.7.50"
+          tag="$RUNNER_PROPOSED_TAG"
           runtime="package/Epoch2DWalkEngine-$tag-runner-linux-x86_64"
-          sdk="package/epoch2d-dev-linux"
+          sdk=package/epoch2d-dev-linux
           rm -rf "$runtime"
           cmake --install build/linux-release --component RunnerRuntime --prefix "$runtime"
-          cp README.md LICENSE missioncache.md "$runtime/"
+          for file in README.md CHANGELOG.md LICENSE missioncache.md \
+            docs/third-party/sdl3-LICENSE.txt docs/third-party/vulkan-loader-LICENSE.txt; do
+            test -s "$runtime/$file"
+          done
+
+          installed_unrelated="$RUNNER_TEMP/epoch2d-$tag-installed-unrelated-linux"
+          installed_launcher="$PWD/$runtime/run.sh"
+          rm -rf "$installed_unrelated"
+          mkdir -p "$installed_unrelated"
+          export DISPLAY=:98
+          export SDL_VIDEODRIVER=x11
+          export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          Xvfb "$DISPLAY" -screen 0 2048x1152x24 -nolisten tcp >"$RUNNER_TEMP/xvfb-package.log" 2>&1 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
+          vulkaninfo --summary | tee "$RUNNER_TEMP/vulkan-package-summary.txt"
+          grep -Eiq 'llvmpipe|lavapipe' "$RUNNER_TEMP/vulkan-package-summary.txt"
+          diagnostics=(
+            --version --diagnose-vulkan --diagnose-package --diagnose-acceptance
+            --diagnose-camera --diagnose-ui --diagnose-art --diagnose-rig-training
+            --diagnose-walk-eye --diagnose-raw-inference --diagnose-speed-walk
+            --diagnose-course --diagnose-hybrid-brain
+          )
+          for argument in "${diagnostics[@]}"; do
+            (cd "$installed_unrelated" && "$installed_launcher" "$argument")
+          done
 
           runtime_archive="Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
           runtime_manifest="Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
           sdk_archive="Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
           sdk_manifest="Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
-          (cd "$runtime" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$runtime_manifest"
+          python3 tools/strict_sha256_manifest.py write --root "$runtime" --manifest "$runtime_manifest"
           tar -C "$runtime" -czf "$runtime_archive" .
           sha256sum "$runtime_archive" > "$runtime_archive.sha256"
-          (cd "$sdk" && find . -type f -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #') > "$sdk_manifest"
+          python3 tools/strict_sha256_manifest.py write --root "$sdk" --manifest "$sdk_manifest"
           tar -C "$sdk" -czf "$sdk_archive" .
           sha256sum "$sdk_archive" > "$sdk_archive.sha256"
 
           runtime_audit="$RUNNER_TEMP/epoch2d-runtime-linux"
           sdk_audit="$RUNNER_TEMP/epoch2d-sdk-linux"
-          rm -rf "$runtime_audit" "$sdk_audit" "$RUNNER_TEMP/epoch2d-consumer-linux"
-          mkdir -p "$runtime_audit" "$sdk_audit"
+          unrelated="$RUNNER_TEMP/epoch2d-unrelated-linux"
+          rm -rf "$runtime_audit" "$sdk_audit" "$unrelated" "$RUNNER_TEMP/epoch2d-consumer-linux"
+          mkdir -p "$runtime_audit" "$sdk_audit" "$unrelated"
           tar -C "$runtime_audit" -xzf "$runtime_archive"
           tar -C "$sdk_audit" -xzf "$sdk_archive"
-          (cd "$runtime_audit" && sha256sum -c "$GITHUB_WORKSPACE/$runtime_manifest")
-          (cd "$sdk_audit" && sha256sum -c "$GITHUB_WORKSPACE/$sdk_manifest")
-          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-package)
-          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-acceptance)
-          (cd "$RUNNER_TEMP" && "$runtime_audit/run.sh" --diagnose-camera)
-          cmake -S examples/installed_consumer -B "$RUNNER_TEMP/epoch2d-consumer-linux" -G Ninja \
+          python3 tools/strict_sha256_manifest.py verify --root "$runtime_audit" --manifest "$runtime_manifest"
+          python3 tools/strict_sha256_manifest.py verify --root "$sdk_audit" --manifest "$sdk_manifest"
+          python3 tools/strict_sha256_manifest.py checksum --archive "$runtime_archive" --sidecar "$runtime_archive.sha256"
+          python3 tools/strict_sha256_manifest.py checksum --archive "$sdk_archive" --sidecar "$sdk_archive.sha256"
+          grep -q '^# Epoch2DWalkEngine$' "$runtime_audit/README.md"
+          grep -q '^# Epoch2DWalkEngine$' "$sdk_audit/README.md"
+          grep -q '^# EpochSimEngine$' "$sdk_audit/docs/third-party/EpochSimEngine/README.md"
+          ldd "$runtime_audit/Runner" | tee "$RUNNER_TEMP/epoch2d-linux-runtime-ldd.txt"
+          ! grep -q 'not found' "$RUNNER_TEMP/epoch2d-linux-runtime-ldd.txt"
+          grep -q 'libvulkan.so.1' "$RUNNER_TEMP/epoch2d-linux-runtime-ldd.txt"
+
+          for argument in "${diagnostics[@]}"; do
+            (cd "$unrelated" && "$runtime_audit/run.sh" "$argument")
+          done
+
+          cmake -S "$sdk_audit/examples/installed_consumer" \
+            -B "$RUNNER_TEMP/epoch2d-consumer-linux" -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$sdk_audit"
           cmake --build "$RUNNER_TEMP/epoch2d-consumer-linux" --parallel
           "$RUNNER_TEMP/epoch2d-consumer-linux/Epoch2DWalkEngineInstalledConsumer"
-      - name: Upload audited Linux assets
-        uses: actions/upload-artifact@v4
+
+          version_info="$RUNNER_TEMP/epoch2d-linux-version-info.txt"
+          : >"$version_info"
+          while IFS= read -r -d '' candidate; do
+            if readelf -h "$candidate" >/dev/null 2>&1; then
+              readelf --version-info "$candidate" >>"$version_info"
+            fi
+          done < <(find "$runtime_audit" -type f -print0)
+          python3 - "$version_info" >"Epoch2DWalkEngine-$tag-linux-abi.txt" <<'PY'
+          import re, sys
+          text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+          def highest(prefix):
+              values = set(re.findall(rf"{prefix}_[0-9]+(?:\.[0-9]+)*", text))
+              if not values:
+                  raise SystemExit(f"no {prefix} requirement found")
+              return max(values, key=lambda value: tuple(map(int, value.split("_", 1)[1].split("."))))
+          print("validation_host=ubuntu-24.04-x86_64")
+          print("highest_required_glibc=" + highest("GLIBC"))
+          print("highest_required_glibcxx=" + highest("GLIBCXX"))
+          PY
+      - name: Upload audited Linux assets and ABI receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: epoch2d-linux-release-assets
+          name: epoch2dwalk-v0751-linux-assets
           if-no-files-found: error
+          retention-days: 30
           path: |
-            Epoch2DWalkEngine-*-runner-linux-x86_64.tar.gz
-            Epoch2DWalkEngine-*-runner-linux-x86_64.tar.gz.sha256
-            Epoch2DWalkEngine-*-runner-linux-x86_64.manifest.sha256
-            Epoch2DWalkEngine-*-dev-linux-x86_64.tar.gz
-            Epoch2DWalkEngine-*-dev-linux-x86_64.tar.gz.sha256
-            Epoch2DWalkEngine-*-dev-linux-x86_64.manifest.sha256
+            Epoch2DWalkEngine-v0.7.51-runner-linux-x86_64.tar.gz
+            Epoch2DWalkEngine-v0.7.51-runner-linux-x86_64.tar.gz.sha256
+            Epoch2DWalkEngine-v0.7.51-runner-linux-x86_64.manifest.sha256
+            Epoch2DWalkEngine-v0.7.51-dev-linux-x86_64.tar.gz
+            Epoch2DWalkEngine-v0.7.51-dev-linux-x86_64.tar.gz.sha256
+            Epoch2DWalkEngine-v0.7.51-dev-linux-x86_64.manifest.sha256
+            Epoch2DWalkEngine-v0.7.51-linux-abi.txt
 
   windows-release:
-    needs: linux-release
+    if: inputs.phase == 'build'
+    needs: validate-source
     runs-on: windows-2025
     steps:
-      - name: Checkout exact tagged source
-        uses: actions/checkout@v4
+      - name: Checkout the exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
-      - name: Download audited Linux assets
-        uses: actions/download-artifact@v4
-        with:
-          name: epoch2d-linux-release-assets
-          path: linux-assets
+      - name: Verify exact Windows source identity
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -cne $env:RUNNER_CANDIDATE_SHA) { throw "Checkout is not the dispatched commit" }
+          if ($env:RUNNER_PROPOSED_TAG -cne "v0.7.51") { throw "Unexpected proposed tag" }
       - name: Checkout pinned vcpkg
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: microsoft/vcpkg
           ref: d015e31e90838a4c9dfa3eed45979bc70d9357fc
@@ -143,18 +343,25 @@ jobs:
       - name: Bootstrap pinned vcpkg
         shell: cmd
         run: call "%VCPKG_ROOT%\bootstrap-vcpkg.bat" -disableMetrics
-      - name: Configure, build, and test full Windows release
+      - name: Configure, build, and test the full Windows release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
           cmake --preset windows-release --fresh
           cmake --build --preset windows-release --parallel
+          cmake --build --preset windows-release --target RunnerVisualCaptures --parallel
           ctest --preset windows-release --output-on-failure -V
-      - name: Run every Windows feature diagnostic
+      - name: Run every Windows build-tree diagnostic
         shell: pwsh
         run: |
           $runner = "build/windows-release/Release/Runner.exe"
-          foreach ($argument in @("--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training", "--diagnose-walk-eye", "--diagnose-speed-walk", "--diagnose-course", "--diagnose-hybrid-brain")) {
+          $diagnostics = @(
+            "--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance",
+            "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training",
+            "--diagnose-walk-eye", "--diagnose-raw-inference", "--diagnose-speed-walk",
+            "--diagnose-course", "--diagnose-hybrid-brain"
+          )
+          foreach ($argument in $diagnostics) {
             & $runner $argument
             if ($LASTEXITCODE -ne 0) { throw "$runner $argument failed with exit code $LASTEXITCODE" }
           }
@@ -167,138 +374,711 @@ jobs:
           $sdk = Join-Path $PWD "package/epoch2d-dev-windows"
           if (Test-Path -LiteralPath $sdk) { Remove-Item -LiteralPath $sdk -Recurse -Force }
           cmake --install build/windows-sdk --config Release --prefix $sdk
-          cmake -S examples/installed_consumer -B build/windows-installed-consumer `
+          cmake -S (Join-Path $sdk "examples/installed_consumer") -B build/windows-installed-consumer `
             -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=$sdk
           cmake --build build/windows-installed-consumer --config Release --parallel
           & "build/windows-installed-consumer/Release/Epoch2DWalkEngineInstalledConsumer.exe"
           if ($LASTEXITCODE -ne 0) { throw "Installed SDK consumer failed" }
-      - name: Package exact Windows runtime, SDK, and source
+          $walkPrefix = Join-Path $env:RUNNER_TEMP "epoch2d-walk-prefix-windows"
+          $dependencyPrefix = Join-Path $env:RUNNER_TEMP "epoch2d-sim-prefix-windows"
+          foreach ($path in @($walkPrefix, $dependencyPrefix, "build/windows-split-prefix-consumer")) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
+          }
+          cmake --install build/windows-sdk --config Release --component Epoch2DWalkEngineDevelopment --prefix $walkPrefix
+          cmake --install build/windows-sdk --config Release --component Unspecified --prefix $dependencyPrefix
+          cmake -S (Join-Path $walkPrefix "examples/installed_consumer") `
+            -B build/windows-split-prefix-consumer -G "Visual Studio 18 2026" -A x64 `
+            -DCMAKE_PREFIX_PATH="$walkPrefix;$dependencyPrefix"
+          cmake --build build/windows-split-prefix-consumer --config Release --parallel
+          & "build/windows-split-prefix-consumer/Release/Epoch2DWalkEngineInstalledConsumer.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Split-prefix Windows SDK consumer failed" }
+      - name: Package Windows runtime, SDK, and exact source
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          if ($tag -ne "v0.7.50") { throw "Tag $tag does not match project version v0.7.50" }
+          $tag = $env:RUNNER_PROPOSED_TAG
           $runtime = Join-Path $PWD "package/Epoch2DWalkEngine-$tag-runner-windows-x64"
           $sdk = Join-Path $PWD "package/epoch2d-dev-windows"
           if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
-          New-Item -ItemType Directory -Force $runtime | Out-Null
           cmake --install build/windows-release --config Release --component RunnerRuntime --prefix $runtime
-          Copy-Item README.md, LICENSE, missioncache.md -Destination $runtime -Force
-
-          function Write-Manifest([string] $root, [string] $output) {
-            Get-ChildItem $root -Recurse -File | Sort-Object FullName | ForEach-Object {
-              $relative = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
-              "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
-            } | Set-Content -Encoding ascii $output
+          foreach ($relative in @("README.md", "CHANGELOG.md", "LICENSE", "missioncache.md", "docs/third-party/sdl3-LICENSE.txt", "docs/third-party/vulkan-loader-LICENSE.txt")) {
+            $path = Join-Path $runtime $relative
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) { throw "Missing runtime document: $relative" }
           }
+          $installedUnrelated = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-installed-unrelated-windows"
+          if (Test-Path -LiteralPath $installedUnrelated) { Remove-Item -LiteralPath $installedUnrelated -Recurse -Force }
+          New-Item -ItemType Directory -Force $installedUnrelated | Out-Null
+          $diagnostics = @(
+            "--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance",
+            "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training",
+            "--diagnose-walk-eye", "--diagnose-raw-inference", "--diagnose-speed-walk",
+            "--diagnose-course", "--diagnose-hybrid-brain"
+          )
+          Push-Location $installedUnrelated
+          try {
+            foreach ($argument in $diagnostics) {
+              & (Join-Path $runtime "run.bat") $argument
+              if ($LASTEXITCODE -ne 0) { throw "Installed runtime failed $argument" }
+            }
+          } finally { Pop-Location }
           function Write-Checksum([string] $archive) {
-            $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-            [IO.File]::WriteAllText("$archive.sha256", "$hash  $([IO.Path]::GetFileName($archive))`n")
+            $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+            [IO.File]::WriteAllText("$archive.sha256", "$hash  $([IO.Path]::GetFileName($archive))`n", [Text.UTF8Encoding]::new($false))
           }
-          function Write-Archive([string] $root, [string] $archive, [string] $manifest) {
-            Write-Manifest $root $manifest
-            Compress-Archive -Path "$root/*" -DestinationPath $archive -Force
-            Write-Checksum $archive
-          }
-
           $runtimeArchive = "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
           $runtimeManifest = "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
           $sdkArchive = "Epoch2DWalkEngine-$tag-dev-windows-x64.zip"
           $sdkManifest = "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
-          Write-Archive $runtime $runtimeArchive $runtimeManifest
-          Write-Archive $sdk $sdkArchive $sdkManifest
+          python tools/strict_sha256_manifest.py write --root $runtime --manifest $runtimeManifest
+          if ($LASTEXITCODE -ne 0) { throw "Runtime manifest generation failed" }
+          Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $runtime -Force | ForEach-Object FullName) -DestinationPath $runtimeArchive -Force
+          Write-Checksum $runtimeArchive
+          python tools/strict_sha256_manifest.py write --root $sdk --manifest $sdkManifest
+          if ($LASTEXITCODE -ne 0) { throw "SDK manifest generation failed" }
+          Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $sdk -Force | ForEach-Object FullName) -DestinationPath $sdkArchive -Force
+          Write-Checksum $sdkArchive
 
           $sourceRoot = "Epoch2DWalkEngine-$tag-source"
           $sourceArchive = "$sourceRoot.zip"
-          git archive --format=zip --prefix="$sourceRoot/" --output=$sourceArchive HEAD
+          git archive --format=zip --prefix="$sourceRoot/" --output=$sourceArchive $env:RUNNER_CANDIDATE_SHA
           if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
           Write-Checksum $sourceArchive
-          $sourceStage = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-manifest"
+          $sourceStage = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-stage"
           if (Test-Path -LiteralPath $sourceStage) { Remove-Item -LiteralPath $sourceStage -Recurse -Force }
           Expand-Archive $sourceArchive -DestinationPath $sourceStage
-          Get-ChildItem (Join-Path $sourceStage $sourceRoot) -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($sourceStage, $_.FullName).Replace('\', '/')
-            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
-          } | Set-Content -Encoding ascii "$sourceRoot.manifest.sha256"
-          Copy-Item linux-assets/* -Destination $PWD -Force
-      - name: Audit independent Windows and source archives
+          python tools/strict_sha256_manifest.py write --root (Join-Path $sourceStage $sourceRoot) --manifest "$sourceRoot.manifest.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Source manifest generation failed" }
+      - name: Independently audit Windows and source archives
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          function Test-Manifest([string] $root, [string] $manifest) {
-            $entries = @(Get-Content $manifest)
-            $files = @(Get-ChildItem $root -Recurse -File)
-            if ($files.Count -ne $entries.Count) { throw "Manifest file count mismatch for $root" }
-            $entries | ForEach-Object {
-              $hash, $relative = $_ -split '  ', 2
-              $target = Join-Path $root $relative
-              if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Missing $relative" }
-              if ((Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) { throw "Manifest mismatch: $relative" }
-            }
-          }
+          $tag = $env:RUNNER_PROPOSED_TAG
           $runtimeArchive = "Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
           $runtimeManifest = "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
           $sdkArchive = "Epoch2DWalkEngine-$tag-dev-windows-x64.zip"
           $sdkManifest = "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
           $runtimeAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-runtime-windows"
           $sdkAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-sdk-windows"
-          foreach ($path in @($runtimeAudit, $sdkAudit)) {
+          $unrelated = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-unrelated-windows"
+          foreach ($path in @($runtimeAudit, $sdkAudit, $unrelated, "$env:RUNNER_TEMP/epoch2d-consumer-windows")) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
             New-Item -ItemType Directory -Force $path | Out-Null
           }
           Expand-Archive $runtimeArchive -DestinationPath $runtimeAudit
           Expand-Archive $sdkArchive -DestinationPath $sdkAudit
-          Test-Manifest $runtimeAudit $runtimeManifest
-          Test-Manifest $sdkAudit $sdkManifest
-          Push-Location $env:RUNNER_TEMP
-          foreach ($argument in @("--version", "--diagnose-package", "--diagnose-acceptance", "--diagnose-camera")) {
-            & (Join-Path $runtimeAudit "run.bat") $argument
-            if ($LASTEXITCODE -ne 0) { throw "Extracted runtime failed $argument" }
-          }
-          Pop-Location
-          cmake -S examples/installed_consumer -B "$env:RUNNER_TEMP/epoch2d-consumer-windows" `
+          python tools/strict_sha256_manifest.py verify --root $runtimeAudit --manifest $runtimeManifest
+          if ($LASTEXITCODE -ne 0) { throw "Runtime manifest audit failed" }
+          python tools/strict_sha256_manifest.py verify --root $sdkAudit --manifest $sdkManifest
+          if ($LASTEXITCODE -ne 0) { throw "SDK manifest audit failed" }
+          python tools/strict_sha256_manifest.py checksum --archive $runtimeArchive --sidecar "$runtimeArchive.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Runtime checksum audit failed" }
+          python tools/strict_sha256_manifest.py checksum --archive $sdkArchive --sidecar "$sdkArchive.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "SDK checksum audit failed" }
+          if ((Get-Content (Join-Path $runtimeAudit "README.md") -TotalCount 1) -cne "# Epoch2DWalkEngine") { throw "Runtime root identity is invalid" }
+          if ((Get-Content (Join-Path $sdkAudit "README.md") -TotalCount 1) -cne "# Epoch2DWalkEngine") { throw "SDK root identity is invalid" }
+          if ((Get-Content (Join-Path $sdkAudit "docs/third-party/EpochSimEngine/README.md") -TotalCount 1) -cne "# EpochSimEngine") { throw "SDK lost EpochSimEngine provenance" }
+          $diagnostics = @(
+            "--version", "--diagnose-vulkan", "--diagnose-package", "--diagnose-acceptance",
+            "--diagnose-camera", "--diagnose-ui", "--diagnose-art", "--diagnose-rig-training",
+            "--diagnose-walk-eye", "--diagnose-raw-inference", "--diagnose-speed-walk",
+            "--diagnose-course", "--diagnose-hybrid-brain"
+          )
+          Push-Location $unrelated
+          try {
+            foreach ($argument in $diagnostics) {
+              & (Join-Path $runtimeAudit "run.bat") $argument
+              if ($LASTEXITCODE -ne 0) { throw "Extracted runtime failed $argument" }
+            }
+          } finally { Pop-Location }
+          cmake -S (Join-Path $sdkAudit "examples/installed_consumer") -B "$env:RUNNER_TEMP/epoch2d-consumer-windows" `
             -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=$sdkAudit
           cmake --build "$env:RUNNER_TEMP/epoch2d-consumer-windows" --config Release --parallel
           & "$env:RUNNER_TEMP/epoch2d-consumer-windows/Release/Epoch2DWalkEngineInstalledConsumer.exe"
           if ($LASTEXITCODE -ne 0) { throw "Extracted SDK consumer failed" }
 
-          foreach ($archive in @($runtimeArchive, $sdkArchive, "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-source.zip")) {
-            $expected = ((Get-Content "$archive.sha256").Trim() -split '\s+')[0]
-            if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "Checksum mismatch: $archive" }
-          }
           $sourceRoot = "Epoch2DWalkEngine-$tag-source"
+          $sourceArchive = "$sourceRoot.zip"
           $sourceAudit = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-source-independent"
           if (Test-Path -LiteralPath $sourceAudit) { Remove-Item -LiteralPath $sourceAudit -Recurse -Force }
-          Expand-Archive "$sourceRoot.zip" -DestinationPath $sourceAudit
-          $expectedFiles = @(git ls-files | Where-Object { $_ -notlike 'release-assets/*' } | ForEach-Object { "$sourceRoot/$($_.Replace('\', '/'))" })
-          $actualFiles = @(Get-ChildItem (Join-Path $sourceAudit $sourceRoot) -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($sourceAudit, $_.FullName).Replace('\', '/') })
-          if ($actualFiles.Count -ne $expectedFiles.Count) { throw "Source tracked-file count mismatch" }
-          foreach ($relative in $expectedFiles) {
-            if ($relative -notin $actualFiles) { throw "Tracked source missing from archive: $relative" }
+          Expand-Archive $sourceArchive -DestinationPath $sourceAudit
+          python tools/strict_sha256_manifest.py verify --root (Join-Path $sourceAudit $sourceRoot) --manifest "$sourceRoot.manifest.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Source manifest audit failed" }
+          python tools/strict_sha256_manifest.py verify-git-tree --repository $PWD --treeish $env:RUNNER_CANDIDATE_SHA --root (Join-Path $sourceAudit $sourceRoot) --exclude-prefix release-assets/
+          if ($LASTEXITCODE -ne 0) { throw "NUL-safe exact-commit source audit failed" }
+          python tools/strict_sha256_manifest.py checksum --archive $sourceArchive --sidecar "$sourceArchive.sha256"
+          if ($LASTEXITCODE -ne 0) { throw "Source checksum audit failed" }
+      - name: Upload audited Windows and source assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: epoch2dwalk-v0751-windows-source-assets
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            Epoch2DWalkEngine-v0.7.51-runner-windows-x64.zip
+            Epoch2DWalkEngine-v0.7.51-runner-windows-x64.zip.sha256
+            Epoch2DWalkEngine-v0.7.51-runner-windows-x64.manifest.sha256
+            Epoch2DWalkEngine-v0.7.51-dev-windows-x64.zip
+            Epoch2DWalkEngine-v0.7.51-dev-windows-x64.zip.sha256
+            Epoch2DWalkEngine-v0.7.51-dev-windows-x64.manifest.sha256
+            Epoch2DWalkEngine-v0.7.51-source.zip
+            Epoch2DWalkEngine-v0.7.51-source.zip.sha256
+            Epoch2DWalkEngine-v0.7.51-source.manifest.sha256
+
+  assemble-build-candidate:
+    if: inputs.phase == 'build'
+    needs: [validate-source, linux-release, windows-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout the exact built source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Download audited Linux build outputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: epoch2dwalk-v0751-linux-assets
+          path: built-inputs
+      - name: Download audited Windows and source build outputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: epoch2dwalk-v0751-windows-source-assets
+          path: built-inputs
+      - name: Re-audit and seal the immutable build candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$RUNNER_PROPOSED_TAG"
+          assets=(
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-source.zip" "Epoch2DWalkEngine-$tag-source.zip.sha256" "Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          )
+          for asset in "${assets[@]}"; do test -s "built-inputs/$asset"; done
+          for archive in \
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-source.zip"; do
+            python3 tools/strict_sha256_manifest.py checksum \
+              --archive "built-inputs/$archive" --sidecar "built-inputs/$archive.sha256"
+          done
+          audit_root="$RUNNER_TEMP/epoch2d-build-candidate-audit"
+          rm -rf "$audit_root"
+          mkdir -p "$audit_root/windows-runtime" "$audit_root/linux-runtime" \
+            "$audit_root/windows-sdk" "$audit_root/linux-sdk" "$audit_root/source"
+          unzip -q "built-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.zip" -d "$audit_root/windows-runtime"
+          tar -C "$audit_root/linux-runtime" -xzf "built-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
+          unzip -q "built-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.zip" -d "$audit_root/windows-sdk"
+          tar -C "$audit_root/linux-sdk" -xzf "built-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
+          unzip -q "built-inputs/Epoch2DWalkEngine-$tag-source.zip" -d "$audit_root/source"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-runtime" --manifest "built-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-runtime" --manifest "built-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-sdk" --manifest "built-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-sdk" --manifest "built-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --manifest "built-inputs/Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify-git-tree --repository "$PWD" --treeish "$RUNNER_CANDIDATE_SHA" --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --exclude-prefix release-assets/
+
+          candidate=build-candidate
+          rm -rf "$candidate"
+          mkdir "$candidate"
+          for asset in "${assets[@]}"; do cp "built-inputs/$asset" "$candidate/$asset"; done
+          cp "built-inputs/Epoch2DWalkEngine-$tag-linux-abi.txt" "$candidate/"
+          receipt="$candidate/BUILD-RECEIPT.txt"
+          {
+            echo "product=Epoch2DWalkEngine"
+            echo "phase=build"
+            echo "build_run_id=$GITHUB_RUN_ID"
+            echo "build_run_attempt=$GITHUB_RUN_ATTEMPT"
+            echo "source_commit=$RUNNER_CANDIDATE_SHA"
+            echo "release_tag=$tag"
+            echo "object_count=15"
+            for asset in "${assets[@]}"; do
+              printf 'asset=%s bytes=%s sha256=%s\n' "$asset" "$(stat -c %s "built-inputs/$asset")" "$(sha256sum "built-inputs/$asset" | cut -d' ' -f1)"
+            done
+          } >"$receipt"
+      - name: Upload immutable build candidate for native review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: epoch2dwalk-v0751-build-candidate-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: build-candidate/
+
+  validate-promotion:
+    if: inputs.phase == 'promote'
+    needs: validate-source
+    runs-on: ubuntu-24.04
+    outputs:
+      build_run_attempt: ${{ steps.verify_run.outputs.build_run_attempt }}
+      build_artifact_id: ${{ steps.verify_run.outputs.build_artifact_id }}
+      build_artifact_name: ${{ steps.verify_run.outputs.build_artifact_name }}
+      build_artifact_sha256: ${{ steps.verify_run.outputs.build_artifact_sha256 }}
+      promotion_inputs_artifact_id: ${{ steps.upload_inputs.outputs.artifact-id }}
+      promotion_inputs_artifact_name: epoch2dwalk-v0751-promotion-inputs-${{ github.run_attempt }}
+      promotion_inputs_artifact_sha256: ${{ steps.upload_inputs.outputs.artifact-digest }}
+      native_evidence_artifact_id: ${{ steps.upload_evidence.outputs.artifact-id }}
+      native_evidence_artifact_name: epoch2dwalk-v0751-native-visual-evidence-${{ github.run_attempt }}
+      native_evidence_artifact_sha256: ${{ steps.upload_evidence.outputs.artifact-digest }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout the exact promotion source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Verify the named build run identity
+        id: verify_run
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_BUILD_RUN_ID" != "$GITHUB_RUN_ID"
+          current_api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          test "$(gh api "$current_api" --jq .id)" = "$GITHUB_RUN_ID"
+          test "$(gh api "$current_api" --jq .run_attempt)" = "$GITHUB_RUN_ATTEMPT"
+          test "$(gh api "$current_api" --jq .event)" = workflow_dispatch
+          test "$(gh api "$current_api" --jq .head_sha)" = "$RUNNER_CANDIDATE_SHA"
+          test "$(gh api "$current_api" --jq .head_branch)" = main
+          test "$(gh api "$current_api" --jq .head_repository.full_name)" = "$GITHUB_REPOSITORY"
+          test "$(gh api "$current_api" --jq .path)" = ".github/workflows/release.yml"
+
+          api="repos/$GITHUB_REPOSITORY/actions/runs/$RUNNER_BUILD_RUN_ID"
+          test "$(gh api "$api" --jq .id)" = "$RUNNER_BUILD_RUN_ID"
+          test "$(gh api "$api" --jq .event)" = workflow_dispatch
+          test "$(gh api "$api" --jq .status)" = completed
+          test "$(gh api "$api" --jq .conclusion)" = success
+          test "$(gh api "$api" --jq .head_sha)" = "$RUNNER_CANDIDATE_SHA"
+          test "$(gh api "$api" --jq .head_branch)" = main
+          test "$(gh api "$api" --jq .head_repository.full_name)" = "$GITHUB_REPOSITORY"
+          test "$(gh api "$api" --jq .path)" = ".github/workflows/release.yml"
+          build_attempt="$(gh api "$api" --jq .run_attempt)"
+          [[ "$build_attempt" =~ ^[1-9][0-9]*$ ]]
+          artifact_name="epoch2dwalk-v0751-build-candidate-$build_attempt"
+          artifact_json="$(gh api "$api/artifacts?per_page=100")"
+          test "$(jq --arg name "$artifact_name" '[.artifacts[] | select(.name == $name)] | length' <<<"$artifact_json")" -eq 1
+          artifact_id="$(jq -r --arg name "$artifact_name" '.artifacts[] | select(.name == $name) | .id' <<<"$artifact_json")"
+          artifact_digest="$(jq -r --arg name "$artifact_name" '.artifacts[] | select(.name == $name) | .digest' <<<"$artifact_json")"
+          artifact_expired="$(jq -r --arg name "$artifact_name" '.artifacts[] | select(.name == $name) | .expired' <<<"$artifact_json")"
+          [[ "$artifact_id" =~ ^[1-9][0-9]*$ ]]
+          test "$artifact_expired" = false
+          [[ "$artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          {
+            echo "build_run_attempt=$build_attempt"
+            echo "build_artifact_id=$artifact_id"
+            echo "build_artifact_name=$artifact_name"
+            echo "build_artifact_sha256=${artifact_digest#sha256:}"
+          } >>"$GITHUB_OUTPUT"
+      - name: Download the exact immutable build candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ steps.verify_run.outputs.build_artifact_name }}
+          path: promotion-inputs
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download and verify immutable native packaged evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate-evidence
+          expected_url="https://epoch.adamrushford.chatgpt.site/downloads/candidates/v0.7.51/$RUNNER_CANDIDATE_SHA/Epoch2DWalkEngine-v0.7.51-native-captures.zip"
+          test "$RUNNER_CAPTURE_BUNDLE_URL" = "$expected_url"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            --max-redirs 0 --output candidate-evidence/native-captures.zip \
+            "$expected_url"
+          python3 tools/strict_sha256_manifest.py verify-capture-bundle \
+            --archive candidate-evidence/native-captures.zip \
+            --sha256 "$RUNNER_CAPTURE_BUNDLE_SHA256" \
+            --commit "$RUNNER_CANDIDATE_SHA" \
+            --tag "$RUNNER_PROPOSED_TAG" \
+            --output candidate-evidence/native-captures
+      - name: Re-audit build receipt, release objects, and captured runtime identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$RUNNER_PROPOSED_TAG"
+          receipt=promotion-inputs/BUILD-RECEIPT.txt
+          grep -Fx "product=Epoch2DWalkEngine" "$receipt"
+          grep -Fx "phase=build" "$receipt"
+          grep -Fx "build_run_id=$RUNNER_BUILD_RUN_ID" "$receipt"
+          grep -Fx "build_run_attempt=${{ steps.verify_run.outputs.build_run_attempt }}" "$receipt"
+          grep -Fx "source_commit=$RUNNER_CANDIDATE_SHA" "$receipt"
+          grep -Fx "release_tag=$tag" "$receipt"
+          grep -Fx "object_count=15" "$receipt"
+          assets=(
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-source.zip" "Epoch2DWalkEngine-$tag-source.zip.sha256" "Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          )
+          for asset in "${assets[@]}"; do
+            path="promotion-inputs/$asset"
+            test -s "$path"
+            grep -Fx "asset=$asset bytes=$(stat -c %s "$path") sha256=$(sha256sum "$path" | cut -d' ' -f1)" "$receipt"
+          done
+          for archive in \
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-source.zip"; do
+            python3 tools/strict_sha256_manifest.py checksum \
+              --archive "promotion-inputs/$archive" --sidecar "promotion-inputs/$archive.sha256"
+          done
+          audit_root="$RUNNER_TEMP/epoch2d-promotion-audit"
+          rm -rf "$audit_root"
+          mkdir -p "$audit_root/windows-runtime" "$audit_root/linux-runtime" \
+            "$audit_root/windows-sdk" "$audit_root/linux-sdk" "$audit_root/source"
+          unzip -q "promotion-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.zip" -d "$audit_root/windows-runtime"
+          tar -C "$audit_root/linux-runtime" -xzf "promotion-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
+          unzip -q "promotion-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.zip" -d "$audit_root/windows-sdk"
+          tar -C "$audit_root/linux-sdk" -xzf "promotion-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
+          unzip -q "promotion-inputs/Epoch2DWalkEngine-$tag-source.zip" -d "$audit_root/source"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-runtime" --manifest "promotion-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-runtime" --manifest "promotion-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-sdk" --manifest "promotion-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-sdk" --manifest "promotion-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --manifest "promotion-inputs/Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify-git-tree --repository "$PWD" --treeish "$RUNNER_CANDIDATE_SHA" --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --exclude-prefix release-assets/
+          cmp -- \
+            "candidate-evidence/native-captures/Epoch2DWalkEngine-$tag-runner-windows-x64.zip" \
+            "promotion-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
+      - name: Preserve exact build inputs for protected promotion
+        id: upload_inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: epoch2dwalk-v0751-promotion-inputs-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: promotion-inputs/
+      - name: Preserve verified native visual evidence for protected promotion
+        id: upload_evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: epoch2dwalk-v0751-native-visual-evidence-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: candidate-evidence/
+
+  release-approval-and-site-handoff:
+    if: inputs.phase == 'promote'
+    needs: [validate-source, validate-promotion]
+    runs-on: ubuntu-24.04
+    environment:
+      name: epoch2dwalk-v0751-release
+    steps:
+      - name: Checkout the exact approved candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Revalidate protected-run context and transferred artifact identities
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RUNNER_CANDIDATE_SHA"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_SHA" = "$RUNNER_CANDIDATE_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$RUNNER_CANDIDATE_SHA"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          test "$(gh api "$api" --jq .id)" = "$GITHUB_RUN_ID"
+          test "$(gh api "$api" --jq .run_attempt)" = "$GITHUB_RUN_ATTEMPT"
+          test "$(gh api "$api" --jq .event)" = workflow_dispatch
+          test "$(gh api "$api" --jq .head_sha)" = "$RUNNER_CANDIDATE_SHA"
+          test "$(gh api "$api" --jq .head_branch)" = main
+          test "$(gh api "$api" --jq .head_repository.full_name)" = "$GITHUB_REPOSITORY"
+          test "$(gh api "$api" --jq .path)" = ".github/workflows/release.yml"
+          artifact_json="$(gh api "$api/artifacts?per_page=100")"
+          verify_current_artifact() {
+            local expected_id="$1" expected_name="$2" expected_digest="$3"
+            test "$(jq --arg name "$expected_name" '[.artifacts[] | select(.name == $name)] | length' <<<"$artifact_json")" -eq 1
+            test "$(jq -r --arg name "$expected_name" '.artifacts[] | select(.name == $name) | .id' <<<"$artifact_json")" = "$expected_id"
+            test "$(jq -r --arg name "$expected_name" '.artifacts[] | select(.name == $name) | .expired' <<<"$artifact_json")" = false
+            test "$(jq -r --arg name "$expected_name" '.artifacts[] | select(.name == $name) | .digest' <<<"$artifact_json")" = "sha256:$expected_digest"
           }
-          Test-Manifest $sourceAudit "$sourceRoot.manifest.sha256"
-      - name: Publish and re-download exact assets
-        shell: pwsh
+          verify_current_artifact \
+            "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_id }}" \
+            "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_name }}" \
+            "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_sha256 }}"
+          verify_current_artifact \
+            "${{ needs.validate-promotion.outputs.native_evidence_artifact_id }}" \
+            "${{ needs.validate-promotion.outputs.native_evidence_artifact_name }}" \
+            "${{ needs.validate-promotion.outputs.native_evidence_artifact_sha256 }}"
+          build_api="repos/$GITHUB_REPOSITORY/actions/runs/$RUNNER_BUILD_RUN_ID"
+          test "$(gh api "$build_api" --jq .id)" = "$RUNNER_BUILD_RUN_ID"
+          test "$(gh api "$build_api" --jq .run_attempt)" = "${{ needs.validate-promotion.outputs.build_run_attempt }}"
+          test "$(gh api "$build_api" --jq .status)" = completed
+          test "$(gh api "$build_api" --jq .conclusion)" = success
+          test "$(gh api "$build_api" --jq .head_sha)" = "$RUNNER_CANDIDATE_SHA"
+          test "$(gh api "$build_api" --jq .head_branch)" = main
+          test "$(gh api "$build_api" --jq .head_repository.full_name)" = "$GITHUB_REPOSITORY"
+          test "$(gh api "$build_api" --jq .path)" = ".github/workflows/release.yml"
+          artifact_json="$(gh api "$build_api/artifacts?per_page=100")"
+          verify_current_artifact \
+            "${{ needs.validate-promotion.outputs.build_artifact_id }}" \
+            "${{ needs.validate-promotion.outputs.build_artifact_name }}" \
+            "${{ needs.validate-promotion.outputs.build_artifact_sha256 }}"
+      - name: Download verified native visual evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.validate-promotion.outputs.native_evidence_artifact_name }}
+          path: audited-visual
+      - name: Download the exact previously built promotion inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.validate-promotion.outputs.promotion_inputs_artifact_name }}
+          path: audited-inputs
+      - name: Re-audit and assemble the 15-object Site handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$RUNNER_PROPOSED_TAG"
+          assets=(
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-source.zip" "Epoch2DWalkEngine-$tag-source.zip.sha256" "Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          )
+          for asset in "${assets[@]}"; do test -s "audited-inputs/$asset"; done
+          for archive in \
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" \
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" \
+            "Epoch2DWalkEngine-$tag-source.zip"; do
+            python3 tools/strict_sha256_manifest.py checksum \
+              --archive "audited-inputs/$archive" --sidecar "audited-inputs/$archive.sha256"
+          done
+          audit_root="$RUNNER_TEMP/epoch2d-final-audit"
+          rm -rf "$audit_root"
+          mkdir -p "$audit_root/windows-runtime" "$audit_root/linux-runtime" \
+            "$audit_root/windows-sdk" "$audit_root/linux-sdk" "$audit_root/source"
+          unzip -q "audited-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.zip" -d "$audit_root/windows-runtime"
+          tar -C "$audit_root/linux-runtime" -xzf "audited-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz"
+          unzip -q "audited-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.zip" -d "$audit_root/windows-sdk"
+          tar -C "$audit_root/linux-sdk" -xzf "audited-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz"
+          unzip -q "audited-inputs/Epoch2DWalkEngine-$tag-source.zip" -d "$audit_root/source"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-runtime" --manifest "audited-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-runtime" --manifest "audited-inputs/Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/windows-sdk" --manifest "audited-inputs/Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/linux-sdk" --manifest "audited-inputs/Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --manifest "audited-inputs/Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          python3 tools/strict_sha256_manifest.py verify-git-tree --repository "$PWD" --treeish "$RUNNER_CANDIDATE_SHA" --root "$audit_root/source/Epoch2DWalkEngine-$tag-source" --exclude-prefix release-assets/
+          python3 tools/strict_sha256_manifest.py verify-capture-bundle \
+            --archive audited-visual/native-captures.zip \
+            --sha256 "$RUNNER_CAPTURE_BUNDLE_SHA256" \
+            --commit "$RUNNER_CANDIDATE_SHA" --tag "$tag" \
+            --output "$audit_root/native-captures"
+          cmp -- \
+            "$audit_root/native-captures/Epoch2DWalkEngine-$tag-runner-windows-x64.zip" \
+            "audited-inputs/Epoch2DWalkEngine-$tag-runner-windows-x64.zip"
+
+          handoff=site-handoff
+          rm -rf "$handoff"
+          mkdir "$handoff"
+          for asset in "${assets[@]}"; do cp "audited-inputs/$asset" "$handoff/$asset"; done
+          cp audited-inputs/BUILD-RECEIPT.txt "$handoff/"
+          cp "audited-inputs/Epoch2DWalkEngine-$tag-linux-abi.txt" "$handoff/"
+          cp audited-visual/native-captures.zip "$handoff/"
+          cp -R "$audit_root/native-captures" "$handoff/native-captures"
+      - name: Sign and verify the strict context-bound handoff receipt
+        shell: bash
+        env:
+          RUNNER_PROTECTED_RELEASE_APPROVAL: ${{ secrets.RUNNER_PROTECTED_RELEASE_APPROVAL }}
+        run: |
+          set -euo pipefail
+          tag="$RUNNER_PROPOSED_TAG"
+          handoff=site-handoff
+          promotion_receipt="$handoff/Epoch2DWalkEngine-$tag-PROMOTION-RECEIPT.json"
+          promotion_signature="$promotion_receipt.hmac-sha256"
+          handoff_summary="$handoff/Epoch2DWalkEngine-$tag-SITE-HANDOFF.txt"
+          python3 tools/strict_sha256_manifest.py write-promotion-receipt \
+            --receipt "$promotion_receipt" \
+            --signature "$promotion_signature" \
+            --summary "$handoff_summary" \
+            --asset-root audited-inputs \
+            --handoff-root "$handoff" \
+            --capture-root "$RUNNER_TEMP/epoch2d-final-audit/native-captures" \
+            --build-receipt audited-inputs/BUILD-RECEIPT.txt \
+            --linux-abi "audited-inputs/Epoch2DWalkEngine-$tag-linux-abi.txt" \
+            --capture-bundle audited-visual/native-captures.zip \
+            --capture-url "$RUNNER_CAPTURE_BUNDLE_URL" \
+            --capture-sha256 "$RUNNER_CAPTURE_BUNDLE_SHA256" \
+            --commit "$RUNNER_CANDIDATE_SHA" \
+            --tag "$tag" \
+            --build-run-id "$RUNNER_BUILD_RUN_ID" \
+            --build-run-attempt "${{ needs.validate-promotion.outputs.build_run_attempt }}" \
+            --promotion-run-id "$GITHUB_RUN_ID" \
+            --promotion-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --run-sha "$GITHUB_SHA" \
+            --run-ref "$GITHUB_REF" \
+            --workflow-sha "$GITHUB_WORKFLOW_SHA" \
+            --workflow-ref "$GITHUB_WORKFLOW_REF" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow .github/workflows/release.yml \
+            --publication-target "${{ inputs.publication_target }}" \
+            --github-status "${{ inputs.github_status }}" \
+            --build-artifact-id "${{ needs.validate-promotion.outputs.build_artifact_id }}" \
+            --build-artifact-name "${{ needs.validate-promotion.outputs.build_artifact_name }}" \
+            --build-artifact-sha256 "${{ needs.validate-promotion.outputs.build_artifact_sha256 }}" \
+            --promotion-inputs-artifact-id "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_id }}" \
+            --promotion-inputs-artifact-name "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_name }}" \
+            --promotion-inputs-artifact-sha256 "${{ needs.validate-promotion.outputs.promotion_inputs_artifact_sha256 }}" \
+            --native-evidence-artifact-id "${{ needs.validate-promotion.outputs.native_evidence_artifact_id }}" \
+            --native-evidence-artifact-name "${{ needs.validate-promotion.outputs.native_evidence_artifact_name }}" \
+            --native-evidence-artifact-sha256 "${{ needs.validate-promotion.outputs.native_evidence_artifact_sha256 }}"
+          cmake -DRUNNER_SOURCE_DIR="$PWD" \
+            -DRUNNER_RELEASE_AUDIT_MODE=final \
+            -DRUNNER_RELEASE_COMMIT="$RUNNER_CANDIDATE_SHA" \
+            -DRUNNER_RELEASE_TAG="$RUNNER_PROPOSED_TAG" \
+            -DRUNNER_RELEASE_CAPTURE_SHA256="$RUNNER_CAPTURE_BUNDLE_SHA256" \
+            -DRUNNER_RELEASE_CAPTURE_URL="$RUNNER_CAPTURE_BUNDLE_URL" \
+            -DRUNNER_RELEASE_BUILD_RUN_ID="$RUNNER_BUILD_RUN_ID" \
+            -DRUNNER_RELEASE_BUILD_RUN_ATTEMPT="${{ needs.validate-promotion.outputs.build_run_attempt }}" \
+            -DRUNNER_RELEASE_PROMOTION_RUN_ID="$GITHUB_RUN_ID" \
+            -DRUNNER_RELEASE_PROMOTION_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            -DRUNNER_RELEASE_EVENT_NAME="$GITHUB_EVENT_NAME" \
+            -DRUNNER_RELEASE_RUN_SHA="$GITHUB_SHA" \
+            -DRUNNER_RELEASE_RUN_REF="$GITHUB_REF" \
+            -DRUNNER_RELEASE_WORKFLOW_SHA="$GITHUB_WORKFLOW_SHA" \
+            -DRUNNER_RELEASE_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" \
+            -DRUNNER_RELEASE_REPOSITORY="$GITHUB_REPOSITORY" \
+            -DRUNNER_RELEASE_PUBLICATION_TARGET="${{ inputs.publication_target }}" \
+            -DRUNNER_RELEASE_GITHUB_STATUS="${{ inputs.github_status }}" \
+            -DRUNNER_RELEASE_BUILD_ARTIFACT_ID="${{ needs.validate-promotion.outputs.build_artifact_id }}" \
+            -DRUNNER_RELEASE_BUILD_ARTIFACT_NAME="${{ needs.validate-promotion.outputs.build_artifact_name }}" \
+            -DRUNNER_RELEASE_BUILD_ARTIFACT_SHA256="${{ needs.validate-promotion.outputs.build_artifact_sha256 }}" \
+            -DRUNNER_RELEASE_PROMOTION_INPUTS_ARTIFACT_ID="${{ needs.validate-promotion.outputs.promotion_inputs_artifact_id }}" \
+            -DRUNNER_RELEASE_PROMOTION_INPUTS_ARTIFACT_NAME="${{ needs.validate-promotion.outputs.promotion_inputs_artifact_name }}" \
+            -DRUNNER_RELEASE_PROMOTION_INPUTS_ARTIFACT_SHA256="${{ needs.validate-promotion.outputs.promotion_inputs_artifact_sha256 }}" \
+            -DRUNNER_RELEASE_NATIVE_EVIDENCE_ARTIFACT_ID="${{ needs.validate-promotion.outputs.native_evidence_artifact_id }}" \
+            -DRUNNER_RELEASE_NATIVE_EVIDENCE_ARTIFACT_NAME="${{ needs.validate-promotion.outputs.native_evidence_artifact_name }}" \
+            -DRUNNER_RELEASE_NATIVE_EVIDENCE_ARTIFACT_SHA256="${{ needs.validate-promotion.outputs.native_evidence_artifact_sha256 }}" \
+            -DRUNNER_RELEASE_ASSET_ROOT="$PWD/audited-inputs" \
+            -DRUNNER_RELEASE_HANDOFF_ROOT="$PWD/$handoff" \
+            -DRUNNER_RELEASE_CAPTURE_ROOT="$RUNNER_TEMP/epoch2d-final-audit/native-captures" \
+            -DRUNNER_RELEASE_BUILD_RECEIPT="$PWD/audited-inputs/BUILD-RECEIPT.txt" \
+            -DRUNNER_RELEASE_LINUX_ABI="$PWD/audited-inputs/Epoch2DWalkEngine-$tag-linux-abi.txt" \
+            -DRUNNER_RELEASE_CAPTURE_BUNDLE="$PWD/audited-visual/native-captures.zip" \
+            -DRUNNER_RELEASE_PROMOTION_RECEIPT="$PWD/$promotion_receipt" \
+            -DRUNNER_RELEASE_PROMOTION_SIGNATURE="$PWD/$promotion_signature" \
+            -DRUNNER_RELEASE_HANDOFF_SUMMARY="$PWD/$handoff_summary" \
+            -P tools/repository_audit.cmake
+      - name: Upload approved Site handoff
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: epoch2dwalk-v0751-site-handoff-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: site-handoff/
+
+  github-publication:
+    if: inputs.phase == 'promote' && inputs.publication_target == 'github'
+    needs: release-approval-and-site-handoff
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout exact approved source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Download approved handoff
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: epoch2dwalk-v0751-site-handoff-${{ github.run_attempt }}
+          path: site-handoff
+      - name: Probe GitHub, audit branches and PRs, then publish with guarded cleanup
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          $assets = @(
-            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip", "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256", "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256",
-            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256", "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256",
-            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip", "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256", "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256",
-            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256", "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256",
-            "Epoch2DWalkEngine-$tag-source.zip", "Epoch2DWalkEngine-$tag-source.zip.sha256", "Epoch2DWalkEngine-$tag-source.manifest.sha256"
-          )
-          $sourceSha = (git rev-parse HEAD).Trim()
-          gh release create $tag $assets --target $sourceSha --title "Epoch2DWalkEngine $tag" --generate-notes --draft
-          $download = Join-Path $env:RUNNER_TEMP "epoch2d-$tag-download"
-          if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download -Recurse -Force }
-          New-Item -ItemType Directory -Force $download | Out-Null
-          gh release download $tag --dir $download
-          foreach ($asset in $assets) {
-            if ((Get-FileHash $asset -Algorithm SHA256).Hash -ne (Get-FileHash (Join-Path $download $asset) -Algorithm SHA256).Hash) {
-              throw "Published asset byte mismatch: $asset"
-            }
+          set -euo pipefail
+          tag="$RUNNER_PROPOSED_TAG"
+          gh api "repos/$GH_REPO" >/dev/null || {
+            echo "GitHub publication unavailable; no tag or release was created." >&2
+            exit 1
           }
-          gh release edit $tag --draft=false
+          default_branch="$(gh api "repos/$GH_REPO" --jq .default_branch)"
+          test "$default_branch" = main
+          default_sha="$(gh api "repos/$GH_REPO/commits/$default_branch" --jq .sha)"
+          test "$default_sha" = "$RUNNER_CANDIDATE_SHA"
+          mapfile -t branches < <(gh api --paginate "repos/$GH_REPO/branches?per_page=100" --jq '.[].name')
+          test "${#branches[@]}" -eq 1
+          test "${branches[0]}" = "$default_branch"
+          test "$(gh pr list --repo "$GH_REPO" --state open --json number --jq length)" -eq 0
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1
+          tag_probe_status=$?
+          set -e
+          if test "$tag_probe_status" -eq 0; then
+            echo "Refusing to overwrite existing tag $tag" >&2
+            exit 1
+          elif test "$tag_probe_status" -ne 2; then
+            echo "GitHub tag availability probe failed; no tag or release was created." >&2
+            exit 1
+          fi
+
+          assets=(
+            "Epoch2DWalkEngine-$tag-runner-windows-x64.zip" "Epoch2DWalkEngine-$tag-runner-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-runner-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-runner-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-windows-x64.zip" "Epoch2DWalkEngine-$tag-dev-windows-x64.zip.sha256" "Epoch2DWalkEngine-$tag-dev-windows-x64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.tar.gz.sha256" "Epoch2DWalkEngine-$tag-dev-linux-x86_64.manifest.sha256"
+            "Epoch2DWalkEngine-$tag-source.zip" "Epoch2DWalkEngine-$tag-source.zip.sha256" "Epoch2DWalkEngine-$tag-source.manifest.sha256"
+          )
+          for index in "${!assets[@]}"; do assets[$index]="site-handoff/${assets[$index]}"; done
+          cleanup_needed=0
+          cleanup() {
+            status=$?
+            if test "$status" -ne 0 && test "$cleanup_needed" -eq 1; then
+              gh release delete "$tag" --repo "$GH_REPO" --yes --cleanup-tag >/dev/null 2>&1 || \
+                git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a "$tag" "$RUNNER_CANDIDATE_SHA" -m "Epoch2DWalkEngine $tag"
+          git push origin "refs/tags/$tag"
+          cleanup_needed=1
+          gh release create "$tag" "${assets[@]}" --repo "$GH_REPO" \
+            --target "$RUNNER_CANDIDATE_SHA" --title "Epoch2DWalkEngine $tag" \
+            --generate-notes --draft
+          download="$RUNNER_TEMP/epoch2d-$tag-github-download"
+          mkdir -p "$download"
+          gh release download "$tag" --repo "$GH_REPO" --dir "$download"
+          python3 tools/strict_sha256_manifest.py verify-publication \
+            --asset-root site-handoff --public-root "$download" --tag "$tag"
+          gh release edit "$tag" --repo "$GH_REPO" --draft=false
+          public_release="$(gh api "repos/$GH_REPO/releases/tags/$tag")"
+          test "$(jq -r .draft <<<"$public_release")" = false
+          test "$(jq -r .tag_name <<<"$public_release")" = "$tag"
+          public_download="$RUNNER_TEMP/epoch2d-$tag-github-public"
+          mkdir -p "$public_download"
+          for asset in "${assets[@]}"; do
+            name="$(basename "$asset")"
+            test "$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' <<<"$public_release")" -eq 1
+            public_url="$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$public_release")"
+            test "$public_url" = "https://github.com/$GH_REPO/releases/download/$tag/$name"
+            public_copy="$public_download/$name"
+            env -u GH_TOKEN -u GITHUB_TOKEN \
+              curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --max-redirs 3 --retry 5 --retry-all-errors --retry-delay 2 \
+              --output "$public_copy" "$public_url"
+          done
+          python3 tools/strict_sha256_manifest.py verify-publication \
+            --asset-root site-handoff --public-root "$public_download" --tag "$tag"
+          cleanup_needed=0

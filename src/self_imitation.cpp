@@ -77,7 +77,9 @@ namespace runner::rl
             for (int step = 0; step < maximum_steps; ++step)
             {
                 ImitationSample sample{};
-                sample.observation = environment.observation();
+                sample.observation = foundational_policy_observation(
+                    environment, course_stage_, gait_task_,
+                    sim::GuidanceMode::assisted);
                 // Store the pre-filter action the policy must predict, while the
                 // demonstration environment executes the filtered public action.
                 sample.action = raw_walking_teacher_action(environment);
@@ -130,6 +132,7 @@ namespace runner::rl
             >= static_cast<std::uint8_t>(sim::CourseStage::hurdles) ? 2400 : 1200;
         PolicyNetwork teacher{ 0x51E17Eu };
         teacher.parameters() = best_parameters_;
+        teacher.set_action_mask(policy_.action_mask());
         std::vector<ImitationSample> best_trajectory{};
         float best_score = -std::numeric_limits<float>::infinity();
         std::uint64_t best_quality = 0u;
@@ -140,18 +143,26 @@ namespace runner::rl
         {
             sim::Environment environment{ blueprint_, 0xB500u + agent * 4099u };
             environment.set_course(course_stage_, course_difficulty_);
+            const float physical_guidance_authority =
+                lesson_teacher_authority(
+                    lesson_update_, course_stage_, environment.blueprint());
+            environment.set_guidance_mode(sim::GuidanceMode::assisted);
+            environment.set_physical_guidance_authority(
+                physical_guidance_authority);
             std::vector<ImitationSample> trajectory{};
             trajectory.reserve(static_cast<std::size_t>(maximum_steps));
             float reward = 0.0f;
             for (int step = 0; step < maximum_steps; ++step)
             {
                 ImitationSample sample{};
-                sample.observation = environment.observation();
+                sample.observation = foundational_policy_observation(
+                    environment, course_stage_, gait_task_,
+                    sim::GuidanceMode::assisted);
                 const auto raw_action = teacher.deterministic_action(sample.observation);
                 sample.action = effective_policy_action(
                     environment, raw_action, course_stage_,
-                    lesson_teacher_authority(
-                        lesson_update_, course_stage_, environment.blueprint()));
+                    physical_guidance_authority,
+                    sim::GuidanceMode::assisted);
                 const sim::StepResult result = environment.step(sample.action);
                 reward += result.reward;
                 const bool clean_demonstration_frame = environment.valid_motion()

@@ -187,6 +187,9 @@ namespace runner::rl
         director::ChallengeKind director_challenge{ director::ChallengeKind::flat };
         director::SelectionReason director_reason{ director::SelectionReason::prerequisite_ready };
         std::uint32_t director_stable_task_id{};
+        float director_task_mastery{};
+        std::uint16_t director_task_failures{};
+        std::uint32_t director_first_stall_stable_id{};
         float difficulty{ 0.25f };
         std::uint64_t rig_generation{};
         std::uint64_t accepted_rig_changes{};
@@ -268,7 +271,8 @@ namespace runner::rl
         [[nodiscard]] int updates_per_cycle() const noexcept { return updates_per_cycle_.load(std::memory_order_relaxed); }
         void set_autosave_paths(std::filesystem::path checkpoint, std::filesystem::path rig,
             std::filesystem::path state);
-        [[nodiscard]] bool load_autosave(std::string& message);
+        [[nodiscard]] bool load_autosave(std::string& message,
+            bool start_training_after_load = false);
 
         void set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy = false);
         [[nodiscard]] bool preview_blueprint(
@@ -281,11 +285,20 @@ namespace runner::rl
         void set_rig_optimization_mode(RigOptimizationMode mode) noexcept;
         void set_gait_task(sim::GaitTask task) noexcept;
         void select_director_task(std::uint16_t task_index) noexcept;
+        void set_director_profile(director::Profile profile) noexcept;
         void reset_policy(std::uint64_t seed = 0xC0FFEEu);
         void set_exploration(float standard_deviation) noexcept;
         void train_one_update() noexcept;
         void step_preview(float dt = 1.0f / 60.0f);
-        void reset_preview(std::uint64_t seed = 0xDEADBEEFu) noexcept;
+        void reset_preview(std::uint64_t seed = 0xDEADBEEFu);
+        [[nodiscard]] std::uint64_t replay_controller_update() const noexcept
+        {
+            return replay_controller_update_;
+        }
+        [[nodiscard]] bool replay_uses_retained_controller() const noexcept
+        {
+            return replay_uses_retained_controller_;
+        }
         void set_preview_guidance_mode(sim::GuidanceMode mode) noexcept
         {
             live_.set_preview_guidance_mode(mode);
@@ -293,6 +306,10 @@ namespace runner::rl
         [[nodiscard]] sim::GuidanceMode preview_guidance_mode() const noexcept
         {
             return live_.preview_guidance_mode();
+        }
+        [[nodiscard]] sim::GuidanceMode replay_controller_guidance_mode() const noexcept
+        {
+            return replay_controller_guidance_mode_;
         }
         [[nodiscard]] GuidanceAuthorityReport preview_authority_report() const noexcept
         {
@@ -344,6 +361,10 @@ namespace runner::rl
             return cached_training_preview_;
         }
         [[nodiscard]] bool has_training_preview() const noexcept { return cached_has_training_preview_; }
+        [[nodiscard]] bool training_preview_is_rollout_sample() const noexcept
+        {
+            return cached_preview_is_rollout_sample_;
+        }
         [[nodiscard]] const sim::CreatureBlueprint& blueprint() const noexcept { return live_blueprint_; }
         [[nodiscard]] const TrainingMetrics& metrics() const noexcept { return cached_metrics_; }
         [[nodiscard]] const std::vector<float>& reward_history() const noexcept { return cached_reward_history_; }
@@ -366,6 +387,7 @@ namespace runner::rl
             set_optimization_mode,
             set_gait_task,
             set_director_task,
+            set_director_profile,
             restore_best,
             save_checkpoint,
             apply_checkpoint,
@@ -382,9 +404,14 @@ namespace runner::rl
             RigOptimizationMode optimization_mode{ RigOptimizationMode::control_optimize };
             sim::GaitTask gait_task{ sim::GaitTask::walk };
             std::uint16_t director_task_index{ director::invalid_task_index };
+            director::Profile director_profile{ director::Profile::curriculum };
+            director::State director_state{ director::make_state(
+                director::Profile::curriculum) };
             std::filesystem::path path{};
             std::shared_ptr<PpoTrainer::CheckpointData> checkpoint{};
             bool transfer_only{};
+            bool start_training_after_load{};
+            bool autosave_state_verified{};
             std::uint64_t rig_generation{};
             std::uint64_t accepted_rig_changes{};
             std::uint64_t rejected_rig_changes{};
@@ -403,8 +430,8 @@ namespace runner::rl
             float exploration{ 0.14f };
             std::uint64_t optimizer_step{};
             bool has_best{};
-            sim::Environment training_preview{};
-            bool has_training_preview{};
+            sim::GuidanceMode controller_guidance_mode{ sim::GuidanceMode::assisted };
+            std::optional<sim::Environment> training_preview{};
             std::uint64_t serial{};
         };
 
@@ -459,7 +486,7 @@ namespace runner::rl
         [[nodiscard]] TrainingRoutine training_routine(std::stop_token stop_token);
         void worker_main(std::stop_token stop_token);
         [[nodiscard]] bool consume_persistence_message();
-        void throttle_after_update() const;
+        void throttle_after_update(std::stop_token stop_token);
 
         void manage_curriculum_locked();
         void attempt_rig_evolution_locked();
@@ -471,7 +498,8 @@ namespace runner::rl
         void queue_checkpoint_save(std::filesystem::path path, PpoTrainer::CheckpointData data);
         void queue_checkpoint_load(std::filesystem::path path, bool transfer_only);
         void queue_autosave_load(std::filesystem::path checkpoint,
-            std::filesystem::path rig, std::filesystem::path state);
+            std::filesystem::path rig, std::filesystem::path state,
+            bool start_training_after_load);
         void persistence_main(std::stop_token stop_token);
         [[nodiscard]] bool stage_mastered_locked() const noexcept;
         void advance_stage_locked();
@@ -499,8 +527,11 @@ namespace runner::rl
             PpoTrainer::CheckpointData checkpoint{};
             sim::CreatureBlueprint blueprint{};
             bool transfer_only{};
+            bool start_training_after_load{};
             sim::CourseStage stage{ sim::CourseStage::balance };
             sim::GaitTask gait_task{ sim::GaitTask::walk };
+            director::State director_state{ director::make_state(
+                director::Profile::curriculum) };
             float difficulty{ 0.25f };
             std::uint64_t rig_generation{};
             std::uint64_t accepted_rig_changes{};
@@ -520,8 +551,17 @@ namespace runner::rl
         PpoTrainer live_;
         sim::CreatureBlueprint live_blueprint_{};
         bool live_morphology_preview_active_{};
+        // Worker publications stage a controller without modifying the active replay.
+        std::vector<float> cached_replay_parameters_{};
+        std::uint64_t replay_controller_update_{};
+        bool replay_uses_retained_controller_{};
+        sim::GuidanceMode replay_controller_guidance_mode_{ sim::GuidanceMode::assisted };
+        sim::GuidanceMode cached_controller_guidance_mode_{ sim::GuidanceMode::assisted };
         sim::Environment cached_training_preview_{};
         bool cached_has_training_preview_{};
+        bool cached_preview_is_rollout_sample_{};
+        std::optional<sim::Environment> pending_rollout_sample_{};
+        std::chrono::steady_clock::time_point last_rollout_sample_{};
         PublishedSnapshot published_{};
         std::uint64_t applied_serial_{};
         TrainingMetrics cached_metrics_{};
@@ -532,6 +572,10 @@ namespace runner::rl
         float cached_exploration_{ 0.14f };
         std::uint64_t cached_optimizer_step_{};
         bool cached_has_best_{};
+
+        void synchronize_snapshot(std::optional<std::uint64_t> replay_seed);
+        void start_cached_replay(std::uint64_t seed);
+        void sample_training_rollout(const sim::Environment& environment);
 
         std::filesystem::path autosave_checkpoint_{
             sim::creature_species_paths(sim::CreatureSpecies::human).autosave_checkpoint };

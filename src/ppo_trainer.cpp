@@ -1,4 +1,5 @@
 #include "ppo.hpp"
+#include "training_budget.hpp"
 
 #include <algorithm>
 #include <array>
@@ -9,6 +10,21 @@
 
 namespace runner::rl
 {
+    namespace detail
+    {
+        [[nodiscard]] float assisted_action_history_new_weight(
+            bool foundational_human_walk,
+            float visible_teacher_authority) noexcept
+        {
+            if (!foundational_human_walk)
+                return 0.60f;
+            const float authority = std::isfinite(visible_teacher_authority)
+                ? clamp(visible_teacher_authority, 0.0f, 1.0f)
+                : 1.0f;
+            return 1.0f - 0.40f * authority;
+        }
+    }
+
     namespace
     {
         constexpr float epsilon = 1.0e-8f;
@@ -89,8 +105,9 @@ namespace runner::rl
             return 0.03f;
         }
 
-        [[nodiscard]] std::array<float, sim::action_count> skill_bootstrap_action(
-            const sim::Environment& environment, sim::CourseStage stage) noexcept
+        [[nodiscard]] std::array<float, sim::action_count>
+        skill_bootstrap_action(const sim::Environment& environment,
+            sim::CourseStage stage) noexcept
         {
             if (stage == sim::CourseStage::balance)
                 return balance_teacher_action(environment);
@@ -99,12 +116,24 @@ namespace runner::rl
             if (stage == sim::CourseStage::crouch_walk)
                 return crouch_walk_teacher_action(environment);
             if (sim::stage_requires_forward_gait(stage))
-            {
                 // Imitation targets live in raw policy action space. The common
                 // topology filter is applied once when the action is executed.
                 return raw_walking_teacher_action(environment);
-            }
             return balance_teacher_action(environment);
+        }
+
+        [[nodiscard]] bool strict_raw_human_walk(std::uint64_t lesson_update,
+            sim::CourseStage stage, sim::GaitTask gait_task,
+            const sim::CreatureBlueprint& blueprint,
+            std::size_t cohort_size) noexcept
+        {
+            return stage == sim::CourseStage::uneven
+                && gait_task == sim::GaitTask::walk
+                && blueprint.human_casual_gait_plan()
+                && cohort_size > 0u
+                && foundational_walk_raw_rollout_count(
+                    lesson_update, stage, blueprint, cohort_size)
+                    == cohort_size;
         }
     }
 
@@ -118,7 +147,8 @@ namespace runner::rl
             const std::size_t available = hardware > 2 ? hardware - 2 : hardware;
             const std::size_t worker_capacity = std::min<std::size_t>(16, environment_count);
             const std::size_t worker_ceiling = maximum_rollout_workers == 0u
-                ? worker_capacity : std::min(worker_capacity, maximum_rollout_workers);
+                ? std::min(worker_capacity, training_budget::default_worker_ceiling)
+                : std::min(worker_capacity, maximum_rollout_workers);
             rollout_worker_count_ = enable_rollout_workers
                 ? std::clamp<std::size_t>(available, 1, worker_ceiling)
                 : 0;
@@ -133,6 +163,8 @@ namespace runner::rl
             preview_.set_course(course_stage_, course_difficulty_);
             preview_.set_trial_time_limit(persistent_preview_time_limit_seconds);
             preview_.set_course_motion_enabled(false);
+            const ActionMask action_mask = action_mask_for(preview_, course_stage_);
+            transition_action_mask(action_mask);
             preview_accumulator_seconds_ = 0.0;
             episode_rewards_.assign(environment_count, 0.0f);
             episode_distances_.assign(environment_count, 0.0f);
@@ -149,7 +181,7 @@ namespace runner::rl
                     rollout_worker_main(worker, stop_token);
                 });
             }
-            set_cpu_mode(4);
+            set_cpu_mode(1);
             initialize_parallel_workers();
         }
 
@@ -174,46 +206,128 @@ namespace runner::rl
             sim::Environment& environment = environments_[environment_index];
             for (std::size_t step = 0; step < rollout_horizon; ++step)
             {
-                const sim::GuidanceMode rollout_guidance =
-                    foundational_walk_raw_rollout_environment(lesson_update_,
-                        course_stage_, blueprint_, environment_index,
-                        environment_count)
+                const bool foundational_human_walk =
+                    course_stage_ == sim::CourseStage::uneven
+                    && gait_task_ == sim::GaitTask::walk
+                    && blueprint_.human_casual_gait_plan();
+                const bool raw_human_walk = foundational_human_walk
+                    && foundational_walk_raw_rollout_environment(
+                        lesson_update_, course_stage_, blueprint_,
+                        environment_index, environment_count);
+                const sim::GuidanceMode rollout_guidance = (raw_human_walk
+                        || trains_unaided_stand())
                     ? sim::GuidanceMode::raw_policy_audit
                     : sim::GuidanceMode::assisted;
+                const float visible_teacher_authority =
+                    rollout_guidance == sim::GuidanceMode::assisted
+                    ? lesson_teacher_authority(lesson_update_, course_stage_,
+                        environment.blueprint())
+                    : 0.0f;
+                Transition& transition = rollout_[
+                    step * environment_count + environment_index];
+                transition.requested_direction = 0.0f;
+                transition.stop_requested = false;
+                transition.foundational_private_phase_scrubbed = false;
+                transition.origin = RolloutOrigin::unspecified;
+                transition.guided_action.fill(0.0f);
+                if (foundational_human_walk)
+                {
+                    // Direction and stop are task observations, not joint
+                    // authority. Present the exact same signed/stop task graph
+                    // during teacher/bootstrap and Raw collection so the
+                    // handoff changes action authority, not the observation
+                    // distribution. After handoff every executed joint remains
+                    // sampled from the Raw policy below.
+                    const RawPlayerIntentCurriculum intent =
+                        raw_player_intent_curriculum(environment_index, step);
+                    const bool accepted = environment.set_locomotion_intent(
+                        intent.direction, intent.stop);
+                    (void)accepted;
+                    transition.requested_direction = intent.direction;
+                    transition.stop_requested = intent.stop;
+                }
                 environment.set_guidance_mode(rollout_guidance);
-                Transition& transition = rollout_[step * environment_count + environment_index];
-                transition.observation = environment.observation();
+                environment.set_physical_guidance_authority(
+                    visible_teacher_authority);
+                transition.observation = foundational_policy_observation(
+                    environment, course_stage_, gait_task_, rollout_guidance);
+                transition.foundational_private_phase_scrubbed =
+                    !foundational_human_walk
+                    || transition.observation
+                        == encode_foundational_human_support_observation(
+                            environment.observation(),
+                            environment.human_support_feedback(),
+                            environment.facing_direction());
                 const PolicyNetwork::Evaluation evaluation = policy_.evaluate(transition.observation);
                 transition.value = evaluation.value;
                 transition.action = sample_action(evaluation, local_random, transition.log_probability);
+                const auto unguided_policy_action = transition.action;
 
-                const float bootstrap = skill_bootstrap_weight(
-                    lesson_update_, course_stage_, blueprint_);
-                const auto guided = skill_bootstrap_action(environment, course_stage_);
-                transition.guided_action = guided;
                 std::array<float, sim::action_count>& previous_action
                     = rollout_previous_actions_[environment_index];
-                for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
+                if (rollout_guidance == sim::GuidanceMode::assisted)
                 {
-                    const float guided_action = lerp(transition.action[action_index],
-                        guided[action_index], bootstrap);
-                    transition.action[action_index] = clamp(
-                        lerp(previous_action[action_index], guided_action, 0.60f), -1.0f, 1.0f);
-                    previous_action[action_index] = transition.action[action_index];
+                    const float bootstrap = skill_bootstrap_weight(
+                        lesson_update_, course_stage_, blueprint_);
+                    const auto guided = skill_bootstrap_action(
+                        environment, course_stage_);
+                    const float action_history_new_weight =
+                        detail::assisted_action_history_new_weight(
+                            foundational_human_walk,
+                            visible_teacher_authority);
+                    transition.guided_action = guided;
+                    transition.origin = bootstrap > 0.0f
+                            && visible_teacher_authority > 0.0f
+                        ? RolloutOrigin::teacher_bootstrap
+                        : RolloutOrigin::guided_policy;
+                    for (std::size_t action_index = 0;
+                        action_index < transition.action.size(); ++action_index)
+                    {
+                        const float guided_action = lerp(
+                            transition.action[action_index],
+                            guided[action_index], bootstrap);
+                        transition.action[action_index] = clamp(
+                            lerp(previous_action[action_index], guided_action,
+                                action_history_new_weight),
+                            -1.0f, 1.0f);
+                    }
+                    const MotorDiscoveryProbe probe =
+                        course_stage_ == sim::CourseStage::balance
+                        ? motor_discovery_probe(environment, environment_index,
+                            lesson_update_, step)
+                        : MotorDiscoveryProbe{};
+                    for (std::size_t action_index = 0;
+                        action_index < transition.action.size(); ++action_index)
+                        transition.action[action_index] = lerp(
+                            transition.action[action_index],
+                            probe.action[action_index], probe.weight);
+                    transition.action =
+                        effective_policy_action_with_unguided_baseline(
+                            environment, transition.action,
+                            unguided_policy_action, course_stage_,
+                            visible_teacher_authority, rollout_guidance);
+                    previous_action = transition.action;
+                    if (course_stage_ == sim::CourseStage::crouch_walk)
+                        // Crouch imitation follows the same finite physical
+                        // authority boundary as the executed action. At zero
+                        // this is the bounded/masked network action exactly.
+                        transition.guided_action = transition.action;
                 }
-                const MotorDiscoveryProbe probe = course_stage_ == sim::CourseStage::balance
-                    ? motor_discovery_probe(environment, environment_index, lesson_update_, step)
-                    : MotorDiscoveryProbe{};
-                for (std::size_t action_index = 0; action_index < transition.action.size(); ++action_index)
-                    transition.action[action_index] = lerp(transition.action[action_index],
-                        probe.action[action_index], probe.weight);
-                transition.action = effective_policy_action(
-                    environment, transition.action, course_stage_,
-                    lesson_teacher_authority(
-                        lesson_update_, course_stage_, environment.blueprint()),
-                    rollout_guidance);
+                else
+                {
+                    // Raw rollout samples must be the actions PPO attributes to
+                    // the policy. Do not silently mix a teacher, history filter,
+                    // or discovery probe and then score the composite as though
+                    // the network sampled it.
+                    previous_action = transition.action;
+                    transition.guided_action.fill(0.0f);
+                    transition.origin = RolloutOrigin::raw_policy;
+                }
                 transition.log_probability = policy_.log_probability(transition.action, evaluation);
                 const sim::StepResult result = environment.step(transition.action);
+                if (rollout_sample_sink_ && worker_index == 0u
+                    && step % 4u == 0u && !result.terminated)
+                    rollout_sample_sink_(environment);
                 transition.reward = result.reward;
                 transition.terminal = result.terminated;
                 totals.total_distance += static_cast<double>(
@@ -309,6 +423,7 @@ namespace runner::rl
 
     void PpoTrainer::set_blueprint(const sim::CreatureBlueprint& blueprint, bool preserve_policy)
     {
+        verified_stand_parameters_ = 0u;
         const bool changed = blueprint.signature() != blueprint_.signature();
         blueprint_ = blueprint;
         for (sim::Environment& environment : environments_)
@@ -318,6 +433,8 @@ namespace runner::rl
         }
         preview_.set_blueprint(blueprint_);
         preview_.set_course(course_stage_, course_difficulty_);
+        const ActionMask action_mask = action_mask_for(preview_, course_stage_);
+        transition_action_mask(action_mask);
         preview_accumulator_seconds_ = 0.0;
         if (!changed)
             return;
@@ -339,11 +456,10 @@ namespace runner::rl
 
     void PpoTrainer::set_course(sim::CourseStage stage, float difficulty, bool preserve_best)
     {
+        verified_stand_parameters_ = 0u;
         difficulty = clamp(difficulty, 0.10f, 1.0f);
-        const bool equipment_enabled = stage == sim::CourseStage::equipment_targets
-            || stage == sim::CourseStage::combat_course;
-        policy_.set_equipment_enabled(equipment_enabled);
-        preview_policy_.set_equipment_enabled(equipment_enabled);
+        const ActionMask action_mask = action_mask_for(preview_, stage);
+        transition_action_mask(action_mask);
         if (stage == course_stage_ && std::abs(difficulty - course_difficulty_) < 1.0e-5f)
             return;
         retained_training_preview_.reset();
@@ -352,7 +468,11 @@ namespace runner::rl
         const bool stage_changed = stage != course_stage_;
         course_stage_ = stage;
         if (stage_changed)
+        {
             lesson_update_ = 0u;
+            raw_handoff_reset_complete_ = false;
+            staged_raw_ppo_evidence_ = {};
+        }
         course_difficulty_ = difficulty;
         for (sim::Environment& environment : environments_)
         {
@@ -403,12 +523,16 @@ namespace runner::rl
         if (!preserve_best)
         {
             best_parameters_.clear();
+            best_policy_guidance_mode_ = sim::GuidanceMode::assisted;
+            best_raw_ppo_receipt_ = {};
             clear_self_imitation_prior();
             metrics_.best_evaluation_distance = -std::numeric_limits<float>::infinity();
             metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
             metrics_.best_quality_key = 0u;
             metrics_.best_update = 0;
         }
+        set_preview_guidance_mode(best_parameters_.empty()
+            ? sim::GuidanceMode::assisted : best_policy_guidance_mode_);
     }
 
     void PpoTrainer::set_gait_task(sim::GaitTask task, bool preserve_best)
@@ -420,6 +544,9 @@ namespace runner::rl
         retained_training_cause_ = sim::TrialTerminalCause::none;
         gait_task_ = task;
         lesson_update_ = 0u;
+        raw_handoff_reset_complete_ = false;
+        staged_raw_ppo_evidence_ = {};
+        last_raw_ppo_receipt_ = {};
         for (sim::Environment& environment : environments_)
         {
             environment.set_course(course_stage_, course_difficulty_);
@@ -445,12 +572,16 @@ namespace runner::rl
         if (!preserve_best)
         {
             best_parameters_.clear();
+            best_policy_guidance_mode_ = sim::GuidanceMode::assisted;
+            best_raw_ppo_receipt_ = {};
             clear_self_imitation_prior();
             metrics_.best_evaluation_distance = -std::numeric_limits<float>::infinity();
             metrics_.best_evaluation_score = -std::numeric_limits<float>::infinity();
             metrics_.best_quality_key = 0u;
             metrics_.best_update = 0u;
         }
+        set_preview_guidance_mode(best_parameters_.empty()
+            ? sim::GuidanceMode::assisted : best_policy_guidance_mode_);
     }
 
     void PpoTrainer::set_equipment_directive(
@@ -463,6 +594,9 @@ namespace runner::rl
         retained_training_reason_ = sim::InvalidMotion::none;
         retained_training_cause_ = sim::TrialTerminalCause::none;
         lesson_update_ = 0u;
+        raw_handoff_reset_complete_ = false;
+        staged_raw_ppo_evidence_ = {};
+        last_raw_ppo_receipt_ = {};
         for (sim::Environment& environment : environments_)
             environment.set_equipment_directive(equipment_directive_);
         preview_.set_equipment_directive(equipment_directive_);
@@ -493,6 +627,9 @@ namespace runner::rl
         const TrainingMetrics previous_metrics = metrics_;
         metrics_ = {};
         lesson_update_ = 0u;
+        raw_handoff_reset_complete_ = false;
+        staged_raw_ppo_evidence_ = {};
+        last_raw_ppo_receipt_ = {};
         if (!clear_totals)
         {
             metrics_.total_updates = previous_metrics.total_updates;
@@ -524,6 +661,8 @@ namespace runner::rl
         if (clear_best)
         {
             best_parameters_.clear();
+            best_policy_guidance_mode_ = sim::GuidanceMode::assisted;
+            best_raw_ppo_receipt_ = {};
             clear_self_imitation_prior();
         }
         std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
@@ -536,20 +675,37 @@ namespace runner::rl
             environments_[index].reset(0x1000u + index * 7919u);
         }
         preview_.set_course(course_stage_, course_difficulty_);
+        set_preview_guidance_mode(best_parameters_.empty()
+            ? sim::GuidanceMode::assisted : best_policy_guidance_mode_);
         preview_.reset(0xDEADBEEFu);
         preview_accumulator_seconds_ = 0.0;
     }
 
     void PpoTrainer::reset_policy(std::uint64_t seed, bool clear_totals)
     {
+        verified_stand_parameters_ = 0u;
         policy_ = PolicyNetwork(seed);
-        const bool equipment_enabled = course_stage_ == sim::CourseStage::equipment_targets
-            || course_stage_ == sim::CourseStage::combat_course;
-        policy_.set_equipment_enabled(equipment_enabled);
-        preview_policy_.set_equipment_enabled(equipment_enabled);
+        const ActionMask action_mask = action_mask_for(preview_, course_stage_);
+        transition_action_mask(action_mask);
         preview_policy_.parameters() = policy_.parameters();
         reset_training_state(true, clear_totals);
         controller_state_ = ControllerState::fresh;
+    }
+
+    void PpoTrainer::transition_action_mask(
+        const ActionMask& action_mask) noexcept
+    {
+        const ActionMask previous = policy_.action_mask();
+        for (std::size_t slot = 0; slot < action_mask.size(); ++slot)
+        {
+            if (previous[slot] && !action_mask[slot])
+            {
+                policy_.clear_action_slot_state(adam_.first_moment, slot);
+                policy_.clear_action_slot_state(adam_.second_moment, slot);
+            }
+        }
+        policy_.set_action_mask(action_mask);
+        preview_policy_.set_action_mask(action_mask);
     }
 
     void PpoTrainer::set_exploration(float standard_deviation) noexcept
@@ -584,22 +740,59 @@ namespace runner::rl
         std::uint64_t& random_state,
         float& log_probability) const noexcept
     {
-        const auto stddev = policy_.standard_deviation();
-        std::array<float, sim::action_count> action{};
-        for (std::size_t index = 0; index < policy_.active_output_count(); ++index)
-            action[index] = clamp(evaluation.mean[index] + stddev[index] * next_normal(random_state), -1.0f, 1.0f);
-        log_probability = policy_.log_probability(action, evaluation);
-        return action;
+        return policy_.sample_action(evaluation, random_state, log_probability);
     }
 
     void PpoTrainer::begin_staged_update()
     {
         if (staged_update_active_)
             return;
+        staged_raw_ppo_evidence_ = {};
+        const bool raw_human_walk = strict_raw_human_walk(lesson_update_,
+            course_stage_, gait_task_, blueprint_, environments_.size());
+        if (!raw_human_walk
+            && course_stage_ == sim::CourseStage::uneven
+            && gait_task_ == sim::GaitTask::walk
+            && blueprint_.human_casual_gait_plan())
+        {
+            raw_handoff_reset_complete_ = false;
+        }
+        if (raw_human_walk)
+        {
+            staged_raw_ppo_evidence_.training_semantics =
+                training_semantics_version;
+            staged_raw_ppo_evidence_.rig_signature = blueprint_.signature();
+            staged_raw_ppo_evidence_.handoff_update =
+                foundational_walk_teacher_handoff_update(blueprint_);
+            staged_raw_ppo_evidence_.rollout_lesson_update = lesson_update_;
+            staged_raw_ppo_evidence_.optimizer_update = lesson_update_ + 1u;
+            staged_raw_ppo_evidence_.global_update = metrics_.update + 1u;
+            staged_raw_ppo_evidence_.optimizer_step_before = adam_.step;
+            staged_raw_ppo_evidence_.parameters_before_digest =
+                parameter_digest(policy_.parameters());
+            staged_raw_ppo_evidence_.active_actor_before_digest =
+                policy_.active_actor_parameter_digest();
+            staged_raw_ppo_evidence_.action_mask_bits =
+                action_mask_bits(policy_.action_mask());
+            staged_raw_ppo_evidence_.stage =
+                static_cast<std::uint8_t>(course_stage_);
+            staged_raw_ppo_evidence_.gait_task =
+                static_cast<std::uint8_t>(gait_task_);
+            staged_raw_ppo_evidence_.equipment_directive =
+                static_cast<std::uint8_t>(equipment_directive_);
+            staged_raw_ppo_evidence_.environments_reset_at_handoff =
+                raw_handoff_reset_complete_;
+            staged_raw_ppo_evidence_.actions_reset_at_handoff =
+                raw_handoff_reset_complete_;
+            staged_raw_ppo_evidence_.episodes_reset_at_handoff =
+                raw_handoff_reset_complete_;
+        }
         constexpr std::size_t horizon = rollout_horizon;
         const std::size_t environment_count = environments_.size();
         rollout_.clear();
         rollout_.resize(horizon * environment_count);
+        if (raw_human_walk)
+            staged_raw_ppo_evidence_.expected_sample_count = rollout_.size();
 
         const std::uint64_t update_seed = random_state_
             ^ (metrics_.update + 1u) * 0x9E3779B97F4A7C15ULL;
@@ -654,6 +847,37 @@ namespace runner::rl
                 }
             }
         }
+        if (raw_human_walk)
+        {
+            for (const Transition& transition : rollout_)
+            {
+                const std::size_t origin = static_cast<std::size_t>(
+                    transition.origin);
+                if (origin < staged_raw_ppo_evidence_.origin_counts.size())
+                    ++staged_raw_ppo_evidence_.origin_counts[origin];
+                else
+                {
+                    ++staged_raw_ppo_evidence_.origin_counts[
+                        static_cast<std::size_t>(RolloutOrigin::unspecified)];
+                }
+                if (!transition.foundational_private_phase_scrubbed)
+                    ++staged_raw_ppo_evidence_.elapsed_phase_samples;
+                if (transition.stop_requested)
+                    ++staged_raw_ppo_evidence_.stop_intent_samples;
+                else if (transition.requested_direction > 0.5f)
+                    ++staged_raw_ppo_evidence_.forward_intent_samples;
+                else if (transition.requested_direction < -0.5f)
+                    ++staged_raw_ppo_evidence_.reverse_intent_samples;
+            }
+            staged_raw_ppo_evidence_.whole_cohort_raw =
+                raw_handoff_reset_complete_
+                && std::ranges::all_of(environments_,
+                    [](const sim::Environment& environment) noexcept
+                    {
+                        return environment.guidance_mode()
+                            == sim::GuidanceMode::raw_policy_audit;
+                    });
+        }
         if (staged_totals_.terminal_preview.has_value())
         {
             const float retained_progress = retained_training_preview_.has_value()
@@ -686,8 +910,15 @@ namespace runner::rl
         constexpr float gae_lambda = 0.95f;
         const std::size_t environment_count = environments_.size();
         std::vector<float> next_values(environment_count, 0.0f);
-        for (std::size_t environment_index = 0; environment_index < environment_count; ++environment_index)
-            next_values[environment_index] = policy_.evaluate(environments_[environment_index].observation()).value;
+        for (std::size_t environment_index = 0;
+            environment_index < environment_count; ++environment_index)
+        {
+            const auto observation = foundational_policy_observation(
+                environments_[environment_index], course_stage_, gait_task_,
+                environments_[environment_index].guidance_mode());
+            next_values[environment_index] =
+                policy_.evaluate(observation).value;
+        }
 
         for (std::size_t environment_index = 0; environment_index < environment_count; ++environment_index)
         {
@@ -705,20 +936,55 @@ namespace runner::rl
             }
         }
 
+        const std::size_t raw_environment_count =
+            foundational_walk_raw_rollout_count(
+                lesson_update_, course_stage_, blueprint_, environment_count);
+        const bool mixed_foundational_rollout =
+            course_stage_ == sim::CourseStage::uneven
+            && gait_task_ == sim::GaitTask::walk
+            && blueprint_.human_casual_gait_plan()
+            && raw_environment_count > 0u
+            && raw_environment_count < environment_count;
+        const auto ppo_sample = [mixed_foundational_rollout](
+            const Transition& transition) noexcept
+        {
+            return !mixed_foundational_rollout
+                || transition.origin == RolloutOrigin::raw_policy;
+        };
         float mean_advantage = 0.0f;
+        std::size_t advantage_count{};
         for (const Transition& transition : rollout_)
+        {
+            if (!ppo_sample(transition))
+                continue;
             mean_advantage += transition.advantage;
-        mean_advantage /= static_cast<float>(rollout_.size());
+            ++advantage_count;
+        }
+        mean_advantage /= static_cast<float>(advantage_count);
         float variance = 0.0f;
         for (const Transition& transition : rollout_)
         {
+            if (!ppo_sample(transition))
+                continue;
             const float delta = transition.advantage - mean_advantage;
             variance += delta * delta;
         }
         const float inverse_std = 1.0f
-            / std::sqrt(variance / static_cast<float>(rollout_.size()) + 1.0e-6f);
+            / std::sqrt(variance / static_cast<float>(advantage_count)
+                + 1.0e-6f);
+        staged_raw_ppo_evidence_.absolute_advantage_sum = 0.0;
         for (Transition& transition : rollout_)
-            transition.advantage = (transition.advantage - mean_advantage) * inverse_std;
+        {
+            if (ppo_sample(transition))
+            {
+                transition.advantage =
+                    (transition.advantage - mean_advantage) * inverse_std;
+            }
+            else
+                transition.advantage = 0.0f;
+            staged_raw_ppo_evidence_.absolute_advantage_sum +=
+                std::abs(static_cast<double>(transition.advantage));
+        }
         staged_advantages_ready_ = true;
     }
 
@@ -727,7 +993,37 @@ namespace runner::rl
         if (!staged_update_active_ || !staged_advantages_ready_ || staged_optimized_)
             return;
         update_policy();
+        staged_raw_ppo_evidence_.optimizer_step_after = adam_.step;
+        staged_raw_ppo_evidence_.parameters_after_digest =
+            parameter_digest(policy_.parameters());
+        staged_raw_ppo_evidence_.active_actor_after_digest =
+            policy_.active_actor_parameter_digest();
         staged_optimized_ = true;
+    }
+
+    void PpoTrainer::reset_raw_handoff_boundary() noexcept
+    {
+        raw_handoff_reset_complete_ = false;
+        clear_foundational_teacher_prior();
+        rollout_.assign(rollout_.size(), Transition{});
+        std::fill(episode_rewards_.begin(), episode_rewards_.end(), 0.0f);
+        std::fill(episode_distances_.begin(), episode_distances_.end(), 0.0f);
+        for (auto& action : rollout_previous_actions_)
+            action.fill(0.0f);
+        for (std::size_t index = 0; index < environments_.size(); ++index)
+        {
+            sim::Environment& environment = environments_[index];
+            environment.set_course(course_stage_, course_difficulty_);
+            environment.set_gait_task(gait_task_);
+            environment.set_equipment_directive(equipment_directive_);
+            environment.set_course_motion_enabled(false);
+            environment.set_guidance_mode(sim::GuidanceMode::raw_policy_audit);
+            environment.reset(0x75130000u
+                + metrics_.update * 65'537u + index * 7'919u);
+        }
+        reset_preview(0x7513DEADu + metrics_.update);
+        metrics_.total_resets += environments_.size();
+        raw_handoff_reset_complete_ = true;
     }
 
     void PpoTrainer::finish_staged_update()
@@ -739,16 +1035,37 @@ namespace runner::rl
         const bool lesson_handoff =
             (course_stage_ == sim::CourseStage::duck_press
                 && lesson_update_ == crouch_teacher_handoff_update)
+            || (course_stage_ == sim::CourseStage::crouch_walk
+                && lesson_update_ == crouch_walk_teacher_handoff_update)
             || ((course_stage_ == sim::CourseStage::uneven
                     || course_stage_ == sim::CourseStage::shuttle)
                 && lesson_update_
                     == foundational_walk_teacher_handoff_update(blueprint_));
+        const bool raw_human_walk_handoff =
+            course_stage_ == sim::CourseStage::uneven
+            && gait_task_ == sim::GaitTask::walk
+            && blueprint_.human_casual_gait_plan()
+            && lesson_update_
+                == foundational_walk_teacher_handoff_update(blueprint_);
+        const bool whole_raw_human_walk_handoff =
+            course_stage_ == sim::CourseStage::uneven
+            && gait_task_ == sim::GaitTask::walk
+            && blueprint_.human_casual_gait_plan()
+            && !environments_.empty()
+            && foundational_walk_raw_rollout_count(
+                lesson_update_, course_stage_, blueprint_,
+                environments_.size()) == environments_.size()
+            && foundational_walk_raw_rollout_count(
+                lesson_update_ - 1u, course_stage_, blueprint_,
+                environments_.size()) < environments_.size();
         if (lesson_handoff)
         {
             // Assisted and unassisted scores are not comparable. Keep the
             // learned network and optimizer, but make every retained champion
             // after this lesson-local boundary prove itself with zero authority.
             best_parameters_.clear();
+            best_policy_guidance_mode_ = sim::GuidanceMode::assisted;
+            best_raw_ppo_receipt_ = {};
             clear_self_imitation_prior();
             metrics_.best_evaluation_distance =
                 -std::numeric_limits<float>::infinity();
@@ -757,7 +1074,14 @@ namespace runner::rl
             metrics_.best_quality_key = 0u;
             metrics_.best_update = 0u;
             preview_policy_.parameters() = policy_.parameters();
+            set_preview_guidance_mode(raw_human_walk_handoff
+                ? sim::GuidanceMode::raw_policy_audit
+                : sim::GuidanceMode::assisted);
         }
+        if (raw_human_walk_handoff || whole_raw_human_walk_handoff)
+            // A provenance boundary is also an episode boundary. The same
+            // routine is used by the non-installed focused test seam.
+            reset_raw_handoff_boundary();
         metrics_.environment_steps += rollout_.size();
         ++metrics_.total_updates;
         metrics_.total_environment_steps += rollout_.size();
@@ -798,8 +1122,10 @@ namespace runner::rl
         append_history(reward_history_, metrics_.mean_reward);
         append_history(speed_history_, metrics_.mean_speed * 3.6f);
         controller_state_ = ControllerState::training;
-        if (metrics_.update == 1 || metrics_.update % 5 == 0)
-            evaluate_policy();
+        const bool evaluation_due =
+            metrics_.update == 1 || metrics_.update % 5 == 0;
+        if (evaluation_due && !raw_human_walk_handoff)
+            evaluate_policy(trains_unaided_stand() ? metrics_.evaluation_count : 0u);
         staged_update_active_ = false;
         staged_advantages_ready_ = false;
         staged_optimized_ = false;
@@ -825,11 +1151,14 @@ namespace runner::rl
             return false;
         policy_.parameters() = best_parameters_;
         preview_policy_.parameters() = best_parameters_;
+        set_preview_guidance_mode(best_policy_guidance_mode_);
         adam_.first_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.second_moment.assign(policy_.parameter_count(), 0.0f);
         adam_.step = 0;
         preview_.reset(0xDEADBEEFu + metrics_.update);
-        if (self_imitation_prior_.empty())
+        if (best_policy_guidance_mode_ == sim::GuidanceMode::raw_policy_audit)
+            clear_self_imitation_prior();
+        else if (self_imitation_prior_.empty())
             refresh_self_imitation_prior();
         controller_state_ = ControllerState::resumed;
         return true;
@@ -848,6 +1177,15 @@ namespace runner::rl
 
     void PpoTrainer::update_policy()
     {
+        last_ppo_raw_actor_samples_ = 0u;
+        last_ppo_assisted_actor_samples_ = 0u;
+        last_guided_raw_sources_rejected_ = 0u;
+        last_guided_assisted_sources_consumed_ = 0u;
+        const bool raw_collection =
+            staged_raw_ppo_evidence_.training_semantics
+                == training_semantics_version
+            && strict_raw_human_walk(lesson_update_, course_stage_,
+                gait_task_, blueprint_, environments_.size());
         constexpr std::size_t optimization_passes = 2;
         constexpr std::size_t minibatch_size = 256;
         constexpr float clip_range = 0.12f;
@@ -856,8 +1194,33 @@ namespace runner::rl
             * std::max(0.10f, 1.0f - static_cast<float>(metrics_.update) / 3500.0f);
         constexpr float max_gradient_norm = 0.38f;
 
-        std::vector<std::size_t> indices(rollout_.size());
-        std::iota(indices.begin(), indices.end(), 0);
+        const std::size_t raw_environment_count =
+            foundational_walk_raw_rollout_count(
+                lesson_update_, course_stage_, blueprint_,
+                environments_.size());
+        const bool mixed_foundational_rollout =
+            course_stage_ == sim::CourseStage::uneven
+            && gait_task_ == sim::GaitTask::walk
+            && blueprint_.human_casual_gait_plan()
+            && raw_environment_count > 0u
+            && raw_environment_count < environments_.size();
+        const bool raw_actor_update = raw_collection || trains_unaided_stand()
+            || mixed_foundational_rollout;
+        std::vector<std::size_t> indices{};
+        indices.reserve(rollout_.size());
+        for (std::size_t index = 0u; index < rollout_.size(); ++index)
+        {
+            const bool raw =
+                rollout_[index].origin == RolloutOrigin::raw_policy;
+            if (!mixed_foundational_rollout || raw)
+            {
+                indices.push_back(index);
+                if (raw)
+                    ++last_ppo_raw_actor_samples_;
+                else
+                    ++last_ppo_assisted_actor_samples_;
+            }
+        }
         float total_policy_loss = 0.0f;
         float total_value_loss = 0.0f;
         float total_entropy = 0.0f;
@@ -881,7 +1244,11 @@ namespace runner::rl
                 parallel_accumulate_batch(
                     indices, begin, end, clip_range, value_coefficient, entropy_coefficient,
                     batch_policy_loss, batch_value_loss, batch_entropy);
-                apply_self_imitation_prior();
+                if (!raw_actor_update)
+                {
+                    apply_self_imitation_prior();
+                    ++staged_raw_ppo_evidence_.self_imitation_updates;
+                }
 
                 const float inverse_batch = 1.0f / static_cast<float>(end - begin);
                 float norm_squared = 0.0f;
@@ -911,9 +1278,23 @@ namespace runner::rl
             (course_stage_ == sim::CourseStage::uneven
                 || course_stage_ == sim::CourseStage::shuttle)
             && !foundational_teacher_prior_.empty();
+        std::vector<std::size_t> assisted_rollout_indices{};
+        if (!use_clean_foundational_prior)
+        {
+            assisted_rollout_indices.reserve(rollout_.size());
+            for (std::size_t index = 0u; index < rollout_.size(); ++index)
+            {
+                if (rollout_[index].origin == RolloutOrigin::raw_policy)
+                    ++last_guided_raw_sources_rejected_;
+                else
+                    assisted_rollout_indices.push_back(index);
+            }
+        }
         const std::size_t guided_source_count = use_clean_foundational_prior
-            ? foundational_teacher_prior_.size() : rollout_.size();
-        if (guided_weight > 0.0f && guided_source_count > 0u)
+            ? foundational_teacher_prior_.size()
+            : assisted_rollout_indices.size();
+        if (!raw_collection && !trains_unaided_stand() && guided_weight > 0.0f
+            && guided_source_count > 0u)
         {
             constexpr std::size_t guided_passes = 4u;
             constexpr std::size_t guided_samples_per_pass = 1024u;
@@ -941,6 +1322,7 @@ namespace runner::rl
                     {
                         const ImitationSample& demonstration =
                             foundational_teacher_prior_[cursor];
+                        ++last_guided_assisted_sources_consumed_;
                         policy_.accumulate_imitation_gradient(
                             demonstration.observation,
                             demonstration.action,
@@ -949,7 +1331,9 @@ namespace runner::rl
                     }
                     else
                     {
-                        const Transition& demonstration = rollout_[cursor];
+                        const Transition& demonstration =
+                            rollout_[assisted_rollout_indices[cursor]];
+                        ++last_guided_assisted_sources_consumed_;
                         policy_.accumulate_imitation_gradient(
                             demonstration.observation,
                             demonstration.guided_action,
@@ -981,12 +1365,14 @@ namespace runner::rl
             foundational_walk_consolidation_active(
                 lesson_update_, course_stage_, blueprint_);
         if (best_parameters_.size() == policy_.parameter_count()
+            && !raw_actor_update
             && (!sim::stage_requires_forward_gait(course_stage_)
                 || lesson_teacher_authority(
                     lesson_update_, course_stage_, blueprint_) >= 0.999f
                 || (consolidating_foundational_walk
                     && !fragile_support_topology)))
         {
+            ++staged_raw_ppo_evidence_.best_anchor_updates;
             const float anchor = consolidating_foundational_walk
                 ? 0.012f : metrics_.update < 1500u ? 0.004f : 0.010f;
             std::vector<float>& current = policy_.parameters();
@@ -1037,15 +1423,26 @@ namespace runner::rl
             preview_accumulator_seconds_ + static_cast<double>(dt));
         while (preview_accumulator_seconds_ + 1.0e-8 >= fixed_step)
         {
+            const float preview_teacher_authority =
+                preview_guidance_mode_ == sim::GuidanceMode::assisted
+                ? lesson_teacher_authority(lesson_update_, course_stage_,
+                    preview_.blueprint())
+                : 0.0f;
+            preview_.set_physical_guidance_authority(
+                preview_teacher_authority);
             const PolicyNetwork& display_policy = best_parameters_.empty()
                 ? policy_ : preview_policy_;
-            const auto raw_action = display_policy.deterministic_action(
-                preview_.observation());
-            auto action = effective_policy_action(
-                preview_, raw_action, course_stage_,
-                lesson_teacher_authority(
-                    lesson_update_, course_stage_, preview_.blueprint()),
-                preview_guidance_mode_);
+            const auto observation = foundational_policy_observation(
+                preview_, course_stage_, gait_task_, preview_guidance_mode_);
+            const auto raw_action =
+                display_policy.deterministic_action(observation);
+            auto action = raw_action;
+            if (preview_guidance_mode_ == sim::GuidanceMode::assisted)
+            {
+                action = effective_policy_action(
+                    preview_, raw_action, course_stage_,
+                    preview_teacher_authority, preview_guidance_mode_);
+            }
             if (preview_equipment_test_enabled_
                 && preview_.equipment_target().active)
                 // Rig Lab exercises the same stop/arm/barrel/fire path as an
@@ -1089,6 +1486,11 @@ namespace runner::rl
         preview_accumulator_seconds_ = 0.0;
         preview_.reset(seed);
         preview_.set_guidance_mode(preview_guidance_mode_);
+        preview_.set_physical_guidance_authority(
+            preview_guidance_mode_ == sim::GuidanceMode::assisted
+            ? lesson_teacher_authority(lesson_update_, course_stage_,
+                preview_.blueprint())
+            : 0.0f);
     }
 
     void PpoTrainer::append_history(std::vector<float>& history, float value)

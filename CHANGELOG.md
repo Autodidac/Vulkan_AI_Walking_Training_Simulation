@@ -1,3 +1,50 @@
+## 0.7.51 (release validation pending)
+
+- Prepared a source-only correction for Stand posture guidance ignoring reduced
+  physical authority. The root/body correction and its diagnostic scalar now
+  follow the requested authority. Focused Windows authority tests cover it.
+  The Stand-to-unaided training handoff
+  remains open and no new locomotion success is claimed.
+
+- Start interactive Autopilot in Eco, default to one active worker, and bound
+  the default worker pool to four. Eco/Balanced enforce 25%/50% training duty with
+  interruptible waits; Maximum is explicit. Incompatible autosaves retain totals
+  and authored rigs but reset policy, optimizer, task evidence and mastery to
+  Stand, including same-rig reloads.
+
+- Separated the interactive Trainer Snapshot inset from the main longevity
+  replay. Worker updates stage new weights and tasks; they do not rewrite or
+  auto-restart an active or terminal replay. R starts a new replay without
+  interrupting the worker.
+- Require two measured load-bearing landing receipts before exchanging Human
+  support legs. This prevents an unloaded touch from authorizing the next lift;
+  sustained unaided walking and recovery still fail release acceptance.
+- Made `Epoch2DWalkEngine` the primary product identity across the native window,
+  Vulkan application metadata, current documentation, CMake package, SDKs, and
+  release archive contract; `Runner.exe` remains the explicit bundled example.
+- Replaced the compact Rig Lab control wall with responsive Trainer and Rig
+  Inspector workspaces, independent Live/Rig art state, truthful editor zoom,
+  and a default low-clutter course annotation mode while retaining every
+  control and hard-failure diagnostic.
+- Centered the authored surface in the canonical 640x360 material-cell cross-section (`-25.3125 m` to `+25.3125 m`) and removed the normal-viewport fallback slab left by the former shallow populated strip.
+- Derived deterministic deep sand/dirt/silt/stone transitions, resource samples, and cavities from the pinned EpochSimEngine resident-ground contracts while preserving authoritative surface collision, terrain sampling, lake depth, structural overlays, and challenge coordinates.
+- Added canonical Grass cells to exposed firm-ground columns without changing
+  their physical height/fill or leaking the veneer onto sand, mud, water, gaps,
+  or structural challenge decks.
+- Advanced the renderer-neutral integration API to version 7, action-layout schema to version 2, and canonical snapshot schema to version 5, and authenticated Director commands against graph index, stable task ID, task/challenge pair, prerequisites, evidence, and control profile before environment mutation.
+- Advanced Director state to schema 2 and autonomous state to format 29. Water and stop/plant/aim/fire mastery now require persisted trial-, task-, challenge-, and tick-bound ordered physical receipts; scalar-only Director schema 1/format 28 mastery fails closed instead of migrating.
+- Resolved supported graph nodes to real material intervals, terrain boundaries, generated features, or the active aim-range target; unavailable recovery, construction, tool, and moving-target behaviors remain explicitly disabled.
+- Added the default finite-ammunition Human carbine sequence with physical braking, timed two-foot planting, joint-driven acquire/settle, simulation-side trigger gating, terrain-first projectile collision, observed-miss correction, cooldown/recoil, reload, and safe-carry locomotion resumption.
+- Extended API 7/action-layout schema 2/canonical snapshot schema 5 equipment snapshots with magazine/round counts, plant and reload state, fire-block reason, and target visibility. Added the canonical RUNRIG7 19-node Human, explicit left/right ankle and distal-toe motors, and 84 observations, including toe angle/rate and finite support-phase-coordinator state. The fixed 15-slot topology-masked action layout excludes inactive anatomy/equipment slots before sampling, RNG, likelihood, entropy, PPO, imitation, and expert application while preserving the three equipment actions as a separate tail after 12 anatomy actions. The physical two-hand equipment and historical 76/13 policy layout first entered under `0x0007'5109`; `0x0007'5110` is the historical foundational-input/mixed-origin boundary, `0x0007'5111` is the whole-composite authority/plant boundary, `0x0007'5112` is the support-feedback observation boundary, and `0x0007'5113` is the CrouchWalk authority boundary. Current training semantics `0x0007'5115` bind the expanded RUNRIG7 84/15 tensor and explicit toe-control contract. Mass-weighted center-of-mass motion and aggregate physical center of pressure are maintained without opt-in telemetry; invalid or unloaded evidence encodes exact zero. Explicit guidance preserves the prior observation contract everywhere else: non-target Raw scopes remain phase-scrubbed and non-target Assisted scopes retain phase. Exact-EOF `EPPO51` storage carries complete Raw origin/reset/contamination/context evidence and every persisted metric; only an opaque trainer- or exact-loader-issued artifact may resume learned state or load retained control. None of `0x0007'5109`, `0x0007'5110`, `0x0007'5111`, `0x0007'5112`, or `0x0007'5113` can silently resume under `5115`; all five are explicit unverified weight-transfer-only inputs, while the v0.7.50 rename boundary may contribute only its validated lifetime ledger. Its unkeyed checksum detects corruption, not authenticity against a malicious producer.
+- Removed the foundational Human Assisted-to-Raw observation cliff by scrubbing private gait phase from policy input on both sides of handoff while leaving it available only to the teacher. Wired the existing 300-update per-environment Raw consolidation schedule into rollout collection: Raw-origin transitions execute sampled policy actions only, Assisted-origin transitions alone may feed the separate decaying imitation pass, and PPO actor gradients, self-imitation, and retained-best anchoring cannot consume Assisted authority once Raw actor samples enter the update. Whole-cohort Raw evidence remains the only receipt boundary. No live posture brace or burial escape was added; unaided retained-network posture and burial recovery remain release-blocking.
+- Automatic learned/evolved species state uses product-owned `epoch2dwalk-v0751-*` paths: `epoch2dwalk-v0751-{species}-autosave.eppo`, `epoch2dwalk-v0751-{species}-evolved.rig`, and `epoch2dwalk-v0751-{species}-autonomy.state`. At the v0.7.50 rename boundary, `runner-v0750-{species}-autosave.eppo` is lifetime-ledger-only compatibility input; its policy, optimizer, retained best, evolved rig, autonomy state, and mastery do not resume, while authored `{species}.rig` remains separately compatible.
+- Added deterministic Director/challenge and physical-equipment coverage and release-package contracts for the v0.7.51 focused design note, installed consumer, exact EpochSimEngine 2.5.29 dependency, and cross-platform artifacts.
+- Split release validation into an immutable build phase and a promotion phase. Native review consumes the exact Windows archive from the named successful build run; promotion downloads and re-audits that same artifact, compares it byte-for-byte with the capture bundle, and never rebuilds or repackages it.
+- Hardened promotion as repeatable strict context verification: it binds workflow SHA/ref, current and Phase-A runs/attempts, artifact IDs/digests, the exact recursive handoff/capture tree, and a canonical Site summary while keeping the HMAC secret step-scoped. The separate Site activation grant remains the one-use authority; GitHub cleanup now waits for both a draft byte audit and anonymous post-publication verification of all 15 objects.
+- Added the fail-closed `--equipment-eye-test`, which advances the canonical Human equipment-target environment through the real assisted teacher and fixed-step equipment state machine, then freezes the first valid two-foot-planted, settled READY frame before a shot. The view labels assisted provenance and physical plant/settle/aim evidence and never substitutes synthetic art or learned-policy proof.
+- Added an opt-in, non-installed production-vertex capture tool and deterministic software-rasterizer test. It writes exact 2048x1152 PPM evidence plus hashes and subject/zoom receipts for Live, Course, every species, equipment, and every Rig Lab page without misrepresenting the result as native Vulkan or Raw learned proof.
+- Kept retained-network Raw inference release-blocking. The latest authoritative Raw audit produces forward stepping but does not yet remain stable across the required repeated seeds with optional guidance removed; no matrix, package, visual, commit, tag, or publication success is implied by this entry.
+
 ## 0.7.50
 
 - Retained truthful terminal trial previews and separated time-limit, invalid-motion, completion, retry, and automatic-next-trial ownership.

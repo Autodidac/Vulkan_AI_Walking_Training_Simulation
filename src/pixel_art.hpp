@@ -136,19 +136,135 @@ namespace runner::art
     [[nodiscard]] inline float human_limb_layer_opacity(
         bool foreground) noexcept
     {
-        // Side-view anatomy still renders both physical chains, but the far
-        // chain must read as depth instead of a duplicate translucent rig.
-        return foreground ? 0.98f : 0.44f;
+        // Side-view anatomy still renders both physical chains. Keep the rear
+        // chain materially opaque so it reads as a second solid limb instead
+        // of a ghost copy; physical draw order and independently stepped
+        // anchors provide the depth cue.
+        return foreground ? 0.99f : 0.96f;
+    }
+
+    [[nodiscard]] inline float human_arm_layer_opacity(
+        bool foreground) noexcept
+    {
+        // A strict side view can put two physical arm chains almost directly
+        // on top of one another. Preserve their anchors and draw order, while
+        // giving the rear arm enough depth separation for both hands to remain
+        // readable around held equipment.
+        return foreground ? 0.99f : 0.94f;
+    }
+
+    [[nodiscard]] inline Color opaque_depth_tint(Color source, Color tint,
+        float strength) noexcept
+    {
+        // Depth treatment is deliberately a color-only operation. The caller
+        // applies it after rejecting transparent source pixels, so it cannot
+        // manufacture a rectangular silhouette around irregular authored art.
+        const float amount = std::clamp(
+            std::isfinite(strength) ? strength : 0.0f, 0.0f, 1.0f);
+        const auto channel = [amount](float source_channel,
+            float tint_channel) noexcept
+        {
+            const float finite_source = std::isfinite(source_channel)
+                ? source_channel : 0.0f;
+            const float finite_tint = std::isfinite(tint_channel)
+                ? tint_channel : finite_source;
+            return std::clamp(lerp(finite_source, finite_tint, amount),
+                0.0f, 1.0f);
+        };
+        return {
+            channel(source.r, tint.r),
+            channel(source.g, tint.g),
+            channel(source.b, tint.b),
+            std::isfinite(source.a) ? std::clamp(source.a, 0.0f, 1.0f) : 0.0f
+        };
+    }
+
+    // These are authored opaque-pixel occupancies, not substitute geometry.
+    // Keeping the fit tied to the supplied irregular silhouettes prevents the
+    // differently padded source canvases from making one physical arm segment
+    // look wire-thin while the adjacent segment looks disproportionately wide.
+    inline constexpr float human_upper_arm_opaque_transverse_fraction =
+        7.0f / 20.0f;
+    inline constexpr float human_forearm_opaque_transverse_fraction =
+        12.0f / 20.0f;
+    inline constexpr float human_hand_opaque_transverse_fraction =
+        13.0f / 28.0f;
+    // The arm sources are much more heavily padded than the leg sources.
+    // Target a substantial visible silhouette after that padding is removed.
+    // The earlier 0.36/0.41 forearm/upper-arm result still read as a wire next
+    // to the chest and disappeared around a held weapon at native scale.
+    // Preserve a visible anatomical taper, but keep both supplied-pixel pieces
+    // broad enough to read as one continuous armored manipulator.
+    inline constexpr float human_arm_opaque_thickness_ratio = 0.53f;
+    inline constexpr float human_arm_opaque_taper_ratio = 0.035f;
+
+    // The supplied boot's last opaque row is 24/28 through its canvas. The
+    // neutral Human support surface lies about 35% of the fitted boot height
+    // below the heel/toe particle centers, matching their capped contact depth.
+    inline constexpr float human_boot_opaque_sole_fraction = 24.0f / 28.0f;
+    inline constexpr float human_boot_contact_depth_fraction = 0.35f;
+
+    enum class HumanFootEdgeKind
+    {
+        ordinary,
+        triangle_brace,
+        ordered_path
+    };
+
+    struct HumanFootEdgeStyle
+    {
+        float width{};
+        float opacity{};
+    };
+
+    [[nodiscard]] inline HumanFootEdgeKind human_foot_edge_kind(
+        int first_slot, int second_slot) noexcept
+    {
+        if (first_slot < 0 || first_slot > 3
+            || second_slot < 0 || second_slot > 3
+            || first_slot == second_slot)
+            return HumanFootEdgeKind::ordinary;
+        const int first = std::min(first_slot, second_slot);
+        const int second = std::max(first_slot, second_slot);
+        if (second == first + 1)
+            return HumanFootEdgeKind::ordered_path;
+        if (first == 0 && second == 2)
+            return HumanFootEdgeKind::triangle_brace;
+        return HumanFootEdgeKind::ordinary;
+    }
+
+    [[nodiscard]] inline HumanFootEdgeStyle human_foot_edge_style(
+        HumanFootEdgeKind kind, bool foreground) noexcept
+    {
+        switch (kind)
+        {
+        case HumanFootEdgeKind::triangle_brace:
+            return foreground ? HumanFootEdgeStyle{ 0.60f, 0.28f }
+                : HumanFootEdgeStyle{ 0.40f, 0.18f };
+        case HumanFootEdgeKind::ordered_path:
+            return foreground ? HumanFootEdgeStyle{ 2.65f, 0.98f }
+                : HumanFootEdgeStyle{ 1.65f, 0.80f };
+        case HumanFootEdgeKind::ordinary:
+            break;
+        }
+        return {};
     }
 
     [[nodiscard]] inline float human_limb_thickness_ratio(
         bool support_limb, bool has_distal_motor) noexcept
     {
         if (support_limb)
-            return has_distal_motor ? 0.48f : 0.43f;
-        // Human arms remain visibly articulated without letting the forearm
-        // and hand dominate the saved neutral silhouette.
-        return has_distal_motor ? 0.34f : 0.24f;
+            return has_distal_motor ? 0.50f : 0.46f;
+        // Normalize the differently padded source canvases while retaining a
+        // deliberate upper-arm -> cuff taper. The physical shoulder/elbow/
+        // wrist anchors still own both ends and no opaque capsule is made.
+        const float visible_target = human_arm_opaque_thickness_ratio
+            + (has_distal_motor ? human_arm_opaque_taper_ratio
+                                : -human_arm_opaque_taper_ratio);
+        return visible_target
+            / (has_distal_motor
+                ? human_upper_arm_opaque_transverse_fraction
+                : human_forearm_opaque_transverse_fraction);
     }
 
     [[nodiscard]] inline float fitted_joint_overlap(float limb_span,
@@ -157,9 +273,11 @@ namespace runner::art
         const float span = std::isfinite(limb_span) ? std::max(0.0f, limb_span) : 0.0f;
         const float thickness = std::isfinite(limb_thickness)
             ? std::max(0.0f, limb_thickness) : 0.0f;
-        const float span_limit = span * (support_limb ? 0.10f : 0.08f);
+        // Arm source pixels taper at both ends. Let them overlap the physical
+        // shoulder/elbow seams while retaining a smaller support-limb overlap.
+        const float span_limit = span * (support_limb ? 0.10f : 0.085f);
         return std::min(span_limit,
-            thickness * (support_limb ? 0.34f : 0.28f));
+            thickness * (support_limb ? 0.34f : 0.30f));
     }
 
     [[nodiscard]] inline HelmetArtDimensions helmet_art_dimensions(
@@ -183,10 +301,14 @@ namespace runner::art
         const bool fitted_to_bone = std::isfinite(forearm_span)
             && forearm_span > 1.0e-4f;
         const float minimum_thickness = fitted_to_bone
-            ? forearm_span * 0.10f : scaled_pixels(10.0f, pixel_scale);
+            ? forearm_span * 0.23f : scaled_pixels(10.0f, pixel_scale);
+        // Only 13/28 of the supplied hand canvas is opaque transversely. Its
+        // bone-fitted request may therefore occupy 76% of the forearm span.
+        // Keep its longitudinal fit compact so the glove reads as a separate
+        // hand/cuff mass instead of extending the forearm into one rigid bar.
         const float maximum_thickness = fitted_to_bone
-            ? forearm_span * 0.24f : scaled_pixels(30.0f, pixel_scale);
-        const float fitted_factor = fitted_to_bone ? 0.68f : 0.52f;
+            ? forearm_span * 0.76f : scaled_pixels(30.0f, pixel_scale);
+        const float fitted_factor = fitted_to_bone ? 1.50f : 0.58f;
         const float thickness = std::clamp(
             std::isfinite(forearm_thickness) ? forearm_thickness * fitted_factor
                 : scaled_pixels(16.0f, pixel_scale),
@@ -196,13 +318,13 @@ namespace runner::art
                 / static_cast<float>(source_height), 1.05f, 1.65f)
             : 1.40f;
         const float minimum_length = fitted_to_bone
-            ? forearm_span * 0.20f : scaled_pixels(17.0f, pixel_scale);
+            ? forearm_span * 0.24f : scaled_pixels(17.0f, pixel_scale);
         const float maximum_length = fitted_to_bone
             ? forearm_span * 0.38f : scaled_pixels(38.0f, pixel_scale);
         const float hand_length = std::clamp(
             thickness * aspect, minimum_length, maximum_length);
         const float wrist_overlap = fitted_to_bone
-            ? hand_length * 0.14f
+            ? hand_length * 0.28f
             : std::min(hand_length * 0.18f,
                 std::max(scaled_pixels(3.0f, pixel_scale), hand_length * 0.14f));
         return { hand_length, thickness, wrist_overlap };
@@ -217,12 +339,20 @@ namespace runner::art
             ? std::max(0.0f, lower_leg_span) : 0.0f;
         const float radius = std::isfinite(joint_radius)
             ? std::max(0.0f, joint_radius) : 0.0f;
-        const float maximum_width = std::max(radius * 1.34f, lower * 0.72f);
-        const float width = std::clamp(
-            std::max(plate * 1.08f, radius * 1.60f),
-            radius * 1.32f, maximum_width);
-        const float height = std::clamp(width * 0.43f,
-            radius * 0.78f, std::max(radius * 0.84f, lower * 0.34f));
+        if (plate <= 1.0e-4f && lower <= 1.0e-4f
+            && radius <= 1.0e-4f)
+            return {};
+        // The physical heel->toe plate is the complete longitudinal sole.
+        // Fitting the sprite's opaque span beyond either endpoint created the
+        // needle-like toe/black spike seen in strict side view. A valid plate
+        // therefore owns the width exactly; knee->ankle and contact radius
+        // influence only the bounded transverse boot envelope. The fallback
+        // remains finite for legacy/malformed non-articulated callers.
+        const float width = plate > 1.0e-4f
+            ? plate : std::max(radius * 1.70f, lower * 0.42f);
+        const float height = std::clamp(width * 0.69f,
+            radius * 1.05f, std::max({ radius * 1.35f,
+                lower * 0.45f, width * 0.74f }));
         return { width, height };
     }
 
@@ -275,6 +405,41 @@ namespace runner::art
             center + axis * (bounded_width * 0.5f), std::max(0.0f, height) };
     }
 
+    // The supplied weapon's physical hand grip is five pixels from the left
+    // edge of its 30-pixel opaque longitudinal span and two thirds of the way
+    // down its 24-pixel canvas. Keep both source-art landmarks fixed for every
+    // equipment state; moving the hand along the same sprite or centering the
+    // receiver on the forearm makes safe carry collapse into a rigid stick.
+    inline constexpr float equipment_primary_grip_fraction = 1.0f / 6.0f;
+    inline constexpr float equipment_primary_grip_normal_fraction = 2.0f / 3.0f;
+
+    [[nodiscard]] inline OrientedArtTransform grip_anchored_art_transform(
+        Vec2 grip, Vec2 direction, float span, float thickness,
+        float grip_fraction = equipment_primary_grip_fraction,
+        float grip_normal_fraction = equipment_primary_grip_normal_fraction,
+        bool mirror_vertical = false) noexcept
+    {
+        const Vec2 axis = normalized(direction, { 1.0f, 0.0f });
+        Vec2 normal{ -axis.y, axis.x };
+        if (mirror_vertical)
+            normal = normal * -1.0f;
+        const float bounded_span = std::isfinite(span)
+            ? std::max(0.0f, span) : 0.0f;
+        const float bounded_thickness = std::isfinite(thickness)
+            ? std::max(0.0f, thickness) : 0.0f;
+        const float bounded_grip = std::isfinite(grip_fraction)
+            ? std::clamp(grip_fraction, 0.0f, 1.0f)
+            : equipment_primary_grip_fraction;
+        const float bounded_grip_normal = std::isfinite(grip_normal_fraction)
+            ? std::clamp(grip_normal_fraction, 0.0f, 1.0f)
+            : equipment_primary_grip_normal_fraction;
+        const Vec2 centerline_grip = grip - normal
+            * ((bounded_grip_normal - 0.5f) * bounded_thickness);
+        return { centerline_grip - axis * (bounded_span * bounded_grip),
+            centerline_grip + axis * (bounded_span * (1.0f - bounded_grip)),
+            bounded_thickness };
+    }
+
     [[nodiscard]] inline OrientedArtTransform support_boot_transform(
         Vec2 proximal, Vec2 support, float width, float height,
         float facing_direction = 1.0f, bool grounded = false) noexcept
@@ -306,16 +471,31 @@ namespace runner::art
         Vec2 heel, Vec2 toe, float width, float height,
         float facing_direction = 1.0f) noexcept
     {
+        if (!std::isfinite(heel.x) || !std::isfinite(heel.y)
+            || !std::isfinite(toe.x) || !std::isfinite(toe.y)
+            || !std::isfinite(width) || !std::isfinite(height)
+            || width <= 0.0f || height <= 0.0f)
+            return {};
         const float facing = std::isfinite(facing_direction)
                 && facing_direction < 0.0f ? -1.0f : 1.0f;
-        Vec2 forward = normalized(toe - heel, { facing, 0.0f });
-        if (forward.x * facing < 0.0f)
-            forward *= -1.0f;
-        const float bounded_width = std::max(0.0f, width);
-        const float bounded_height = std::max(0.0f, height);
+        const Vec2 forward = normalized(toe - heel, { facing, 0.0f });
+        // draw_authored_pixel_art mirrors the transverse source axis when the
+        // whole rig faces left. Reconstruct that presented normal here so the
+        // bottom of the supplied 20-high opaque boot inside its 28-high canvas
+        // lands on the real heel->toe contact plane at every physical pitch.
+        // Human support particles are centers with a capped contact depth;
+        // retaining that depth below the ordered anchors prevents a FLAT foot
+        // from visibly hovering without moving either physical endpoint.
+        Vec2 presented_normal{ -forward.y, forward.x };
+        if (facing < 0.0f)
+            presented_normal *= -1.0f;
+        const float bounded_width = width;
+        const float bounded_height = height;
         const Vec2 physical_center = (heel + toe) * 0.5f;
-        const Vec2 center = physical_center + Vec2{ 0.0f,
-            -bounded_height * 0.48f };
+        const Vec2 center = physical_center - presented_normal
+            * (bounded_height
+                * (human_boot_opaque_sole_fraction - 0.5f
+                    - human_boot_contact_depth_fraction));
         return oriented_box_transform(center, forward,
             bounded_width, bounded_height);
     }

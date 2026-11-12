@@ -5,19 +5,15 @@ namespace runner::preview_sync
     struct Decision
     {
         bool replace_blueprint{};
-        bool replace_course{};
-        bool reset_episode{};
-        bool adopt_controller{ true };
+        bool start_replay{};
     };
 
     [[nodiscard]] constexpr Decision decide(bool rig_changed,
-        bool course_changed, bool best_changed) noexcept
+        bool first_publication, bool editing_rig, bool explicit_reset) noexcept
     {
         return {
-            rig_changed,
-            course_changed,
-            rig_changed || course_changed,
-            best_changed || !rig_changed
+            rig_changed && !editing_rig,
+            !editing_rig && (rig_changed || first_publication || explicit_reset)
         };
     }
 }

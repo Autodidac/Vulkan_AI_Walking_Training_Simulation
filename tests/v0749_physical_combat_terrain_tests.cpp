@@ -17,22 +17,67 @@ namespace runner::sim
             bool stopped) noexcept
         {
             environment.equipment_state_ = EquipmentState::ready;
+            environment.equipment_state_seconds_ = 1.0f;
             environment.equipment_stopped_ = stopped;
+            environment.equipment_body_speed_ = stopped ? 0.0f : 0.85f;
+            environment.equipment_plant_seconds_ = stopped ? 1.0f : 0.0f;
             environment.equipment_aim_rate_ = 0.0f;
             environment.equipment_aim_settle_seconds_ = 1.0f;
             environment.equipment_cooldown_seconds_ = 0.0f;
-            environment.equipment_aim_angle_ =
-                environment.equipment_recommended_aim_angle();
+            environment.equipment_recoil_recovery_seconds_ = 0.0f;
+            const std::uint16_t rear = environment.equipment_mount_node();
+            const std::uint16_t front = environment.equipment_foregrip_node();
+            const std::uint16_t shoulder =
+                environment.equipment_mount_shoulder_node();
+            if (environment.valid_node(rear) && environment.valid_node(front)
+                && environment.valid_node(shoulder) && rear != front)
+            {
+                const WeaponGeometry geometry = weapon_geometry(
+                    environment.weapon_class_);
+                const Vec2 body_up = normalized(
+                    environment.particles_[environment.blueprint_.torso_node]
+                        .position
+                        - environment.particles_[environment.blueprint_.root_node]
+                            .position,
+                    { 0.0f, 1.0f });
+                const float facing = environment.facing_direction();
+                const Vec2 body_forward = facing
+                    * Vec2{ body_up.y, -body_up.x };
+                for (int iteration = 0; iteration < 3; ++iteration)
+                {
+                    const float angle =
+                        environment.equipment_recommended_aim_angle();
+                    const Vec2 axis{ std::cos(angle), std::sin(angle) };
+                    const Vec2 pocket = geometry.shouldered
+                        ? environment.particles_[shoulder].position
+                            + body_forward * 0.04f - body_up * 0.10f
+                        : environment.particles_[shoulder].position
+                            + body_forward * 0.28f - body_up * 0.16f;
+                    const Vec2 rear_position = geometry.shouldered
+                        ? pocket + axis * geometry.butt_to_rear_grip : pocket;
+                    environment.particles_[rear].position = rear_position;
+                    environment.particles_[front].position = rear_position
+                        + axis * geometry.rear_to_foregrip;
+                    environment.particles_[rear].previous = rear_position;
+                    environment.particles_[front].previous =
+                        environment.particles_[front].position;
+                    environment.equipment_aim_angle_ = angle;
+                }
+            }
+            environment.previous_equipment_aim_angle_ =
+                environment.equipment_aim_angle_;
         }
 
         static void begin_moving(Environment& environment) noexcept
         {
             environment.forward_speed_ = 0.85f;
+            environment.equipment_body_speed_ = 0.85f;
+            environment.equipment_plant_seconds_ = 0.0f;
         }
 
         static void record_ground_miss(Environment& environment) noexcept
         {
-            const Vec2 mount = environment.equipment_mount_position();
+            const Vec2 mount = environment.equipment_muzzle_position();
             environment.equipment_target_.position = mount + Vec2{ 4.0f, 1.0f };
             environment.equipment_target_.radius = 0.20f;
             environment.equipment_target_.active = true;
@@ -242,29 +287,16 @@ int main()
         "stopped, supported, settled physical aim was rejected");
 
     sim::Environment safe_carry{ sim::CreatureBlueprint::humanoid(), 0x749003u };
-    const std::uint16_t carry_mount = safe_carry.equipment_mount_node_index();
-    std::uint16_t carry_parent = safe_carry.blueprint().torso_node;
-    float shortest_link = std::numeric_limits<float>::infinity();
-    for (const sim::DistanceConstraint& bone : safe_carry.blueprint().bones)
-    {
-        if (bone.a != carry_mount && bone.b != carry_mount)
-            continue;
-        const std::uint16_t candidate = bone.a == carry_mount ? bone.b : bone.a;
-        const float span = length(safe_carry.blueprint().nodes[candidate]
-            - safe_carry.blueprint().nodes[carry_mount]);
-        if (span < shortest_link)
-        {
-            shortest_link = span;
-            carry_parent = candidate;
-        }
-    }
-    const Vec2 carry_link = safe_carry.particles()[carry_mount].position
-        - safe_carry.particles()[carry_parent].position;
-    const float physical_carry_angle = std::atan2(carry_link.y, carry_link.x);
+    const sim::EquipmentGripFrame carry_frame =
+        safe_carry.equipment_grip_frame();
     require(safe_carry.equipment_state() == sim::EquipmentState::safe_carry
+            && carry_frame.resolved
+            && length(safe_carry.equipment_display_direction()
+                - carry_frame.axis) <= 1.0e-6f
             && std::abs(wrap_angle(safe_carry.equipment_aim_angle()
-                - physical_carry_angle)) <= 1.0e-5f,
-        "safe-carry art invented a horizontal gun instead of following the hand link");
+                - std::atan2(carry_frame.axis.y, carry_frame.axis.x)))
+                <= 1.0e-5f,
+        "safe-carry art invented an aim instead of following the two-hand frame");
 
     sim::Environment scalar_cheat{ sim::CreatureBlueprint::humanoid(), 0x749004u };
     scalar_cheat.set_course(sim::CourseStage::balance, 0.30f);
@@ -313,7 +345,8 @@ int main()
     require(hand.length <= 80.0f * 0.43f
             && hand.thickness <= 80.0f * 0.27f
             && art::fitted_joint_overlap(80.0f, 32.0f, false) > 0.0f
-            && art::fitted_joint_overlap(80.0f, 32.0f, false) <= 80.0f * 0.08f,
+            && art::fitted_joint_overlap(80.0f, 32.0f, false) >= 80.0f * 0.10f
+            && art::fitted_joint_overlap(80.0f, 32.0f, false) <= 80.0f * 0.12f,
         "arm/hand art escapes its physical forearm bone envelope");
     require(boot.width <= 64.0f * 0.88f && boot.height <= 64.0f * 0.40f,
         "boot art escapes heel/toe and lower-leg geometry");

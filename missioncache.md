@@ -1,3 +1,1273 @@
+## v0.7.51 direct visual acceptance and final-system polish (2026-09-05)
+
+Human finite capture-target closure active (2026-09-06): first-swing traces
+now localize the remaining fall before touchdown: the planted right sole stays
+fixed and receives real normal/tangential contact, but the normalized capture
+point moves from about `-0.03` to `-0.22` behind its COP while root height falls
+and the finite stance hip approaches its torque cap. Higher friction and higher
+hip/knee strength both made the same-seed trial worse, so neither is an
+authorized remedy. Feed the already-public `HumanSupportFeedback` capture error
+into the Human teacher's supported-leg endpoint only, in the same live-facing
+frame as IK, bounded to less than half the authored sole span and distributed by
+measured load while excluding the outgoing swing leg. The correction may emit
+only existing finite hip/knee targets; it may not translate particles, pin a
+sole, edit contacts/history, add root/torso drive, or enter retained Raw
+inference. Require exact sign/mirror/invalid/load-weight/repeated-seed tests and
+rerun the unchanged strict physical landing and Raw authority gates before
+retaining it. A successful first landing is not completion: sustained bilateral
+purchase, stand, walk, recover, transition, and run still require their own
+physical receipts.
+
+First capture-target A/B result (2026-09-06): the unchanged seed now keeps the
+root roughly `3.4 cm` higher at apex, halves the early backward COM velocity,
+and brings the first contact vertical approach inside the strict bound
+(`0.469 m/s` versus the prior `1.317 m/s`). It still fails honestly because the
+free sole accelerates horizontally to `1.115 m/s`: terminal horizontal feedback
+does not begin until FLARE even though physical DESCENT starts roughly two dozen
+frames earlier. Preserve the successful capture sign/bound, denormalize with the
+same average leg scale used to encode feedback, and start the existing bounded
+swing-endpoint brake at observed DESCENT. Do not relax the `0.40 m/s` landing
+limit or manufacture a contact. If this does not produce a sustained purchase,
+revert it instead of stacking gains.
+
+Observable capture-hold A/B active (2026-09-06): starting the existing
+horizontal endpoint brake at DESCENT reduced the same event to `0.485 m/s`
+horizontal and `0.277 m/s` vertical, but the body still falls after its
+facing-local capture error has already crossed roughly `-0.12`; the coordinator
+continues advancing the swing target and eventually forces hand contact. Add the
+finite, policy-visible capture receipt to `HumanGaitCoordinatorInput` and pause
+only further swing/descent phase advance while the capture point is materially
+behind the planted support. Holding coordinator state must remain force-free;
+the existing bounded stance endpoint correction is the only recovery command.
+Require deterministic pass/hold/mirror/nonfinite tests and keep all landing,
+body-contact, torque, work, and Raw authority thresholds unchanged.
+
+Observable capture-hold A/B rejected (2026-09-06): pausing phase at the
+`-0.045` capture threshold held the free leg at its departure boundary until it
+recontacted, reset the coordinator to DEPARTURE, and worsened vertical impact to
+`0.992 m/s`. Remove that input/gate and its test rather than hiding the failure.
+The next bounded experiment is ordinary capture-point step placement: preserve
+the supported-leg endpoint correction, but during SWING through LANDING shift
+the outgoing ankle target toward the same measured facing-local capture point.
+This is a finite hip/knee target that moves the free mass opposite the fall and
+selects a recoverable landing location; it may not freeze phase, alter contact,
+or bypass the existing strict landing/body/authority gates.
+
+Reactive free-foot placement A/B rejected (2026-09-06): blending the bounded
+capture shift into the outgoing target after real release reduced peak swing
+speed but raised the immediate landing approach from the best `0.485` to
+`0.848 m/s`; vertical contact remained legal at `0.463 m/s`, but purchase still
+never stabilized. Remove only the free-foot shift and retain the independently
+helpful supported-leg correction plus early terminal brake for the next
+controller test. The native Windows capture helper also failed twice while
+applying its sandbox ACL, so no live-screen observation is claimed from this
+turn; use the strict software/runtime evidence until the helper is healthy.
+
+Late capture-landing placement A/B active (2026-09-06): the rejected row began
+moving the free-foot capture target immediately after release, adding reaction
+while the stance was still healthy. Test the same bounded endpoint displacement
+only over the existing observable DESCENT alignment blend, after apex and in
+parallel with the independently helpful velocity brake. This leaves departure,
+clearance, and apex trajectories unchanged while letting the physical foot seek
+a recoverable contact point before LANDING. Retain only if the unchanged first
+landing becomes both horizontally/vertically legal and purchase remains
+body-clean; otherwise remove it without gain tuning.
+
+Late capture-landing placement A/B rejected (2026-09-06): deferring the free
+foot shift until DESCENT still raises landing speed to `1.020 m/s`, produces an
+unconfirmed purchase, and ends in hand contact. Remove it. The current best
+honest slice remains supported-leg capture plus early terminal velocity braking
+(`0.485/0.277 m/s` first approach), which crosses both vertical and almost all
+horizontal error but cannot arrest the torso after impact. Do not continue
+tuning free-foot capture position; fix the LANDING-to-PURCHASE seam so the new
+dual support is held and recaptured before side ownership and backstroke swap.
+
+Apex horizontal-braking timing A/B active (2026-09-06): the coordinator holds
+the free sole at APEX for roughly eleven measured frames while its X velocity
+reverses from about `-0.35` to `+0.36 m/s`, but the existing velocity-opposed
+endpoint brake remains multiplied by a zero descent-phase blend during that
+entire hold. Enable the same bounded finite hip/knee endpoint correction at the
+observable APEX state, opposing either velocity sign, without moving phase or
+changing its vertical target. Require the unchanged `0.40/0.65 m/s` first
+landing and body-contact gates; reject if it merely moves the later collapse.
+
+Reach-preserving terminal-brake wiring repair active (2026-09-06): enabling the
+brake during APEX reproduced essentially the same `0.485/0.277 m/s` candidate,
+revealing that timing was not the effective seam. Source audit finds the actual
+defect: horizontal correction is added after vertical reach is chosen, so the
+near-full Human leg crosses the radius guard and silently falls back to the
+uncorrected nominal endpoint. Apply the correction to `stance_x` before
+computing vertical reach, preserving the same authored radius and finite IK
+solution instead of discarding it. Remove the post-height fallback path. Keep
+the same `0.18 m` cap, action/motor/contact limits, and unchanged landing/body
+gates; add no new force or authority.
+
+Reach-preserving terminal-brake A/B sign audit (2026-09-06): moving the full
+velocity correction inside the reachable IK circle proves it now reaches the
+physical joints, but the unchanged seed worsens from the prior partially
+discarded `0.485/0.277 m/s` event to `1.104/0.469 m/s`. The nominal endpoint-X
+sign is therefore not the world-velocity braking sign under the relative hip
+hinge and loaded pelvis dynamics. Test the exact mirrored endpoint sign with
+the same finite gain/cap and no other changes. Retain only a sign that reduces
+the unchanged physical sole velocity in both facing directions; otherwise
+restore the prior bounded fallback and reject this path without loosening the
+landing gate.
+
+Reach-preserving terminal-brake A/B rejected (2026-09-06): both reachable-arc
+signs fail the unchanged physical event. Subtracting the correction lands at
+`1.104/0.469 m/s`; adding it lands at `1.020/0.394 m/s`, both much worse than
+the prior post-height guarded `0.485/0.277 m/s` behavior. Restore that smaller
+effective path exactly. This rules out a full-radius endpoint displacement as
+the remaining fix; keep the measured supported-leg capture correction and
+locate the residual horizontal velocity in the distal ankle/sole alignment or
+LANDING/PURCHASE state seam before changing another hip endpoint.
+
+Guarded terminal-brake horizon A/B active (2026-09-06): the retained guarded
+path misses the physical horizontal landing limit by about `0.085 m/s` while
+vertical approach is already legal. Its correction encodes only a `0.20 s`
+velocity horizon and remains below the existing `0.18 m` displacement cap.
+Test a `0.24 s` finite horizon on that same post-height guarded endpoint, with
+the exact same contact, reach, force, and acceptance rules. Update the pure
+mirror/repeat helper receipt; reject if the unchanged physical seed does not
+reduce the landing approach without moving the failure elsewhere.
+
+Guarded terminal-brake horizon result / purchase seam active (2026-09-06): the
+`0.24 s` guarded horizon clears the unchanged strict first-flight and landing
+gate; execution now reaches the sustained Raw demonstration. It then exposes a
+state-machine dead end: the physical outgoing sole recontacts while the
+coordinator is still in FLARE, but FLARE requires that same sole to remain
+released, so LANDING and the existing PURCHASE state are unreachable. The rig
+stays on the terminal target, folds backward, and terminates after about
+`2.47 s`. Treat observed bilateral recontact as entry to LANDING, require two
+flat physical purchase frames, then enter (not skip) PURCHASE and require three
+more bilateral body-clean purchase frames before swapping ownership. This only
+holds/advances policy-visible target state; it may not create contact, move a
+particle, or add force. Add deterministic positive, interrupted, and repeated
+state tests, then rerun the unchanged full physical/raw gate.
+
+Purchase seam temporal audit correction (2026-09-06): an extra five-frame
+purchase dwell is not justified and repeats an earlier rejected failure mode.
+The needed receipt is exactly two consecutive fixed steps split across the
+observable LANDING and PURCHASE states: both soles flat and loaded, no body
+contact, and the terminal zero-lift phase actually reached. Preserve frame one
+when entering PURCHASE; reset it on any interrupted contact; swap only on frame
+two. Use the existing `human_sole_has_flat_purchase` predicate so toe-only,
+negative-clearance, zero-impulse, and stale-time inputs cannot qualify.
+
+Rear-foot plane damping A/B active (2026-09-06): the first physical landing is
+now legal, but the Raw trace shows the loaded body falling backward before a
+flat transfer can complete. The landing ankle currently corrects measured
+heel-to-ball position error only, while the distal toe already uses a bounded
+position-plus-relative-motion plane correction. Apply that same finite
+`finite_sole_alignment_correction` to the measured rear-foot plate, using only
+ball-minus-heel one-step displacement and the existing explicit ankle motor.
+This must not move the ankle endpoint, alter contact, or add root/torso force;
+its existing pure helper mirror/repeat/nonfinite/cap coverage and the unchanged
+physical landing/Raw torque/work gates decide whether it stays.
+
+Rear-foot plane damping A/B rejected (2026-09-06): velocity-aware rear-foot
+alignment changes only a few frames and slightly worsens termination
+(`-2.070 m`, `2.48 s`) while the capture error is already saturated backward
+well before touchdown. Restore the position-only rear-foot alignment. The
+supported-leg capture shift reaches its sole-span cap through the entire
+single-support interval, so isolate it next with an exact zero-contribution
+A/B while retaining observed hip frame, vertical flare, terminal brake, and
+the corrected purchase state seam. This determines whether the apparent
+balance command is damping or driving the backward body mode.
+
+Supported-capture isolation result (2026-09-06): removing the stance endpoint
+contribution restores a low horizontal approach (`0.126 m/s`) but the swing
+sole drops ballistically at `1.317 m/s`; the correction is genuinely supporting
+the pelvis and is not removable. Full authority makes vertical landing legal
+but later saturates the backward body mode. Test one bounded half-authority
+blend through the same support-only endpoint, preserving its sign, sole-span
+cap, and every authority/contact gate. The unchanged physical event determines
+whether a useful finite interval exists; do not alter the acceptance limits.
+
+Half-authority capture / descent pacing A/B active (2026-09-06): half capture
+authority lands between the endpoints (`0.654/0.870 m/s`) and fails both strict
+bounds, but it avoids the full saturated stance displacement. The trace shows
+APEX successfully brakes the sole to a controlled descent, then DESCENT lowers
+the phase target at full nominal cadence and the sole reaches terrain before
+FLARE. Pace only DESCENT with the existing `0.45` terminal landing rate while
+keeping half capture authority. This gives the finite hip/knee action slew time
+to track the already-commanded height; it adds no dwell force or contact and
+must still pass the same event and sustained Raw gates.
+
+Half-authority/descent-pacing A/B rejected; stance-COP response active
+(2026-09-06): half authority remains ballistic, and slower DESCENT worsens the
+same physical touchdown to `0.702/1.134 m/s` because the pelvis is falling
+rather than outrunning phase. Restore full supported-leg capture and nominal
+DESCENT, which already proved a legal first landing. The surviving trace then
+shows facing-local capture error growing negative throughout the loaded
+right-sole interval while its ankle response remains dominated by the terrain
+target. Add that finite capture error to the existing Raw teacher's selected
+stance-ankle correction: negative (backward) capture requests the already-
+tested backward-fall ankle sign, positive capture requests its mirror. Bound
+the combined correction at the existing `0.34` action limit; require pure
+finite/mirror/repeat/no-feedback tests, unchanged hip/knee endpoint, and the
+unchanged physical Raw authority/torque/work gates. This is COP control through
+a real loaded ankle, not torso support or a body transform.
+
+Stance-COP response sign audit (2026-09-06): the initial mapping delays contact
+but excites the swing/body mode and worsens landing to `0.780/0.650 m/s`.
+Because anatomical support-side action sign and ground-reaction sign differ,
+test the exact mirrored capture-to-ankle mapping once before rejecting COP
+feedback. Keep the same `0.34` bound and no other source change; the unchanged
+landing and Raw gates decide the sign rather than the helper's label.
+
+Stance-COP response A/B rejected / endpoint capacity active (2026-09-06): both
+ankle mappings destroy the already-legal landing (`0.780/0.650` and
+`0.611/0.801 m/s`), so remove capture from the ankle and retain the independently
+tested torso-fall ankle response only. The actual supported-endpoint correction
+is already at its `0.45`-sole-span cap while capture continues growing backward;
+test a morphology-bounded `0.75`-sole-span cap through the same reachable
+hip/knee IK. This remains below one physical boot length, uses measured contact
+load only, and adds no authority path. Reject if the unchanged landing or Raw
+torque/work/body gates worsen.
+
+Endpoint-cap receipt correction (2026-09-06): the `0.75`-sole-span source row
+compiled, but its pure bound test still asserted the superseded `0.45 * 0.40 =
+0.18 m` cap and stopped before physics. Update only that exact deterministic
+receipt to `0.75 * 0.40 = 0.30 m`; preserve the sign, mirror, repeat, invalid,
+landing, body-contact, torque, work, and sustained Raw thresholds unchanged.
+This is test bookkeeping for the already-recorded A/B, not evidence that the
+wider endpoint produces a valid gait.
+
+Endpoint-capacity A/B rejected (2026-09-06): the wider `0.75`-sole-span row
+produces a real body-clean first landing after `79` all-node-clear frames, but
+horizontal approach worsens to `0.621407 m/s` against the unchanged
+`0.40 m/s` limit and vertical approach rises to `0.638866 m/s`. Restore the
+previous `0.45`-sole-span cap and its exact `0.18 m` pure receipt. The wider
+endpoint is not a gait fix, and neither landing threshold may be relaxed.
+
+Human finite-target lag A/B active (2026-09-06): with the accepted `0.45` sole
+cap, the dedicated physical landing is legal and Raw reaches LANDING, but the
+single supported leg reverses the body before impact. The curriculum currently
+shrinks every observation-derived joint target to `80%` before the existing
+finite one-action-unit-per-second actuator slew applies a second delay. Probe an
+exact `100%` teacher target response while retaining the `0.010` joint damping,
+all actuator slew/torque/work/contact limits, phase state, and no-root/no-body
+authority. Reject if the unchanged physical landing or Raw body/cycle gates
+worsen; this changes a learnable action target, not simulation authority.
+
+Human finite-target lag A/B rejected (2026-09-06): `100%` target response
+makes the first swing ballistic: `1.623456 m/s` horizontal and `1.375223 m/s`
+vertical landing approach versus unchanged `0.40/0.65 m/s` bounds. Restore the
+previous `80%` response. More target amplitude is not the missing support; the
+next isolated variable is the coordinator cadence relative to the finite
+one-action-unit-per-second actuator, preserving every force/contact/acceptance
+limit.
+
+Human casual-cadence bandwidth A/B active (2026-09-06): the restored legal
+landing uses a `0.64 Hz` gait whose half-cycle is only `0.78125 s`, shorter than
+the time required for several observed stance/swing action targets to traverse
+their finite range at one action-unit per second. Test a genuinely casual
+`0.45 Hz` coordinator cadence while keeping the same `0.50 m` step, `0.22 m`
+clearance, `80%` target response, motor slew/torque/work, contact model, and all
+landing/Raw gates. This still permits eighteen alternating half-cycles in the
+twenty-second Raw receipt. Retain only if physical landing remains legal and
+signed sustained transfer improves; reject rather than lowering distance or
+cycle requirements.
+
+Human casual-cadence bandwidth A/B rejected (2026-09-06): `0.45 Hz` fails the
+existing coherent one-step signed stance-ankle prerequisite before a gait
+rollout, so it is not a valid casual-walk correction. Restore `0.64 Hz`. The
+current frame trace instead exposes a stance-frame error: at frame 52 the
+physical loaded right ankle is `+0.1428 m` from its hip while the delayed
+analytic endpoint asks for `+0.4155 m`, pulling the pelvis backward before the
+capture error can respond.
+
+Human measured-stance endpoint A/B active (2026-09-06): for only the physically
+supported, non-outgoing Human leg, start endpoint X from the measured local
+ankle-to-hip displacement and then apply the existing load-weighted bounded
+capture shift. Preserve the authored/reachable endpoint Y, outgoing
+SWING/FLARE/LANDING trajectory, action shape, motor slew/torque/work, contacts,
+particles/history and all acceptance thresholds. The policy already observes
+foot/root offsets, support, capture/load, joint angles/rates and coordinator
+state, so this is a learnable motor target rather than a hidden plant or rail.
+Require unsupported/outgoing no-op, mirror, repeat and no-state-mutation tests,
+then the unchanged physical landing and sustained Raw gates.
+
+Human measured-stance endpoint A/B rejected (2026-09-06): exact per-frame
+recapture of the supported ankle removes the analytic offset but destabilizes
+the first exchange before Raw: landing approach rises to `1.390321 m/s`
+horizontal and `0.900820 m/s` vertical, with the body already reversing by
+frame 79. Remove the helper and its pure receipts completely, returning to the
+last legal first-landing path. A moving physical endpoint is not a stable
+stance reference when copied afresh every frame through the separately slewed
+joint-target plant.
+
+Human fixed stance-reference A/B active (2026-09-06): isolate the failure in
+the rejected moving recapture by holding only the supported, non-outgoing
+leg's endpoint X at its immutable authored ankle-to-hip offset, then add the
+existing bounded capture correction. The outgoing leg keeps its complete
+coordinator-driven swing; endpoint Y, contacts, particles/history, action ABI,
+motor slew/torque/work and every acceptance limit remain unchanged. Unlike the
+failed per-frame copy, this reference cannot chase a falling pelvis, and unlike
+the analytic shared phase it cannot command stance backstroke faster than the
+actuator can track. Require exact eligible/ineligible/finite/repeat receipts and
+the unchanged physical/Raw gate before retaining it.
+
+Human fixed stance-reference A/B rejected (2026-09-06): holding the loaded
+leg at its authored ankle-to-hip X reference preserves the dedicated legal
+landing, but worsens the sustained Raw trial to `-2.43307 m`, zero cycles,
+termination at `2.61666 s`, maximum COM-to-COP lead `1.21453 m`, and maximum
+support slip `1.59376 m/s`. Remove the helper and its receipts. A constant
+body-relative stance target still drags the support under a falling pelvis and
+is not a physical plant reference.
+
+Human loaded-leg response A/B active (2026-09-06): preserve the proven `80%`
+global observation-derived teacher response for airborne swing, arms, ankles,
+and toes, but allow exactly `100%` response for the physically supported,
+non-outgoing Human hip/knee pair while its coordinator is active. The global
+`100%` experiment made the swing ballistic; the frame trace instead shows the
+loaded hip/knee pair lagging the bounded capture target while the real stance
+sole remains planted. Select the response through a finite deterministic pure
+helper with left/right mirror, unsupported, outgoing, non-leg, nonfinite, and
+repeat receipts. It may change only ordinary motor targets and must preserve
+actuator slew, torque/work limits, contact causality, action/observation ABI,
+and every physical threshold. Retain it only if the unchanged first-landing
+and sustained Raw forward/reverse gates improve together.
+
+Human loaded-leg response A/B rejected (2026-09-06): full response on only
+the physically loaded non-outgoing hip/knee pair destroys the previously legal
+first landing: horizontal approach rises to `1.559716 m/s`, vertical approach
+to `1.257931 m/s`, five non-foot frames follow, and the coordinator does not
+reach a valid purchase. Remove the selection helper and all receipts and
+restore the uniform `80%` finite target response. The support-pair lag is not
+independent of the swing/pelvis plant and cannot be corrected by asymmetric
+target amplitude.
+
+Human recontact-phase synchronization A/B active (2026-09-06): the restored
+legal first landing physically establishes bilateral flat loaded contact while
+the coordinator remains near its terminal FLARE/LANDING phase. On the first
+valid bilateral purchase frame, enter PURCHASE and synchronize only the
+policy-visible target phase to the existing purchase pose; preserve that first
+receipt and require the second consecutive valid frame before swapping support
+ownership. Any interruption still clears the receipt. This changes only the
+finite motor-target state selected after real contact; it creates no contact,
+moves no particle/history, supplies no root/body force, and retains every
+landing, torque, work, body-contact, Raw authority, and action/observation
+threshold. Add exact first-frame, second-frame, interruption, stale-contact,
+mirror, and repeat coverage before rerunning the real landing and sustained Raw
+rollouts.
+
+Human recontact-phase trigger correction (2026-09-06): the first seam A/B
+does not execute in the real rollout because bilateral support begins as a
+physical heel/partial-sole recontact, while the intentionally stricter flat
+purchase predicate is still false. Synchronize the finite target to zero-lift
+at the current positive-time two-sole recontact while remaining in LANDING;
+do not award a purchase receipt there. LANDING then holds that target and may
+enter PURCHASE with receipt one only after both complete soles are flat,
+positively loaded, and body-clean; the next consecutive strict frame alone may
+swap ownership. Zero-time, toe-only/non-flat, zero-impulse, body-contaminated,
+mirror, and repeat cases remain required. This distinguishes a landing motor
+target from earned purchase instead of waiting for a flat foot before asking
+the ordinary motors to finish flattening it.
+
+Human recontact-phase synchronization A/B rejected (2026-09-06): selecting
+the zero-lift target at the first current-step two-sole recontact reduces peak
+support slip from `0.866945` to `0.709104 m/s`, but it does not produce a flat
+purchase, cycle, or alternating step. Raw still falls at `2.51666 s` after
+`-2.10010 m`, with uprightness `-0.162742` and maximum COM-to-COP lead
+`1.20440 m`. Remove the phase jump and its special receipts, restoring the
+prior gradual LANDING target. The correction arrives after the decisive
+single-support body reversal and cannot be retained as a gait fix.
+
+Human trunk/hip authority inventory active (2026-09-06): before another gait
+target experiment, enumerate the canonical Human pelvis/torso/hip topology and
+ordinary motor application order. The physical model currently asks the same
+bilateral hip motors to articulate the legs and react the freely rotating upper
+body. Determine whether an anatomically local, reciprocal, finite trunk joint
+is actually absent or merely misconfigured, and distinguish passive structural
+support from learnable powered posture control. Any candidate must act through
+equal-and-opposite constraint impulses, conserve linear momentum, respect
+torque/work budgets, expose its state/action if powered, remain dormant inside
+a broad natural range if passive, and pass opposed-sign/mirror/zero-action and
+unchanged landing/Raw gates. Do not add a world-up projector, root transform,
+contact fabrication, or unconditional training brace.
+
+Human first-replant balance-capacity audit active (2026-09-06): the stricter
+all-node departure and temporal landing receipt now prove one honest left-sole
+landing, then correctly refuse to call the planted right heel a swing. The Raw
+trial still falls backward at about 5.97 seconds after one alternating step.
+Frame evidence shows the stance sole remains stationary with available traction,
+while the requested right stance endpoint moves behind the pelvis and the real
+endpoint diverges forward under load; this rules out a simple low-friction fix
+and points at finite support-motor tracking/capture control. Instrument the
+existing motor target, angle, torque-cap fraction, and work receipts through the
+failing exchange before changing gains. Any retained correction must act only
+through ordinary hip/knee/ankle motor targets, remain bounded and observable to
+the policy, preserve contact causality and momentum accounting, and pass exact
+same-seed, opposed-sign, no-contact, and unchanged Raw authority/landing gates.
+Do not restore maximum-node flight, root/body translation, stance pinning,
+posture projection, conveyor motion, or relaxed physical thresholds.
+
+Human observed-hip-frame correction A/B active (2026-09-06): motor telemetry
+disproves the initial saturation hypothesis. Through the first exchange all four
+leg hinges remain within about `0.10 rad` of their finite applied targets, but
+the commanded endpoint was solved relative to the permanently upright authored
+torso while each physical hip is relative to the moving pelvis-to-torso arm.
+Using observation channels `0/1` as that same local-facing hip reference removes
+the rotational positive feedback and turns the first touchdown from a fast
+horizontal skid into a nearly stationary horizontal contact (`0.0106 m/s`) with
+46 fully-clear frames and no body contact. It also reaches the ground before the
+coordinator's FLARE gate at about `-1.04 m/s`, so the unchanged `0.65 m/s`
+vertical landing bound still rejects it. Retain the observed-reference idea only
+if one bounded earlier finite vertical-braking target can make this event legal
+and the subsequent bilateral Raw gait remains stable; do not weaken the landing
+gate or add a collision/body impulse.
+
+Human observable support-phase coordinator A/B active (2026-09-06): the
+restored RUNRIG6 Human remains body-clean only through frame 114, then folds
+over a right-ball-dominant support; the unchanged Raw forward/reverse rows travel
+`+2.51982/+2.49935 m`, complete zero cycles, and fall with maximum COM-to-COP
+lead `1.11797/1.16353 m`. Prior stateless capture placement, action grids,
+passive foot changes, explicit toe/lumbar motors, wall-time event hold, residual
+phase pacing, and morphology/solver probes are rejected. Test one genuinely
+different control architecture: a small finite support-phase coordinator whose
+state is explicit policy-visible proprioception, advances through authored
+startup, physical all-node departure, controlled swing, bounded descent, and
+positive-impulse flat purchase, and emits only the existing finite
+hip/knee/ankle actions. The coordinator may remember which physical sole owns
+the exchange, but may not write particles, Verlet history, contacts, root/body
+pose, terrain, or acceptance evidence, and phase state alone must exert no
+force. Require finite/reset/stop, mirror, repeated-seed, zero-action, and stale
+contact rejection coverage. Run unchanged V0748 and Raw forward/reverse early;
+retain and migrate training/inference only if it eliminates forbidden body
+contact, produces bounded same-sole landings and signed alternating progress,
+and preserves all existing torque/work/authority thresholds.
+
+Final visual/UI acceptance correction active (2026-09-06): the latest strict
+2048x1152/3840x2160 review still clips the Human almost entirely out of the
+Course eye frame; keeps the 3840-pixel Rig Lab below its dual-pane threshold so
+Setup, Trainer, and Inspector remain mutually exclusive; defaults Rig Lab Art
+off while hiding its in-context toggle on compact routes, making the Art page
+look unlike the canonical live assembly; draws full-height scroll rails even
+when a panel has no scrollable overflow; and clips authority/action and footer
+evidence in the 2048 proof views. Correct these five presentation defects as
+one layout/camera pass. Preserve the truthful Live zoom contract, independent
+Live-Art-on/Rig-Art-off defaults, canonical shared preview, readable terrain-tag
+policy, physics, controller state, and gun mechanics. Add deterministic positive
+and adversarial 1368x799, 2048x1152, and 3840x2160 layout/camera/capture coverage,
+then regenerate the strict MISSION/VIEW/DETAILS visual schema. This entry makes
+no gait, physical-equipment, native-eye, package, tag, upload, or release claim.
+
+Held-equipment visual layering correction active (2026-09-06): the physical
+two-hand gun frame is currently painted in the same layer as the far limbs, so
+the torso can obscure the receiver/stock before the near hands are drawn. Move
+only the existing held-equipment draw layer between torso and near limbs, add
+source-order and rendered-pixel separation coverage, and rerun the unchanged
+physical-equipment gate. Do not change grip targets, aiming, projectiles,
+equipment state, contacts, physics, controller tensors, or authority.
+
+Release-contract false-positive cleanup active (2026-09-06): the final
+read-only diff audit found that every new exact-version fixture is still
+untracked and the repository-hygiene check currently proves only that files
+exist in the developer worktree. More importantly, the stale EpochSimEngine
+configure test is marked `WILL_FAIL`, so an absent fixture or unrelated CMake
+error can satisfy it without ever exercising the `2.5.9` versus `2.5.26`
+contract. Replace that inverted exit-code test with a deterministic wrapper
+that requires both fixture files, requires configure to fail, and matches the
+exact dependency-version diagnostic. Require the guard, wrapper, and complete
+fixture in repository hygiene. Remove the unregistered Raw
+`--teacher-trace-only` command path because it is an internal exploration
+console dump rather than a supported diagnostic or asserted CTest. Preserve
+all physical behavior, Raw thresholds, action/observation contracts, package
+contents, and known open gait failures; run only focused release-contract and
+Raw compile/test checks before reconciling this entry.
+
+Release-contract false-positive cleanup receipt (2026-09-06): the stale
+EpochSimEngine negative CTest now delegates to a fail-closed CMake wrapper. The
+wrapper requires both source-override fixture files, requires the nested
+configure to fail, normalizes the emitted transcript, and accepts the result
+only when it contains the exact `2.5.26` requirement, the stale FetchContent
+origin, reported `2.5.9`, and remediation text. Repository hygiene requires the
+guard, wrapper, and both fixture files and rejects restoration of `WILL_FAIL`.
+The unsupported Raw `--teacher-trace-only` dispatch and its unreachable console
+trace body were removed; the asserted Raw authority path is unchanged. Four
+rejected V0748-only exploration commands (`--stance-grid-only`,
+`--double-support-trace`, `--double-support-grid-only`, and
+`--event-gait-only`) and their 1,153-line unregistered probe implementation
+were also removed after the toe/lumbar A/B restored the stable
+`10` anatomy / `13` total action / `76` observation ABI. Fresh MSVC 17.14
+Release warnings-as-errors builds pass for `RunnerRawAuthorityTests` and
+`RunnerV0748ContactArtTests`; the exact-version positive/negative and repository
+hygiene CTests pass `3/3`. The tracked but unreferenced
+`assets/ui/runner_icon_concept.svg` mockup was deleted: no source, generator,
+test, document, or package contract names it, while the broad runtime asset
+install would otherwise ship its stale `RUNNER` product lettering. The
+unchanged physical gates remain truthfully red:
+V0748 reaches first non-foot contact at frame `115` with zero qualified
+unload/landing frames; Raw forward travels `+2.51982 m` but falls with zero
+cycles, and Raw reverse travels wrong-signed `+2.49935 m`, falls, and records
+zero cycles. This cleanup makes no gait, policy, physics, threshold, package,
+tag, upload, publication, or release-completion claim. The new guard/fixture
+files remain required members of the final commit; they must not be omitted
+when the currently dirty release tree is staged.
+
+Human explicit distal-toe action-space A/B active (2026-09-06): the canonical
+19-node Human exposes hip, knee, and ankle motors but leaves both ball-to-toe
+joints passive, while the first physical exchange retains the nominal swing
+toe on the floor after heel and ball have cleared. Evaluate the smallest honest
+control-boundary migration: append one finite MotorConstraint/action and one
+angle/rate observation pair for each real distal toe joint, move the three
+equipment actions after the expanded anatomy range, advance training semantics
+and the rig/checkpoint signature through an explicit migration, and teach a
+neutral-to-cyclic toe target through those ordinary policy outputs. No inferred
+toe drive, contact-triggered projection, root/body/history write, morphology,
+friction, torque/work bypass, phase reset, or weakened gate is permitted.
+Compile only the necessary ABI/persistence/test surfaces first, then retain the
+migration only if unchanged V0748 gains a clean unload/landing and Raw
+forward/reverse gain signed travel with cycles without regressing the existing
+physical bounds. Otherwise revert the complete ABI/motor/teacher experiment and
+record the exact rejection before any UI, docs, packaging, or release expansion.
+
+Human explicit lumbar-plus-toe action-space A/B active (2026-09-06): the first
+explicit distal-toe cycle is the first candidate in this closure pass to produce
+a real same-sole event: V0748 records `16` all-node-clear frames, `0` non-foot
+frames, `0` detector rejection counters, and a `0.009355 m` minimum-clearance
+landing. It remains provisional because horizontal approach is `1.745473 m/s`
+and vertical approach/contact are `0.769111/-0.733616 m/s`, outside the unchanged
+`0.40/0.65 m/s` bounds, while Raw forward/reverse still fall without a cycle and
+reverse remains wrong-signed. Test the smallest combined physical architecture:
+append the real local pelvis-torso-head `{0,1,2}` lumbar MotorConstraint and its
+angle/rate observations after both explicit distal-toe channels, leaving the
+three equipment actions at the tail. Teach only an observation-derived finite
+posture target through that ordinary motor; do not add world-up projection,
+root/torso/history writes, hidden contact authority, morphology, friction, or a
+weakened threshold. Retain toe plus lumbar only if unchanged V0748 keeps a clean
+bounded landing and Raw forward/reverse gain signed cycles within the established
+COM-COP, slip, work, and authority gates; otherwise revert both ABI migrations.
+
+Human explicit lumbar action-space A/B rejection (2026-09-06): the local
+pelvis-torso-head `{0,1,2}` MotorConstraint was appended after both explicit toe
+channels with its own angle/rate observations and the equipment tail preserved.
+It compiled cleanly at finite strengths `0.030` and `0.012`, used the ordinary
+motor solver and zero/observation-derived neutral action only, and introduced no
+world-up, root, contact, or history authority. Both bounded strengths failed the
+unchanged V0748 prerequisite before the landing trial: adding the third-body
+articulation made the established signed stance-ankle correction increase rather
+than reduce at least one coherent one-step torso perturbation. Remove the lumbar
+motor, observations, RUNRIG8 migration, and semantics `0x0007'5115` together.
+The explicit-toe candidate remains provisional only for the already-authorized
+single observation-derived landing-speed correction; it is not a release result
+until unchanged V0748 and signed Raw forward/reverse gates both pass.
+
+Human explicit-toe landing-damping A/B rejection (2026-09-06): after the
+softer explicit toe cycle produced a body-clean same-sole event but exceeded
+the unchanged approach bounds, one bounded observation-derived endpoint trial
+increased horizontal sole braking from `0.050/0.08 m` to `0.16/0.22 m` and
+vertical descent feedback from `0.070` to `0.22` with the target rate reduced
+from `-0.30` to `-0.20 m/s`. It acted only through the existing finite hip/knee
+commands, but V0748 regressed from a qualified landing candidate to node-impulse
+rejection followed by forbidden knee/hand/body contact: first non-foot contact
+frame `117`, `123` non-foot frames, uprightness `0.311692`. Restore the original
+endpoint feedback exactly; do not expand this into another gain/cap grid.
+
+Human explicit distal-toe/lumbar architecture final rejection (2026-09-06):
+the minimal RUNRIG7 toe migration appended two real heel-ball-toe
+MotorConstraints, ordinary action slots `10/11`, observations `76..79`, and
+shifted the three equipment outputs to the tail. Neutral toes produced only
+three clear frames. A continuous bounded stance/swing target
+`-0.14/+0.34` produced the first body-clean same-sole candidate—`16`
+all-node-clear frames, `0` non-foot frames, and `0.009355 m` clearance—but
+touchdown remained outside the unchanged physical bounds at `1.745473 m/s`
+horizontal, `0.769111 m/s` vertical approach, and `-0.733616 m/s` node rate.
+The single stronger observation-derived landing correction then regressed as
+recorded above, and the local lumbar motor failed the prerequisite at both
+bounded strengths. Finally, unchanged Raw forward/reverse remained invalid
+with zero cycles/alternation: forward `+2.57253 m`, maximum COM-COP
+`1.02491 m`; reverse wrong-signed `+2.49954 m`, maximum COM-COP `1.03652 m`.
+Therefore the clean-looking landing is not a releasable learned gait. Remove
+all toe/lumbar actions, observations, motors, teacher targets, RUNRIG7/8 and
+semantics migrations, restore the `10` anatomy / `13` total action / `76`
+observation RUNRIG6 contract and passive Raw toes, and leave the truthful Human
+physical-gait blocker open for a future controller architecture rather than
+shipping hidden authority or weakened gates.
+
+Human capture-placement controller A/B rejection (2026-09-06): the bounded
+row selected stance from real single support or a decisive `0.18` normalized
+load split during double-support overlap, then blended only the opposite
+phase-designated swing ankle toward the finite measured capture point through
+its existing hip/knee targets. It changed no Environment, contact, phase,
+passive toe, ankle command, morphology, root/body/history, tensor, torque, work,
+or gate. It did not establish a valid first exchange. V0748 still had zero
+qualified unload/landing and first forbidden left-knee/both-hand contact at
+frame `115`; uprightness improved only from the restored `0.3225` baseline to
+`0.3519`. Raw forward/reverse remained fallen with zero cycles and wrong common
+positive travel at `+2.50463/+2.49592 m` (restored baseline
+`+2.56795/+2.50477 m`), while maximum COM-COP lead remained
+`1.08800/1.11977 m`. V0749 Speed Walk regressed from the restored
+`2.81477 m / 1 step` to `2.61441 m / 0 steps`. Remove the helper and production
+row. The decisive trace shows why a memoryless capture blend cannot close this
+candidate: the phase-designated swing side and measured load-bearing side
+frequently disagree while both toe latches remain active, so the capture target
+arrives after the one-action-unit-per-second actuator slew has already committed
+the opposite exchange. Do not tune the capture gain, cap, or load threshold.
+
+Human complete-stride speed-regulation A/B active (2026-09-06): the restored
+Raw trace stays body-clean and double-supported while facing-local pelvis speed
+rises past the current locomotion plan and capture lead begins its irreversible
+growth; the two-leg Human path has no counterpart to the existing four-support
+overspeed attenuation. Test one bounded, memoryless controller-space response:
+derive a finite mirror-invariant stride-authority scalar from the existing plan
+target speed and facing-local measured pelvis speed, retain exact full authority
+at or below target, and smoothly shorten the complete stance-backstroke/swing
+excursion without reversing it as overspeed grows. Apply the same scalar to both
+explicit hip/knee endpoint trajectories so phase-exchange positions still match
+for each observation sample; change no phase, root/body state, contacts,
+friction, actuator ceiling, action/observation shape, helper authority, or gate.
+First exercise this as a test-local feasibility row against the unchanged V0748
+clean unload/landing event and forward/reverse Raw receipts. Promote only if a
+clean same-side replant appears and signed motion improves together; otherwise
+record the exact rejection and remove the probe rather than tuning another
+capture-action grid.
+
+Human complete-stride speed-regulation rejection (2026-09-06): the exact
+test-local row retained full stride at/below the current plan target, then
+scaled the complete bilateral step excursion by
+`clamp(target_speed/directed_speed, 0.45, 1.0)` as overspeed grew. It was
+finite, mirror-invariant, exact-repeatable, action-only, and changed no phase,
+physics, contact, root, authority, or acceptance threshold. It does not create
+the missing clean support exchange. Forward first forbidden body contact
+worsens from frame `115` to frame `113` (uprightness `0.317794`), with only one
+clean single-support frame, no qualified all-node unload/landing, and
+`+2.743205 m`; reverse still travels in the wrong world direction, producing
+`-2.639497 m` facing-local distance, first body contact at frame `111`, no clean
+single support, and no landing. The apparent forward cycle is therefore not an
+admissible same-sole replant. Remove the entire feasibility harness and do not
+promote dynamic per-frame stride scaling: shrinking the planted trajectory
+moves its body-relative target and worsens capture rather than preserving a
+physical stance invariant.
+
+Nonphysical release-contract reconciliation active (2026-09-06): the final
+audit found five bookkeeping/evidence gaps that do not belong in locomotion
+physics. Ignore generated `epoch2dwalk-v0751-*-autonomy.state` runtime state
+without deleting or rewriting any user's state; require the v0.7.51
+CrouchWalk authority source, target, and registered test in repository hygiene;
+prove `0x0007'5112` enters the current `5113` checkpoint only through the
+explicit unverified transfer path and correct the stale pre-5112 diagnostic;
+replace every stale native-capture `STATUS/TOTALS/ADVANCED` page contract with
+the accepted `MISSION/VIEW/DETAILS` routes across the capture tool, strict
+tests, repository audit, README, and closure document; and make Phase A build
+the opt-in visual-capture target while separately exercising the installed
+runtime launcher before archiving as well as the independently extracted
+launcher. Preserve all generated training state, archive identities, physics,
+gait, contacts, policy tensors, package contents, tag, upload, and publication.
+Use exact source/audit assertions and focused deterministic tests; this entry
+does not claim that native acceptance or the release is complete.
+
+Nonphysical release-contract reconciliation receipt (2026-09-06): generated
+`epoch2dwalk-v0751-*-autonomy.state` files are now ignored in place without
+deletion; repository hygiene requires the v0.7.51 CrouchWalk authority source,
+target, and registered test; raw-learning provenance exercises historical
+semantics through `0x0007'5112` and names the current `0x0007'5113` transfer
+boundary accurately; and the strict native evidence contract now contains 60
+captures using only the accepted visible `MISSION`, `VIEW`, and `DETAILS`
+routes. The capture implementation, strict manifest test, repository audit,
+README, and closure document agree on that schema. Phase A now explicitly
+builds `RunnerVisualCaptures`, runs the complete diagnostic matrix from each
+installed launcher in an unrelated working directory before archiving, and
+repeats it from each independently extracted launcher after archiving. Focused
+verification passed: strict-manifest Python tests `16/16`; candidate repository
+hygiene audit; release-workflow YAML parse; warnings-as-errors Visual Studio
+Release builds of `RunnerRawLearningProvenanceTests`,
+`RunnerV0751CrouchAuthorityTests`, and `RunnerVisualCapture`; and CTest
+`Runner.RawLearningProvenance` plus `Runner.V0751CrouchAuthority` (`2/2`).
+`git diff --check` is clean apart from Git's existing line-ending notices. No
+physics, gait, contact, policy tensor, generated state payload, archive, tag,
+upload, or publication changed, and this receipt does not claim release
+acceptance.
+
+V0728 climb positive-control fixture migration active (2026-09-06): the
+course-completion fixture still calls `solve_course()` directly after placing
+a Human hand at the authored ledge. The Raw-authority closure deliberately
+removed proximity grasp/snap from generic course collision and placed the
+remaining teacher-only behavior in the explicitly Assisted
+`apply_ledge_training_scaffold()` stage, which production executes before
+collision. Update only this positive-control fixture to select Assisted mode
+explicitly and invoke the same scaffold-before-collision order for each grasp.
+Keep the existing real grasp-slot, hand-contact, support-transfer, climb, and
+controlled-descent assertions. Do not fabricate counters, weaken Raw no-op
+coverage, add autonomous grip authority, or change production physics.
+
+V0728 climb positive-control fixture migration receipt (2026-09-06): the
+fixture now explicitly enters Assisted guidance and executes the production
+`apply_ledge_training_scaffold()` then `solve_course()` ordering for both
+grasp events. Its existing counters are still earned from real scaffold-owned
+grasp slots, a foot transfer onto the ledge, root ascent, regrasp, and a
+controlled descent; no counter or particle result is assigned directly. A
+fresh warnings-as-errors build and direct
+`RunnerV0728CourseCompletionTests.exe` run pass every diagnostic case, repeated
+determinism, material positive control, and climb positive control. The
+separate Raw ledge no-op/retirement contract remains unchanged and autonomous
+climbing still requires an explicit policy/tool grip mission.
+
+Legacy V0736 controller/equipment fixture correction receipt (2026-09-06):
+the authored controller contract now samples a complete post-ramp Human Walk
+cycle instead of sampling twice while the actuator ramp still returns rest.
+It proves both leg and both arm pairs move, remain contralaterally opposed at
+the intentionally relaxed casual-Walk amplitude, and repeat bit-exactly. The
+weapon range boundary is covered through the same finite, inclusive physical
+muzzle-distance predicate used by production, including exact minimum and
+maximum boundaries plus outside, negative, infinity, and NaN cases for all
+three weapons. The end-to-end sidearm fixture now enters the real Equipment
+Targets course, explicitly requests `fire_and_correct`, and uses the same
+Assisted action composition as the production NPC for a bounded 900-frame
+physical plant/grip/aim/fire window. It reaches the three-hit goal with exactly
+one real round per hit, retires the fixed target, and proves held trigger cannot
+resume firing after completion. A fresh warnings-as-errors build and direct
+`RunnerV0736AuthoredRuntimeTests.exe` run pass. No gait target, arm amplitude,
+equipment gate, range, contact, policy tensor, physics, package, or release
+behavior changed; this closes two stale pre-ramp/pre-Director fixtures only.
+
+Human distal-mass distribution A/B active (2026-09-06): the canonical
+articulated Human assigns each heel inverse mass `0.58` (mass `1.72414`) and
+each ball/toe inverse mass `2.40` (mass `0.416667`). The six foot-contact
+particles therefore carry `5.11494` of `14.00383` total model-mass units
+(`36.525%`), and each heel is heavier than either the pelvis or torso. This
+physical morphology arrived with the articulated feet and is a plausible
+common cause of the observed toe anchor, free-leg reaction, inadequate
+support transfer, and posture collapse across Walk and Speed Walk. First run
+the smallest test-only, bilaterally symmetric A/B: preserve each foot's exact
+heel-plus-ball mass and the toe mass, but split the rigid rear plate evenly
+between heel and ball (`inverse_mass ~= 0.9342282` each). This removes the
+arbitrary primary-contact-slot bias and makes the lighter passive toe absorb
+roughly `72%` of MTP closure instead of pulling an equal-mass ball with it.
+Change no geometry, contacts, friction, constraints, motors, actions, teacher,
+timing, total mass, or gates. If that has no physical signal, test one broader
+conserved anatomy row: set each heel/ball/toe mass to `0.60/0.35/0.20` and
+transfer the exact removed distal mass equally into the real pelvis and torso.
+Measure total mass/COM, left/right equality, finite state, Raw signed
+forward/reverse transfer, V0748 clean unload/landing, and V0749 Speed Walk.
+Promote a production morphology change only if the unchanged physical gates
+improve together; otherwise record the rejection and remove all probe
+plumbing. No mass may be created/deleted and no root/contact/history write or
+extra authority is permitted.
+
+Human distal-mass distribution rejection (2026-09-06): the smallest
+whole-rig/each-foot-mass-conserving row equalized each rigid heel/ball pair at
+mass `1.07040` (`inverse_mass ~= 0.934228`) while leaving the toe at mass
+`0.416667`. It moved the initial COM only horizontally
+`-0.113971 -> -0.094046 m`, reduced the forward Raw maximum COM-COP lead from
+`1.10085` to `1.01414 m`, and made both forward and reverse runs show finite
+all-sole unload. It did not produce any replant, gait cycle, alternating step,
+or valid finish: Raw forward/reverse still fell and travelled the wrong common
+positive direction at `+2.51112/+2.49349 m`; reverse COM-COP lead remained
+`1.11252 m`. V0748 still recorded zero qualified unload/landing and first
+forbidden knee/both-hand contact remained frame `115` with uprightness only
+`0.323548`. V0749 Speed Walk regressed from the current restored
+`2.81477 m / 1 step / 0.140738 m/s` to
+`2.60192 m / 0 steps / 0.130096 m/s`. The broader conserved
+`0.60/0.35/0.20` foot row, with exact removed mass transferred equally to
+pelvis/torso, was worse in Raw: COM-COP lead `1.65129/1.66930 m`, wrong-signed
+distance `+2.29481/+2.15507 m`, zero cycles, and both runs fallen. Remove both
+rows and all probe plumbing. The primary-slot mass bias is real morphology
+debt, but neither redistribution repairs the earlier controller/contact
+capture failure; do not retain it as a release gait fix.
+
+Final anatomical-convergence causality trace active (2026-09-06): the restored
+Raw trace shows that the eight post-motor leg/foot distance passes are
+mass-balanced (frame-89 mass-center displacement and velocity change are zero
+within float precision), but they still move the pelvis by `-0.000493/-0.000332
+m` after the main powered solve. The much larger external effect in the same
+frame is the real ground manifold: `+0.044992 m/s` horizontal center-velocity
+change while both semantic soles remain supported, even though the nominal
+left swing heel/ball are `0.111927/0.070170 m` clear and its toe is still on the
+floor. Instrument the opt-in Raw authority record with support-motor tracking
+error immediately before and after this final convergence block. If those
+passes materially unwind finite motor targets, A/B interleave only the same
+existing XPBD powered constraints, accumulated lambdas, torque caps, and work
+budgets with the distance/ground convergence; add no action, phase/contact
+target, root transform, or extra motor authority. Retain only if the unchanged
+V0748 clean unload/landing gate, Raw signed forward/reverse gate, V0730 seed
+gate, and V0749 Speed Walk gate improve together. Otherwise record the
+rejection and remove the A/B.
+
+Final anatomical-convergence interleave rejection (2026-09-06): opt-in
+pre/post instrumentation proves the eight distance/ground cleanup passes do
+unwind the most loaded ankle targets, but only modestly. At forward frames
+`80/89/90`, right-ankle absolute tracking error grows
+`0.124277->0.153471`, `0.110523->0.135171`, and
+`0.114328->0.139762 rad`; the near-target left ankle grows
+`0.003277->0.010222`, `0.000490->0.008267`, and
+`0.000356->0.008459 rad`. Interleaving the same support-motor XPBD calls with
+the same accumulated lambda, torque ceiling, and positive-work budget cannot
+recover transfer. It changes first forbidden contact only from frame `115`
+(knee plus both hands, upright `0.322509`) to frame `116` (both hands,
+upright `0.344399`) while V0748 still has zero qualifying unload/landing and
+`124` contaminated frames. Raw forward/reverse remain fallen with zero cycles
+at `+2.68200/+2.51307 m`, maximum COM-COP lead remains
+`1.08218/1.09267 m`, and reverse stays wrong-signed. V0749 Speed Walk regresses
+from `3.11649 m / 5 steps / 0.155825 m/s` to
+`2.88954 m / 1 step / 0.144477 m/s`. All ten V0730 terrain seeds remain fallen
+with `0..2` strides near `+2.65..+2.98 m`. Remove the interleave and temporary
+telemetry fields. The cleanup pass is a small secondary angular perturbation,
+not the common cause; do not add solver iterations or motor authority here.
+
+Legacy V0736 controller/equipment fixture correction active (2026-09-06): after sampling the Human through the real post-ramp policy clock, the authored-runtime suite reaches its later weapon boundary and exposes a second stale fixture. Its target helper first measured range from `equipment_mount_position()` rather than the completed physical two-hand muzzle; correcting that origin truthfully reveals the fixture still force-labels a safe-carry arm pose as READY, which the new fail-closed grip gate properly rejects as `invalid_grip`. Do not mutate hand particles or bypass the grip gate merely to reach range assertions. Extract the exact finite inclusive muzzle-distance predicate used by production into a pure helper, cover inside/at/outside bounds directly for every weapon, and leave end-to-end READY/grip/range/fire interaction to the stronger V0751 physical-equipment suite. This does not change production gait, arm amplitude, weapon range, grip physics, or firing gates.
+
+The same V0736 suite's later finite-fire fixture still creates a Balance environment, leaves the new Director equipment directive passive, evaluates an Equipment Targets action externally, and expects the old one-hand aim path to finish within `240` frames. Bring the fixture onto the real Equipment Targets course with explicit `fire_and_correct`, the same Assisted effective-action composition used by the production NPC, and the current bounded `900`-frame physical window already proven by V0751. Keep the exact target-hit completion and no-additional-shot assertions. This is fixture migration, not a shortcut around plant, grip, aim, projectile, or goal gates.
+
+Opposed-arm regression investigation active (2026-09-06): the complete Windows preflight exposes an independent deterministic V0736 controller-contract failure before any simulated landing. Its assertion still describes a relaxed four-percent Human arm excursion while current casual-Walk configuration requests `0.012` of chain length. Measure the exact rest-to-quarter-cycle shoulder/elbow motion and left/right separation before deciding whether the teacher lost visible contralateral alternation or the historic numeric gate is stale. Preserve the user's requirement that both real articulated arms remain visibly opposed without returning to the distracting oversized throw; do not waive the gate from a comment mismatch alone. Add exact repeated/mirrored controller coverage for whichever current amplitude is visually and physically accepted, and keep equipment arm authority separate.
+
+Complete Windows preflight build receipt (2026-09-06): the current restored candidate builds every configured Visual Studio 2022 Release target successfully with the warnings-as-errors contract, eliminating the earlier missing-executable audit state. A parallel preflight of the `45` suites outside the eight already-isolated long/physical gates passes `41/45`. Exact remaining failures are one coherent locomotion cluster: V0730ReferenceFrame (all ten Human seeds fall near `+2.55..+2.89 m`, zero to two strides), V0728CourseCompletion (climb positive control has zero contacts/transfers), V0736AuthoredRuntime (paired legs/arms do not produce accepted opposed sagittal swing), and V0750PersistentDirectorArt (Human falls at `x=2.37343 m` before the lake shore). UI, camera/zoom, art, terrain-cell integration, physical equipment, external host, package layout, Live acceptance, runtime pipeline, concurrency, library API, exact EpochSimEngine version guards, repository hygiene, and strict release-manifest suites are green in that preflight. V0731CrouchLearning passes in `253.26 s`. This is discovery evidence from the uncommitted candidate, not final qualification; all `53/53` must be rerun after the shared support-transfer correction.
+
+Two-hand product-document reconciliation receipt (2026-09-06): the v0.7.51 closure document no longer presents the superseded waist-level equipment experiment as the current result. It now records the completed real two-hand upper-chest grip frame, fail-closed invalid-grip behavior, accepted deterministic READY proof, and focused green physical-equipment/art coverage, while explicitly preserving the separate V0749 Speed Walk failure as the remaining combined-suite blocker. No physics, equipment behavior, gate, archive, tag, upload, or publication changed in this documentation-only correction.
+
+Human reciprocal lumbar-support investigation active (2026-09-06): the rebuilt clean no-helper baseline reproduces first forbidden left-knee/both-hand contact at frame `115`, Raw forward/reverse `+2.56795/+2.50477 m` with zero cycles, and maximum COM-to-COP lead `1.10085/1.11363 m`. The canonical Human has only a pelvis-to-torso distance bone and no passive angular lumbar element; its explicit hip motors must therefore both move the legs and carry the entire upper-body attitude response. Evaluate one low-authority reciprocal passive ligament/damper across the two real hip-to-torso branches, with a deliberately wide dead zone around the authored joint angles and no world-upright target. It may constrain only excessive relative folding and dissipate relative angular velocity through equal-and-opposite generalized impulses; it must not translate the mass center, write root/contact/current pose directly, manufacture support, consult intent/phase/course/guidance, add an action, or inject positive work. Add deterministic dormant/in-range, opposed-sign, mirrored, disabled/malformed, momentum/energy, and repeated-input coverage before production integration. Retain it only if the unchanged V0748 clean unload/landing gate, Raw signed forward/reverse transfer gate, and V0730 repeated seeds improve without weakening their thresholds; otherwise remove it and record the rejection before trying another leg target.
+
+Human reciprocal lumbar-support rejection (2026-09-06): the bounded A/B used the mean angular coordinate of the two real torso-pelvis-knee branches, applying only a four-particle generalized viscous impulse. Its gradients summed to zero, it changed only Verlet history, used no world-upright/intent/phase/contact target, and reduced common-mode angular kinetic energy by `10%` per step inside a `24 deg` free range (`55%` only while stretching farther outside). It did not produce a support exchange and regressed the separate Speed Walk gate. Raw forward remained fallen with zero cycles at `+2.57526 m`, reverse remained wrong-signed at `+2.50408 m`, and maximum COM-COP lead remained `1.08719/1.11350 m`. V0748 still had zero qualifying unload/landing and first forbidden left-knee/both-hand contact remained frame `115` (`125` contaminated frames). V0749 Speed Walk fell from the restored-baseline `3.11649 m / 5 steps / 0.155825 m/s` to `2.81472 m / 1 step / 0.140736 m/s`. The production A/B is removed. Hip trace evidence explains the rejection: immediately before collapse at frame `89`, both explicit hips already track their finite targets closely (left `-2.81657` vs `-2.85228 rad`, right `-2.74678` vs `-2.75373 rad`), so extra relative damping fights intended swing but cannot create the missing whole-body capture/support transfer. Do not increase this into a rigid posture projector or passive world-up brace.
+
+External-host one-update truth correction active (2026-09-06): the v0.7.51 external-host fixture currently creates a fresh random trainer, skips directly to the fully Raw side of the Human Walk handoff, performs exactly one PPO update, and then requires the complete six-seed production retention gate to issue a champion. That is neither a bounded training run nor an honest integration fixture, and it now fails deterministically at `trainer did not retain a repeated-seed-qualified Raw policy`. Preserve every production qualification threshold, Raw receipt requirement, optimizer path, and retention rule. Replace only this one-update external-host setup with explicit test-artifact plumbing: require genuine Raw-origin optimizer/provenance evidence, require the resulting checkpoint to remain non-retained for production, and exercise external controller rejection rather than force-promoting it. Keep successful retained-controller loading covered by the existing Assisted test artifact and keep full Raw mastery exclusively behind the long production diagnostic. Add deterministic repeated-seed and negative non-retention coverage as applicable; rebuild and run the focused v0.7.51 external-host target. This correction must not change PPO math, physics, curriculum, policy dimensions, persistence grammar, thresholds, package, tag, upload, or publication, and it makes no Raw gait/mastery claim.
+
+External-host one-update truth correction receipt (2026-09-06): the focused fixture now crosses the genuine all-Raw handoff, 1,024-sample rollout, optimizer, and six-seed evaluation exactly once, records the real `384` forward / `384` reverse / `256` stop provenance plus changed parameter and optimizer digests, and requires the failed physical evaluation to remain explicitly unretained. It then proves that `RetainedPolicyController` rejects the absent verified production artifact with the fail-closed provenance error. The existing trainer-issued Assisted artifact continues to cover the successful external-controller load path; no production threshold, PPO equation, curriculum, checkpoint grammar, or physical gate was changed. A fresh direct run of `build/windows-vs2022-v0751-verify/Release/RunnerV0751ExternalHostTests.exe` passes. This closes only the dishonest one-update test setup and makes no Raw gait, mastery, package, tag, upload, or publication claim.
+
+Current-semantics documentation synchronization active (2026-09-06): source and focused CrouchWalk authority tests correctly advanced current training semantics to `0x0007'5113`, but README, CHANGELOG, library/product-closure documents, and repository-audit literals still identify `5112` as current. Synchronize those current-boundary statements while preserving `5112` as the historical support-feedback observation boundary and documenting `5113` as the same stable 76/13 tensors plus the unified fading CrouchWalk physical-authority boundary. Update the repository audit to require the truthful chain and rerun its registered gate. No tensor shape, behavior, checkpoint acceptance, release object, tag, upload, or publication changes in this repair.
+
+Current-semantics documentation synchronization receipt (2026-09-06): README, CHANGELOG, the v0.7.51 product-closure document, the installed-library document, and repository audit now agree that `0x0007'5112` is the historical support-feedback observation boundary and current `0x0007'5113` preserves 76 observations/13 actions while binding all CrouchWalk Assisted composition to the one fading physical authority. All four older `5109..5112` boundaries are explicitly transfer-only and cannot silently resume under `5113`. The registered `Runner.RepositoryHygiene` gate passes and `git diff --check` remains error-free (line-ending notices only). No runtime behavior, checkpoint payload, package, tag, upload, or publication changed.
+
+Passive MTP range correction probe active (2026-09-06): the explicit-joint trace localizes the visual rear-foot drag before collapse. At frame `89`, the nominal swing heel and ball are `0.111927/0.070170 m` above the plane while its distal toe remains exactly planted; the corresponding passive MTP deviation is already `-0.169770 rad` (`-9.73 deg`). The present unilateral range permits `-42 deg` plantar flexion and only `+36 deg` extension, so the unpowered distal link can fold downward as an anchor instead of following the lifting rear foot. Probe an anatomical passive range with tightly bounded plantar flexion and preserved roll-off extension, using only the existing reciprocal three-particle hard stop and viscous damping. This must remain exactly dormant inside the range, conserve joint mass center, introduce no motor/action/helper/root/contact write, and be direction/phase independent. Add positive/negative/boundary/repeat coverage and rerun the unchanged V0748 landing, Raw forward/reverse authority, all ten V0730 seeds, and retention gates. Reject it unless it creates earlier real all-three-node unload without weakening body-contact, landing, COM-COP, or no-helper authority gates.
+
+Passive MTP range correction rejection (2026-09-06): the bounded `-8/+42 deg` passive stop does engage without motor/helper authority: at frame `89` the nominal swing toe becomes `0.000428 m` clear and its deviation is clamped at `-0.139622 rad`, versus the baseline exactly planted toe at `-0.169770 rad`. That isolated improvement does not create a usable support exchange. First forbidden knee/both-hand contact remains frame `115`; V0748 still records zero qualified unload/landing frames. Raw forward remains fallen with zero cycles at `+2.57341 m`, and reverse still travels the wrong `+2.50560 m`; maximum COM-COP lead is `1.09214/1.12533 m`. The changed stop also drives both toes to the opposite `+42 deg` limit during collapse instead of the prior `+36 deg`, while body contamination persists. Restore the original `-42/+36 deg` range. The distal drag is real evidence, but unilateral range clipping alone is not its causal repair; do not release or retrain from this probe.
+
+Passive plantar-tendon probe active (2026-09-06): test the missing physical element implied by the failed stop-only experiment: a finite reciprocal neutral-angle MTP elasticity applied through the same three-particle angular gradients and Verlet history, followed by the existing dissipative hinge. It must be independent of intent, gait phase, contact state, course, and policy; alter no current position/contact membership; preserve linear momentum; apply equal/opposite response for equal/opposite deviation; cap its per-step angular impulse; and pass repeatability plus combined kinetic/elastic energy accounting. This is passive stored-energy anatomy, not a powered toe or pose projector. Promote only if the unchanged V0748 and Raw gates show a clean earlier all-node unload and bounded landing in both directions; otherwise remove it and record the receipt.
+
+Passive plantar-tendon probe rejection (2026-09-06): the reciprocal finite spring (`omega^2=48 s^-2`, maximum `1.25 rad/s` rate change per fixed step) changes no positions, policy actions, powered-toe counts, or helper telemetry, but produces no meaningful pre-collapse foot improvement. Frame `89` swing toe remains planted at `-0.168769 rad` versus baseline `-0.169770`; forbidden knee/both-hand contact remains frame `115`; V0748 still records zero qualified unload/landing frames. Raw forward remains fallen with zero cycles at `+2.56800 m`; reverse remains wrong-signed at `+2.50455 m`; maximum COM-COP lead is `1.08423/1.11327 m`. The spring is removed. A passive neutral tendon of this finite authority cannot compensate for the earlier whole-body capture divergence and actuator saturation; do not increase it into an implicit posture/foot servo.
+
+Bilateral explicit-hip posture demonstration probe active (2026-09-06): `balance_teacher_action()` already derives a signed torso attitude/rate correction from canonical policy observations and maps it into both explicit hip/knee actions, but `biped_gait_teacher_action()` overwrites those four actions and the Raw foundational wrapper never restores that observable double-support response. Probe adding only the signed bilateral proximal correction after the existing gait joint-space PD, before the unchanged single-support ankle response. It must act through declared motors only, be odd under opposite torso error/rate, remain exact zero at authored pose/rate, preserve action limits and Raw helper/root identity, and change no particles, contacts, clock, phase, topology, or tensor shape. Require direct sign/zero/repeat tests plus unchanged V0748 and Raw forward/reverse physical gates; reject unless it prevents the frame-115 whole-body collapse and produces a qualified all-node unload/landing.
+
+Bilateral explicit-hip posture demonstration rejection (2026-09-06): restoring the existing signed `balance_teacher_action()` leg response after gait IK confirms that explicit hip torque can change the collapse but cannot recover the plant. At `1x` it delays body contact from frame `115` to `116` and improves contact uprightness from `0.322509` to `0.341410`; at `2x` uprightness reaches `0.364229` but contact remains frame `116`; at `4x` contact reaches only frame `117` with uprightness `0.349957`. Every row still produces zero qualified all-node unload/landing and zero Raw cycles, while reverse remains wrong-signed near `+2.47..+2.49 m`. Higher authority suppresses the intended hip trajectory and shifts load but does not establish support transfer. Remove it rather than teach the network a saturated fight between two target families. The observable torso response is missing from the final teacher composition, but simply adding this older controller is not the solution.
+
+Moving-Human actuator-bandwidth probe active (2026-09-06): the frame trace shows requested swing ankle near `+0.92` while the finite actuator has reached only `+0.65`, and the first genuine unload arrives after relevant motors are one-sided or saturated. The shared Assisted/Raw moving-Human plant currently limits every target to `1.0 action/s`, despite a `0.64 Hz` stride reversing some targets over roughly `0.78 s`. Probe a modest symmetric bandwidth increase without changing control ramp, motor torque/work caps, actions, teacher targets, contacts, phase, or helper authority. Require explicit positive/negative finite slew bounds and exact Assisted/Raw plant identity, then unchanged V0748, Raw forward/reverse, V0730 ten-seed, energy, and retention gates. Reject unless earlier action tracking yields a clean bounded landing rather than merely faster saturation or more impact energy.
+
+Moving-Human actuator-bandwidth probe rejection (2026-09-06): raising the symmetric finite slew from `1.0` to `2.0 action/s` accelerates the failure rather than recovering tracking. First forbidden body contact regresses from frame `115` to `104`, now led by the left knee at only `0.396460` uprightness; V0748 still records zero qualified unload/landing frames and accumulates `136` contaminated frames. The unchanged Raw authority identity gate also correctly rejects the changed plant because its exact finite slew contract was not updated. Restore `1.0 action/s`; the existing lag is consequential, but extra bandwidth turns target error into earlier physical collapse and is not a release repair.
+
+Explicit swing-ankle clearance probe active (2026-09-06): with the restored finite plant, the nominal swing heel and ball clear while the passive toe remains the last support, and the previous passive-foot probes cannot release it. Probe only the already-declared policy ankle target: increase the continuous zero-at-both-endpoints swing dorsiflexion envelope while preserving exact stance neutral, cadence, hip/knee endpoint, action slew/torque/work limits, passive toe physics, contacts, phase, tensor shape, and no-helper identity. This gives the network an earlier explicit way to peel the rear-foot triangle off its distal contact without a powered toe or contact override. Require exact endpoint continuity and bounded action plus unchanged V0748/Raw/V0730 gates; reject unless the complete three-node sole unloads early enough for a clean bounded landing and prevents body contact.
+
+Explicit swing-ankle clearance probe rejection (2026-09-06): increasing the continuous swing toe-up envelope from `0.12` to `0.28 rad` changes explicit ankle actions and some unload timing but does not free a safe step. At frame `89` the swing toe remains planted and the ankle request is already near saturation; first forbidden knee/both-hand contact remains frame `115` and uprightness regresses to `0.303795`. V0748 again records zero qualified unload/landing frames. Raw forward/reverse remain fallen with zero cycles at wrong-signed `+2.54734/+2.51242 m`; maximum COM-COP lead remains `1.08769/1.11793 m`. Restore `0.12 rad`. More toe-up cannot overcome the distal contact through the existing finite actuator and worsens whole-body capture, so do not tune it further.
+
+Explicit-joint Human collapse trace active (2026-09-06): the restored baseline proves the no-helper Human teacher falls in both directions before one bilateral transfer (`forward +2.56795 m`, reverse moves the wrong signed `+2.50477 m`, first unload near frame 114/115, zero cycles, maximum COM-to-COP lead above `1.10 m`). Retain a test-only exact frame trace of requested/actuated hip, knee, ankle, contact load/COP, torso/root pose and motor work around the first loss of support. Use it to distinguish insufficient finite hip reaction, mistimed swing placement, and contact/traction error before changing production strength or targets. Any production candidate must remain action-only, pass forward and reverse with the unchanged clean landing/body-contact gates, and preserve zero root/helper authority; otherwise revert it.
+
+Nominal-swing clearance discontinuity probe rejection (2026-09-06): the bounded A/B gated the extra `0.12 m` clearance/velocity feedback on actual physical single support while leaving the continuous cyclic lift and every physics/acceptance path unchanged. It reduced the frame-69-to-70 left hip/knee/ankle request jump from approximately `-0.048/0.001/+0.342 -> +0.326/-0.485/+0.563` to `-0.042/0.003/+0.259 -> +0.038/-0.099/+0.197`, and delayed first forward body contact from frame `115` to `123`. It still produced zero repaired all-node-clear frames, zero qualified landing, zero alternating cycles, and a fall in both directions; Raw forward/reverse remained only `+2.52794/+2.49956 m` with maximum capture overflow `1.08310/1.11187 m`. The right ankle simultaneously retained a separate phase-boundary jump from approximately `+0.081` to `+0.514`, so eliminating the premature swing correction alone neither creates a support exchange nor makes the target family continuous. The production change is reverted. Do not train or release from this partial delay; isolate the stance-ankle reference switch next without changing contact, root/history, policy ABI, or gates.
+
+Stance-ankle reference-switch probe rejection (2026-09-06): disabling the discontinuous ground-aware stance-ankle target removed its frame-70 `+0.081 -> +0.514` action jump, but it regressed first Human body contact from frame `115` to `114`, retained zero repaired clear/landing frames and zero alternating cycles, reduced Raw forward/reverse travel to `+2.49691/+2.25215 m`, and increased dissipative friction work magnitude to `-19.06/-21.12 J`. Maximum capture overflow improved to `1.04939/1.06739 m`, which shows the branch materially changes the loaded response, but the planned-shank target alone loses the physical level-sole behavior the branch was added to preserve. The production change is reverted. Do not delete either behavior; the only admissible next local A/B is a continuous phase-entry blend between them, paired with a zero-at-endpoints nominal-swing clearance envelope, so both explicit action targets remain continuous without removing load-aware stance control.
+
+Continuous phase-boundary target probe rejection (2026-09-06): the paired continuous-target A/B squared the nominal-clock swing-clearance envelope and blended planned-shank to terrain-aware stance ankle over the first `20%` of stance. It removed the separate right-ankle frame-70 jump and reduced the left hip/knee/ankle step, delaying first forward body contact from frame `115` to `124`. It still produced zero all-node-clear landing, zero alternating cycles, and a fall; Raw forward/reverse remained `+2.50791/+2.49837 m`, with maximum capture overflow `1.07284/1.11056 m`. The unchanged landing prerequisite therefore rejects it. Both target changes are reverted; this is useful causal evidence that teacher target discontinuity worsens collapse timing but is not sufficient to establish physical support transfer. Do not train, package, or release from this probe.
+
+Truthful Live zoom and exact EpochSimEngine dependency gate active (2026-09-06): the Live camera currently displays the full `0.28x..3.60x` user range while its rendered pixels-per-meter is silently clamped at `150`, so a Human auto-fit near `95 px/m` stops changing visibly near `1.58x` on a normalized 4K canvas. Restore a one-to-one monotonic Live contract through every displayed zoom step at representative `1368`, `2048`, and `3840` widths, including the actual smoothed render scale; preserve Course and Rig Lab zoom bounds, fit/reset behavior, high-DPI logical-coordinate routing, camera isolation, physics, and policy state. Add deterministic factor/button-step, wheel-routing, and rendered-geometry coverage so a changing readout without changing world projection fails. Separately, fail configuration closed when any installed or FetchContent-provided EpochSimEngine reports a semantic version other than exact `2.5.26`, even if a stale `EpochSimEngine::EpochSimEngine` target exists; retain the immutable normal-fetch commit pin and do not claim arbitrary local overrides are commit-authenticated. This is a bounded camera/dependency correction only: do not redesign the broader Rig Lab stats layout or make package/release claims until focused and full validation complete.
+
+Truthful Live zoom and exact dependency gate receipt (2026-09-06): Live fitting and its smoothed render state now share a dedicated `403.2 px/m` ceiling, exactly `112.0` automatic maximum times the declared `3.60x` endpoint. The authored Course path retains its separate `150 px/m` cap and Rig Lab retains its independent inspection cap/state. Deterministic camera coverage starts at `0.28x`, applies the same positive `1.25` control step used by both buttons and wheel routing through `3.60x`, and requires both smoothed pixels-per-meter and a 4.8 m subject's projected height to increase at every step on `1368x799`, `2048x1152`, and normalized `3840x2160` presentation surfaces. The production camera diagnostic now exercises live-wheel rendered-vertex change and Live/Rig Lab camera isolation at all three sizes. A fresh exact installed EpochSimEngine `2.5.26` configure succeeds; a real FetchContent source-override fixture declares `2.5.9`, creates the expected `EpochSimEngine::EpochSimEngine` target, and is nevertheless rejected with the exact-version diagnostic before generation can complete. The normal network fetch remains pinned to commit `14f55d30df3e406215facf069c8b50082d7439eb`; the portable version check uses the dependency's CMake `PROJECT_VERSION` and does not pretend an arbitrary local override is commit-authenticated. Fresh MSVC 17.14 Release warnings-as-errors builds pass for `RunnerViewCameraTests`, `RunnerV0723GrayFrameTests`, and `Runner`; the focused CTest set passes `5/5` (`ExactEpochSimEngineVersionGuardAcceptsCurrent`, `ExactEpochSimEngineVersionGuardRejectsStaleOverride`, `ViewCamera`, `V0723GrayFrames`, and `CameraDiagnostic`). Direct `Runner.exe --diagnose-camera` also passes with `routed=yes`. This closes the source/software-camera plateau and stale-version cache defects, not native fullscreen eye acceptance or the intentionally separate broader Rig Lab layout mission; no physics, rig, policy, persistence, package, tag, upload, or publication changed.
+
+Event-driven Human foundational gait probe rejection (2026-09-06): a retained test-only `RunnerV0748ContactArtTests.exe --event-gait-only` feasibility bound evaluates one coherent memoryless controller whose action selection is a pure function of current physical evidence available in the stable `76` observations and public rig geometry. Actual heel/ball/toe airborne state selects single support; decisive finite solved load dominance selects stance during asymmetric double support; otherwise facing-local trailing-foot order selects the initial stance. The controller requests only the existing hip/knee/ankle actions, keeps the stance target inside the measured sole polygon relative to finite capture, and requests bounded capture placement, `0.22 m` all-node clearance, and evidence-triggered descent for the swing. The six-frame detector is verdict bookkeeping only and never feeds action selection. No elapsed-time phase, controller latch/history, particle/root/contact/course mutation, projector, powered toe, new policy state/action/observation, topology, threshold, persistence, package, or release path is used.
+
+Fresh serial MSVC 17.14 Release warnings-as-errors evidence is deterministic bit-for-bit in both directions but rejects promotion. The final strict probe emits zero for every non-leg action and has no inherited balance teacher, clock, latch, or mutable controller state. Forward delays the first forbidden body contact from baseline frame `115` to `126`, remains otherwise `VALID` through frame `480`, travels the correct signed `+3.127959 m`, and reports one existing step/cycle counter, but never produces one all-node-clear frame or landing. Reverse delays body contact from baseline frame `111` to `182`, remains otherwise `VALID` through frame `480`, travels the correct signed `+2.580456 m`, and reports two existing step/cycle counters; it produces a maximum `55` consecutive detector-eligible clear frames beginning at frame `66` but never completes a clean same-side positive-impulse landing. Thus neither direction eliminates body contact or passes the unchanged six-frame unload-plus-landing gate. Capture leaves the real support polygon by as much as `1.150293/1.475430 m`, proving the action-only placement strategy cannot arrest the whole-body capture divergence even though it corrects reverse sign and delays collapse. Do not promote or train from it. The durable value is the exact negative test/receipt: an observation-representable event selector is controllable enough to affect direction and collapse timing, but the current hip/knee/ankle plant cannot establish a qualified repeatable support exchange with this strategy. No production source or release artifact changed.
+
+Pre-unload double-support action grid active (2026-09-06): the single-support grid proves no clean unilateral control frame exists before the first Human collapse. Trace frames `0..115` using only finite previous-step Human support feedback, per-side solved normal load/COP, torso attitude/rate, semantic support, and the unmodified teacher's explicit hip/knee/ankle actions to identify the earliest observable load-transfer divergence. Then run one test-only mirror-symmetric action grid while both soles are physically supported and the body remains clean: choose an incipient stance only from finite load asymmetry above a conservative threshold, drive only its explicit hip/knee/ankle targets from finite capture/posture evidence, and keep equal load, unloaded, non-finite, already-single-support, and body-contact states exact no-ops. Exclude the already-rejected equal-split ankle-only response. Rank by delayed/eliminated body contact, then an unchanged repaired clean landing, uprightness, and real cycles; require opposite mapping, reverse, and exact repeat on finalists. No production source, action/observation shape, physics state, contact, history, root, threshold, persistence, package, or release may change.
+
+Pre-unload double-support action grid rejection (2026-09-06): `RunnerV0748ContactArtTests.exe --double-support-trace` records all `116` pre-action frames `0..115` from the unchanged physical teacher. Human support feedback first becomes valid at frame `1`: facing capture error `+0.018638`, anatomical load asymmetry `-0.069153`, left/right normal impulses `2.833624/2.564645`, left/right COP `-0.332968/+0.013312 m`, aggregate COP `-0.172076 m`, torso X/rate `+0.157082/-0.003002`, both soles supported, and post-step uprightness `0.999995`. The earliest conservative `|load| >= 0.20` divergence is frame `22`, still body-clean and double-supported: capture `+0.027204`, load `+0.203162`, impulses `2.003310/3.160945`, COP `-0.324679/+0.012901 m`, aggregate COP `-0.122110 m`, torso X/rate `+0.194254/-0.021394`, base left hip/knee/ankle `+0.005012/+0.000894/+0.028705`, base right `+0.008137/+0.001009/+0.002783`, and uprightness `0.999205`. The load subsequently reverses sign at frames `49` and `71`, reaches left-dominant `-0.594109` at frame `61`, then right-dominant `+0.950763` at frame `77`; this is an observable oscillating transfer well before contact loss, not a missing input.
+
+The companion test-only `--double-support-grid-only` run evaluates `96` mirror-symmetric combinations: thresholds `0.20/0.40`, hip/knee/ankle coefficients from `{-0.75,0,+0.75}`, canonical/opposite selected-side mappings, with all-zero and the already-rejected proximal-zero ankle-only rows excluded. Selection is solely the sign of finite R-L load while both soles are physically supported and the body is clean. The finite capture/posture signal is clamped to `+/-0.65`; every per-joint additive action is clamped to `+/-0.35`. Direct adversarial selector coverage proves equal load, unloaded feedback, invalid feedback, and non-finite capture produce exact no selection. No candidate eliminates body contact or produces any repaired six-frame unload/landing. The best forward row (`threshold=0.20`, canonical, hip/knee/ankle `-0.75/-0.75/0`) delays first contact only from frame `115` to `116`, improves contact-frame uprightness from `0.322509` to `0.336225`, acts on `71` eligible frames with maximum actual hip/knee deltas `0.163557/0.163557`, zero ankle delta and one action saturation, but produces no clean single-support frame, no landing, and only the same one reported cycle. The ankle-including near-best row creates only one clean single-support frame, still contacts at `116`, and records zero cycles. The exact finalist reverse delays contact from `111` to `113` and creates only one clean single-support frame, with no landing/cycle; the opposite mapping regresses forward to `113` and reverse to `110`. All finalist repeats are bit-exact. This response is too weak and structurally fails the unchanged landing prerequisite, so do not promote it or retrain from it. The remaining invariant is that explicit selected-stance action bias can slightly shift collapse timing but cannot create the required support exchange; the next causal work must inspect why the finite teacher keeps both soles loaded while torso/capture drift grows, rather than tune this controller. Fresh Windows MSVC 17.14 Release warnings-as-errors build succeeds; the ordinary V0748 run remains exactly red at the unchanged frame-115 body-contact receipt. No production code, action/observation contract, physics, threshold, persistence, package, tag, upload, or publication changed.
+
+Single-support stance-motor grid rejection (2026-09-06): a retained test-only `RunnerV0748ContactArtTests.exe --stance-grid-only` probe exhaustively evaluates `250` bounded Human stance hip/knee/ankle combinations (`5^3` coefficients `{-0.75,-0.375,0,0.375,0.75}` under both support-reflected and direct mappings). The only candidate signal is finite policy-visible torso attitude/rate plus the new previous-step facing-local capture/load feedback; each requested per-joint addition is clamped to `+/-0.50`, and neither particles, root, contact, history, course, nor detector thresholds are mutated. Every forward, opposed-sign, direct-map, support-reflected, repeated, and reverse/mirror row applies on exactly `0` frames, saturates `0` times, produces exact zero joint deltas, and records no clean landing. This is not an inconclusive tuning result: the production trajectory contains no body-clean single-support control interval. Forward first forbidden body contact occurs in post-step frame `115` at uprightness `0.322509`, while the first pre-action semantic single-support state is frame `116`, already contaminated; the first clean-single-support frame remains `-1`. Reverse first body contact is frame `111`, first visible single support is frame `114`, and again clean single support is absent. The forward first-contact observable signal would be `-0.273940` with facing capture `+0.590423` and anatomical load asymmetry `-0.118851`; reverse is `-0.251352`, `+0.597534`, and `+0.115938`, but both arrive after body contact and therefore cannot authorize a clean unilateral hint. Exact repeated runs match bit-for-bit. Do not add or tune a single-support helper: it cannot influence the first collapse. Any next bounded experiment must act earlier during genuine double support through finite action targets and must still pass the unchanged body-contact and repaired landing gates. No production code, action/observation shape, semantics, physics, threshold, persistence, package, tag, upload, or publication changed.
+
+Human non-foot contact root-cause probe active (2026-09-06): after repairing the V0748 landing detector, the existing Raw-plant foundational teacher stays body-clean for frames `0..114`, then produces non-foot ground contact on all `125` remaining live frames before invalidation, so no admissible clean swing-and-landing event exists to tune. Identify the exact grounded non-support node(s), first-contact frame, clearance/velocity/pose relationship, and whether the cause is authored foot geometry, solver classification, or whole-body collapse. Add only test-local diagnostics/probes first. Do not weaken the no-body-contact gate, relabel ankle/knee/body nodes as feet, change physics, or enable a trajectory experiment until one exact causal invariant is established and recorded.
+
+Human non-foot contact root-cause receipt (2026-09-06): a test-local V0748 probe now checks its direct grounded-node scan against production `non_foot_grounded()` on every frame and retains exact causal data in the failing landing receipt. The canonical Human begins with `0.063568 m` minimum non-support clearance and remains body-clean through frames `0..114`; the first forbidden contact is frame `115`, when the left knee (`3`), left hand (`9`), and right hand (`12`) simultaneously reach exact ground clearance `0`. Their solved velocities are respectively `(0.311909, 0.110479)`, `(-0.815420, 0.014532)`, and `(-0.479121, 0.001514) m/s`. At that instant uprightness has already collapsed to `0.322509`, root/torso are `(2.06032, 0.819528)` / `(3.21010, 1.01762)`, the left sole is unsupported, only the right ball is grounded (`L000/R010`), and the explicit 13-value teacher action is `[0.873459,-0.750535,-0.275583,-0.000636,0.055492,0.143286,0.094908,-0.317685,0.459549,1,0,0,0]`. Across the subsequent 125 contaminated frames the exact grounded non-support union/count is torso `1=118`, head `2=1`, left knee `3=72`, right knee `5=64`, left hand `9=123`, right elbow `11=110`, and right hand `12=3`. The existing neutral six-node sole-plane equality still passes, every reported node is genuinely outside both authored foot clusters, and the independent scan agrees exactly with production classification. The failure is therefore a real forward whole-body collapse over a single right-ball support, not incorrect sole geometry or relabeling. The smallest next A/B is one finite teacher-action-only capture/posture response during measured single support through explicit stance leg motors, with no particle/root/contact mutation; accept it only if frame-115 contact disappears and the unchanged clean same-side landing gate passes, otherwise remove it. No production physics, contact class, threshold, persistence, package, or release changed.
+
+Raw actionless-ledge authority closure active (2026-09-06): `solve_course()` currently snaps a nearby Human hand toward a ledge and rewrites both position and Verlet history without any grip action or Raw-mode guard. That is a hidden body prop inside the generic course-collision bucket. Preserve the existing Assisted climb scaffold for now, but make proximity alone an exact no-op in Raw, add explicit Y-aware authority telemetry for any remaining direct helper movement, and prove nearby/mirrored/repeated Raw hands receive no position/history/contact/root mutation while Assisted behavior remains distinctly labeled training scaffolding. Do not invent a grip action, expand the 13-action ABI, claim learned climbing/burial recovery, or weaken physical qualification gates. Record the remaining need for an explicit policy/tool grip before live autonomous climbing can be advertised.
+
+Raw actionless-ledge authority closure receipt (2026-09-06): the former proximity grasp/snap is no longer part of generic course collision. `apply_ledge_training_scaffold()` is an internally Assisted-only teacher scaffold with the explicit `ASSISTED LEDGE SCAFFOLD` authority source; entering Raw retires any live teacher-created grasp anchor and teacher-earned ledge progress before inference. Raw proximity alone now leaves every particle position, Verlet history, grounded bit, root state, collision latch, grasp slot, and hand-contact count exactly unchanged. Per-source authority telemetry now records vertical velocity, mass-center current/history position, and root/torso Y deltas in addition to the prior horizontal ledger, so an equal current/history helper shift cannot disappear merely because velocity is preserved. Deterministic fixtures pass eligible Assisted correction/source isolation, ineligible torso proximity, left/right-hand mirrored Raw no-op, mirrored Assisted response, same-seed repeat, and Assisted-to-Raw anchor/progress retirement. Fresh MSVC 17.14 Release `/W4 /WX` builds pass for `RunnerCoreTests` and `RunnerRawAuthorityTests`; Core and `RunnerRawAuthorityTests --ledge-authority-only` execute successfully. The complete RawAuthority run remains truthfully red at the unchanged gait gate: forward/reverse travel `+2.56795/+2.50477 m`, zero completed cycles, fallen, and `1.10085/1.11363 m` maximum COM-COP lead. No grip action was invented, the stable `76/13` policy ABI did not change, and autonomous climbing or burial recovery is not claimed; an explicit policy/tool grip and separate physical training receipt remain required.
+
+Physical landing-event evidence repair active (2026-09-06): the fixed v0.7.48 Human landing gate currently conflates `free_side == 0` for both-supported and both-airborne states, minimizes horizontal/absolute-vertical values across distinct contacts, and overwrites signed/contact velocity from a later event. Repair the diagnostic fixture before using it to accept any trajectory change. Bind every approach metric to the first clean heel/ball/toe contact of one sole after at least six consecutive frames with all three nodes at least `0.005 m` clear, negligible swing normal impulse, the opposite sole physically supported, and no non-foot contact; require same-side positive normal impulse at landing and use the immediately preceding velocity of the node that first grounds. Double-airborne, side switches, short unloads, body contact, and mixed-event synthetic minima must fail. This is evidence integrity only and may not alter production physics, thresholds, retention, packaging, or publication. After the corrected fixture is deterministic, A/B only an inert Human-foundational asymmetric cubic lift profile and revert it unless one coherent physical landing plus Raw/V0730 evidence improves.
+
+Physical landing-event evidence integrity receipt (2026-09-06): `RunnerV0748ContactArtTests` now uses a deterministic same-sole event state machine instead of the ambiguous `free_side == 0` transition and cross-event minima. A candidate requires six consecutive frames where all heel/ball/toe nodes of one sole are at least `0.005 m` clear, its aggregate normal impulse is at most `1e-5`, the opposite sole remains physically grounded, and no non-foot contact exists. Only that sole's first subsequent grounded node with positive normal impulse can land; horizontal and vertical approach bounds come exclusively from the immediately preceding frame, and the contact vertical velocity comes from that exact newly grounded node. Test-local positive/repeated evidence is exact, while both-airborne, side-change, five-frame unload, non-foot-contact, and mixed-event adversarial sequences are rejected. The fresh MSVC 17.14 Release target builds cleanly. The corrected live physical test remains an earlier hard failure than the former synthetic landing-speed row: all `125` frames before invalidation report non-foot ground contact, so it observes zero admissible clean-clear frames and no landing event (`frames=0`, `observed_clear=0`, `nonfoot_frames=125`, every other event-rejection counter `0`). No production source, motor, physics, contact, acceptance threshold, retention, persistence, package, tag, upload, or publication changed; the former `19`-frame mixed-event row is not valid evidence and must not drive tuning.
+
+Observable capture/load self-support observation receipt and motor rejection (2026-09-06): the stable `76/13` tensor now gives canonical Human Uneven Walk one identical foundational input in training, bootstrap value evaluation, parallel mastery, retained integration, diagnostics, preview, app replay, morphology, and self-imitation. Environment always maintains finite previous-step mass-weighted COM/velocity, aggregate impulse-weighted COP, authored-scale capture error, total normal impulse, and anatomical right-minus-left load asymmetry without enabling optional authority telemetry. The scoped adapter scrubs the private clock and encodes facing-local capture error in slot 38 and load asymmetry in slot 39; invalid/unloaded values are exact zero. Every call supplies explicit guidance: non-target Raw Speed Walk, balance, other stages, and non-Human scopes retain the exact zero phase scrub, while the same non-target Assisted scopes remain byte-compatible and retain phase. Retained integration derives this choice from `provenance_.retained_guidance`, never ambient Environment mode. Training semantics advance `0x0007'5111` to `0x0007'5112`, Raw observation preprocessing schema advances 1 to 2, and 5109/5110/5111 are explicit transfer-only inputs with unchanged `EPPO51` grammar. Deterministic tests prove finite positive encoding, invalid rejection, exact repeat, mirror behavior, no caller mutation, same-seed physical feedback, Raw Speed Walk/balance/non-Human scrubbing, Assisted negative-scope preservation, and Assisted/Raw foundational equality. The proposed loaded-ankle double-support Assisted motor response was implemented only after that evidence, then removed completely when the required v0.7.48 landing prerequisite remained red; the accepted unilateral helper is byte-for-byte unchanged and no new motor authority remains. Fresh MSVC 17.14 Release builds pass for Core, RawLearningProvenance, RawAuthority, V0729, and V0748 targets. Core passes (`19.619 s`), RawLearningProvenance passes after the guidance correction (`25.309 s`), V0729 passes (`0.261 s`), and RepositoryHygiene passes. RawAuthority reproduces its exact known moving-gait failure (`+2.56795/+2.50477 m`, zero cycles, fallen) with zero command/actuator/motor mismatches or helpers. The pre-repair V0748 fixture reproduced its exact prior red row (`19` unloaded frames, `0.006467 m` clearance, `0.767569 m/s` swing horizontal speed, `0.295642/0.840472 m/s` landing speeds); after the independently active landing-event fixture repair was linked, it rejects with no qualifying event (`frames=0`) and remains owned by that separate evidence-integrity mission. No threshold, retention rule, physics trajectory, persistence grammar, package, commit, tag, upload, or publication changed.
+
+Instrumented `5111` whole-Raw baseline (2026-09-06): the freshly rebuilt `Runner.exe --diagnose-raw-inference` again completed all 1,200 updates and retained no policy, but the new report-local candidate evidence now identifies the failure rather than printing zero seed rows. The first genuine post-handoff evaluation at update 905 rejected all six runs as `FALLEN`, with mask `0x49` (`INVALID MOTION + MISSING SKILL + BODY CONTACT`), mean distance `2.543459 m`, `0.333333` stride events, and `3.422225 s` survival. The last evaluation at update 1200 still rejected all six runs as `FALLEN`, mask `0x59` (the same failures plus `NO PROGRESS`), mean distance `2.698148 m`, `0.666667` stride events, and `4.208338 s` survival. No Raw receipt/checkpoint exists and the report correctly emits `replay_skipped_no_retained_policy=1`. The optimizer slightly improves survival/step evidence but never learns a safe support transfer; this confirms an upstream physical teacher/proprioception problem rather than an over-strict final retention threshold. Keep every qualification threshold unchanged.
+
+Observable capture/load self-support A/B planned (2026-09-06): the no-hint Raw gait remains red and retention thresholds must not be weakened. Two independent read-only audits confirm that the 76-value Human Uneven Walk policy sees torso attitude/rate, pelvis velocity, semantic whole-sole support, ankle state, and sole clearance/velocity, but not the solved left/right normal load or center of pressure that distinguishes a symmetric double-support pose from an already-tipping load transfer. Keep the 76/13 tensor shape by replacing only the two Human foundational slots 38/39 already scrubbed to exact zero with finite, facing-local previous-step capture/load evidence; all other species/stages retain their existing phase semantics. Advance training semantics to `0x0007'5112` and allow no silent resume. Preserve the accepted single-support ankle response and test one distinct pre-unload Assisted teacher term selected by measured dominant load, applied only through explicit finite ankle/hip motor actions and faded solely by the existing whole-composite authority. Equal load, airborne/no load, non-finite data, disabled motors, wrong topology, and Raw execution are exact no-ops. First rerun the new first/last-candidate diagnostic as the unchanged `5111` baseline. Then require pure encoding, mirrored/repeated motor response, no state mutation or hidden authority, full/mid/zero fade identity, unchanged V0748 landing thresholds, all V0730 seeds, RawAuthority forward/reverse/stop and helper-zero gates, and a fresh 1,200-update immutable retained-Raw receipt. Reject and remove the A/B at its first fixed physical regression; do not claim burial recovery.
+
+Whole-authority 1,200-update Raw training outcome (2026-09-06): the freshly rebuilt production `Runner.exe --diagnose-raw-inference` completed all `1200` updates under semantics `0x0007'5111` after the Human composite fade, overlapping Raw-origin ramp, identical moving-Human actuator/damping plant, and update-900 evaluation suppression. It retained no policy: retained update `0`, mode remained Assisted, and no Raw receipt/checkpoint/replay evidence existed. The diagnostic therefore failed honestly rather than presenting teacher playback as learned motion, but its no-retention output dumped zero-initialized forward/reverse/stop rows and did not preserve the rejection evidence from the first or last post-handoff candidate evaluations. Add report-local first/last Raw-execution candidate evidence (update, validity, invalid runs/reason, rejection mask, distance, strides, survival, quality) without checkpoint/schema churn, and explicitly label physical replays skipped when no retained Raw artifact exists. Do not tune thresholds or claim gait/posture/burial success from this result.
+
+Raw candidate-evaluation telemetry receipt (2026-09-06): the production diagnostic now observes real evaluation-count transitions strictly after the Human Uneven Walk Raw handoff, stores the first event once and overwrites only the latest event, and reports each event's update, validity, invalid-run count/reason, hexadecimal rejection mask plus decoded summary, mean distance, stride events, survival, and quality key. This evidence is local to `RawInferenceReport`; it does not enter `TrainingMetrics`, checkpoint grammar, retention quality, or training semantics. A no-retention result prints both candidate-presence fields and `replay_skipped_no_retained_policy=1`, then omits all forward/reverse/stop seed and joint rows instead of presenting zero-initialized values as physical replays; an unverified retained artifact has a separate fail-closed skip reason. Deterministic boundary, capture, rejection-decoding, formatter, absent-evidence, and replay-suppression coverage passes in `RunnerRawLearningProvenanceTests.exe`. Fresh MSVC 17.14 Release warnings-as-errors builds pass for `RunnerRawLearningProvenanceTests` and `Runner.exe`, and the focused executable passes. This receipt does not rerun the expensive 1,200-update training diagnostic and makes no gait, posture, stop, burial-recovery, package, tag, upload, or publication claim.
+
+Explicit-stop locomotion classification correction receipt (2026-09-06): the Human Uneven validity and reward paths now derive translation/gait demand from the accepted current intent instead of the course name alone. Exact coherent `set_locomotion_intent(0.0f, true)` retires only micro-motion, zero-progress, hazard-stall, and walk-shaping demand; posture, body integrity, actual support/gait events, non-foot contact, foot-pivot/rolling checks, Raw/effective action identity, course motion, and optional-authority evidence remain measured. Zero direction without stop, forward/reverse requests, non-finite values, and the contradictory low-level `(1.0f, true)` pair remain fail-closed; the external player contract already rejects that contradictory pair before Environment mutation. A direct 1,200-frame production gait-metric replay passes three unique stopped Human Uneven seeds plus an exact repeated seed with zero locomotion demand, zero stall accumulators, zero gait cycles/alternations, and no invalid motion. The same 20-second fixture invalidates forward, reverse, and contradictory requests through the unchanged micro-motion/zero-progress thresholds. `raw_stop_replay_frames` is restored from the temporary 120-frame audit window to 1,200 frames; the strict drift `<1.0 m`, peak speed `<0.20 m/s`, zero-cycle/contact/authority, body, stationary-course, and deterministic action/contact/trajectory predicates are unchanged. Fresh MSVC 17.14 Release `/W4 /WX` builds pass for `RunnerCoreTests`, `RunnerRawAuthorityTests`, and `Runner`; Core and `RunnerRawAuthorityTests --stop-predicate-only` pass. The complete RawAuthority test retains the exact known release-blocking moving-gait result: forward `+2.56795 m`, reverse `+2.50477 m` in the wrong direction, zero cycles, fallen, with `1.10085/1.11363 m` maximum COM-COP lead. No retained Raw policy currently exists, so no physical retained-network stop seed is claimed; the configured 20-second replay will run only after a truthful Raw checkpoint is retained. `git diff --check` reports no errors beyond existing line-ending warnings. No PPO optimization, curriculum, action/observation ABI, persistence, UI, package, commit, tag, upload, or publication changed.
+
+Current-semantics/UI truth reconciliation receipt (2026-09-06): the whole-composite Human authority fade and identical moving-Human plant advance current training semantics to `0x0007'5111`; README, changelog, the focused v0.7.51 closure document, installed-library documentation, and repository-audit assertions now preserve `0x0007'5109` as the original 76-observation/13-action physical-equipment boundary and `0x0007'5110` as the historical foundational-input/mixed-origin boundary, with both historical forms transfer-only and neither silently resumable under `5111`. The Live Advanced authority banner now derives its assistance claim from `preview_authority_report().optional_guidance_active()`: exact-zero Human Uneven guidance reports root/body projectors off rather than claiming pose/contact assistance that is not present. Fresh MSVC 17.14 Release `/W4 /WX` builds pass for `Runner.exe`, `RunnerCoreTests`, and `RunnerV0729ModularArtTests`; Core and V0729 execute successfully, and `Runner.RepositoryHygiene` passes the synchronized documentation/source audit. This UI/documentation slice did not change PPO implementation, policy dimensions, physics, thresholds, persistence code, packaging, tags, or publication.
+
+Rig Lab Test layout contract correction receipt (2026-09-06): the large-type Test page intentionally grew its selection, range, pattern, status, and manual-slider rows to a 336-logical-pixel production card, but the shared Core fixture still supplied the retired 225-pixel card. The production 336-pixel height is now single-sourced through `ui_layout::rig_lab_test_card_height` and consumed by the app, GrayFrame contract, and Core fixture. Core covers translated narrow/medium/wide cards, all five rows pairwise, card containment, the accepted 48-pixel primary controls, the 18-pixel bottom inset, and 64 deterministic repetitions without shrinking the modern controls. Fresh Release Core and V0723 GrayFrame builds and executions pass; the former `Rig Lab Test controls or status rows overlap` failure is gone.
+
+Automatic learned/evolved species state uses product-owned `epoch2dwalk-v0751-*` paths: `epoch2dwalk-v0751-{species}-autosave.eppo`, `epoch2dwalk-v0751-{species}-evolved.rig`, and `epoch2dwalk-v0751-{species}-autonomy.state`. At the v0.7.50 rename boundary, `runner-v0750-{species}-autosave.eppo` is lifetime-ledger-only compatibility input; its policy, optimizer, retained best, evolved rig, autonomy state, and mastery do not resume, while authored `{species}.rig` remains separately compatible.
+
+Raw handoff cadence/history-filter receipt (2026-09-06): production now suppresses only the exact Human Uneven Walk update-900 handoff evaluation, after the final 7/8-Raw mixed rollout and environment reset, while preserving update 1 and every later five-update slot. Direct single-worker evidence holds evaluation count at 37 through updates 900-904, records 1,024 whole-Raw actor samples on each update 901-905, then increments to 38 and issues the genuine Raw receipt at update 905; an identical seeded trainer reproduces the complete update/lesson/sample/receipt/parameter digest. Quadruped Walk and Human Speed Walk negative controls still evaluate normally at global update 900. Human Uneven Assisted action-history smoothing now consumes the same visible lesson authority as the composite action: new-action weight is exactly 0.60/0.70/0.80/0.90/1.00 at authority 1.00/0.75/0.50/0.25/0.00, clips finite out-of-range inputs, treats non-finite authority conservatively as full guidance, and remains exactly 0.60 for unrelated species/stages/gaits. The focused MSVC 17.14 Release warnings-as-errors target builds cleanly and `RunnerRawLearningProvenanceTests.exe` passes in `21.69 s`. This slice changes no evaluation threshold, policy dimension, persistence format, package, tag, upload, or publication and does not claim the still-red Raw physical gait has learned posture or burial recovery.
+
+Retained Raw stop-replay gate in progress (2026-09-06): the final Raw diagnostic currently proves forward and reverse retained-network motion but never replays the same immutable network with the existing player stop contract `set_locomotion_intent(0.0f, true)`. A network that ignores the stop observation can therefore satisfy the published final predicate. Add a distinct deterministic Raw stop receipt over the canonical repeated-seed set: zero signed locomotion intent and an asserted stop flag, stationary terrain, direct sampled/effective-action identity, bounded horizontal COM drift and peak speed, zero qualified gait cycles/alternating steps, no invalid motion or non-foot contact, intact body, zero optional authority, and bit-repeatable trajectory/action/contact evidence. Include every seed in `RawInferenceReport::passed` and print the stop evidence explicitly. This is an acceptance diagnostic only; it may not change PPO, curriculum, physics, thresholds used by moving gait, persistence, UI, packaging, tags, or publication, and it does not establish burial recovery.
+
+Raw stop-window/action-identity audit consequence (2026-09-06): an otherwise correct stationary stop on Uneven is still classified by the generic course gate as `locomotion_required`, so a 1,200-frame stop-only replay would deterministically self-invalidate as zero progress and could never certify the intended behavior. Use a fixed 120-frame/two-second stop receipt, which is longer than the existing 64-step Raw stop training window and avoids changing simulation invalidation semantics in this bounded diagnostic task. Its maximum COM excursion must remain below `1.0 m` and every instantaneous horizontal COM speed below `0.20 m/s`. Raw identity compares the effective action against the finite clamped, task-masked network action: disabled equipment slots are required to be zero and are not falsely counted as network-authority mismatches. Existing Raw authority already treats active toe projection/rate limiting as optional and separately permits the measured passive-anatomy limiter; keep that distinction.
+
+Retained Raw stop-replay implementation receipt (2026-09-06): `RawInferenceReport` now owns six stop-seed receipts over the same canonical seeds as forward/reverse replay. Each restores the immutable retained checkpoint into Raw, applies `set_locomotion_intent(0.0f, true)`, records the two-second COM envelope, zero-cycle/zero-alternation result, non-foot contact frames, bounded task-masked Raw/effective identity, optional-authority count, stationary-course state, invalid reason, body integrity, and exact action/contact/trajectory digests. Every repeated stop seed must qualify independently and the complete stop array is an explicit conjunct of the final diagnostic verdict; report output names every bound and failure field. The focused MSVC 17.14 Release `/W4 /WX` build passed for `Epoch2DWalkEngine.lib`, `RunnerRawAuthorityTests.exe`, and `Runner.exe`. `RunnerRawAuthorityTests.exe --stop-predicate-only` passes exact-boundary, truncated-window, moving/missing-stop, cycle, alternation, non-foot-contact, action-mismatch, optional-authority, invalid/body/course, NaN/infinity, nondeterminism, and output-presence rejection checks. The complete RawAuthority executable reaches that new probe, then reproduces the pre-existing physical gait failure unchanged: forward `+2.56795 m / 0` cycles / `1.10085 m` maximum COM-COP lead / fallen; reverse `+2.50477 m` in the wrong direction / `0` cycles / `1.11363 m` lead / fallen; command/actuator/motor mismatches and helpers remain zero. No retained Raw checkpoint currently exists, so the production stop replay cannot honestly emit passing physical seed values until the separate gait/training gate retains one. The long intentional-stop versus generic zero-progress classification remains an explicit simulation follow-up; no PPO, physics, curriculum, persistence, UI, package, tag, upload, or publication change was made here.
+
+Foundational Human whole-authority convergence in progress (2026-09-06): removing the Human Uneven topology override exposed additional crossed wires at the same boundary. At advertised lesson authority zero, Assisted still applies fixed history smoothing, startup/body clamps, bilateral synergy, the manipulator envelope, and a different actuator-slew and particle-damping plant before Raw removes them in one step. Replace those overlapping paths with one monotonic composite authority for Human Uneven: preserve the bounded/masked sampled network action, compute the full finite-motor Assisted demonstration once, and blend the whole composite to exact sampled-action identity at zero without authority-squared teacher weighting. Scale optional guidance telemetry by that same authority, converge the Raw rollout cohort during the existing 600..900 teacher fade, and use the same symmetric actuator slew and isotropic integration damping for moving Human physics on both sides. Advance training semantics to `0x0007'5111`; old semantics remain transfer-only. Require exact zero-authority Assisted/Raw action and physical-trajectory identity, midpoint interpolation, ramp-boundary/origin balance, optional-guidance-zero, positive/negative/adversarial/mirrored/repeated evidence, and the unchanged physical gates. This removes training scaffolding; it does not itself prove learned posture, gait, stop, or burial recovery. No release may claim success until the retained no-hint Raw network passes those receipts.
+
+Focused Core build blocker (2026-09-06): the first authority-cliff rebuild exposed an in-flight source/test scope mismatch unrelated to the new authority behavior. `tests/core_tests.cpp` validates the configured Human gait against `rl::human_authored_stance_step`, but the current `ppo.hpp` moved the unchanged `0.80f` constant inside `configure_biped_gait()` and therefore no longer declares the tested namespace symbol. Restore that same constant at namespace scope and consume it from the existing configuration expression; change no value, gait target, phase, physics, authority, ABI, or threshold. Rebuild Core before interpreting the authority test.
+
+Human Uneven authority-cliff correction in progress (2026-09-06): source audit found that the advertised Human teacher fade is bypassed by `topology_runtime_reflex_authority()`. The Human Uneven branch returns `{1,1}` after lesson authority begins fading; `effective_policy_action()` therefore replaces every active Human motor with the authored teacher at full strength, then restores the exact four support targets after generic filtering even when lesson authority is zero. Assisted updates never exercise learned support/body control before Raw abruptly removes the code brain, directly contradicting the user's learned-posture requirement and the documented gradual handoff. Moving-Human Uneven physics below the action boundary already rejects the structure/posture projectors and uses ordinary finite motors, constraints, gravity, terrain and contacts; do not add a root/body/contact/history correction. Scope the Human Uneven topology reflex to exact zero while preserving Human Shuttle and non-Human topology behavior, replace the obsolete forced-teacher test with deterministic full/mid/zero authority and guidance-report evidence, and require zero-authority Human support actions to remain policy-dependent. First run focused Core/provenance/V0748/RawAuthority/V0730 gates; only then run the real 1,200-update Raw inference diagnostic. Retain no release claim unless an immutable retained Raw network maintains unaided posture and qualified bilateral gait. Partial-burial recovery remains untrained and must not be reported implemented without a separate mirrored repeated-seed Raw physical receipt.
+
+Historical 5110 repository-audit receipt (2026-09-06): this checkpoint originally made `0x0007'5110` current after `0x0007'5109` introduced the physical two-hand equipment and stable 76-observation/13-action ABI. The later `0x0007'5111` reconciliation receipt above supersedes that current-value assertion while preserving both `5109` and `5110` as explicit unverified-transfer-only boundaries. The namespace gap found by that earlier audit is now closed by the exact product-owned persistence contract above. Its earlier `Runner.StrictReleaseManifest` `20.12 s` result remains historical evidence only; the fresh repository-audit result is recorded above.
+
+Rejected direction-independent Human swing-dorsiflexion A/B (2026-09-06): the bounded prototype removed travel direction from the 0.12 rad anatomical ankle-to-ball swing rotation and added a pure stance-zero/non-finite scalar plus action reconstruction across forward facing +1, direct reverse facing +1, and the physically mirrored facing -1 case. The isolated MSVC 19.44 Release warnings-as-errors target built cleanly; temporary exact evidence reconstructed positive toe-up cross products 0.182629/0.179736/0.182629, exact forward-to-physical-mirror local actions/target, deterministic repetition, and only a 0.002942 motor-round-trip target difference between signed travel cases. V0748 reproduced the unchanged red prerequisite at 19 all-node-unloaded frames, 0.006467 m clearance, 0.767569 m/s swing horizontal speed, 0.295642 m/s landing horizontal speed, 0.840472 m/s landing absolute vertical speed, signed vertical range [-1.241696,-1.192776] m/s, and -1.212708 m/s contact-most vertical speed. RawAuthority forward was bit-identical at +2.56795 m, zero cycles, and 1.10085 m maximum COM-COP lead; direct reverse worsened from the restored +2.50477 m baseline to +2.51290 m in the wrong world direction, retained zero cycles/alternations and the missing right unload/replant, remained invalid, and changed COM-COP only immaterially from 1.11363 to 1.11248 m. Requested/effective/actuator/motor identity, zero powered-toe commands, and zero helper/root corrections remained clean. All ten V0730 seeds reproduced the unchanged forward failure at 2.48761..2.61772 m, exactly one stride, 2.87..5.25 s, and every trial fallen or flipped. The toe sign defect is anatomically real but is not the cause of the common-mode forward launch, absent bilateral transfer, or one-metre capture error; remove the complete production/test prototype and retain no source change or threshold waiver.
+
+Additional authority-boundary validation (2026-09-06): the freshly linked `RunnerRawLearningProvenanceTests` passes in both optimized MSVC 17.14 Release `/W4 /WX` (`23.8 s`) and Debug `/W4 /WX` (`~135 s`); the Debug executable timestamp is later than the final `ppo_trainer.cpp` edit.
+
+Final foundational phase-leak audit (2026-09-06): the morphology candidate evaluator and packaged retained-Walk eye replay were the last two policy call sites still feeding `Environment::observation()` directly. Both now use the shared foundational adapter, preserving non-Human/non-Walk inputs while scrubbing private phase for Human Uneven Walk. A fresh Release `/W4 /WX` build links `Runner.exe` and all focused provenance/RawAuthority/V0748/V0730 tests from the restored baseline; provenance passes, while the three unchanged physical gait gates reproduce the exact red evidence recorded below.
+
+Human rear-foot topology A/B in progress (2026-09-06): direct Rig Lab Bones review rejects the canonical Human's large ankle-to-ball diagonal as a visibly wrong rear-foot triangle. Probe the smallest coherent physical replacement while preserving RUNRIG6 semantic ankle/heel/ball/toe indices, heel/ball/toe contact identity, actions 8/9 as the only powered ankle authority, passive toes, the stable 76-observation contract, and zero root/body/contact rewrite authority. A serial ankle-to-heel-to-ball-to-toe graph is admissible only if its explicit ankle motor and physical solver keep the rear foot valid and bounded; otherwise test only a materially smaller, honestly rendered structural brace and reject the experiment rather than hiding a constraint. Require deterministic positive, malformed/disabled negative, mirrored, opposing-contact, and repeated-seed topology evidence, fresh Windows MSVC /W4 /WX focused builds, V0729 physical-preview parity, the unchanged V0748 swing/contact prerequisite, RawAuthority zero-helper evidence, and V0730 repeated seeds. Retain no topology whose validity, segment error, semantic contacts, landing evidence, or Raw authority regresses; do not touch PPO/training gradients, UI/art presentation, terrain, persistence, packaging, release, tags, or publication.
+
+Rejected Human serial rear-foot topology A/B (2026-09-06): removing both real ankle-to-ball braces reduced the canonical Human from 23 to 21 bones and moving actions 8/9 from knee-to-ankle-to-ball onto knee-to-ankle-to-heel produced the honest ordered ankle-to-heel-to-ball-to-toe Bones graph, but the distance-only heel hinge was physically underconstrained. Fresh isolated MSVC 19.44 Release /W4 /WX builds passed for RunnerV0748ContactArtTests, RunnerRawAuthorityTests, RunnerV0729ModularArtTests, and RunnerV0730ColdStartTests; V0729 presentation/source parity passed. The unchanged V0748 prerequisite immediately rejected the candidate with 0 all-node-unloaded frames, 0.000000 m clearance, and no landing event. RawAuthority preserved exact command/actuator/motor identity, zero powered-toe commands, zero helper/root corrections, and six initial physical contacts, but forward degraded to 2.38834 m / zero cycles with 1.22509 m maximum COM-COP lead, while reverse reached only 2.26535 m, never unloaded or replanted either sole, and terminated invalid. All ten V0730 references fell at 2.24799..2.34494 m with only 0..1 strides, versus the restored baseline 2.59828..2.85012 m and 1..2 strides. Remove the complete production/test A/B and restore the 23-bone ankle/heel/ball triangle, motor-to-ball endpoint, contact identity, 76 observations, and unchanged Raw baseline. With the existing three rear-foot nodes and distance-only structural vocabulary, a rigid planar rear foot necessarily needs the visible triangle; merely shortening that brace would move the physical ball/contact lever and passive toe hinge rather than solve the topology. The visual rejection therefore remains open. A future brace-free physical design would require a separately reviewed, explicitly telemetered passive angular constraint or an additional structural node plus full RUNRIG/signature/persistence/editor/diagnostic migration; hiding the brace or weakening the physical gates is not admissible.
+
+Final Human modular-art correction in progress (2026-09-06): direct user screenshots and the current deterministic side-elevation proof still reject the Human manipulator and rear-foot presentation. Preserve the existing authored shape language and exact physical shoulder/elbow/wrist, heel/ball/toe, contact, two-hand grip, and weapon-frame anchors; change presentation geometry only. Give upper arm, forearm, and hand a continuous readable armored silhouette without synthetic control geometry, and make the rear boot read as the same ordered physical heel-to-toe plate rather than crossed/detached bones. Require deterministic positive, malformed-input negative, mirrored-facing, opposing-contact-phase, repeated-render, and two-hand equipment alignment evidence, then fresh Windows MSVC `/W4 /WX` focused art/equipment builds and an inspected 2048x1152 Human bitmap. Do not touch PPO, simulation authority, gait, terrain, UI layout, or release workflow.
+
+Final Human modular-art correction receipt (2026-09-06): the retained presentation-only fit keeps every physical shoulder/elbow/wrist, heel/ball/toe, contact, and weapon-frame point unchanged. After compensating for the supplied sprites' transparent padding, the visible upper arm and forearm occupy about `56.5%` and `49.5%` of their physical spans with a continuous authored taper; the irregular hand occupies about `35.3%` transversely, overlaps the cuff, and stays within the physical forearm envelope. Near/far tint and joint weight now encode depth without ghosting or enlarging the rear chain. Each boot's opaque longitudinal fit remains exactly heel-to-toe, with a bounded `69%` transverse envelope; the Rig Lab bone diagnostic still draws every real structural edge, but paints the ordered ankle/heel/ball/toe path last and materially stronger than the faint triangle brace. Deterministic positive, malformed-input negative, reverse-slot/mirrored, opposing-contact-phase, repeated-dimension/style, and exact two-hand grip/stock/muzzle tests pass. Fresh MSVC 17.14 Release `/W4 /WX` builds pass for `RunnerV0729ModularArtTests`, `RunnerV0751PhysicalEquipmentTests`, and `RunnerVisualCapture`; the full modular-art suite, its `--human-geometry-only` path, and the physical-equipment suite all execute successfully. `build/human-art-final-v0751/manifest.txt` records all `62` frames. Direct original-resolution and nearest-neighbor review confirms a solid arm/hand silhouette, matching grounded front/rear authored boots, a subordinate physical rear-foot brace, and unchanged two-hand carbine alignment. Canonical Human proof `art-human-2048x1152.ppm` is `7,077,905` bytes / SHA-256 `8c9bcecbab9bc2600193c8b50724e34fa0f2ec48f2203cdee62c4dca9b87083e`; review PNG is `46,604` bytes / `1569e4c0d74e37890bb50ef41e279ade8668ad2b1f82fc57924deb9452c7a4cf`. Opposing-phase physical-foot proof is `7,077,905` bytes / `8a81c743006a968d709a321c2249b1801f67b3c61eff88004813f965980aebb0`; equipment proof is `7,077,905` bytes / `42a9a69e9a48d1835325090779156fb12c9da5253475e811eb974b1c3e88fc01`. This establishes deterministic software-raster art and anchor continuity only; native Vulkan/package eye acceptance and Raw posture/gait remain separate open gates.
+
+Human posture and partial-burial recovery correction in progress (2026-09-06): direct live v0.7.51 review shows the Human folding forward after the former back-support behavior was removed. Preserve the accepted zero-root-projection, zero-hidden-brace authority contract and the stable 76-observation Raw policy shape. Add one finite, observable articulated recovery path that uses measured torso angle/rate, semantic sole support, contact load and burial depth to request bounded Human hip/ankle/torso motor work; it may stabilize an ordinary planted posture and deliberately extract from partial burial, but it must never translate particles, rewrite contacts/history, teleport the root, manufacture support, or bypass actuator limits. The game-facing recovery lesson must distinguish recoverable partial burial from impossible/disabled-actuator cases. Require deterministic positive, negative, adversarial, mirrored and repeated-seed tests, then fresh Windows MSVC `/W4 /WX` execution plus the unchanged V0748 and V0730 physical prerequisites. Retain only if upright stabilization improves without weakening the existing gait or no-cheat gates; record any remaining Raw release failure explicitly.
+
+User correction — learned posture, not live support (2026-09-06): an always-on finite joint modifier would still be a runtime brace and cannot close the visible slump or burial mission. Any new proximal posture/burial signal is permitted only as a weak, bounded Assisted-training hint that shapes examples through existing motors, decays monotonically across the curriculum, and reaches exact zero before the retained-controller Raw handoff. It must be absent from Raw/live learned effective actions and authority telemetry. Release acceptance requires the retained network, with no hint or optional posture authority, to maintain ordinary planted posture and demonstrate the declared recoverable partial-burial behavior across mirrored repeated seeds; otherwise the feature remains honestly untrained. Remove the prototype entirely if it improves only teacher playback. Do not label the Director recovery node implemented without an ordered physical receipt from unaided execution.
+
+Foundational Human policy-input distribution cliff (2026-09-06): independent source audit found that pre-handoff Assisted Human Walk feeds the network the unsanitized environment observation, including teacher-correlated elapsed-phase sine/cosine at indices 38/39, while strict Raw handoff and evaluation apply `raw_policy_observation()` and zero those exact inputs. The clock-driven teacher therefore permits a shortcut that disappears precisely when the network becomes authoritative, contradicting the source comment that handoff changes action authority without changing the observation distribution. The advertised deterministic Raw rollout ramp is also defined and surfaced but not consumed by the Human rollout partition, which currently changes from all Assisted to all Raw; guided imitation is then disabled for Raw collection. Before adding a posture hint or running long training, feed the same sanitized policy observation to the foundational Human network and transition in both Assisted and Raw collection while keeping the teacher's private clock out of policy input. Add exact Assisted/Raw policy-input equality, phase-leak rejection, finite/mirrored/repeated tests, then run the unchanged V0748/V0730 and retained Raw gates. Do not expose phase to Raw, blend teacher authority into Raw, or claim the unused ramp works.
+
+Foundational Human authority-boundary receipt and posture/burial rejection (2026-09-06): retain one shared foundational policy-input adapter for Human Uneven Walk across Assisted and Raw rollout collection, bootstrap value evaluation, retained integration, parallel evaluation, self-imitation capture, and diagnostic replay. It scrubs private phase observations `38/39` on both sides of handoff while leaving Speed Walk and other stages byte-unchanged. Training semantics advance to `0x0007'5110` with the stable `76/13` ABI; `0x0007'5109` preserves its historical equipment meaning but may not silently resume and is explicit transfer-only. The existing 300-update schedule now assigns authority per environment: Raw origins execute sampled actions only; complementary Assisted origins retain finite demonstrations. During mixed updates only Raw-origin transitions enter PPO actor/value/entropy accumulation, self-imitation and retained-best anchoring are exactly absent, and the separate decaying imitation pass consumes Assisted origins only. Whole-cohort Raw remains the sole receipt boundary. Direct deterministic pre-handoff/first/midpoint/final-mixed/whole-Raw tests prove exact origin counts, monotonic guide decay, zero Assisted PPO actor samples, rejected Raw imitation sources, no premature receipt, repeatability, and a real optimizer change; fresh MSVC 17.14 Release `/W4 /WX` build and `RunnerRawLearningProvenanceTests` pass (`23.8 s`). The pre-existing observable ankle balance target is only Assisted teacher composition, activates only for a physically observed single-support side, returns exact no-op for double support/airborne or `require_raw_policy` mismatch, and Raw effective-action identity tests prove no live contribution. A tentative proximal attitude/burial modifier was removed because its one-step physical sign probe did not establish stable opposed response; no always-on support or burial script is retained. A direction-reflected phase A/B improved reverse unload/replant (`106/101` unload and `107/103` replant versus baseline `112/-1` and `-1/-1`) but still moved the wrong world direction (`+2.29556 m`), remained invalid, and was removed. A no-action physically mirrored fixture was sign-symmetric (`COM vx +/-0.043106 m/s`, pelvis `+0.042466/-0.042466`, mirrored tangential impulses), excluding an inherent +world contact rail. The unchanged physical gates remain red: RawAuthority forward/reverse travel `+2.56795/+2.50477 m`, complete `0/0` cycles, reach `1.10085/1.11363 m` maximum COM-COP lead, and lose the far-side replant; V0748 fails the fixed landing prerequisite at frame `19` (`0.295642 m/s` horizontal, `0.840472 m/s` absolute vertical, signed `[-1.241696,-1.192776] m/s`, contact-most `-1.212708 m/s`); all ten V0730 Human seeds fall after one stride at `2.48761..2.61772 m` and `2.87..5.25 s`. `stabilize_duck_posture()` remains separately labeled Assisted-only direct-particle crouch scaffolding and cannot certify Raw posture or burial mastery. Recovery, construction, and tool traversal remain disabled/untrained. Ordinary unaided slump and partial-burial escape therefore remain open release gates; no release success is implied.
+
+Final promotion-receipt hardening in progress (2026-09-06): finish the reopened release boundary without touching locomotion, UI, packaging, tags, uploads, or publication. The protected promotion workflow must authenticate the dispatched workflow definition and ref plus the current run before protected secrets are exposed; bind the exact Phase-A run attempt and artifact IDs/digests; recursively allowlist every handoff file including the decoded native-capture tree and one canonical SITE-HANDOFF summary; scope the HMAC secret to signing/final verification only; and pin all third-party actions to immutable full SHAs. The signed receipt is deliberately repeatable strict context binding, while genuine one-use authority remains the Site activation grant. Publication sequencing must retain rollback until a pre-publication byte audit succeeds and then anonymously re-download and hash every public asset after publication. Add deterministic hostile coverage for foreign workflow/ref/run identity, Phase-A attempt/artifact substitution, repeated valid verification, nested handoff additions, altered captures, and missing/failed post-publication verification. No release claim is permitted from this work alone.
+
+Final promotion-receipt hardening receipt (2026-09-06): the v2 external receipt and canonical `SITE-HANDOFF` summary now bind the exact candidate, executing event/run/ref/workflow SHA/ref, Phase-A run attempt, and immutable build/promotion-input/native-evidence artifact IDs and digests. Both promotion stages query and authenticate the current GitHub run before the only step that receives the HMAC secret; every release-path action is pinned to a full 40-character commit. The Site handoff verifier recursively requires the exact 15 release objects, two Phase-A receipts, native bundle, complete extracted capture file/directory tree, promotion receipt/signature, and summary, and rejects nested extras, empty directories, changed copies, or changed captures. Receipt verification is stateless and repeatable; the summary explicitly delegates one-use authority to the external atomic Site activation grant. The GitHub opt-in path keeps rollback armed, verifies the draft's exact 15-object byte set, publishes, strips token variables from fresh public downloads, and verifies exact filenames, sizes, SHA-256 values, and bytes before cleanup. A missing CMake final-audit forwarding edge for run SHA/ref was corrected, and repository audit now enforces secret-order, action-pin, draft-audit, anonymous-download, post-publication-audit, and rollback ordering. Python compile and workflow YAML parsing pass; all `16/16` strict adversarial tests pass, including repeatable receipt/publication checks; registered `Runner.RepositoryHygiene` and `Runner.StrictReleaseManifest` pass `2/2`; and `git diff --check` reports no errors. This closes only the local release-workflow implementation. Publication remains blocked by the unchanged Raw Human physical failures, native packaged capture/eye acceptance, a stabilized committed candidate, complete Windows/Linux/package matrices, external Phase-A artifact and protected promotion receipts, and live Site/GitHub re-download evidence. No tag, package, upload, Site mutation, or publication occurred.
+
+Final UI reconciliation in progress (2026-09-06): reconcile the already-started production UI facelift without restoring retired microcopy or touching simulation, gait, weapon, terrain, or release logic. The deterministic UI contract must require the current production navigation instead of the obsolete `TRAINING CONTROLS` label; one coherent Rig Lab route must retain all training functions, with a responsive compact command surface, a capped right rail, responsive Rig Art actions, persistent preview `ZOOM OUT / FIT / ZOOM IN`, isolated Live/Rig art and zoom state, F11 fullscreen with Escape returning to windowed mode first, and Live Details as the sole owner of detailed telemetry overlays. Require MSVC `/W4 /WX` focused tests plus fresh 1368x799, 2048x1152, and 3840x2160 software-raster evidence. Software captures can establish deterministic layout and pointer behavior only; native high-DPI and packaged-runtime eye acceptance remain separate open gates.
+
+Final UI reconciliation receipt (2026-09-06): the retained production surface now has one Live `MISSION / VIEW / DETAILS` hierarchy and one Rig Lab command bar with mission, `START/PAUSE TRAIN`, `SETUP`, `TRAINER`, and `INSPECTOR`; the retired `TRAINING CONTROLS` microcopy was not restored. The Rig Lab rail is bounded to `420..720` logical pixels while preserving more than 900 logical preview pixels at 1368x799, narrow gait choices become full-width readable actions, 4K uses the inset-aware wide Summary without reopening duplicate panes, and compact Summary evidence wraps at the 1.40 type floor. Details cards and the Live PIP reserve measured wrapped-text height; only View owns the world telemetry/PIP while History/raw data remain reachable through Details. Live Art initializes on when its optional bitmap loads, Rig Art initializes off, and their state remains isolated. The persistent Rig preview toolbar owns `ZOOM OUT / FIT / ZOOM IN`; a dedicated title lane prevents its buttons from covering Art/Bone/Motor/Test headings, and physical-test detail begins below the toolbar. F11 fullscreen and Escape-first return-to-windowed behavior remain source-contract covered. Fresh MSVC 17.14 `/W4 /WX` Release builds pass for `RunnerViewCameraTests`, `RunnerV0729ModularArtTests`, `RunnerV0723GrayFrameTests`, and `RunnerVisualCapture`; all three test executables pass. `build/ui-final-reconcile-v0751-titlelane/manifest.txt` records 62 deterministic production-vertex frames plus its manifest across 1368x799, 2048x1152, and 3840x2160. Direct review confirms readable compact Live/Details/View, non-overlapping 1368 Rig Art title/zoom controls, persistent 4K zoom controls, and an intentionally sparse fitted 4K preview. This closes the UI source/software-raster reconciliation and makes the source safe to rebuild and relaunch for native review. It does not establish native Vulkan, packaged-runtime, Raw gait, weapon, terrain, release, tag, upload, or publication acceptance; those gates remain separate.
+
+Large-type production-tool UI closure in progress (2026-09-06): final original-resolution software captures still show clipped Rig Art action labels, two competing Rig Lab navigation layers, an oversized but mostly empty 4K inspector rail, duplicated Live Details telemetry/PIP overlays, weak all-caps type hierarchy, wheel-only preview zoom, and no real SDL fullscreen route. Reflow Rig Art actions and subtitle before raising body text to at least 1.40 logical scale, reduce Rig Lab to a compact mission breadcrumb plus Start/Pause and Setup/Trainer/Inspector routes, reduce its embedded Trainer to Status/Mission/Details while retaining History/raw controls beneath Details, cap the compact rail near 28 percent / 720 logical pixels, and add persistent Zoom Out/Fit/Zoom In preview controls backed by the existing isolated Rig zoom. Live Details must own its information without duplicated world telemetry or PIP. Add F11 fullscreen with Escape returning to windowed mode before quit. Preserve every simulation, rig, contact, gait, weapon, terrain, policy, persistence, and shared-preview behavior; require deterministic 1368x799 and normalized 3840x2160 layout, pointer, camera-isolation, label-fit, and raster evidence plus focused Windows warnings-as-errors UI builds.
+
+Double-support ankle-distribution A/B planned (2026-09-06): the restored Raw trace remains bilateral through frame `89`, while `apply_raw_human_support_balance` routes the complete observable torso correction through whichever ankle the elapsed phase merely labels stance. That creates a discontinuous phase-owned torque handoff despite both real soles still carrying contact and can saturate one actuator before the first physical single-support interval. Probe one observable, mirror-symmetric correction only: when both semantic soles are supported, split the same finite correction equally across the two explicit ankle motors with opposite topology signs; when exactly one sole is supported, retain the existing full selected-ankle action; when airborne, apply none. This changes no hip/knee endpoint, phase, root, contact, course, torque/work limit, action/observation count, or acceptance threshold. Require positive/negative, toe-only/single/double/airborne, mirrored and repeated evidence, then the unchanged V0748 physical prerequisite, Raw forward/reverse authority gate, and all ten V0730 reference seeds. Reject and remove it unless it improves signed physical transfer without weakening any prerequisite.
+
+Rejected double-support ankle-distribution A/B (2026-09-06): the mirror-symmetric split passes its direct positive/negative and repeated-input action proof, but immediately regresses the unchanged V0748 physical prerequisite before the Raw teacher gate can run. The swing still obtains `21` consecutive all-node-unloaded frames with `0.006941 m` minimum clearance, but maximum swing horizontal speed rises to `0.822431 m/s`; landing horizontal speed is `0.414898 m/s` versus the fixed `0.40` limit; maximum absolute vertical approach is `1.421631 m/s`, signed range `[-1.421631,-1.362939] m/s`, and the contact-most node strikes at `-1.398028 m/s` versus `-0.65`. Distributing the finite attitude request does not create earlier controllability; it reduces the selected stance ankle's capture before the incoming sole is safe. Remove the production/test prototype and restore the selected physical stance ankle unchanged. Do not tune the split or weaken landing thresholds.
+
+Two-hand physical weapon-frame correction completed (2026-09-06): direct source and bitmap review rejected the former shoulder pose even though it could reach READY. The retained repair gives both real Human hand particles finite body-local endpoint IK toward a shoulder-pocket/rear-grip and separated foregrip, with branch continuity chosen from the live articulated links instead of fixed world Y. One measured rear-to-front grip frame now owns held rendering, actual aim/rate, ballistic muzzle, visibility, miss correction, and finite 60/40 recoil at the two grips. Invalid, crossed, coincident, nonfinite, unseated, incomplete, or malformed-root/torso grips resolve explicitly to `invalid_grip` before settle/state checks and cannot fire. No root, contact, particle-position, history-position, projectile-steering, synthetic-hit, or acceptance-threshold change is present. The stable 76-observation contract advances to equipment semantics `0x0007'5109`; the older rejected residual-paced locomotion use of `5109` recorded below was never retained and is explicitly superseded without changing Raw dimensions or behavior. Windows MSVC `/W4 /WX` builds pass for Runner, V0751 physical equipment, V0729 modular art, and Raw learning provenance; all three focused executable suites pass. The older V0749 combined combat/terrain executable builds cleanly but still stops at its pre-existing Speed Walk teacher gate (`3.11649 m`, five steps, `0.155825 m/s`, zero collisions), before reaching equipment assertions. The deterministic 2048x1152 equipment proof reports planted/READY, `0.005 rad` aim error, `0.010 rad/s` aim rate, no shot, and a real two-hand upper-chest carbine frame; original-resolution inspection confirms the rendered stock/rear grip/muzzle landmarks share the physical `WeaponGeometry`. Canonical proof PPM: `build/two-hand-equipment-proof-v0751/equipment-assisted-ready-2048x1152.ppm`, 7,077,905 bytes, SHA-256 `0c3a29d688982d7da9861bff63251ab79b7b600e5b96dfd9f2176b9e8dee6494`. Review PNG: `build/two-hand-equipment-proof-v0751/equipment-assisted-ready-2048x1152.png`, 45,348 bytes, SHA-256 `c0eac12d8b2ee00539476f7c98eeddfc1d218b5c9f1a52192140a3978bce293e`.
+
+Rejected Raw actuator-clock source mismatch A/B (2026-09-06): evaluating moving-Human actuator authority on the unshifted canonical clock does not repair locomotion and regresses the prerequisite before Raw teacher evidence is reached. A fresh MSVC warnings-as-errors V0748 build records `23` consecutive all-node-unloaded frames and `0.006708 m` minimum clearance, but touchdown is `0.415764 m/s` horizontally and `1.549743 m/s` in absolute vertical approach; the contact-most node strikes at `-1.517168 m/s`, versus the unchanged `0.40 / 0.65 m/s` gates. Restore the prior moving-Human ramp timing. Do not align the clocks merely because their source expressions look inconsistent: the physical A/B proves the delayed authority shortens capture and worsens landing. No cadence, slew, torque, endpoint, contact, root, course, threshold, observation, or semantics change is retained.
+
+Event-conditioned phase prerequisite (2026-09-06): a pure finite oscillator step now passes Windows warnings-as-errors coverage for semantic flat purchase, exact-boundary release, toe-only/airborne/non-finite rejection, smooth final-window easing, and repeated/mirrored evolution. The gate requires a real support member plus maximum heel/ball/toe clearance `<=0.008 m`; without it the phase approaches but cannot cross the half-cycle exchange, while a purchased incoming sole advances at the unchanged nominal rate. This helper alone leaves the baseline V0748 physical prerequisite green and reaches the existing Raw teacher failure (`2.50818 m`, zero cycles, invalid at `2.06667 s`). Next integrate one explicit Human Walk phase/rate state, advance it only from post-solve semantic sole evidence, expose the same phase/rate to the policy, and run V0748 once. Retain only if the held finite endpoint actually flattens the incoming sole and improves the unchanged landing gates; no contact/root/history write or target override is permitted.
+
+Rejected event-clock physical integration (2026-09-06): wiring that proven oscillator to the Human Walk teacher and exposing its phase/rate does not make the existing finite endpoint flatten. V0748 grows from the passing baseline to `74` all-node-unloaded frames with `0.006118 m` clearance and `1.179803 m/s` maximum swing speed, but never records a qualifying replant; the landing scalars remain their `float::max` sentinel and signed/contact vertical samples remain zero because no landing event occurs. The endpoint is stranded airborne when the oscillator waits for physical purchase. Revert all production clock, observation-count, and semantics changes to the stable `76` / `0x0007'5108` contract. Preserve only the pure transition helper/tests as negative design evidence: contact-conditioned phase is coherent and symmetric, but cannot solve a plant the current trajectory never physically reaches. Do not tune its window or clearance threshold.
+
+Restored-baseline signed source-order trace (2026-09-06): forward and reverse are byte-identical through frame `20`, as expected while the analytic control phase is held and the finite action ramp is near zero. Once direction-specific hip/knee targets diverge, ground response still has the same `+world` sign: at frame `40` forward/reverse ground center-velocity increments are `+0.005082/+0.005982 m/s`; at frame `60` they are `+0.031652/+0.028993 m/s`, while pelvis velocities are already `+0.220150/+0.191000 m/s`. At frame `89`, both nominal directions remain bilateral toe-supported rather than reaching true single support; pelvis velocities are `+0.656782/+0.686143 m/s`, heel clearances are forward `0.113715/0.014961 m` and reverse `0.052427/0.039349 m`, but both distal toes remain at the plane. The first semantic unload is not until frames `107..113`, after the common drift and COM-COP lead are established. This excludes an instruction-sign-only explanation: direction-specific targets act through two still-constrained soles, and the free-chain hip reaction plus toe pivot can share a positive world response. Remove the temporary trace flags. Next measure the local controllability matrix from real single-support snapshots: perturb the finite stance hip and ankle independently in both signs, on both support sides and mirrored intent, and compare pelvis/torso acceleration, COP shift, sole slip, torque/work, and friction dissipation before designing any combined observable controller.
+
+Finite stance-response matrix rejection (2026-09-06): first-real-single-support snapshots do not provide the bilateral, opposed local inverse required for a new speed/attitude controller. At reverse/right support, stance hip `-0.18/+0.18` requests apply only `-0.02252/+0.01081` and produce pelvis acceleration deltas `+1.215/-0.580 m/s^2`; ankle requests apply `-0.01529/+0.01805`, shift COP `-0.00230/+0.00261 m`, and produce `+0.230/-0.271 m/s^2`. But reverse/left support already saturates the negative hip and both ankle directions: three of four perturbations have exactly zero applied-action and zero physical response. Forward/right similarly has zero negative hip response, while forward/left has zero response for both hip signs and positive ankle; only negative ankle applies (`-0.03333`) and produces `+0.193 m/s^2`, `-0.00933 m` COP, and `-0.03279 m/s` slip. All measured contact work stays dissipative (`-0.09..-0.30 J`), so friction is not injecting the asymmetry. The first true support events arrive with the relevant actuators already one-sided or saturated; no mirrored two-input controllable region exists there. Remove the temporary `STANCE_MATRIX` probe. Do not synthesize a hip/COP controller from this singular state. The causal prerequisite is earlier physical swing/toe unloading that reaches single support before the common `+world` momentum and actuator saturation accumulate.
+
+Vertical target continuity A/B planned (2026-09-06): the restored trace exposes a remaining exact trajectory discontinuity before first support. Human sagittal X uses the C1 Hermite path, and transition flex already uses `sin^2`, but swing lift still uses `sin(progress*pi)`. Its derivative jumps from zero stance lift to approximately `swing_lift*pi` at each exchange and returns with a nonzero downward derivative at contact. At the frame-89 toe pivot the desired hip/knee are `+0.734/-0.855` while finite actuators have reached only `+0.286/-0.335`; the requested vertical endpoint is `0.682 m` versus `0.499 m` actuator endpoint and `0.275 m` actual ankle. Test only a Human smooth-gait `sin^2` lift profile, which preserves zero height and peak clearance but makes lift velocity zero at both exchanges. It changes only finite joint targets, not phase, contact, root, history, torque, work, or thresholds. Retain only if V0748 physical landing stays green and Raw/V0730 show earlier all-node release plus bilateral signed improvement.
+
+The vertical-profile A/B above was not executed: the finite stance matrix more directly proves that phase reaches first support after the accepted targets and actuators are already saturated, and the bounded next experiment is residual-paced phase rather than another shape sweep. Keep `sin` unchanged for this isolation. The residual rate law must use only observable desired-versus-current leg action and joint-velocity magnitudes, remain mirror-invariant and finite, clamp to a positive crawl rate, and impose at most a nonzero support-event rate cap near exchange. It must expose explicit phase/rate state if retained; no wall-time/hidden latch, contact/root write, or acceptance change is allowed.
+
+Rejected distal-departure target A/B (2026-09-06): using the appended per-sole maximum clearance to blend the finite swing clearance/descent target before all three nodes unload does not repair the landing invariant. A fresh Windows warnings-as-errors build reaches `24` all-node-unloaded frames with `0.007222 m` minimum clearance, but the landing is worse: maximum swing horizontal speed `0.821581 m/s`, contact horizontal speed `0.429542 m/s`, signed vertical range `[-1.670133,-1.596706] m/s`, and contact-most vertical speed `-1.623561 m/s`. `RunnerV0748ContactArtTests` rejects this before its teacher gate. Remove the entire target blend; keep only the honest 76-value observation/schema extension. The next bounded diagnostic is an exact same-seed removal of the direction-independent Raw Human support-balance ankle term, decomposing base hip/knee/ankle requests from the balance delta before altering phase or geometry.
+
+Rejected support-balance removal A/B (2026-09-06): removing only `apply_raw_human_support_balance` from the foundational Human teacher does not own the common `+world` collapse and materially removes finite stance recovery. Raw forward/reverse remain the wrong same sign at `+2.56734/+2.50509 m`, zero cycles; maximum COM-COP lead is `1.09153/1.11316 m`. V0748's physical transfer regresses from its passing baseline to a hard landing failure (`21` unload frames, `0.006421 m` clearance, `0.412545 m/s` horizontal contact approach, contact-most vertical velocity `-1.361495 m/s`). V0730 seed `29440` falls at `2.91666 s` with zero strides and the ten-seed set yields only `0..1` strides, versus baseline `1..2`; survival is mostly `2.8..5.21668 s`. Restore the direction-independent ankle balance. It reduces the forward COM-COP error and extends real transfer; it does not explain the signed-direction failure. Phase reflection was already separately rejected, so the next causal pass must decompose the base endpoint/contact sequence rather than remove this stabilizing actuator term.
+
+Physical art/equipment acceptance pass in progress (2026-09-06): the remaining bounded work owns authored-sprite fit and the Human articulated ready/aim pose only. Preserve the supplied irregular PPM pixels, exact physical shoulder/elbow/wrist and heel/ball/toe anchors, ordinary contact/friction authority, the finite motor/action path, stop/plant/settle/fire sequencing, projectile miss feedback, and the current policy/persistence dimensions. No capsule replacement, renderer-only pose, root/contact/history write, hidden aiming state, terrain/UI change, or release claim is permitted. Audit Human near/far arm and hand mass/seams, physical boot separation, and species terminal continuity against original-resolution captures; change Dog/Chicken/Hexapod only when their actual topology-to-sprite transforms prove a defect. Redesign the equipment teacher through observable finite joint targets so a planted Human seats the stock near the shoulder, aligns the sight near the eye, and presents two readable physical grip chains without weakening ballistic/stance gates. Add positive, negative, mirrored, malformed, and repeated-seed coverage; require exact 2048x1152 relaxed-Human and planted-equipment raster review before closing this slice.
+
+Flat-sole phase-handoff correction in progress (2026-09-06): the deterministic Raw Human teacher first becomes unstable at the nominal phase exchange, not at a contact-solver discontinuity. At frame `69` the incoming right sole is toe-only (right heel clearance `0.01776 m`) while the left heel/ball/toe still carry stance. At frame `70`, elapsed-time phase selection nevertheless changes the left requested ankle endpoint from `y=0.4655` to `0.5472 m` and its hip/knee targets from approximately `-0.048/-0.002` to `+0.322/-0.484`; the old stance is therefore lifted before the incoming sole has full purchase. COM-to-COP lead then grows from `0.253 m` to about `0.99 m`, pelvis speed rises from `1.30` to `3.26 m/s`, and the body rolls into the unchanged `FALLEN` gate. Minimum sole clearance alone cannot distinguish flat purchase from a toe-only pivot because both report zero. Preserve observation indices `0..73`, append per-side maximum heel/ball/toe clearance at `74..75`, and advance training semantics to `0x0007'5108`. The finite joint-space teacher may begin a new swing only as the opposite sole continuously approaches full heel/ball/toe purchase; until then it remains at the exact preceding stance endpoint with zero added lift. Once that command produces measurable all-node departure, the swing sole's own maximum clearance is the observable latch that maintains the smooth transition while the new stance naturally rolls through backstroke; no hidden clock or controller state is introduced. This is observation-driven target continuity only: no contact membership, particle/root/history write, anchor, collision suppression, or force is permitted. Add flat/toe-only/nonfinite/repeated observation and handoff tests, then run the deterministic physical teacher gates before any long retraining. Temporary frame traces must be absent from the retained source.
+
+Flat-purchase gate first outcome (2026-09-06): the exact stateless opposite-sole gate correctly rejects the `0.01776 m` toe-only exchange but deadlocks the physical swing at zero all-node-unloaded frames because normal stance backstroke soon raises one end of the newly planted sole and closes the gate again. Adding only the outgoing sole's observed maximum clearance as a continuous physical departure latch restores `21` consecutive all-node-unloaded frames with `0.006382 m` minimum clearance, proving the gate is not opening collision or writing support. It does not close the unchanged landing gate: maximum swing horizontal speed is `0.753624 m/s`, contact approach is `0.405919 m/s` versus the `0.40` limit, maximum absolute vertical speed is `1.068004 m/s`, and the contact-most node strikes downward at `-1.481191 m/s` versus the `-0.65` bound. V0730 remains all red: each of ten seeds records exactly one qualified stride, travels `+2.62594..+2.81579 m`, and becomes `FALLEN` or `FLIPPED` after `2.933..5.333 s`. The phase delay has shortened the remaining finite swing/descent interval rather than producing a safe event-timed exchange. Do not start long Raw retraining from this target gate. Keep the new maximum-clearance observation/schema evidence, but either reject the provisional target gate or replace it with a full-duration event-driven phase transition that is representable by the policy and passes the existing landing/teacher gates. Windows warnings-as-errors focused builds and exact `384` forward / `384` reverse / `256` stop provenance pass; the Core executable currently stops at an unrelated Rig Lab layout-overlap assertion.
+
+Rejected landing-capture follow-up (2026-09-06): an observation-only safe-descent window and two bounded finite-endpoint velocity-gain sweeps reduce one horizontal landing approach to `0.213698 m/s`, but cannot reduce the actual contact-most downward strike below `-1.298579 m/s`; V0730 remains exactly one qualified stride per seed and then falls or flips. The fall-driven distal velocity is therefore not repaired by a free-endpoint terminal correction. Remove the phase-purchase/departure and descent-window target experiments rather than training from them. Retain the honest maximum-clearance inputs, 76-value schema, and semantics `0x0007'5108`: they are required to distinguish toe-only contact even though the attempted stateless phase gate is rejected.
+
+Post-rejection focused locomotion matrix (2026-09-06): after removing every provisional phase-purchase/departure/descent target, the original hard physical swing/replant prerequisite passes again and V0748 next fails only its unchanged Raw demonstration at `2.50818 m`, zero cycles, zero alternating steps, and `FALLEN` after `2.06667 s`. V0730 remains all red at `+2.59828..+2.85012 m`, one or two strides, and `2.90..5.31668 s` before `FALLEN`. Raw forward/reverse are both the wrong positive world sign (`+2.52581/+2.50115 m`), with zero cycles/alternations, maximum COM-COP lead `1.03902/1.12325 m`, valid reciprocal toes near `0.6283 rad`, real unload/replant evidence, zero powered-toe/helper authority, and `FALLEN`. V0749 Speed Walk advances `+3.11649 m` with five steps but remains below its unchanged distance/step gate. The lake Human falls before water at `x=2.3361 m` versus shore `34.6002 m`, `2.06667 s`, zero cycles, zero helper/posture/manipulator/toe authority. These remain release-blocking and no long retraining has been started. Windows `/W4 /WX` focused builds and Raw provenance pass; Core execution is independently blocked earlier by a shared Rig Lab layout-overlap assertion.
+
+Signed phase-reference A/B planned (2026-09-06): the Human foundational gait reflects endpoint X for negative local intent but currently retains the positive-direction authored phase offset. That maps the saved stagger to the opposite point of the reflected stance curve, so reverse starts with a leg exchange rather than the same continuous authored pose and both Raw trials can receive the same initial positive-world contact reaction. Test only the mathematical reflected reference `pi - phase_offset` for negative local direction, leaving cadence, targets, actuators, contacts, and the positive path unchanged. Retain it only if V0748 physical swing remains green, Raw reverse obtains negative progress with real transfer, and V0730 does not regress.
+
+Rejected signed phase-reference A/B (2026-09-06): reflecting the negative-direction phase reference leaves the forward trace byte-identical and preserves the physical swing prerequisite, but reverse still collapses in the positive world direction at `+2.28647 m`, zero cycles/alternations, with `1.07222 m` maximum COM-COP lead. This is only a modest change from `+2.50115 m / 1.12325 m` and does not provide signed locomotion; remove it. The same-world collapse is therefore not caused solely by selecting the wrong authored point on the mirrored phase.
+
+Forward/reverse source-order trace (2026-09-06): after reverting the phase reflection, both signed teachers are byte-identical through the zero-authority startup and receive the same small passive/contact transient (`+0.151816 m/s` accumulated ground-source delta through frame 20). The teacher begins diverging by frame 40, but both bodies continue in positive world X. At frame 60 forward/reverse pelvis velocities are `+0.220/+0.191 m/s` with pelvis height `2.284/2.286 m`; by frame 89 they are `+0.657/+0.686 m/s` and pelvis height has sagged to `2.143/2.090 m`. Both are still toe-supported on both sides rather than in true single support. The commanded swing endpoint height is already `0.682/0.692 m`, but the slew-limited actuator endpoint reaches only about `0.499/0.513 m`; commanded hip/knee values approach `0.73/-0.86` forward and `0.89/-0.87` reverse while the actuators lag substantially. By frame 120 pelvis height collapses to `0.565/0.438 m`, both semantic soles are unsupported or toe-penetrating, and the knee/hip solve reaches large finite torque/work usage. Thus the same-world sign is a consequence of the common positive startup transient followed by insufficient pre-transfer body support: direction-specific targets arrive, but neither obtains a load-bearing single-support interval capable of reversing the initial momentum before torso/pelvis collapse. The next correction must improve finite support/attitude capture through existing observable joint actions; another direction/phase sign change is excluded. Temporary Raw trace flags are removed.
+
+Distal-departure controller A/B planned (2026-09-06): the existing clearance/descent controller turns on only after the complete semantic sole reports unsupported. The source-order trace shows the nominal swing heel/ball already `0.05..0.11 m` clear while its passive distal toe remains the final supported node, so the additional finite lift never participates in creating the single-support state it is meant to regulate. Use appended maximum sole clearance to derive a continuous `0..1` physical-departure blend while the opposite sole remains genuinely supported, and blend the existing finite hip/knee clearance/velocity target by that amount. A flat sole receives exactly zero extra target; a visibly departing heel/ball ramps smoothly to full control; contact membership, particles, root, history, and collision remain untouched. Retain only if the existing V0748 swing/landing gate passes, Raw obtains improved signed transfer/COM evidence, and repeated V0730 improves.
+
+Orthographic art acceptance reopening (2026-09-06): original-resolution v0.7.51 proofs still fail the user's explicit arm, hand, foot, and gun-stance review. Human upper arms read as sticks against the armored torso/thigh, the far arm disappears, the hand looks like a detached gripper below the carbine, overlapping feet collapse into one thin toe silhouette, and the rear ankle/sole/bone line reads ungrounded. The planted equipment pose holds the weapon near the waist with no credible stock-to-shoulder or eye-to-sight alignment and no two readable grip points. Dog rear and front paws use inconsistent bead-chain versus compact terminal shapes; Chicken terminal feet are near-line-width toes with little plantar/contact mass; Hexapod distal feet vary between detached discs and long loops with several visually broken shank connections. Preserve the accepted species/body silhouettes and physical anchors, but thicken and connect Human shoulder/upper-arm/elbow/forearm/hand modules, fit two hands and stock/shoulder/eye to the actual aim axis, separate near/far Human heel-midfoot-toe masses with a flat planted sole, and make every species' terminal geometry consistent and visibly continuous. Re-run modular-art/contact tests and exact orthographic plus planted-aim bitmap review; metrics cannot waive these visible failures.
+
+Bounded authored-art fit outcome (2026-09-06): the Human renderer now fits the unchanged irregular PPM arm modules to a `0.50` upper-arm and `0.44` forearm transverse fraction, retains the far arm at `0.90` opacity, grows the supplied hand/cuff silhouette within a finite `0.68`-forearm-span cap, and overlaps the real shoulder/elbow/wrist seams without adding capsules or duplicate limbs. The Human boot transform now spans the exact physical heel-to-toe plate and keeps the near/far soles independently readable. Fresh Windows warnings-as-errors `RunnerV0729ModularArtTests --human-geometry-only` and the complete modular-art suite pass. Original-resolution inspection accepts the current Human arm/hand mass and sole separation for this bounded art slice. The exact proof is `build/art-equipment-proof-v0751/art-human-2048x1152.png`, `2048x1152`, `46,056` bytes, SHA-256 `3204b09fcc6ebf3ff1d02f535dd3c93bd581d96d0453472bca323ae599caa336`; the inspected crop is `art-human-closeup.png`, `92,327` bytes, SHA-256 `7089bbaf4bc136254132d550c54449b991b941db2b944ca267ee37f46def03d5`. Direct source-transform and contact-overlay inspection found no detached terminal anchor in the Dog, Chicken, or Hexapod production silhouettes, so their supplied asymmetric PPM feet remain unchanged rather than being normalized into generated shapes. This is isolated software-rendered QA, not packaged native evidence.
+
+Physical shoulder-height equipment rejection (2026-09-06): the equipment teacher now discovers both real Human shoulder/elbow/hand chains, selects the actual weapon-mount hand as the rear grip, places the other real endpoint on a separated foregrip along the physical barrel axis, uses only finite equipment-only motor envelopes, mirrors the request correctly for left-facing targets, and preserves safe-carry, stop, two-foot plant, settle, fire, real miss correction, cooldown, and recovery. The first exact render nevertheless rejected the stable `0.60` world-down upper-arm bias: rear-grip distance/drop were `0.337336/0.336063 m`, so the carbine read at the waist. The bounded height bracket proved why a coefficient alone cannot close it. Bias `0.30` seats the grip high but leaves the third-target reacquisition at aim rate `0.380062 rad/s`; `0.40` yields `0.232650 m` drop but reaches only `0.216667 s` of the required `0.30 s` settle; `0.45` finishes with `0.746840 rad/s`. Expressing `0.45` in the aim-axis/down-normal frame removes the target-angle conditioning error but still reaches only `0.083333 s` settle on the third target. All red candidates remained valid, planted, and within finite joints, yet each stopped at two of three physical hits; no gate was weakened. Restore the last fully green `0.60`, `176-degree`, `0.056` baseline and keep the shoulder-height visual mission OPEN. Fresh `RunnerV0751PhysicalEquipmentTests` passes its positive, negative, malformed, mirrored, real two-grip, no-early-shot, miss-correction, repeated-seed, and two firing-seed contracts, but the exact `build/art-equipment-proof-v0751/equipment-assisted-ready-2048x1152.png` proof (`48,996` bytes, SHA-256 `180c10a23929d370b8fb1459788d4bc9a2afa0e37316cbe001c2e85c831b3145`) remains explicitly rejected as waist-level. The next coherent attempt must change the physical weapon/grip model so a shoulder-height two-hand line has a nonsingular recoil-recovery solution; renderer-only stock placement, particle/root/contact writes, hidden aim, more coefficient sweeping, or acceptance relaxation are excluded.
+
+Terrain visual-acceptance reopening (2026-09-06): direct original-resolution review of the current packaged course capture rejects it as a labeled debug cutaway rather than a natural connected EpochSimEngine/SandHybrid-style training world. Six tall leader wires suspend challenge tags in empty sky; the nearly flat surface hides the meaningful material features in disconnected rectangular chambers; the lake is a vertical-sided tank without a graded entry/exit; the cavern is a sealed lens; facility volumes are screen-sized boxes rather than traversable constructed spaces; and large vertical seams/rectangular strata dominate the geology. Preserve the canonical material-cell field and deterministic physical challenge identities, but redesign the visible course as one continuous walkable sequence with progressive banks/depth, rig-scaled connected facilities/cavern approaches, geologic transitions, and tags off by default or edge-docked with short non-crossing leaders. A wide view must communicate the training progression through geometry itself and keep the rig visible without relying on debug labels. Re-run repeated-seed cell/physics coverage plus exact 2048x1152 and compact visual review before release acceptance.
+
+Terrain connected-cell candidate receipt (2026-09-06): the terrain-owned candidate replaces rectangular geology patches with `28` deterministic canonical-cell sediment/ore lenses; replaces the isolated lab/tank/cavern/bay boxes with one orthogonally connected, alternating-door service network; limits its longest open run to `112` cells horizontally and `44` vertically; and couples the real graded surface-lake footprint to a capped SceneCell Water aquifer and glass well without changing the top two solid walking cells, surface challenge coordinates/IDs, `ground_height`, water depth, or traction contract. Positive, negative, exact-cell, same-seed, sixteen different-seed, and adversarial repeated-seed coverage passes in `Runner.DeformableTerrain`; `Runner.SandHybridIntegration` also passes. The exact software-rendered QA image is `build/terrain-connected-capture-v0751/course-2048x1152.png`, `2048x1152`, `35,265` bytes, SHA-256 `7bc6ef8233006eb2cdddc296b80232c48ef30c746bcd34cb9520e22af5dfdc39`; challenge tags and leader wires are absent, the surface lake has a visible graded basin/exit, and underground water is visibly coupled through the well. This is QA-only, not native evidence, and it does not close visual acceptance yet: the isolated full-course camera clips most of the Human at the extreme left and the step/ramp progression remains subtle at whole-world scale, both presentation-owned issues. The locomotion-coupled V0737/V0749/V0751-lake suites remain explicitly red on the shared in-flight locomotion baseline before the lake (`backward rest axis`, Speed Walk `3.11649 m / 5 steps`, Human fall at `x=2.3361 m` versus shore `34.6002 m`); no terrain threshold or traversal result is waived.
+
+Raw candidate rejection audit (2026-09-06): the production rollout curriculum has a confirmed task-distribution discontinuity at the Human Walk handoff. `collect_rollout_partition` assigns locomotion intent only when `strict_raw_human_walk` is already true, so assisted/bootstrap updates `0..899` train the default forward observation exclusively; the first Raw update abruptly contains the deterministic `384` forward / `384` reverse / `256` stop cohort. `raw_walking_teacher_action` already consumes the signed locomotion observation. The existing genuine one-update Raw handoff seam measured its first six-seed evaluation without changing retention: all `6/6` runs are invalid, primary invalid reason `FOOT-NODE SKATING / ROLLING`, rejection mask `25 = INVALID MOTION | MISSING SKILL | NO PROGRESS`, mean distance `0.116087 m`, zero strides, `2.93611 s` survival, quality key zero. `finish_staged_update` evaluates at update one and every five updates thereafter; in production, the handoff itself occurs at update `900`, clears all prior Assisted champions, resets the Raw cohort, and immediately performs a Raw evaluation before even one Raw optimizer rollout, followed by updates `905,910,...`. The causal producer correction is to set the same deterministic signed/stop task observations for the Human Walk cohort before observation during assisted/bootstrap collection as well as Raw collection, while retaining teacher execution only before handoff and exact zero-teacher Raw execution afterward. This removes the observation-distribution cliff; it does not waive the independently red physical teacher gait or any six-seed qualification gate. Add exact pre-/post-handoff cohort tests and permanent diagnostic first/last rejection telemetry before another long run.
+
+First Raw candidate pivot cause (2026-09-06): deterministic replay of the first genuine one-update Raw candidate at evaluation seed `0xE000` enters the pivot detector at frame `150` / `2.51666 s` with both soles fully planted (`left/right support = 1/1`, minimum clearances `0/0`), essentially stationary feet (`sole vx = 0/0`, aggregate stance slip `0.00141499 m/s`), zero completed transfers, but pelvis velocity `+0.181497 m/s` and torso rate `-0.0901812 rad/s`. Its four leg actions are only `-0.0104594/+0.0154455/+0.0158918/-0.0131778`. This satisfies the detector's truthful planted-pivot condition (`|root vx| > 0.18`, clearance below `0.085`, no recent support transfer); it is not excess per-contact friction and changing the detector/contact would hide the stalled policy. The physical correction must teach enough finite hip/knee/ankle action to create the already-proven real all-node swing before the post-handoff network is judged. Direct same-seed/same-state comparison confirmed the second producer discontinuity: Assisted/bootstrap imitation and the Raw diagnostic selected different Human gait profiles solely because the `.64 Hz` bounded demonstration was gated on `environment.raw_policy_audit()`. The retained correction makes the teacher target authority-independent while leaving execution unchanged: Assisted/bootstrap may execute/imitate it before handoff, whereas production Raw executes only the network afterward. Exact test coverage requires byte-identical teacher actions under Assisted versus Raw guidance at the same physical state.
+
+Swing-clearance feedback A/B (2026-09-05): a provisional teacher-only minimum-sole-clearance correction, expressed solely through the finite hip/knee endpoint, proves the leg can earn genuine single support without suppressing collision. With a `0.12 m` desired clearance and `0.24 m` bounded vertical correction, the first swing obtains eleven consecutive frames (`159..169`) with exactly zero swing-side normal impulse; heel/ball/toe clearances during that interval are approximately `0.369..0.415 / 0.166..0.208 / 0.008..0.018 m`. This is not acceptable locomotion yet. The passive distal toe reverses rapidly in free flight and reaches roughly `-0.66..-1.21 m/s` vertical velocity before unilateral contact resumes, while other intervals still carry `0.05..2.24 N s`; the ten-seed V0730 outcome remains essentially unchanged at `+2.53..+2.68 m`, four or five transfers, then fall. The next local proof must address that relative MTP velocity with reciprocal energy-removing damping only—no preferred angle, action, contact flag, or particle-position write—and must preserve the real zero-load interval while making preimpact sole velocity bounded. The current 68-value policy observation lacks distal sole clearance and velocity, so this teacher-only state feedback cannot be claimed as learned Raw authority; if it survives the physical proof, the smallest honest schema extension is explicit per-side semantic sole clearance and ground-relative sole velocity, followed by a semantics advance and retraining.
+
+Reciprocal MTP damping result (2026-09-05): the generalized velocity impulse is a real passive improvement but does not close gait. Exact both-side/both-sign/zero-rate/repeated-seed tests show a `70%` relative-rate reduction, strictly nonincreasing three-particle kinetic energy, unchanged linear momentum, and exactly unchanged current positions. With the same finite swing-clearance target, disabling damping yields an eleven-frame unloaded interval with `0.007875 m` minimum distal clearance and `1.210521 m/s` worst sole horizontal speed; enabling it yields sixteen frames, `0.007593 m`, and `0.758995 m/s`. The run still never completes a measurable unloaded-to-replant transition before becoming invalid, so landing approach velocity remains unavailable and the hard swing gate stays red. Ten-seed V0730 nevertheless improves to `+2.684..+2.890 m`, five to seven transfers, and `5.12..7.63 s` survival, but every seed still falls. Raw forward/reverse remain the same wrong world sign (`+2.48696/+2.50754 m`) with zero complete cycles. Retain damping as a finite passive joint property; do not accept the provisional teacher-only clearance feedback until semantic distal observations, event-driven late descent, and a real bounded replant are implemented and retrained.
+
+Distal-observation schema decision (2026-09-05): the minimum honest Raw surface is six appended values, with no new actions: for each Human sole, the minimum heel/ball/toe clearance and the facing-local horizontal plus world-vertical velocity of the node attaining that minimum. Existing root velocity and powered-joint rates cannot reconstruct the passive toe's ground-relative approach, and heel-only support cannot distinguish the proven toe scrape. Append these as observations `68..73`, keep all prior indices byte-stable, advance training semantics exactly once from `0x0007'5105` to `0x0007'5106`, and invalidate stale v0.7.51 checkpoints/retained policies. Use the same normalized observations in the teacher's finite hip/knee clearance and late-descent feedback so the demonstration has no privileged particle state. The fixed action layout remains thirteen slots. Non-Human rigs publish zero for this Human-specific appended tail. Required tests cover signed/mirrored clearance and velocity, malformed-finite bounds, inactive-species zero tail, exact integration metadata, and Raw retraining/provenance under `5106`.
+
+Observable swing/replant receipt (2026-09-05): with the six-value sole tail and a continuous descent gate driven only by physical single support, phase readiness, and the observed contact-most node velocity, the focused Human fixture now passes a hard multi-frame exchange gate. It records twenty consecutive frames with all heel/ball/toe nodes at least `0.006715 m` clear and zero swing normal impulse, then a real replant with `0.211982 m/s` maximum horizontal approach and `0.621455 m/s` maximum absolute vertical approach; the actual landing-node vertical velocity is explicitly required to be descending within `[-0.65,-0.01] m/s`. No contact flag, collision suppression, particle position, root, or body history is written. This closes only the physical swing prerequisite. V0748 next fails the unchanged Raw learnability gate at `2.50818 m`, zero cycles, invalid at `2.06667 s`; V0730 remains all-red at `+2.68422..+2.88955 m`, five to seven transfers, and `5.11668..7.63338 s` before FALLEN. The next bounded work is exact Core/integration/provenance schema validation followed by genuine production Raw retraining; do not claim the teacher-only numbers as retained network proof.
+
+First production Raw retraining outcome under semantics `0x0007'5106` (2026-09-06): the real `Runner.exe --diagnose-raw-inference` path completed all `1200/1200` updates in about `174 s` and honestly retained nothing. Its terminal report is `retained_update=0`, teacher handoff `900`, retained mode `ASSISTED`, no retained policy, no truthful checkpoint, and zero Raw receipt digest/update/sample count; replay evidence is intentionally absent rather than filled from teacher or random weights. The diagnostic controls also remain nonwalking: zero control reaches `0.133136 m / 0 cycles`, fixed control `2.947542 m / 0 cycles`, and ablated weights `0 / 0`. `RunnerRawLearningProvenanceTests` passes the new semantics, so the first blocker is producer eligibility/physical quality after handoff, not checkpoint acceptance or dimension mismatch. Do not repeat a long training run until the exact per-update candidate rejection reason is exposed from the production trainer metrics; do not force-promote or bless an assisted/pre-handoff controller.
+
+Independent product/release audit receipt (2026-09-05): the product-facing CMake project, install/export package, public umbrella, current README/changelog/library/closure documents, native window title, Vulkan metadata, and `--version` output correctly lead with `Epoch2DWalkEngine`; `Runner` remains only the bundled example, executable, compatibility target/namespace, or historical release identity. The deterministic production-vertex capture manifest now leads with `Epoch2DWalkEngine v0.7.51` and qualifies Runner as the example. The phase-one candidate assembler now verifies the produced `Epoch2DWalkEngine-v0.7.51-dev-windows-x64.manifest.sha256` instead of the nonexistent `windows-x86_64` spelling, and repository hygiene rejects either identity/asset regression. The candidate repository audit, strict checksum/manifest suite (`10/10`), both workflow YAML parses, and `git diff --check` pass. The public v2.5.26 tag still resolves to exact EpochSimEngine commit `14f55d30df3e406215facf069c8b50082d7439eb`; its immutable source archive re-downloaded at `583,525` bytes with SHA-256 `d0cc1d98a14b23b9963cf7a0547ad1c75c8ad9e1a1664c0f5af2bfcd7fc20d69`. That exact source now supplies a Visual Studio 2022 `/W4 /WX` Release package at `build/v0751-installed-sim-release`; its `SandHybrid.lib` is `1,719,324` bytes with SHA-256 `AD7667C83646363314433D35A178057EDF3DFAF25DE67F8EC00641C76B78A29B`, and its installed config reports exact package version `2.5.26` plus a real `IMPORTED_LOCATION_RELEASE`. Against it, a fresh strict Release Epoch2DWalkEngine library probe, `Epoch2DWalkEngineDevelopment` install, and unrelated separate-prefix Release consumer all build and run successfully. The same exact dependency and current library/example/install/consumer boundary also pass under Linux GCC 14.3 warnings-as-errors, with the reusable Linux dependency package retained at `build/v0751-installed-sim-release-linux`. The generated package exports `Epoch2DWalkEngine::Epoch2DWalkEngine`, relocatable include paths, exact `EpochSimEngine 2.5.26` dependency, and package version `0.7.51` on both platforms. All bounded temporary source/build/install/consumer paths and downloaded archives were removed after verification; the two exact Release dependency installs are intentionally retained for final platform matrices and are cleanup-eligible only after release closure. These bounded library proofs do not replace the required full Windows/Linux Runner, all-CTest, diagnostic, native, archive, and publication matrices. The current branch/worktree must remain intact until all physical/native/package gates close. After verified publication, delete only confirmed ignored build/capture/package staging (including both retained Release dependency installs), the obsolete local `agent/v0750-editor-course-art` ref that is identical to the v0.7.51 branch base, and the superseded `agent/v0751-visual-polish` ref/worktree after integration. Remote `origin/agent/v0731-terrain-curriculum-art` at `b2b69556a2198788b190b5981778a4ff85861af7` is an ancestor of the current v0.7.51 branch but remains two commits ahead of `origin/main`; delete it only after the v0.7.51 integration makes those commits reachable from `main`. Preserve the user's canonical checkout and every dirty or unrelated worktree.
+
+Preparatory validation/cleanup command receipt (2026-09-05): use Windows dependency prefix `C:\Users\iammi\.codex\worktrees\f8c0\Vulkan_AI_Walking_Training_Simulation\build\v0751-installed-sim-release` and WSL/Linux prefix `/mnt/c/Users/iammi/.codex/worktrees/f8c0/Vulkan_AI_Walking_Training_Simulation/build/v0751-installed-sim-release-linux`. Candidate hygiene is `cmake -DRUNNER_SOURCE_DIR="$PWD" -DRUNNER_RELEASE_AUDIT_MODE=candidate -P tools/repository_audit.cmake`, `python tests/strict_sha256_manifest_tests.py -v`, then `git diff --check`. The local Windows matrix is `cmake --preset windows-vs2022-release --fresh -DRUNNER_SANDHYBRID_PACKAGE_ROOT=<Windows-prefix>`, `cmake --build --preset windows-vs2022-release --parallel`, and `ctest --preset windows-vs2022-release --output-on-failure -V`; the canonical hosted matrix remains the workflow's Visual Studio 2026 `windows-release` preset. In WSL, use `CC=gcc-14 CXX=g++-14 cmake --preset linux-release --fresh -DRUNNER_SANDHYBRID_PACKAGE_ROOT=<Linux-prefix>`, then the matching build and verbose CTest presets. Run every listed `--diagnose-*` command from each build tree and independently extracted runtime, with Windows `run.bat` and Linux `run.sh` launched from unrelated directories. Only the two-phase workflow may assemble the five archives, five LF checksum sidecars, five per-file manifests, immutable native evidence, and publication handoff.
+
+Cleanup remains post-publication only. First require a clean integrated checkout, live re-download byte/hash equality, `git merge-base --is-ancestor b2b69556a2198788b190b5981778a4ff85861af7 main`, and `git worktree list --porcelain`. Then resolve and verify each target under this exact repository before a native PowerShell `Remove-Item -LiteralPath` call. The exact cleanup set is the following subdirectories of `build`: `external-boundary-v0751`, `package-layout-v0751-audit`, `package-layout-v0751-unrelated`, `root-terrain-v0751`, `sdk-consumer-v0751`, `sdk-identity-v0751`, `terrain-art-closure-v0751`, `terrain-art-closure2-v0751`, `terrain-art-closure3-v0751`, `terrain-art-closure4-v0751`, `ui-facelift-capture-v0751`, `ui-facelift-capture2-v0751` through `ui-facelift-capture9-v0751`, `ui-facelift-capture11-v0751`, `ui-facelift-capture12-v0751`, `ui-facelift-debug-v0751`, `ui-summary-v0751`, `v0751-installed-consumer`, `v0751-installed-sim`, `v0751-installed-sim-release`, `v0751-installed-sim-release-linux`, `v0751-installed-walk`, `visual-v0751-baseline`, `visual-v0751-walk-baseline`, `windows-vs2022-package-v0751`, `windows-vs2022-ui-v0751`, and `wsl-external-v0751`. The exact ignored `Runner-v0.7.43-{source,windows-x64}` archives and four sidecar/manifest siblings plus `vcpkg_installed` and `vcpkg_installed-vs2022` are separately rebuildable cleanup candidates, but must be re-inventoried with `git clean -ndX` before deletion. From the canonical checkout, remove the clean integrated v0.7.51 worktree, delete local `agent/v0751-visual-polish` and identical-base `agent/v0750-editor-course-art` with non-force `git branch -d`, then delete remote `agent/v0731-terrain-curriculum-art` only after the ancestry check above passes. Never target the repository root, a dirty/unrelated worktree, or an unresolved glob.
+
+Swing-sole orientation seam (2026-09-05): the contact-event prerequisite trace shows that nominal Human single support is not physical whole-sole unloading. During frames `120..239` of a Raw forward trial, the swing heel reaches `0.14..0.36 m` and the ball `0.008..0.155 m` above its unilateral plane, but the toe stays approximately `0.0003..0.030 m` below that plane for nearly the complete swing. At the clearest sample the rear-foot plate itself is steeply toe-down (heel/ball clearances `0.329/0.126 m`) and the passive toe is at its `+36 deg` unilateral limit, so the next frame immediately restores `0.58..1.57 N s` swing-side normal load. The cause is in the explicit ankle target: stance resolves ankle-to-ball from the observed shank into a terrain-aligned world sole, while swing reverts to the planned IK shank. Finite hip tracking/body rotation therefore pitches the entire swing plate down even when the ankle reaches its relative target. Bounded A/B: use the same observed-shank reference for both phases and rotate the terrain-local sole by the explicit finite swing toe-up target. Require all heel/ball/toe nodes to clear deterministically for multiple frames and swing normal impulse to remain near zero before adding COP feedback; this changes only the explicit ankle target and writes no contact, particle, root, or pose state.
+
+Swing-ankle A/B rejection and passive-MTP refinement (2026-09-05): resolving the swing ankle from the observed shank does not clear the distal toe and breaks the existing bilateral stance-response proof, so that `ppo.hpp` hunk is removed. The worst-case geometry is now exact: the `0.195 m` ball-to-toe link reaches the positive `36 deg` passive stop while the ball is only `0.008..0.155 m` clear, permitting roughly `0.11 m` of distal drop and persistent unilateral contact. Preserve the declared reciprocal `[-42,+36] deg` anatomical stop. The next bounded physical correction is velocity-level reciprocal MTP damping: reduce only relative toe angular velocity through equal-and-opposite three-particle impulses, with no preferred in-range angle, no powered action, and nonpositive kinetic work. Require an exact neutral/in-range no-servo proof, both-sign damping, solver-count invariance, repeated seeds, and real multi-frame all-node swing clearance before retaining it.
+
+Passive-toe solver-order invariant (2026-09-05): the damping and reduced-range probes are rejected. The decisive source-order trace is that the eight-pass anatomical closure correctly ends each pass with `solve_ground`, but `limit_articulated_toe_rates` then invokes the reciprocal passive Human toe stop once more after that loop. The stop moves the distal toe as part of its equal-and-opposite angular correction and can leave it `0.02..0.04 m` below the unilateral plane; the next frame's ground solve pushes it back, creating the repeated toe impulse/skate while heel support flags report swing. Minimal physical correction: include the passive toe stop inside every final anatomical convergence pass before `solve_ground`, and do not reapply it after the last ground solve. Preserve the full declared range and finish on both angle and nonpenetration convergence. Validate the exact final toe angle/plane bounds, no powered toe work, no body/root/contact writes, and multi-frame zero swing normal load.
+
+Solver-order-only A/B rejection (2026-09-05): converging the toe stop before the final ground solve reduces visible post-step penetration and produces isolated frames with all three swing nodes clear, but it does not eliminate contact work: nominal swing frames still accumulate approximately `0.19..1.60 N s` swing-side normal impulse, and no long deterministic zero-load interval appears. The hunk is removed. The real geometric prerequisite remains that the passive `0.195 m` distal link can sit about `0.13 m` below the ball, while the sinusoidal ankle lift gives much less margin during most of swing. Next A/B changes only the explicit hip/knee endpoint: use measured minimum heel/ball/toe clearance to add a bounded vertical deficit correction through early/mid swing, fade it smoothly only during late descent, and retain the existing unilateral contact and passive toe. This teacher proof also audits schema: the retained network currently sees heel-only support flags and no distal sole clearance/velocity, so any successful state feedback will require the smallest explicit observation revision before it can certify Raw replay.
+
+Terrain/art visual-closure reopening (2026-09-05): the latest 2048-wide software evidence is not acceptable as art proof because auto-framing hides Human, Dog, and Chicken upper silhouettes beneath telemetry/PIP panels; require the complete subject and every contact foot unobscured at a readable scale. Human arm mass has improved but still reads as a long uniform bar with a merged undersized hand, the planted-weapon frame fuses hands/forearms into the receiver, and the rear boot/back-foot bone fit remains visually suspect. The constructed course contains canonical rooms, a reservoir, and a cavern, but its sparse rectangular solids, enormous dark circular void, and flat strata do not yet resemble the connected, materially dithered EpochSimEngine reference. Refine only canonical terrain composition and authored-pixel fitting at unchanged physical anchors; do not move contacts, drive physics from art, copy reference UI/state, or accept an obscured capture. Add deterministic bounded/malformed/adversarial coverage and inspect fresh original-resolution course and all-species art evidence before closure.
+
+Terrain/art bounded implementation receipt (2026-09-05): canonical terrain now retains the exact authored walking surface while adding seed-stable four-by-three deep material pockets, aligned lab machinery, compact irregular ore veins, and a connected winding two-room gallery capped at `120x44` cells; the former arena-sized circular void and flat full-width strata are gone. Human presentation keeps every shoulder/elbow/wrist/heel/toe/contact anchor authoritative while fitting a `0.325 -> 0.285` visible upper-arm-to-cuff taper, a compact `0.18..0.20` visible glove envelope, and a deeper boot whose exact width remains the ordered physical heel-to-toe span. `RunnerDeformableTerrainTests.exe`, `RunnerV0729ModularArtTests.exe --human-geometry-only`, and the complete `RunnerV0729ModularArtTests.exe` pass in the Windows Release build; the coverage includes exact repeated-seed state, distinct-seed geology, bounded natural-vs-checker density, maximum cavern spans, required facility materials, malformed finite fitting, mirrored anchor reconstruction, and repeated transforms. Fresh accepted original-resolution terrain evidence is `build/terrain-art-closure3-v0751/course-2048x1152.png`, `44,298` bytes, SHA-256 `95AAAE3063E124112A511C8B972BAC689750E6DB6B15358838384392EA91D116`, inspected at `2048x1152` against the exact EpochSimEngine normal/map references. All-species art acceptance remains open rather than fabricated: the corrected main Human probe is below the overlays (`y=675.3..817.0`, overlay bottom `451.3`), but the capture validator unions the separate PIP art difference at `y=184` into the main subject bounds and fail-closes before writing any art frames. That capture-region/UI fix belongs outside this bounded terrain/art change; do not accept the older obscured images or infer weapon/species closure from geometry tests alone.
+
+Native capture-matrix contract reopening (2026-09-05): the first fail-closed evidence verifier requires only fifteen generic scenario labels and a global `2048x1152` PNG floor. That can accept one pose per species, omit Human heel/flat/toe progression, omit species lake entry/exit, collapse equipment plant/aim/fire/recovery into one still, omit normal/zoom parity for Rig Lab pages and all Art subjects, and reject the operator's exact compact native workspace even when its logical/drawable/DPI identity is truthful. Replace the count-like gate with one exact semantic scenario matrix. Every capture must bind an expected group, subject, phase, viewport class, logical size, drawable size, and DPI scale; the drawable dimensions must match the fully decoded PNG and the logical-to-drawable scale. Require compact/default/ultrawide Live evidence including PIP; course plus lake approach/immersion/exit; Human heel/flat/toe phases; Chicken/Dog/Hexapod multiple contacts and lake entry/exit; equipment plant/aim/fire/recovery; normal and zoom views for Presets/Structure/Motors/Test and for every species Art page; and an honest terminal state. Reject missing or extra scenarios, duplicate semantic phases, invalid class/size/DPI combinations, and malformed metadata deterministically. This strengthens evidence only; it may not manufacture a capture, alter UI/physics, publish, or treat software raster output as native Vulkan authority.
+
+Independent-DOF requirement (2026-09-05): the final combined local A/B rejects a location/slope/ROM/scalar-ankle controller. At current hip travel, `0.40 m` clearance plus touchdown slope and stance-ankle `-0.45` moves the root from `0.553` to `0.443 m/s` and torso rate from `0.707` to `0.536 rad/s` with dissipative friction, but the landing heel/ball/toe still travel forward `+1.488/+1.414/+0.776 m/s`. Widening the hip from `36` to `48 deg` makes the requested endpoint derivative negative (`-0.177 m/s`) but the free-leg reaction accelerates the actual sole to `+1.940/+1.782/+1.321 m/s`, root to `1.187 m/s`, and torso to `1.377 rad/s`; adding the same ankle offset remains worse. All temporary curve parameters and `SLOPEPROBE` code are removed. The physical plant needs two already-authored independent stance DOFs: derive bounded desired COM acceleration from directed pelvis-speed error, choose a desired COP clamped to the real heel/ball/toe polygon, and coordinate stance hip against torso error while the ankle produces the ground-reaction shift. The swing chain must remain contact-event-driven, hold real clearance until the late phase, and request pelvis-relative touchdown velocity near `-pelvis_vx`; it may not use a root/contact write or fixed hidden world anchor. First establish the signed finite hip/ankle response matrix under both support sides and mirrored velocity, then add the smallest observable controller surface only if root, torso, and sole response all improve with dissipative finite traction.
+
+Swing-trajectory limiter (2026-09-05): the refined cloned landing grid proves all actual heel/ball/toe velocities remain forward, approximately `+0.95..+1.61 m/s`, throughout bounded `+/-2` symmetric endpoint tangent and `+/-0.20 m` placement sweeps. The requested ankle endpoint itself still advances `+0.74..+1.73 m/s`; hip action reaches `+1.0` in the most aggressive placement, but residual hip error is only `0.05..0.14 rad`, knee error is approximately zero, and the physical landing occurs at nominal swing progress `0.778..0.837`, with the toe only `0.004..0.022 m` above its collision plane. This is a trajectory-shape invariant, not a torque deficit: `sagittal_step_x` uses the same negative tangent at both lift-off and touchdown, which first moves backward, then accelerates through the middle, and does not enter its braking tail until after the distal toe lands. Keep production unchanged and expose distinct inert swing lift-off/touchdown tangents. Sweep bounded positive lift-off with negative touchdown slopes and require requested plus actual contact velocity to cross zero with opposed, monotone, finite traction before any integrated A/B.
+
+Landing-slope local checkpoint (2026-09-05): with the stance trajectory unchanged and an inert swing-only Hermite option, the first forward landing improves at endpoint tangent `-1.0`: post-impact root speed falls from the linear baseline `0.37773` to `0.36191 m/s`, torso rate from `0.964524` to `0.868592 rad/s`, and tangential impulse from `0.028032` to `0.009135 N s`, all within existing finite hip/knee limits. This is not yet sufficient: reverse intent still arrives at the probed landing with positive root speed and same-sign traction, and neither placement-only nor the first negative-slope sweep proves ground-relative velocity crosses zero. Keep the parameter inactive. Refine the cloned fixture to arm only after genuine initial support, record heel/ball/toe preimpact tangential velocities, and sweep paired `+/-` endpoint slopes and placement offsets within current reach. Integrate only if contact velocity crosses zero with monotone bounded impulse response; otherwise remove the inert parameter and report the limiting phase/sign/actuator invariant.
+
+Placement-only capture rejection (2026-09-05): a cloned first-landing probe applying a constant facing-local swing endpoint offset of `-0.30/-0.14/0/+0.14/+0.30 m` never produces opposed touchdown traction. All trials land the left sole at frame `92/93` with same-sign tangential impulses `+0.008035/+0.016962/+0.028032/+0.027186/+0.095587 N s`; pre-impact root speed increases monotonically from approximately `0.762` to `1.155 m/s` as the target is moved forward. A forward swing placement alone accelerates the body through the finite internal hip reaction before contact and cannot supply the missing braking invariant. Reject any location-only capture integration. The smallest remaining physical design must combine sampled placement with a bounded negative facing-local swing touchdown slope, while leaving the planted stance/backstroke trajectory exactly unchanged. First expose the swing-only curve as an inert gait parameter and require the cloned landing probe to produce opposed bounded traction and improved one-step torso/contact response before enabling any production path.
+
+Capture-audit coupling consequence (2026-09-05): the candidate repository audit still recognizes the retired `CAPTURE_SCENARIOS = frozenset(` declaration instead of the v2 contract, so the stronger validator is rejected even though its focused suite passes. Replace that implementation-shape assertion with behavioral source invariants for the v2 schema, explicit scenario matrix, logical/drawable/DPI fields, exact compact profiles, semantic duplicate rejection, and the unchanged strict bundle entry point. The audit must fail if any of those requirements is removed, without requiring one incidental Python container spelling.
+
+Native capture-matrix contract receipt (2026-09-05): `epoch2dwalk-native-capture-v2` now binds exactly 44 ordered frames rather than accepting fifteen generic labels. The matrix explicitly covers compact/default/ultrawide Live and ultrawide PIP; Course and Human lake approach/immersion/exit; Human heel-strike/flat-support/toe-off; loaded/transfer contact and lake entry/exit for Chicken, Dog, and Hexapod; equipment plant/aim/fire/recovery; normal/zoom Presets, Structure, Motors, and Test; normal/zoom Art for all four species; and the retained terminal state. Each entry has an exact semantic group/subject/phase, canonical filename, viewport class, logical size, drawable size, native DPI, byte count, and SHA-256. Exact 1368x768 and 1368x799 compact clients are accepted; accepted native DPI scales must produce integral matching drawable dimensions and the fully decoded PNG must have that drawable size. Unknown/extra/missing/reordered scenarios, duplicate phases or image bytes, malformed/extra JSON fields, duplicate keys, non-finite constants, false integer types, invalid dates/host, corrupt PNGs, and runtime mismatch fail closed. The focused Python suite passes `10/10` in `7.73 s` on a repeat run, including repeated identical positive and negative outcomes and bundle extraction. After the independent README identity correction, the complete candidate repository audit accepts the v2 manifest invariants and all 44 scenario names and reports `Epoch2DWalkEngine v0.7.51 repository hygiene passed`; `git diff --check` also passes. No native capture, archive, tag, upload, or publication was created.
+
+Compact page-evidence reopening (2026-09-05): independent review found that the 44-frame native contract accepted only one generic compact Live overview and default-size Rig Lab pages, despite compact control reachability and named inspector pages being the exact operator complaint. Software captures alone cannot close native DPI/layout acceptance. Extend the exact v2 matrix with Status bottom, Mission/View/Totals/Advanced top and bottom, plus compact top and bottom frames for Rig Lab Presets, Structure, Motors, Art, and Test. Keep the original compact overview as Status top. Every frame must be unique and semantically named; a page title without its reachable scrolled content is insufficient. Update tests, repository audit, and closure documentation before accepting a native evidence bundle.
+
+Compact page-evidence contract receipt (2026-09-05): `epoch2dwalk-native-capture-v2` now requires exactly 63 ordered, semantically unique frames. The original `live-compact` is the compact Status top; Status bottom plus Mission, View, Totals, and Advanced top/bottom frames prove each named Live surface at 1368x768 or 1368x799. Presets, Structure, Motors, Art, and Test each add compact top/bottom frames before their default normal/zoom evidence, so a selected title cannot impersonate reachable controls. The strict fixture locates `live-default` by scenario rather than a positional assumption, all ten positive/negative/adversarial tests pass in `9.66 s`, the candidate repository audit passes all 63 names and v2 invariants, and `git diff --check` passes. Native review remains open; this contract does not claim those frames already exist.
+
+Supported-chain world-frame probe rejection (2026-09-05): the requested one-step stance-only probe does not satisfy the sign precondition for integration. With the same intended world ankle endpoint at torso pitch `-0.18 rad`, changing from authored-parent to observed-parent target improves the left target-direction dot product from `-5.52043e-4` to `+5.1217e-5` and the right from `+0.00618006` to `+0.00690714`. At opposed `+0.18 rad`, it worsens both and reverses the left sign from `+2.00918e-4` to `-1.96113e-5`, while the right falls from `+0.00690318` to `+0.00663657`. The observed-parent derivative is less pitch-dependent, but a pitch-invariant derivative is not guaranteed convergence under the coupled loaded manifold. Desired-vector math was consistent: the live and authored parent arms were both transformed into facing-local coordinates before applying `signed_angle(live, authored)` to the target, which at facing `+1` is identical to explicit world reflection. Do not integrate a stance-only version; remove the temporary `FRAMEPROBE` output and continue from the first physical transfer/contact event.
+
+Swing-only parent-frame A/B rejection (2026-09-05): a controlled one-step fixture with identical desired world ankle endpoints at torso pitch `-0.18/+0.18 rad` shows that the observed-parent swing derivative is less pitch-dependent than the authored-parent response. Applying it only to the nominal free chain avoids the earlier immediate reverse flip, but it suppresses real exchange: all ten Windows `/WX` v0.7.30 seeds make exactly one transfer and terminate `MICRO-MOTION EXPLOIT` at `5.08334 s`, moving only `+0.246938..+0.405531 m` while still upright around `0.969..0.975`. Reject and remove it. The next local proof must inspect only the physically supported stance chain, use an explicitly reflected desired world vector before converting to the facing-local motor target, and demonstrate correct endpoint derivative without an exchange discontinuity before any integrated A/B.
+
+Observed-parent-frame hip-target A/B rejection (2026-09-05): an exact seed `29440` endpoint trace proves the finite hip/knee motors can report near-target joint angles while both physical ankles rotate progressively behind the pelvis. At frames `250/260/270/280/290/300`, the authored requested ankle X pairs relative to the saved root are approximately `(+.021,-.021)/(-.129,+.129)/(-.221,+.221)/(-.071,+.071)/(+.079,-.079)/(+.229,-.229) m`, while the actual ankle pairs relative to the live root become `(-.347,-.339)/(-.488,-.365)/(-.693,-.529)/(-.733,-.806)/(-.793,-1.093)/(-1.107,-1.424) m`. However, directly comparing the desired upper-leg vector with the observed facing-local torso-to-pelvis parent arm is decisively worse: the Windows `/WX` v0.7.30 run changes all ten seeds from `+2.53..+2.68 m`, four/five transfers and `5.6..8.1 s` survival to `-0.822..-0.905 m`, exactly one transfer and `4.12..4.15 s`, all `FLIPPED`. Reject and remove this per-frame gravity-frame cancellation. The physical endpoint lag is evidence of the common post-transfer roll, not proof that the teacher's body-relative hip reference is wrong; the next correction must preserve the finite body's rotational dynamics and find the contact/trajectory event that starts the roll rather than use a hip target to cancel torso pitch.
+
+Capture-hold rejection and actuator-band audit (2026-09-05): holding an observed forward capture offset through 75% of the next stance still falls at `~5.6..8.1 s` and turns several formerly `FALLEN` terminals into `FLIPPED`; it is rejected with the other unlatched capture experiments. The consistent `~2.5 m` collapse survives landing-placement changes while the new ROM-independent XPBD stiffness reaches full torque by only `0.25 rad`, four times stiffer than the former wide-knee ROM-derived response at small error. Keep stiffness independent of ROM, torque, work, and lambda ceilings, but A/B a `0.50 rad` full-torque tracking band: it must retain the proven knee load capacity while reducing the observed alternating `~1.2-1.9 m/s` pelvis impulses. Reject unless repeated casual/Raw survival, real cycles, COM-support lead, and Speed Walk all improve without weakening any gate.
+
+Capture-carry A/B rejection (2026-09-05): a direct speed-derived Hermite family fixed Speed Walk's sign (`-2.0402` to `+2.42783 m / seven steps`, then `+3.38688 m / nine steps` with continuous carry) but reversed casual Walk when applied there; preserving casual's linear phase while adding a support-lag capture carry synchronized all seeds into a `~5.9 s` flip. These provisional forms are rejected because their per-frame capture amplitude was not latched and decaying the forward offset over stance added the very backstroke impulse that an overspeed body must shed. The next bounded controller-space A/B preserves the original landing location and finite swing, but scales the complete stance-backstroke/swing excursion from the existing Plan target speed versus observed directed pelvis speed, continuously matching both exchange positions for a fixed sample. This is only explicit hip/knee target travel; it may not change contact, root, body pose, friction, or thresholds.
+
+Installed-package diagnostic consistency reopening (2026-09-05): the Runner build and install rules correctly treat the EpochSimEngine dependency's source-only `missioncache.md` as optional, because the exact supported v2.5.26 installed development package does not contain that repository ledger. The packaged `--diagnose-package` layout validator still listed `docs/SandHybrid-missioncache.md` as unconditional runtime content, so a valid installed-package-root build could compile and package successfully but fail its own diagnostic. Remove only that optional dependency ledger from the mandatory runtime list; retain the product mission ledger and all shipped EpochSimEngine README, changelog, license, CMake, library, and integration provenance requirements. Re-run the installed-root runtime diagnostic and source-root packaging path before release.
+
+Tracked-input audit reopening (2026-09-05): the candidate repository gate did not enumerate three build-critical v0.7.51 files: `src/presentation_session.hpp`, `tests/raw_authority_tests.cpp`, and the transitively included `tests/raw_learning_test_access.hpp`. A clean audit could therefore accept an unstaged working-tree build that an exact-commit checkout could not reproduce. Add all three to the required-file inventory and keep the later exact-commit source/tree audit mandatory; do not infer tracked completeness from a successful dirty-tree build.
+
+Fourth-transfer capture trace (2026-09-05): the exact seed `29440` failure is not a missing collision release or sand transition. At frame 260 the pelvis is already `+0.714 m/s` with both soles reported supported but the trailing side carries only `0.231 N s` normal impulse; by frame 270 the pelvis is `+0.887 m/s` and the loaded CoP is `0.387 m` behind a root at `0.853 m`; at frames 280/290 the root accelerates to `+1.155/+1.501 m/s` while the loaded CoP trails by `0.81/1.12 m`, stance slip reaches `0.78/1.24 m/s`, and uprightness falls to `0.870/0.803`. Contact-edge tracing proves the semantic exchanges are distal-toe-first: frame 227 left heel/ball are still moving forward `+0.464/+0.454 m/s` while only the passive toe is latched; at frames 276-278 the right toe remains latched while its heel/ball move backward about `-0.79 m/s`; frame 284 again latches the left toe while heel/ball move forward `+0.95/+1.14 m/s`. A shared stance-center capture shift increases nominal transfers but worsens survival and is rejected: moving the planted target destroys the stance invariant. The physical correction must preserve the planted endpoint, place only the swing endpoint toward the bounded facing-local capture point, and give its continuous trajectory enough negative relative touchdown velocity to cancel measured body speed before heel/ball/toe contact. Remove all temporary `ROLLTRACE`/`LANDTRACE` output before validation.
+
+Final-5105 focused gait checkpoint (2026-09-05): the rebuilt Windows `/WX` source is deterministic but all six physical acceptance gates remain red without threshold changes. v0.7.30 Human Walk advances `+2.52792..+2.63527 m` with four/five actual transfers, then falls at `5.63335..8.11671 s`; Raw forward/reverse both fall with `+2.48878/+2.47434 m`, zero qualified cycles, `1.05821/1.09071 m` COM-support lead, and bounded passive toes; v0.7.32 mirrors local progress `1.40657/1.40652` but action mismatch `4.30942e-5` exceeds `1e-5`; v0.7.48 falls at `2.46667 s / +2.4761 m / zero cycles`; v0.7.49 Speed Walk remains `-2.0402 m / three steps`; v0.7.51 lake rejects the first Raw sample at `0.0333333 s` with passive-toe telemetry still false. The slower `1.05 Hz` Speed Walk A/B was also backward (`-1.87228 m / two steps`) and is rejected; original Speed Walk target/cadence are restored. Keep semantics `0x0007'5105` and the `epoch2dwalk-v0751-*` namespace fixed. Next isolate the earliest common Human roll after the fourth transfer (contact load/COP, finite hip-knee-ankle targets and torso angular momentum), and separately distinguish the lake sample's initialization-evidence gate from actual physical invalidity; do not change acceptance bounds, roots, contacts, or pose projection.
+
+Speed Walk target A/B receipt (2026-09-05): bounding the Human Speed Walk step alone to `0.62` or `0.50 m` at the current `~1.27 Hz` cadence remains backward (`-2.15052/-2.0846 m`) despite five/six transfers, so both variants are rejected. This independently confirms target velocity, not only stride radius, controls the touchdown sign. Next test a still-faster-than-casual `1.05 Hz` finite Speed Walk cadence with a `0.62 m` target, leaving its lift, physical gate, and actuator/contact limits unchanged; reject it unless the unchanged `17.5 m / 14-cycle / 0.72 m/s` gate improves materially.
+
+Focused gait regression checkpoint (2026-09-05): `/WX` builds pass for v0.7.32, v0.7.48, and v0.7.49, but their unchanged runtime gates remain red. Shuttle reflection is numerically close (`action 4.31e-5`, pose `5.32e-5`, progress mismatch `4.85e-5`) yet exceeds its exact physical mirror bound. Raw contact/art falls at `2.46667 s / +2.4761 m`, zero cycles. Speed Walk repeats the long-step touchdown reversal at `-2.0402 m`, three steps, `-0.10201 m/s`. The Speed Walk target is currently about `1.10 m` at `~1.27 Hz`, more than twice the physically improved casual `0.50 m` target; next A/B a bounded Human Speed Walk step around `0.62 m` at unchanged faster cadence/lift/torque, retaining only if it restores positive distance and real cycles without weakening its `17.5 m / 14-cycle / 0.72 m/s` gate.
+
+Current-identity/semantics decision (2026-09-05): the retained reciprocal toe stop, ROM-independent finite motor stiffness, and canonical Human joint-target envelope change physical rollout meaning beyond provisional semantics `0x0007'5104`; use final current source value `0x0007'5105` and invalidate stale retained controllers coherently. Because v0.7.51 is unreleased, rename only its persistence namespace from `runner-v0751-*` to `epoch2dwalk-v0751-*`; retain explicit prior `runner-v0750-*` migration compatibility. Productize current v0.7.51 diagnostics as Epoch2DWalkEngine Runner-example labels without rewriting historical release strings.
+
+Product-state identity reopening (2026-09-05): the v0.7.51 library, package, and Runner-example names are product-first, and current v0.7.51 state now moves to `epoch2dwalk-v0751-*` while `runner-v0750-*` and older names remain only for explicit compatibility migration/history. The final physical-locomotion contract advances training semantics from the intermediate `0x0007'5104` to `0x0007'5105`; current documentation and repository-audit enforcement must agree. Productize current diagnostics without renaming the truthful bundled `Runner.exe` example, internal compatibility targets/namespaces, or historical release records. Require migration, rejection, repository-audit, package, and exact-commit evidence before release.
+
+Assisted balance-gain rejection and overspeed seam (2026-09-05): halving the explicit ankle feedback also worsens survival to `5.00..7.45 s`; both zero and half correction are rejected, and the full finite ankle target is restored. The repeatable roll is a gait-speed problem rather than an attitude-gain problem: seed `29440` remains near upright through frame 260, then advances from `x=0.697` to `1.544 m` in 40 frames while uprightness falls from `0.977` to `0.768`, before the soft-sand region. There is no two-leg Human speed regulation analogous to the existing four-support overspeed recovery, so every planted backstroke continues adding momentum after casual speed is exceeded. Next apply bounded observation-derived stride attenuation only to the teacher's explicit Human joint targets; it may shorten but never reverse the requested direction, and must improve repeated-seed upright survival/real cycles without any root/body/contact correction.
+
+Assisted balance A/B receipt (2026-09-05): removing the explicit ankle feedback while retaining the base finite gait target worsens repeated-seed survival to `4.90..7.30 s` (versus as much as `8.12 s`) and is rejected. The feedback is physically useful, but its full Assisted correction can saturate one ankle immediately before the repeatable forward roll. Next test a bounded half blend between the base ankle target and the same observation-derived correction; no hip/knee target, body state, contact, or actuator limit changes.
+
+Compact workspace native-acceptance receipt (2026-09-05): the final rebuilt Windows `/WX` UI passed `Runner.ViewCamera`, `Runner.V0723GrayFrames`, and `Runner.V0729ModularArt`, plus routed `--diagnose-ui` and `--diagnose-camera`. Direct 1368x768 inspection at the actual desktop DPI accepted the reduced hierarchy: the preview is dominant; training state, four 2x2 gait actions, task/profile selection, progress, and view/performance controls are legible; Summary contains only current status/evidence/retained state/next goal; Totals and Advanced own the dense history and diagnostic prose through the independent scroll surface. Live Zoom In visibly changes actual world geometry and Auto View restores it. In Rig Lab, Rig Inspector and the complete Trainer/rig-statistics workspace are selectable peers over the same truthful physical pose; Rig art starts off, toggles on without moving anchors, and does not change Live art, which remains on after the round trip. Native inspection caught the unsupported chevrons that automation missed; the task row now renders `PREV TASK / SELECT TASK / NEXT TASK`, the profile action uses `PROFILE ... / SET ...`, and focused source/raster coverage rejects the old glyphs. The observed rig remained honestly fallen rather than cosmetically corrected, so locomotion stays independently release-blocking.
+
+Installed EpochSimEngine package-consumption receipt (2026-09-05): after making the dependency's source-only mission ledger conditional, the existing Windows build reconfigured against the exact installed EpochSimEngine 2.5.26 package root and the complete `Runner` target compiled, linked, and completed its package-sync post-build successfully. Required dependency README/changelog/license/CMake/library provenance remains unchanged; no substitute SandHybrid mission ledger was generated. A pinned fetched-source build, install audit, and final runtime archive audit remain part of the full release matrix.
+
+Assisted late-roll receipt (2026-09-05): shortening the already improved `0.50 m` Human step again to `0.40 m` increases distance but reduces survival to `4.80..7.33 s`, so it is rejected and reverted. With `0.50 m`, seed `29440` is upright through four real transfers (`0.999` at frame 200, `0.990` at frame 220, `0.986` at frame 240) and then begins rolling on still-firm terrain before reaching sand (`0.923` at frame 280, `0.768` at frame 300). At frame 280 both feet are physically loaded but the Assisted feedback saturates the left ankle target at `+1.0` while the right is `-0.219`; twenty frames later only the left foot remains and height has fallen from `2.13` to `1.73 m`. The next bounded A/B is the explicit ankle-balance action composition itself: remove it while retaining the finite base hip/knee/ankle gait targets, and keep/reject solely on repeated survival/upright/contact evidence.
+
+Rejected Raw bandwidth A/B (2026-09-05): raising the explicit Raw target slew from `1.0` to `2.0` or `4.0 action-unit/s` makes both signed trials fall within four seconds with larger `~0.585..0.689 m/s` COM velocity, `~0.997..1.181 m/s` pelvis velocity, and no completed cycle. Both variants are rejected and the existing finite `1.0` rate is restored. Target lag is real but is not safely repaired by bandwidth because the resulting faster foot collision adds more external impulse; signed Raw closure remains open behind stable Assisted contact transfer.
+
+Installed-dependency packaging reopening (2026-09-05): a fresh Windows Runner link succeeded, but its post-build package sync failed because `CMakeLists.txt` unconditionally copied `${runner_sandhybrid_SOURCE_DIR}/missioncache.md`. That file exists in an EpochSimEngine source checkout but is deliberately absent from the exact installed v2.5.26 development/runtime package, whose supported consumer surface instead provides CMake config, headers/library, README, changelog, license, and focused docs. Treat the SandHybrid mission ledger as optional source provenance: copy/install it only when the configured dependency root actually contains it, without fabricating a replacement or weakening the exact EpochSimEngine version/commit/package checks. Reconfigure and rebuild against both an installed-package root and the pinned fetched-source path before release.
+
+Raw target-bandwidth causal receipt (2026-09-05): reflecting the reverse authored phase reference reduces its four-second forward fall only from `+2.56397` to `+2.43211 m`; it does not create signed gait, so that A/B is rejected and reverted. The detailed Raw trace instead shows the finite target conditioner irrecoverably trails the gait: at frame 90 the forward left hip/knee requests `+0.592/-0.679` while the actuator has reached only `+0.301/-0.336`, and a requested `+0.751` ankle has reached `+0.520`; by frame 120 the pelvis has already fallen to `1.982 m`. Assisted biped actions within range are not rate-limited, whereas Raw alone uses `1.0 action-unit/s`, requiring as much as two seconds to cross its range despite a `0.64 Hz` cycle. This is why forward and reverse are both dominated by the same forward fall rather than the small (`+0.135769 m`) passive bias. Next test a still-finite Raw joint-target bandwidth that can traverse one requested range within a half-cycle, with the same torque/work ceilings and no replacement action; require it to improve upright survival and allow signed physical cycles before retaining.
+
+Native control-label glyph reopening (2026-09-05): the definitive compact Live build passes its focused raster, layout, camera, and warnings-as-errors checks and materially clears the persistent control wall: one large preview remains beside a readable roughly 430-pixel trainer rail, the four gait choices are a 2x2 primary control group, Summary contains only status/evidence/retained-state/next-goal, and technical narrative is reachable on the independently scrolling Advanced page. Direct 1368x768 Windows inspection also proves Live zoom changes the real world projection, Auto View restores it, Rig Inspector retains a full-width physical preview, Rig art defaults off and toggles independently, and returning to Live preserves Live art on. One interface-wiring defect remains visible: the pixel font substitutes question marks for the less-than/greater-than chevrons in the task browser and profile transition, producing `? TASK`, `TASK ?`, and an ambiguous profile request. Replace these unsupported glyphs with explicit word actions, re-run the focused UI/camera/raster gates, and re-inspect the same native frame; do not treat a source string as rendered proof.
+
+Bounded-stride and Raw phase receipt (2026-09-05): reducing only the canonical Human casual joint-space step target from `0.74/0.68 m` (Assisted/Raw) to `0.50 m`, with unchanged cadence, lift, contacts, and actuator ceilings, removes the high-speed touchdown reversal. All ten v0.7.30 seeds return to positive `2.561..2.623 m`, achieve four or five physical transfers, and survive `8.067..8.117 s`, approximately twice the stiff-actuator baseline, before a still-unaccepted repeatable fall. Raw's remaining same-world-sign response is not explained by passive drift: the zero-action trial travels only `+0.135769 m`, versus `+2.60074/+2.56397 m` under forward/reverse teacher targets. The reverse cycle reuses a forward-authored phase offset even though multiplying endpoint X by `-1` reflects which point of the stance curve matches the saved stagger; consequently it begins by commanding a leg exchange instead of a continuous reverse step. Reflect the authored phase reference (`pi - phase_offset`) for negative local direction, then require reverse displacement and real bilateral cycles rather than changing a force/contact sign.
+
+Rejected early-arrival trajectory A/B (2026-09-05): enabling smooth Human transitions and completing the swing target at 78% of its airborne interval does not reduce the failure; every v0.7.30 seed still records three exchanges but accelerates farther backward (`-2.156..-2.200 m`) and rolls earlier at `~3.68..3.70 s`. Both hunks are rejected and reverted. The issue is therefore not merely endpoint dwell: the current `0.74 m` casual step requires the physical ankle to traverse about `0.43 m` in the last 20 frames of the observed swing, and touchdown retains as much as `1.807 m/s` forward slip. Next bound only the explicit casual step target to a smaller Human-scale stride at unchanged cadence/lift/authority, and retain it only if touchdown slip, direction, survival, and real bilateral cycles improve across repeated seeds and signed Raw trials.
+
+Finite-actuator landing-sign receipt (2026-09-05): the shared XPBD motor's former compliance was tied to half the joint range of motion, so the same finite actuator became softer as an anatomical joint was allowed to travel farther. The failing stance knee used `73.1981/121.245 N m` and `3.81024/4.04149 J`; neither hard ceiling was primary, because its `~0.612 rad` tracking error multiplied by the ROM-derived `~119.8 N m/rad` stiffness yields the measured torque. A fixed `0.25 rad` full-torque tracking-error band leaves torque, lambda, and positive-work limits unchanged and makes narrow/wide-ROM requests exactly equivalent in both signs, at 1/14/32 solver passes, grounded/airborne, across repeated seeds and a non-Human rig. It produces three physical contact exchanges on every v0.7.30 seed instead of late post-collapse chatter, but travel becomes consistently backward and remains rejected. A subsequent sign trace identifies touchdown, not stance backstroke, as the first reversal: on seed `29440`, the left swing heel/ball/toe land near frame 100 still moving forward at as much as `1.807 m/s`, producing a `-0.875 N s` left tangential impulse; the right stance is then lost and the root reverses from `-0.0386 m` at frame 100 to `-0.1120 m` at frame 120. The swing target has reached its forward endpoint while the finite motor still trails it, so the foot hits before settling. Keep cadence unchanged; next test only a continuous target profile that completes the forward swing early enough to settle while clearance remains positive, then require low-velocity heel/ball/toe landing, bilateral cycles, signed/repeated travel, bounded actuator ledgers, and no projection.
+
+Finite-transfer saturation receipt (2026-09-05): with the provisional `0.22 m` explicit swing endpoint and reciprocal passive toe range stop, all ten v0.7.30 Human trials have positive displacement (`2.19469..2.35924 m`), but the unchanged gate remains red because the body collapses before a healthy contact exchange. On seed `29440`, both soles retain partial physical contacts through frame 220; at frame 120 the left knee is `2.188` versus a `2.800 rad` target with `+73.20 N m` measured torque, at frame 180 the error remains `0.375 rad / +44.9 N m`, and by frame 210 the right knee is `2.107` versus `2.672 rad / +67.46 N m` while pelvis height/uprightness have fallen to `1.804 m / 0.870`. The first complete semantic-foot unload is frame 221, after height/uprightness have already fallen to `1.510 m / 0.781`; subsequent isolated ball/toe chatter creates nominal step counts during the fall and cannot qualify locomotion. Raw at the same lift now produces a real forward bilateral cycle and valid unload/replant, but reverse remains wrongly positive (`+2.52887 m`) with zero qualified cycles. Remove the temporary transfer trace; next distinguish the explicit knee actuator's torque ceiling, positive-work ceiling, and target-reach/load moment before changing only finite joint capacity or geometry, and make cycle qualification reject post-collapse contact chatter.
+
+Semantic-foot transfer causal receipt (2026-09-05): after all moving-Human body/posture projections are removed, the finite Assisted Walk correctly advances but completes no gait cycle. Seed `29441` reaches the strict skating gate at `2.61666 s / +0.428934 m`. A six-contact trace proves this is not stale collision membership: throughout the first left swing the heel and ball physically rise as high as `0.100728/0.0886084 m`, while the passive distal toe remains exactly on the plane with zero tangential velocity and continuing normal load. The reciprocal ankle motor remains close to its finite target, but the pelvis simultaneously sags about `0.16 m`; that consumes the authored `0.14 m` endpoint lift before the ball-to-toe link reaches its passive range and pulls the toe clear. A slower `0.52 Hz` A/B raises heel/ball to `0.127916/0.113661 m` but only makes every seed hit the skating timer sooner, so it is rejected and reverted. It also exposes the missing physical invariant: toe deviation reaches `-0.760842 rad`, past the declared `-42 degree` limit, because canonical Human returned from both toe solvers. A new reciprocal three-particle unilateral stop is exactly dormant within `[-42,+36] degrees`, conserves joint mass center, is deterministic on both sides/signs, and runs once after the physical step rather than multiplying across solver passes. Raw now has bilateral unload/replant and bounded `~0.628 rad` toes with zero powered-toe/helper commands, but still produces `+2.57599/+2.56770 m` for forward/reverse, zero qualified cycles, and `>1.11 m` COM-COP lead. Original-cadence Assisted still does not reach the passive stop on seed `29441`; next test only a bounded larger finite swing endpoint target capable of overcoming measured pelvis sag, without changing torque, contact state, or body/root pose.
+
+Modern control-surface reopening (2026-09-05): the operator's latest native review says the focused workspace is closer to a modern product, but still presents too much small text and the overall control scheme remains visually dense. Treat this as a hierarchy and interaction-design failure, not a font-size-only tweak: make primary session state and actions immediately readable, group view/performance controls separately, move technical prose behind the named Totals/Advanced pages, preserve every control through Trainer/Rig Inspector selection and scrolling, and keep hard safety/physics failures visible. Require fresh ordinary-fullscreen native review at the actual Windows DPI plus minimum-layout reachability before release acceptance.
+
+Native facelift review receipt (2026-09-05): the rebuilt `build/ui-summary-v0751/Release/Runner.exe` at the actual Windows desktop scale materially improves the workspace: a roughly 460-pixel selected rail leaves a dominant preview, Trainer/Rig Inspector selection is unambiguous, the primary session and secondary view/performance cards read separately, the persistent shortcut sentence is gone, Live Art is independently visible, and Live Zoom In plus Auto View both change and restore the real projection. Acceptance remains open because Summary still renders several lanes of roughly 12-14-pixel all-caps prose, the Live upper-left telemetry and PIP footer remain microtext, the Rig Inspector Presets explanation is tiny, and the four gait chips are cramped. Reduce persistent copy and increase the readable floor using the existing scroll surface; keep only headline, concise physical evidence, retained state, and next goal on Summary, with full narrative/technical detail on Totals or Advanced. The same live inspection truthfully shows the authority-clean candidate fallen at about `-1.99 m` with the body lying across the canonical grass/sand cross-section, so UI polish cannot close the locomotion gate.
+
+Moving-Human passive-projector causal receipt (2026-09-05): the remaining Assisted Human path still invoked `stabilize_passive_appendages` fourteen times per fixed step. Unlike Raw's unilateral neck-range stop, that branch targets each endpoint from the authored torso rotation, moves endpoint/attachment positions with a fixed 90/10 split unrelated to mass, and partly rewrites only endpoint Verlet history. A source-ledger trace on seeds `29440/29441` proves this helper adds roughly `+0.03..+0.06 m/s` horizontal COM velocity during the nominal zero-control interval and is the hidden authority that turned the otherwise backward passive/contact transient into the prior apparent forward gait. Removing it from moving canonical Human makes passive-source COM delta exactly zero, but honestly exposes the unresolved physical result: all ten v0.7.30 Human trials travel backward out of bounds near `-7.82..-7.87 m` after `3.78..5.35 s`, with only `0..6` transfers. Retain the authority removal for moving Human while preserving static balance/duck teaching; do not restore the pose guide to recover a metric. The next correction must arise through finite explicit joints and physical contacts, and must also close Raw repeated-seed retention, signed reverse/stop, shuttle reflection, and lake traversal.
+
+Raw player-intent producer/provenance receipt (2026-09-05): training semantics `0x0007'5104` and Raw receipt schema 3 now require a deterministic signed player-intent curriculum before observation and policy sampling. For the canonical eight-environment, 128-step rollout, the exact cohorts are 384 forward, 384 reverse, and 256 explicit stop samples; the immutable receipt signs all three counts and rejects absent, overflow-shaped, or total-mismatched evidence. Observation 43 carries the signed local request, while stop reward measures actual nonzero world speed without applying a brake or replacement action. Windows `/WX` `RunnerRawLearningProvenanceTests` builds and passes with exact positive, negative, adversarial, and repeated-schedule coverage. ExternalHost no longer promotes `one_real_raw_update` into a pretend champion: its Raw fixture crosses the production handoff, optimizer, six-seed evaluation, and retention path, and currently fails honestly at `trainer did not retain a repeated-seed-qualified Raw policy`. The unchanged physical forward/reverse/deceleration assertions remain behind that gate; continue training/physics closure rather than restoring pseudo-retention.
+
+Locomotion closure in progress (2026-09-05): retain the node-local Coulomb tangent solve, outward per-node unilateral release, moving-Human finite XPBD actuator route, no moving-Human structure/posture projector, and final passive anatomical constraint convergence; these are physical corrections and the focused contact invariants plus v0.7.49 Speed Walk now pass. The unchanged v0.7.30 repeated-seed gate still fails because nominally equivalent firm-ground trials first diverge in an explicit ankle action near frame 20, before terrain identity diverges; isolate whether the discontinuity originates in the ground-aware stance target or its observation-based ankle balance wrapper, then require repeated forward, reverse, and reflected behavior without root/body/contact authority. Player-guided retained Raw stop remains hard red (`0.228191` to `0.398287 m/s`), equipment aiming remains outside tolerance, Raw gait still lacks valid bilateral cycles, and the lake path still flips. Temporary controller/contact traces must be removed before focused validation or handoff, and training semantics `0x0007'5104` remains provisional until signed player intent and its retained-policy training contract are coherent.
+
+Raw player-intent producer correction authorized (2026-09-05): production post-handoff Raw rollouts must deterministically cover forward, reverse, and move-then-stop requests before observation/action sampling; observation 43 must expose the requested local signed direction (while preserving obstruction escape semantics), and the stop reward must measure actual nonzero world speed instead of multiplying it by a zero direction. This remains a task/reward curriculum only: sampled retained-policy joint actions are the sole body authority and Environment receives no root brake, contact selection, replacement action, or hidden stop servo. Advance training semantics only with positive, negative, adversarial, deterministic-repeat, and receipt coverage. The ExternalHost gate must consume a legitimately trained and retained repeated-seed controller; the existing test-only one-update helper that manually copies a random post-update network into `best_parameters_` is provenance plumbing, not physical skill evidence, and cannot certify the forward/reverse/deceleration gate.
+
+Director/equipment release-audit false-green reopening (2026-09-05): resolved challenge IDs and caller-supplied scalar progress are not physical execution or mastery evidence. Waterlogged/lake nodes may advance only from an authentic ordered approach/entry, measured aquatic phase with sufficient depth and body immersion, and far-shore exit. Stop/plant/gun/aim/fire-and-correct may advance only from the physical two-foot plant and joint-driven aim state, followed by at least one observed ballistic miss, a finite bounded correction derived from that miss, and a later physical shot whose measured error improves. Failed, stalled, out-of-order, synthetic-only, non-finite, or replayed evidence must remain non-mastered and must not mutate unrelated Director state. The external-host boundary must additionally demonstrate bounded fixed-step forward and reverse physical displacement plus deceleration to a stopped state through authenticated player-guided requests, while retaining explicit expert-action rejection evidence. Add deterministic positive, negative, adversarial, and repeated-seed coverage in the focused v0.7.51 Director, equipment, and external-host suites; update the installed example only where the public API can prove a successful guided physical request. This closure is scoped to curriculum/evidence reduction and public-host tests/example; any missing physical telemetry that requires simulation ownership must be named exactly rather than synthesized here.
+
+Director/equipment fail-closed implementation receipt (2026-09-05): every default task now carries a stable physical challenge ID, and Director state schema 2 persists a per-node physical-evidence schema 1 receipt bound to nonzero trial ID, stable task/challenge IDs, and an enclosing fixed-tick interval. Water receipts require strictly ordered approach, entry, wading/requested swim phase, shore exit, later far-shore dry observation, finite depth, and bounded body immersion. Stop/plant, gun-stance, acquire/aim, and fire/correct receipts all require an ordered timed two-foot plant, settled physical aim, real miss, a strictly later opposite-signed correction bounded to 0.22 radians, and a still-later hit whose physical error improved; malformed counts, overflow-shaped counts, same-tick correction, wrong IDs, missing phases, replay-shaped scalar completion, non-finite values, and receipts attached to incomplete/nonphysical nodes fail without mutation. Direct Director storage is locale-invariant, exact-EOF, deterministic on repeat, and rejects schema 1 atomically. Autonomous storage advances to format 29 and exact-EOF schema-2 receipts; format 28 is deliberately rejected because it carried unaudited scalar Director mastery, while formats 16-27 retain their settings-only compatibility. The automatic curriculum deliberately returns false for these water/equipment nodes because current `TrainingMetrics` lacks the required ordered producer fields: trial/challenge identity and first/last ticks; approach/entry/wading/swimming/shore-exit/far-shore-dry ticks plus maximum depth/submersion; and two-foot-plant/physical-aim/miss/correction/improved-shot ticks, plant/aim dwell, miss/correction/next-shot errors, shot/miss/hit counts, and improved-hit identity. No aggregate distance, transition, shot, or hit total is substituted.
+
+Director/equipment focused validation receipt (2026-09-05): Visual Studio 2022 Release warnings-as-errors builds pass for `RunnerV0751DirectorChallengeTests`, `RunnerV0751ExternalHostTests`, `RunnerV0751PhysicalEquipmentTests`, `RunnerV0750PersistentDirectorArtTests`, `Epoch2DWalkEngineLibraryExample`, and `RunnerV0724StructuralMetricsIconTests`. Director challenge, the installed example, and the corrected v0.7.24 format-29 persistence probe execute green; the example demonstrates a successful public expert-joint physical fixed step and preserves the intended rejection of an empty/unretained controller. A successful Raw player-guided example cannot be boundedly constructed by the installed public API: the genuine post-handoff retained Raw receipt requires the 900-update Human training boundary, while the one-update issuer is explicitly test-only. Three physical failures remain hard red. Player-guided forward travel is `+0.020266 m`, then a stop request raises speed from `0.228191` to `0.398287 m/s` instead of decelerating. The equipment NPC plants at frame 9 and enters AIMING at frame 19, but its best barrel error is `0.233805 rad` versus the carbine's `0.09 rad` tolerance, aim-settle remains zero, shoulder motor 4 saturates at `+1`, and READY/shot never occurs. The migrated v0.7.50 Director fixture reaches its separate Human lake regression and flips at `x=3.9347 m` after `3.48333 s`, before the `30.9078 m` shore. Repository hygiene now passes the example identity and format-29 checks and stops at a separate shared training-semantics mismatch: `tools/repository_audit.cmake` requires `0x0007'5103`, while `src/ppo.hpp` currently declares `0x0007'5104`. These external release-tool and physical failures remain open; none is waived by the schema implementation.
+
+Native-capture gate hardening (2026-09-05): the first candidate-evidence verifier accepted a 24-byte PNG prefix with self-declared dimensions and trusted a manifest's claimed runtime identity without auditing those archive bytes. That cannot establish a rendered packaged frame. The verifier now parses the complete PNG chunk stream, checks every chunk length and CRC, requires one first IHDR plus decodable non-interlaced 8/16-bit RGB/RGBA IDAT data, validates scanline filters, requires a terminal IEND, and rejects truncation, unsupported critical chunks, decompression mismatch, or trailing bytes. The capture bundle must carry the exact named Windows runtime archive; its real size and SHA-256 must match the manifest, its bytes are included in the complete bundle inventory, and the final workflow compares it byte-for-byte with the independently built/audited Windows release archive. Deterministic tests use complete PNGs and now reject the former 24-byte pseudo-image, CRC corruption, post-IEND corruption, and a substituted runtime. No self-asserted operator/authority text can compensate for missing or mismatched evidence bytes.
+
+Packaged camera-diagnostic hardening (2026-09-05): the former `--diagnose-camera` checked only standalone camera formulas, so a broken Application input route or unchanged rendered view could still pass in an extracted package. The diagnostic now initializes the isolated production Application from the invoked package's assets at 2048x1152 and 3840x2160, routes a real wheel input through the Live viewport, requires camera evidence and world-space render vertices to change, enters Rig Lab, routes editor zoom through the real editor viewport, and proves that the saved Live camera survives the round trip without editor leakage. Native button/fullscreen behavior remains part of the direct packaged eye test; this headless diagnostic no longer claims success from math alone.
+
+Legacy lifetime-fixture correction (2026-09-05): the reported `INVALID LEGACY LIFETIME LEDGER` Core failure was not a negative or non-finite production total. The test had deliberately left that error in its shared message buffer, then passed a mutated, unsealed current `CheckpointData` to the hardened EPPO51 writer while constructing an EPPO41 fallback; C++ argument evaluation allowed the stale ledger message to be formatted before the writer replaced it. Both legacy lifetime and file-transfer fixtures now use the existing test-only exact EPPO44 binary layout (rewriting only the intended lifetime fallback magic to EPPO41), while the production writer remains fail-closed to unissued current artifacts. The import gate has explicit finite-positive, infinite, negative-distance, and NaN-duration coverage without changing accepted ledger state. A canonical active-ankle observation fixture now rotates the live heel/ball/toe cluster after Environment normalization and proves both signed responses instead of mutating a blueprint neutral that canonical construction is required to rebase. The Windows Visual Studio 2022 Release `/WX` `RunnerCoreTests` target rebuilt successfully and `Runner.Core` passed 1/1 in 19.33 seconds.
+
+Finite ankle-actuator receipt (2026-09-05): the promoted Human ankle motor is correctly authored as `(knee, ankle, ball)`, but its `~0.187 m` distal arm previously set the entire XPBD torque ceiling while the same hinge drives against the `~1.06 m` shank. The shared powered-joint solver now uses `max(parent_arm, driven_arm)` as its symmetric characteristic length while preserving the existing finite lambda, torque, positive-work, and solver-count-independent work limits. A warnings-as-errors adversarial probe proves that both ankles really have greater than 4:1 adjacent-arm disparity, that positive and negative actions reach the declared motor in grounded and airborne states, and that measured torque/work stay finite and inside those unchanged ceilings. Grounded angular response rises from roughly `0.000077` to `0.000332 rad` for a `0.00989 rad` central target; airborne response rises from roughly `0.00345` to `0.0067 rad`. The focused physical gates improve materially but do not pass: Speed Walk rises from roughly `+6.17 m / 1 step` to `+18.3359 m / 2 steps`; six of ten v0.7.30 seeds survive 20 seconds with five reaching `+19.8..+22.3 m`, while three still flip and seed `29441` reverses to `-7.83672 m` out of bounds; reflected shuttle trials both have positive local progress (`3.86252/3.56735 m`) but one facing is invalid and pose mismatch is `0.295172`. The v0.7.48 joint-sign response is stronger but still stops at the independent single-rising-toe/whole-sole contact gate. Raw authority is no longer a print-only false green: its required signed progress, cycles, bilateral unload/replant, passive toe range, and bounded COM/COP evidence now hard-fail (`forward -1.06994 m`, reverse `+1.63067 m`, zero cycles, toe violations, `1.24072/1.18549 m` maximum COM/COP lead). Active per-frame impulse dumps and unasserted arm/variance ablations were removed; failure-only summaries remain. Do not tune actuator strength further or reintroduce structure/posture/root/contact projection. Next isolate the first contact/phase divergence of reverse seed `29441`, the single-rising-toe release contract, and Raw direction reflection before any further implementation.
+
+Double-support tangent audit (2026-09-05): the first seed fork is not terrain or target phase. Seed `29441` and a full-survival seed remain on the same flat firm material with identical phase, hip/knee targets, and semantic support pattern through frame 22. At frame 23, `29441` receives `+0.601459` left-sole tangent impulse, then `-1.02825` right at frame 24 and `-1.13903` right at frame 25; the survivor receives essentially zero tangent impulse at frames 23-24 and `+0.568363` left at frame 25. The source invariant is the double-support branch of `solve_raw_support_tangent_manifold`: it targets the entire rig horizontal momentum and constrains the summed contact-lambda delta to that target, whose physical impulse is the negative delta. Repeating this after every distance/motor pass therefore cancels all feasible whole-rig momentum rather than solving Coulomb friction solely from local contact slip and measured normal capacity; the accumulated per-step lambdas then retain that topology/order-selected brake as contact membership changes. Raw forward/reverse proves the same masking: after the actuator ramp begins and their joint targets separate, COM speed stays approximately `1e-7..1e-3 m/s` through frame 150 while the pelvis and joints deform, and only the later collapse produces the apparent opposite-direction distances. The current Raw sign result is therefore collapse direction, not a controller-sign proof. Separately, the single-rising-toe gate fails because the shared unilateral predicate ignores outward velocity at the plane and requires separation above `2.5 mm`; a toe at zero separation and `+0.6 m/s` is re-grounded. Unilateral complementarity requires an at-plane point with positive normal velocity to release its own latch while zero/downward velocity retains contact. Any correction must remain per-node and physical, with negative zero/downward/sub-threshold tests and no selected support, root/body motion, or scripted release.
+
+Assisted frame-zero preload isolation (2026-09-05): the moving Human now shares the unilateral XPBD sole and bounded powered-joint actuator used by Raw, which removes the former one-second launch but exposes a repeatable backward ground reaction on the first fixed step. A source-ordered trace shows neutral requested ankle endpoints and essentially zero joint/posture/manipulator COM work before contact. Iteration zero only arrests the six supports' inward `-0.3667 m/s` gravity rate; on iteration one shin closure drives the left/right ankles to approximately `(0.229,-2.039)` and `(-0.283,-1.854) m/s`, then ankle-to-heel/ball bones 4-13/4-14 generate `+2.025/+1.481 m/s` left-sole shear while 6-16/6-17 generate `-0.472/-3.907 m/s` on the right before tangent. The simultaneous Coulomb manifold therefore reacts to, rather than initiates, the shear. Swapping left/right foot blocks does not alter it; swapping the complete leg-constraint order worsens timing but retains the backward sign. A rigid whole-pose reset perturbation and an eight-pass passive gravity/distance/contact preload both fail to restore direction, and the latter reproduces the same next-gravity-frame shear, so both experiments are removed. The legacy assisted toe servo and its final unilateral rate projector amplify the reaction and are removed from canonical Human outside the explicit duck-press lesson, but that authority correction alone does not close forward locomotion. The remaining moving-Human A/B removes `project_structure_rigid`: Raw already bypasses this authored 16-pass inverse-kinematic projector, while Assisted still rewrites both knee positions and may translate almost the entire non-support graph with matching Verlet history after the physical motor/contact solve. A moving physical Human must report zero structure-projection authority; static balance/duck teaching may retain their bounded lesson posture. With that rail removed, the requested endpoints retain the correct opposed `-x/+x` gait, but the actual ankles collapse from the authored `-0.17/+0.17 m` offsets to approximately `+0.008/+0.010 m` relative to the pelvis in the first step. Inverting only the Human sagittal target profile does not reverse physical progress (`V0730` remains about `-7.85 m`, `V0749` about `-7.89 m`, mirrored local progress about `-5.1 m`), so gait convention is rejected as the cause and the experiment is removed. A symmetric double-support neutral with ankles beneath the pelvis and same-branch knees likewise remains backward (`V0730` about `-7.86 m`, `V0749` about `-7.85 m`, mirrored local progress about `-7.62 m`) and is removed. Removing the remaining moving-Human torso posture projector flips the physical direction conclusively: `V0730` produces `+5.28..+27.67 m`, `V0749` `+6.10 m`, and both reflected shuttle trials positive local progress, but the unactuated torso eventually flips. Retain that authority removal and apply the observation-based stance-ankle correction to the Assisted teacher through the same finite XPBD motor, preserving the existing Raw-only public helper contract and never rotating body particles directly. Because traces show the gait already exchanging stance at about `0.2 s` while the shared actuator ramp remains zero through `0.35 s` and partial through `1.60 s`, run the Human target clock from the exact integral of accepted actuator authority (`policy_control_phase_seconds`) while retaining shuttle-local phase resets. That timing raises the deterministic receipt to five of ten seeds surviving 20 seconds with `+20.4..+28.5 m` and produces real transfer evidence, but the remaining trials still saturate the ankle actions and flip. Raising ankle strength from `0.034` to `0.056` does not increase valid seeds or transfers and is removed. The actual leverage loss is in the shared XPBD torque scale: the promoted ankle motor is correctly `(knee, ankle, ball)`, but `maximum_torque` uses only the short `ankle->ball` driven arm (`~0.187 m`) and ignores the `~1.06 m` load-bearing shank, while hip/knee parent and driven arms are both about `1.1 m`. Ground contact plus the rear-foot distance pass then cancels nearly all response: a `0.00989 rad` one-step target yields only `0.000077 rad` grounded response versus `0.00345 rad` airborne. Use the larger of the two physical joint arms as the morphology scale while retaining the exact finite XPBD torque, work, and lambda bounds; then require positive/opposed response, physical unload/replant, bounded torso/COM-COP/slip, forward/reverse mirror progress, and zero projection before retaining it. Continue from a physically proven controller response; do not reintroduce root/body helpers, contact anchors, action-derived release, fake grounded state, unproven gait-sign compensation, or reset-time pose projection.
+
+V0750 retained-controller fixture closure (2026-09-05): the persistent Director/external-host test now obtains a genuine trainer-owned Assisted checkpoint under the exact `equipment_targets` / Walk / `fire_and_correct` context requested by its autonomous Director command. Production fail-closed Raw/player context validation remains unchanged; the prior player request paired with a passive/Uneven-only Raw artifact was stale test data, not a controller defect. The focused Windows `/WX` target rebuilt successfully and executed beyond the corrected checkpoint load and physical external-host step; the combined suite then stopped at the separately open Human lake traversal regression (`seed=0x7500`, `x=-8.02467`, `t=3.26666 s`, `OUT OF BOUNDS`), which remains owned by the locomotion closure rather than waived here.
+
+The operator authorizes one fresh native acceptance pass and asks this task to take direct ownership of visual inspection, physical testing, corrections, cross-platform packaging, and release preparation while leaving the Site and SandHybrid repositories under their existing owners. Preserve immutable v0.7.50 source, packages, and publication evidence. Do not inherit a green result from automated diagnostics: launch the packaged application, inspect the actual rendered Human, Chicken, Dog, and Hexapod in multiple gait/contact phases, exercise the shared course and lake, weapon stance/aim/fire recovery, autonomous and player/external control, and every Rig Lab page. A visible defect reopens the matching system even when telemetry claims success.
+
+**Status:** ACTIVE — BASELINE PACKAGED EYE AUDIT, COHERENT CORRECTIONS, DETERMINISTIC COVERAGE, FULL MATRICES, EXACT PACKAGING, VISUAL RE-ACCEPTANCE, RELEASE HANDOFF, AND CLEANUP REMAIN.
+
+Acceptance criteria:
+
+- Human Walk is unmistakably a relaxed sub-one-hertz walk with alternating opposite arm/leg motion, planted heel/ball/toe progression, connected hands/forearms/ankles/boots, bounded pelvic motion, and visible ground purchase. Speed Walk, Walk/Run Transition, Run, translating crouch walk, weapon carry, stop-and-plant, aimed fire, recovery, and player-guided movement remain distinct selectable graph tasks rather than cosmetic labels over one controller.
+- Chicken, Dog, and Hexapod preserve their species silhouettes while every physical limb root, knee/elbow, terminal foot, near/far layer, head, neck, tail, and body segment remains connected and readable throughout contact, swing, terrain deformation, water entry, shore exit, failure, and editor preview. Art never supplies collision or hides a physically detached chain.
+- The canonical SandHybrid-derived 16-byte material-cell course is the only terrain/collision authority. The deterministic course contains meaningful, species-scaled firm, dry, waterlogged, shallow-water/lake, shore, step, ramp, gap, low-clearance, recovery, aim-range, and tool/construction anchors. Every placard is tethered to its real cell/world coordinate, deconflicted from the rig and viewport, and never floats or defines physics.
+- All four production rigs cross the declared early lake/challenge sequence from repeated fixed seeds using finite, material-ordered contact budgets and physical articulated motion. First-stall identity, terminal cause, world/cell location, traction used/available, slip, immersion, phase, and requested recovery remain visible. No root projection, treadmill progress, infinite anchor, synthetic teleport, hidden course motion, silent preview reset, or time-limit-as-VALID claim is permitted.
+- The default autonomous NPC equipment state is explicit, visible, and shared by live, PIP, Rig Lab, player, external-host, save/load, and diagnostics. Firing requires a physical stop/plant, gun stance, joint-driven acquire/settle, finite trajectory, impact or miss observation, aim correction, cooldown/reload, and locomotion resume. The AI Director may choose tasks and goals but cannot grant movement, contact, aim, hits, or completion.
+- Rig Lab and live preview operate on one canonical rig, pose, contact, terrain, equipment, art, task/director, and telemetry snapshot. The full trainer and statistics remain usable on every editor page. Structure, motors, contacts, morphology, art anchors/pivots/scales/rotations/layers, weapon mounts, undo/redo, save/load, gait scrubbing, zoom, contrast, skeleton toggle, and live commit all preview through the same renderer and propagate immediately.
+- The Epoch2DWalkEngine library exports platform-neutral rig/task/director/control/material/contact/equipment/fixed-step/result/diagnostic contracts, with Runner as the complete SDL/Vulkan example and a headless external-host example proving another project can supply requests and consume state without UI globals, filesystem assumptions, or hidden training authority.
+- Direct multi-phase packaged bitmap review at 2048x1152 or larger accepts scale, framing, gait, art, terrain, labels, PIP, telemetry readability, Rig Lab parity, weapons, and terminal-state retention. Only then may exact Windows/Linux Runner and SDK archives, exact-commit source, normalized checksums, per-file manifests, provenance, and one authentic capture be handed to the Site task for publication.
+
+Interaction inventory: fixed-step/root authority; Verlet integration; graph topology and motor/action dimensions; semantic heel/ball/toe or species terminal contacts; material-cell collision, friction, deformation, water and terrain synchronization; observations, rewards, PPO rollout/evaluation, retained-policy lineage, curriculum/task/director selection, first-stall and preview lifecycle; weapon mass/mount/stance/ballistics/feedback; autonomous/player/external control; canonical pose/art/equipment persistence and undo; shared live/PIP/Rig Lab renderer and camera; UI statistics/diagnostics/input; installed library API and examples; Windows/Linux compilers and packages; exact release/source manifests; branch, staging, Site handoff, and cleanup.
+
+Focused mixed-suite reopening (2026-09-05): the canonical articulated Human foot promotion invalidated several point-foot/index-range diagnostics without changing their assertions. The v0.7.26 training-truth and live duck accounting still call every motor after slot three an arm even though slots eight and nine are now the explicit load-bearing ankle motors; the live semantic-clearance scalar also treats the intentionally overlapping near/far side-view sole plates as one fused support instead of checking each heel/ball/toe cluster internally. The v0.7.25 compressed-pose fixture translates the new ankle with the upper body because it mistakes the knee motor endpoint for the semantic contact, so it fails before stance reconstruction is exercised. The v0.7.37 ordinary-boundary gate includes the newly declared physical step/ramp overlays whose height is independently required. Correct these tests by topology and declared challenge identity while retaining their original negative coverage. The v0.7.48 Raw torso-response assertion also predates the endpoint-invariance finding: production now preserves both hip/knee endpoint commands and changes only the selected stance ankle, while the old test demands symmetric hip and bilateral ankle output. Require the signed selected-stance ankle, exact untouched hip/knee/swing ankle slots, exact requested endpoint preservation, both support sides, both perturbation signs, and the physical opposed-control comparison. Separately, the assisted gait manipulator projector currently runs after the physical motor solve on uneven/shuttle/crouch and can overwrite a selected safe-carry/low-ready/combat arm target. Equipment directives must own the realized physical arm chain whenever active; split the v0.7.50 validity and realized-angle evidence, retain the v0.7.51 finite/non-collinear command proof, and run the focused legacy/live/equipment suites. The bounded Windows receipt passes v0.7.25, v0.7.26, v0.7.37, v0.7.51 physical equipment, and Live Acceptance; v0.7.50 now reaches a pre-existing retained-policy context mismatch in its external-host fixture because the checkpoint was issued under the passive/uneven action mask but the command stages fire-and-correct/equipment-targets authority. The v0.7.48 bilateral/sign physical proof passes after mapping the selected ankle action by support side, then reaches the separately open single-toe contact failure. This bounded closure does not waive or alter the open Raw Human gait authority gates.
+
+Canonical-map reopening (2026-09-05): direct source/render inspection found that the nominal 640x360 material grid populated only the roughly 32 rows between the surface and `world_bottom=-4.5 m`; the remainder of the visible underground viewport was an opaque renderer fallback. That is why the submitted course looked like a few enormous rectangular slabs instead of the EpochSimEngine/SandHybrid material world. Populate a centered, deep canonical cell cross-section, derive wavy/dithered layer transitions and resource/cavity samples from the pinned `world_layout.hpp` and `terrain_generation.hpp` contracts, and keep surface collision, lake depth, challenge coordinates, and structural ledges authoritative. Add exact-cell/repeated-seed and material-diversity coverage; a decorative bitmap or screenshot-derived terrain remains forbidden.
+
+Canonical-map construction receipt (2026-09-05): the centered 640x360 `SceneCell`-compatible field now constructs its underground training facilities from canonical materials on the same 8x8 alignment used by the pinned SandHybrid reset contract. A west lab, service stair, conveyor deck, glass-lined waterworks reservoir and pipe, seeded natural cavern with ore pockets, and east construction bay are real steel/glass/water/stone/resource cells beneath the unchanged surface course rather than screen-space art. Same-seed tests compare every canonical word/fill/metadata value and require the constructed material inventory plus a substantial below-surface atmosphere cavity; different seeds must still alter the deep transition geology. A fresh native full-map capture and all traversal/material regressions remain required before this implementation can be accepted.
+
+Raw body-thrust reopening (2026-09-05): the operator's direct observation that head motion is being accompanied by an unnatural whole-body forward launch is confirmed by the strict Raw replay rather than dismissed as an art artifact. The current retained teacher exceeds bounded torso-rate, stance-slip, support-lead, pelvis/COM impulse, and unsupported-forward-impulse limits. The legacy Human graph also signs a pre-runtime 13-node rig and then appends an incorrect diagonal knee-to-ball brace, while exposing no learned ankle command. Replace this split authority with one canonical authored heel/ball/toe topology, explicit learned ankle slots, passive physical toe hinges, and a topology-masked policy layout. Raw acceptance requires requested joint commands to equal effective powered commands, all body/root/course helpers to remain zero, finite dissipative contact work, repeated-seed support alternation, and zero unsupported forward COM impulses; an Assisted or visually plausible replay cannot satisfy it.
+
+Raw load-bearing endpoint reopening (2026-09-05): the current both-forward-knee, solver-flat-sole, per-contact-release Raw trace isolates the first failed transfer to a policy joint-target coordinate error rather than a body force. At frame 89 the phase labels the left leg swing and the right leg stance, yet the left requested ankle endpoint rises about 0.117 m while the supposedly load-bearing right endpoint is also retracted about 0.041 m. The stance retraction comes from applying transition flex to both halves and then shortening the Human target through the generic one-percent reach reserve. Keep the authored Human root-to-ankle reach for stance with no subsequent shortening; apply lift/flex only to swing with a profile exactly zero at both exchange boundaries. Prove numerical continuity/periodicity, six neutral solver contacts, correct frame-89 load ownership, actual normal-impulse COP and COM lead, forward/reverse contact-causal impulse signs, requested/effective/actuator/motor identity, and every unchanged Raw distance, alternation, lunge, slip, torso, and no-helper bound before cold retained inference. Both knees must remain visibly forward-facing; a mirrored backward-knee neutral remains diagnostic-only and cannot satisfy visual acceptance.
+
+Raw stance-balance kinematic receipt (2026-09-05): the visible whole-body lunge remains a hard rejection, so torso feedback may not shorten, translate, or re-aim the load-bearing hip-to-ankle endpoint. A nonsingular planar hip/knee pair has no independent endpoint-preserving attitude null space; retain its complete gait endpoint and route the bounded signed observed torso-angle/rate correction only through the explicit stance ankle motor about the physical heel/ball contact plate. Single-support chooses the measured planted side, double-support chooses the continuous gait-phase stance, and airborne applies none. Deterministic left/right and opposite-sign perturbations must prove exact endpoint invariance, untouched swing commands, motor-only authority, finite contact work, and improved physical response before the unchanged forward/reverse repeated-seed Raw gates may run.
+
+Raw stance-foot prediction receipt (2026-09-05): a one-step coordinate-lag hypothesis was tested and rejected. Summing the published torso, hip, and knee angular rates and compensating only the explicit stance-ankle target preserved the actuator-space hip/knee endpoint and invoked zero hidden authority, but its actual-step improvement was tiny on Uneven (sole error 0.076122 to 0.075235 rad), reversed on flat ground (0.202975 to 0.203208 rad), and the integrated trajectory regressed to -2.17346 m forward / -2.34872 m reverse with zero cycles. No predictor remains in the production teacher. The stronger invariant is the zero-action defect: the one-link passive toe swings freely through a physically impossible 0.198 m clearance excursion and the two soles exchange roughly +95.7/-96.5 N-s of tangential impulse despite a six-contact spawn. Repair passive anatomy reciprocally with no positive work, powered command, phase/contact reflex, root/contact projection, or topology disguise before resuming controller tuning.
+
+Raw passive-toe range rejection (2026-09-05): a reciprocal mass-balanced, velocity-neutral positional angle-range prototype was also rejected and removed. Despite moving each Verlet history by the exact constraint displacement, it engaged 3,119 times in the four-second zero-input probe, accumulated 0.000262 J of positive numerical work, retained the 0.198 m clearance excursion, worsened zero-input pelvis drift from -0.0743 m to -0.1870 m, and degraded the teacher to -2.6384 m. This proves that clamping the heel-ball-toe angle does not address the complete rear-foot/leg motion and can overconstrain physical rollout. Reopen from the restored baseline with per-frame heel/ball/toe angle, velocity, normal/tangent impulse, COP, and contact-order evidence; any next passive model must be velocity-level/dissipative or otherwise prove zero positive work before gait tuning.
+
+Raw zero-input toe-inversion isolation (2026-09-05): the clean restored baseline identifies the wrong rear-foot bone as real passive anatomy rather than renderer error or learned output. With zero actions, level soles, and all six support nodes initially touching, the planted left heel-ball plate remains level while the unrestrained ball-to-toe link changes from its authored 3.11596-radian relative angle at frame 0 to -3.04536 at frame 13, -2.68015 at frame 16, -1.823 at frame 20, and 0.02563 by frame 30, where it remains nearly 180 degrees inverted. The right plate independently unloads at frame 13 and replants at frame 16. A phase/action/contact-independent three-node velocity-level damper/outward stop was then tested: its direct impulse conserved linear momentum within 1.5e-8 and angular momentum within 7.2e-12, dissipated 0.00272 J for a 2.0-to-1.52 rad/s probe, and changed no position/contact state, but a single late application could not prevent the within-iteration fold. Coherent zero drift worsened from -0.07751 m to -0.07788 m and maximum toe clearance remained 0.19801 m, so the experiment was rejected and removed rather than gain-tuned. Reopen the motor/contact iteration itself: identify which neutral hip/knee/ankle solve plus ground-manifold order creates the first toe fold, and distinguish velocity impulses from velocity-neutral positional anchor corrections before designing another passive joint.
+
+Raw XPBD/contact reconstruction receipt (2026-09-05): the repeated position-level powered motor was replaced experimentally in Raw only by one per-step accumulated, torque/work-bounded signed-angle XPBD lambda per actual motor constraint. The contact solve now obtains normal capacity from per-node accumulated unilateral constraint lambda instead of multiplying local sole velocity by an inferred whole-body load; heel+ball share one velocity-level Coulomb solve while the passive toe has an independent finite contact, and no Raw tangential path moves a position toward an anchor. The first compile-complete contact trial exposed a separate complementarity defect: an intra-solver upward Verlet rate dropped heel/ball contact even while those nodes remained on the plane with positive normal lambda. Requiring geometric separation and exhausted normal support before release restores all six initial contacts and keeps requested/effective/actuator/motor identity plus helper/powered-toe counts clean. It does not close acceptance: zero input still travels +2.49743 m in four seconds, both passive toes violate their fixed anatomical range at frames 134/135 with about 0.210 m clearance, and forward/reverse teachers both move about +2.48 m with zero cycles. A fail-closed authored, phase-independent toe interval was then applied through identical reciprocal position/history corrections inside the coupled iterations. It was rejected before any teacher run: coherent zero input still moved +2.44375 m in four seconds, toe clearance remained 0.14581/0.13983 m with first range violations at frames 134/135, accumulated positive numerical work was 0.0001061 J, and angular-momentum error reached 0.03464. The prototype was removed. A same-spawn authority A/B then isolated the whole-rig thrust to the tangential contact solve: with every powered motor disabled but physical tangent retained, forty zero-input frames produced +0.157446 m/s COM drift, -0.583159 m/s pelvis drift, and +9.36533/+0.804321 N-s support tangent; the first nonzero tangent appeared at frame zero while motor torque/work remained exactly zero. With all motors retained but Raw tangent disabled, COM speed was -0.0000014 m/s, pelvis speed -0.08401 m/s, distance -0.04354 m, all six contacts stayed level, and no toe range failure occurred. Replace the order-dependent per-sole tangent update with one phase/action-independent simultaneous manifold solve from a frozen pre-tangent velocity snapshot: a double-support common mode receives one aggregate finite Coulomb budget distributed by measured normal load/effective mass, relative sole motion remains finite and zero-sum, toe contact remains separate, and single support retains the same finite law. No x anchor, planted flag, position projection, infinite friction, or zero-action special case is permitted. Prove contact-order permutation, mirror symmetry, deliberate sliding decay, asymmetric/double and single support, nonpositive friction work, 4-second zero-input drift within 0.05 m with bounded toes, and forward/reverse intent separation before teacher or cold-network acceptance.
+
+Required deterministic coverage: positive per-species course/lake traversal and each gait/weapon state; negative hidden course bounds, clamps, synthetic displacement, invalid trigger, silent reset, stale preview, detached art, mismatched editor snapshot, and stale checkpoint; adversarial low-friction/wet seams, steps, gaps, low clearance, moving/occluded targets, empty ammunition, repeated misses, task interruption, save corruption, and external-host misuse; repeated-seed first-stall and no-cheat trajectory/contact equivalence across Windows and Linux.
+
+Repeated-seed lake regression allocation (2026-09-05): preserve the existing authored uneven course, 30% difficulty, fixed lake/shore coordinates, disabled course motion, 120-second budget, and shore-plus-0.5-metre success gate. Add an isolated v0.7.51 regression that advances paired environments in lockstep for every production species over two additional fixed seeds, requires exact deterministic evidence equality and a stable nonzero challenge identity, and records both final evidence and the first measured transition into the canonical stall predicate. Every positive traversal must run in Raw guidance with the authority ledger enabled: requested anatomy actions equal the reported commands, while the declared finite control ramp/slew result equals the actuator and physical motor reports with no substituted action; course/root/torso drives, posture/manipulator helpers, and powered toe commands remain zero. Passive physical toe constraints remain permitted and separately attributed. Failure evidence must identify species/seed, action source/guidance/authority, root world and canonical-cell location, shore, elapsed time, gait/task, region/challenge/progress, terminal/invalid cause, finite traction budget, slip, water depth/immersion/phase, and recovery state. A bounded zero-action negative proves that stall capture and field validation do not silently label immobility as a crossing. This is diagnostic/test work only; physics, course roots, and acceptance gates remain unchanged.
+
+Director/challenge implementation receipt (2026-09-05): integration API 4 now authenticates selected task index, stable task ID, task/challenge pair, prerequisites, evidence, and control profile against `director::select` before mutating an environment; caller-asserted physical support was removed. One resolver maps every enabled default node to an actual canonical material interval, lake/shore/gap boundary, generated low-clearance obstacle, or active aim-range target and returns its stable challenge ID, authority, and course coordinate through task results/diagnostics. Waterlogged and shallow-water IDs no longer swap meanings with seed order. Deterministic structural fine-cell step and ramp overlays now occupy stable positions in the full 640-cell course; speed-walk and transition bind to those real surfaces. Static targets are labeled as aim range rather than moving targets, while recover, construction, and tool traversal remain explicitly disabled until those distinct physics exist. The production Director selection command now runs the same selection/prerequisite resolver and verifies the challenge in the live worker environment. `course_geometry.hpp` single-sources the 90 m span and 45 m center for terrain and camera framing. `RunnerV0751DirectorChallengeTests`, the external library probe, and camera tests pass forged, prerequisite, profile, all-enabled-node, physical-placement, and repeated-seed coverage. Automatic curriculum updates of mastery/failure/first-stall evidence, a real moving/occluded target, recovery/tool/construction challenges, and the shared all-species lake regression remain open under this active mission.
+
+Director atomicity reopening (2026-09-05): a command that passed graph authentication could still change course, gait, equipment, or directive before the physical challenge resolver reported a missing target/feature. Apply requested state to a candidate environment, resolve its physical challenge there, and commit the candidate only after success. A rejected command must leave the caller's complete environment bit-for-bit unchanged.
+
+Director external-state hardening (2026-09-05): stable IDs must be unique; every enum, threshold, difficulty, evidence value, prerequisite, and current decision must be finite, bounded, acyclic, and consistent with a fresh selection. Add a pure physical-trial evidence reducer that records completion, failure, and first stall without granting success, and emit the declared stall diagnostic from measured motion state. Version the canonical host snapshot and include pose/contact/material/equipment, task, action-source, and guidance provenance sufficient for another linked project to consume without Runner UI globals. Replace Director state using a platform-correct atomic rename that never deletes the accepted destination first, and test malformed, cyclic, duplicate, stale-current, repeated-seed, replacement, and no-mutation cases.
+
+Director/runtime authority reopening (2026-09-05): the graph-selection primitives are not yet a functioning live Director. Runtime mastery, failure, and first-stall evidence are never fed back into `director_state_`; the control profile has no real runtime setter; Director evidence/profile/current selection are absent from autosave/load; and the four gait buttons overwrite the current node without prerequisite selection. Make the live graph the single task-selection authority, update it from authentic completed/failed trial evidence, persist it with explicit compatibility validation, expose autonomous versus player-guided profiles, and prove progression, rejection atomicity, restart continuity, and no gait-button bypass. A Director may request a task but still cannot generate displacement, contacts, aim, hits, or completion.
+
+Installed SDK boundary reopening (2026-09-05): the exported core target advertises `${prefix}/include/Epoch2DWalkEngine` while the documented public include is `<Epoch2DWalkEngine/Engine.hpp>`. A co-installed EpochSimEngine currently masks that broken root include path; separate-prefix consumers fail. Export `${prefix}/include`, keep public headers beneath `Epoch2DWalkEngine/`, and add an installed split-prefix consumer test so dependency include directories cannot conceal the defect.
+
+External-host implementation allocation (2026-09-05): correct the exported include root and prove it with Epoch2DWalkEngine and EpochSimEngine installed under distinct prefixes on both release platforms. Replace the one-tick zero-action SDK probe with a retained-checkpoint-backed policy step selected by a player task request, plus an explicit expert-joint-action step. The probe is a contract test, not learned-quality evidence; the separate Raw retained-network release diagnostic remains the locomotion authority.
+
+Player-guided authority reopening (2026-09-05): `ControlMode::player_guided` currently changes only Director task eligibility while accepting the same low-level joint-action array as every other mode. It has no player intent/goal contract, retained-policy inference, bounded guidance blend, profile setter, or proof that AI movement remains physical. Add a platform-neutral intent request and retained-policy-controlled fixed-step path in which the player supplies direction/task/tool intent while the controller supplies joint commands; preserve a separately named expert joint-action mode for hosts that intentionally own the actuators. Deterministic tests must reject ambiguous mixed authority and prove raw/effective action provenance, physical contact causality, and save/restart continuity.
+
+External control boundary design (2026-09-05): every fixed-step request must explicitly choose a joint-command source and Raw versus Assisted guidance. Missing, mismatched, non-finite, stale-semantics, wrong-rig, or ambiguous controller authority rejects before task, reset, clock, or physics mutation. A retained controller is constructed only from a compatible checkpoint's retained-best parameters and provenance; player-guided task selection supplies high-level gait/equipment intent while that controller supplies joint commands. Results expose requested and physically applied motor commands plus optional-guidance authority so another project cannot mistake Assisted replay for independent policy inference.
+
+External-host/library implementation receipt (2026-09-05): integration API 4 now exposes schema-1 player intent and retained-policy provenance plus schema-2 canonical runtime snapshots; strict Raw player mode accepts only an exact-rig, exact-training-semantics retained-best policy whose own provenance is Raw, while Assisted request provenance and Assisted retained provenance have distinct fail-closed rejections. Signed forward/reverse and independent momentary stop intent change only Environment planner/observation direction before inference, so a player may pause a selected moving gait without changing its Director node; a deterministic invariant compares every particle's current/previous position and proves the intent setter supplies no root/body force. Any external fixed step that can mutate task, retry, intent, or guidance stages that state, joint inference, and physics on a candidate and commits only after the complete request succeeds; unchanged steady-state requests avoid copying the canonical world. The Director graph/state parser rejects duplicate IDs, invalid enums/ranges, non-finite or out-of-graph evidence, enabled unsupported tasks, disabled-prerequisite dead ends, duplicate prerequisites, cycles, stale current decisions, and failed/stalled trials forged as completion; pure evidence reduction records measured progress, failure, first stall, and completion without granting success. Director saves use a locale-invariant grammar and platform-native atomic replacement without deleting the accepted destination; focused coverage replaces an existing file and proves comma-decimal host locales cannot change the wire format. The exported target now advertises the true include root, app-only Python/icon generation is gated by `RUNNER_BUILD_APP`, and release CI builds exact-version installed consumers with Epoch2DWalkEngine and EpochSimEngine under distinct prefixes on Linux and Windows. GCC 14 warnings-as-errors builds and executions passed `RunnerV0751ExternalHostTests`, `Epoch2DWalkEngineLibraryExample`, `RunnerV0750PersistentDirectorArtTests`, and `RunnerV0751DirectorChallengeTests`; a freshly reinstalled split-prefix Linux consumer also configured, linked, and ran before the final strict-evidence, independent-stop, and locale-atomicity source follow-up. These prove the contract boundary, not learned locomotion quality; the source follow-up and full Windows/Linux release matrices remain under the active v0.7.51 mission.
+
+External intent lifecycle reopening (2026-09-05): an accepted player stop was stored in the physical Environment, but a later autonomous or training request did not explicitly replace that high-level intent. A host switching away from player-guided mode could therefore inherit a zero-direction stop despite valid autonomous joint commands. Resolve every accepted fixed-step request to an explicit locomotion intent: player-guided uses its authenticated signed direction/stop pair, while autonomous/training restore the physical planner's forward, non-stopped default. Treat the handoff as candidate-staged state and prove rejection cannot partially clear or retain a player stop.
+
+Public Windows-header hygiene reopening (2026-09-05): the installed atomic-replacement header included `windows.h` without suppressing legacy `near`/`far` macros, so including the public umbrella before ordinary consumer code could rewrite valid identifiers and break both Runner and external SDK builds. Contain Windows declarations with `NOMINMAX`/`WIN32_LEAN_AND_MEAN`, explicitly remove the legacy pointer-model macros after the include, and add an include-order compile contract that fails if either leaks.
+
+Public operating-system header boundary reopening (2026-09-05): macro cleanup makes the current inline atomic replacement compile safely, but an installed platform-neutral umbrella still transitively parses `windows.h` for every Windows consumer even when it never persists Director or art state. Keep the public `atomic_file.hpp` contract declaration-only, move the `MoveFileExW`/POSIX rename implementation and all operating-system includes into one `RunnerCore` translation unit, and preserve the no-delete replacement/error contract plus include-order coverage.
+
+Public operating-system header boundary source receipt (2026-09-05): `atomic_file.hpp` is now declaration-only and includes only standard filesystem/string contracts. `atomic_file.cpp` is linked once into `RunnerCore` and contains the conditional Windows `MoveFileExW` or POSIX rename implementation; no operating-system header is installed transitively through the umbrella. Repository audit requires the implementation translation unit, forbids `windows.h` in the public header, and preserves the replace-existing/write-through/no-delete source contract. A final serialized Windows build and freshly installed split-prefix SDK consumer remain required after the active Raw-authority work stabilizes shared sources.
+
+External SDK source audit receipt (2026-09-05): the installed public-header closure contains every quoted project include and reaches no SDL, Vulkan, renderer, canvas, window, app, or UI header. `integration::fixed_step` owns no singleton or process path: its environment, task graph/evidence, player intent, retained controller, trial ID, and tick are caller supplied; every possible task/retry/guidance/intent mutation is candidate-staged and rejected without committing the environment. Filesystem APIs remain explicit opt-in save/load calls with caller-owned paths, not hidden fixed-step authority. All remaining v0.7.50 strings in the current library/package surface are intentional changelog/test history or the narrowly validated lifetime-ledger migration; exact current CMake, vcpkg, consumer, archive, and candidate documentation identities are v0.7.51. This is a source-boundary audit, not the still-pending Raw learned-gait or final package evidence.
+
+Canonical external-authority reopening (2026-09-05): schema-1 snapshots expose the full particle array and primary material samples but do not identify semantic root/torso/contact indices, provide an explicit mass-weighted center of mass, expose contact pose/phase, or carry the opt-in per-source Raw authority ledger. A remote host therefore cannot reconstruct a self-describing no-rails audit from the snapshot alone. Advance the canonical snapshot schema, preserve the existing requested/applied motor and guidance provenance, add semantic poses and finite mass-weighted COM, and include every `RawAuthorityTelemetry` source/counter with an explicit enabled flag. Strict validation must reject stale schemas, malformed indices, non-finite pose/COM/authority values, and hidden array tail data. The snapshot is physical-authority evidence only; it must not claim that an arbitrary retained network learned a viable gait.
+
+Headless test-boundary reopening (2026-09-05): Python/icon generation is correctly app-only, but the v0.7.20 UI and v0.7.24 structural/icon tests still consume the app-generated asset directory while being registered unconditionally under `RUNNER_BUILD_TESTS`. A platform-neutral `RUNNER_BUILD_APP=OFF` plus `RUNNER_BUILD_TESTS=ON` build can therefore compile tests whose runtime inputs were deliberately never generated. Register those two app-asset tests only with the application, keep every core/library/external-host test enabled, and configure/build/test the headless matrix without relying on Python or generated artwork.
+
+Headless test-boundary implementation receipt (2026-09-05): the v0.7.20 UI and v0.7.24 structural/icon targets are now registered only when `RUNNER_BUILD_APP=ON`; all core, Director, library-example, and external-host targets remain available in a test-only build. Pull-request CI no longer installs Python for the headless job and explicitly rejects a discovered `Python3_` cache entry, a generated-assets directory, or either app-asset test in the CTest inventory before building the full target graph. A fresh GCC 14 warnings-as-errors `RUNNER_BUILD_APP=OFF` plus `RUNNER_BUILD_TESTS=ON` configure against the pinned split-prefix EpochSimEngine package produced no Python cache entry or generated-assets directory and registered neither app-only test. Focused builds and executions pass `Epoch2DWalkEngine.LibraryAPI`, `Runner.V0751ExternalHost`, and `Runner.V0751DirectorChallenge`; the full headless target/test graph remains enforced by the pull-request job and the final release matrix.
+
+Physical equipment audit (2026-09-05): the existing Human does own a real hand-chain mount and finite ballistic projectiles, but the engagement gate samples the prior frame's filtered locomotion speed, accepts either single foot as a planted firing base, and tests target overlap before terrain impact. An occluded target can therefore score a false hit, a one-foot shuffle can become READY, and the selected `fire_and_correct` behavior never returns to safe carry after its goal. The weapon also has no magazine/reload or projectile lifetime state in the platform-neutral snapshot. Close this as one explicit physical sequence: safe carry/locomotion, low-ready braking, two-foot timed plant, gun stance dwell, joint-driven aiming dwell, READY, ballistic flight with terrain-first collision, bounded observed-miss correction, physical recoil/cooldown, finite magazine/reload, and safe-carry locomotion resumption. Tests must reject scalar-only aim, moving/unplanted/unsettled/occluded/empty trigger attempts and prove repeated-seed state order, real projectile hit/miss, correction, cooldown, reload, and resumption without root, target, or projectile steering.
+
+Physical equipment implementation receipt (2026-09-05): the default Human now begins with a finite loaded carbine in safe carry; assisted equipment behavior preserves the locomotion controller while the physical body brakes, establishes a timed two-foot low-slip plant, dwells in gun stance, and drives the actual shoulder/elbow/hand chain to acquire and settle the ballistic aim before READY. The trigger is simulation-gated for body motion, plant, stance, settle, target/goal, cooldown/recoil, ammunition/reload, range, material footing, and course/terrain occlusion. Projectiles have finite flight, resolve terrain/obstacle impact before target overlap, never steer or move the target, feed bounded observed vertical misses into the next aim, and return the rig to safe carry after the fixed hit goal. The platform-neutral API 4 snapshot now publishes magazine/round counts, plant/reload state, fire-block reason, and target visibility; the appended reload state is protected by training semantics `0x0007'5101`, so older controller state cannot silently inherit its changed observation encoding. Equipment remains transient trial state rather than a new incompatible rig/checkpoint payload. Windows warnings-as-errors builds pass, and `Runner.V0728CourseCompletion`, `Runner.V0736AuthoredRuntime`, `Runner.V0751DirectorChallenge`, and the new repeated-seed positive/negative/adversarial `Runner.V0751PhysicalEquipment` suite pass. Mixed suites still reopen their independently owned failures before their equipment assertions: `Runner.V0732ShuttleFacing` reflection symmetry, `Runner.V0749PhysicalCombatTerrain` Speed Walk translation, and `Runner.V0750PersistentDirectorArt` Human lake traversal; `Runner.V0729ModularArt` separately reports a missing remade-art renderer contract. These gates were not weakened.
+
+Release-surface preparation receipt (2026-09-05): v0.7.51 metadata and public documentation are being advanced around the open visual-authority release contract and the implemented Director/challenge, physical-equipment, canonical-course, and platform-neutral library contracts. The changed 68-observation/13-action checkpoint contract requires semantics `0x0007'5103`, integration API 6, canonical snapshot schema 4, and current species-owned `runner-v0751-*` paths; v0.7.50 state is recognized only for validated lifetime-ledger migration, never learned controller, optimizer, mastery, rig, or autonomy resume. The exact public dependency remains `EpochSimEngine 2.5.26`; no unavailable v2.5.28 package is claimed. Raw inference remains an explicit release gate rather than a completed feature: the last authoritative Raw audit produced network-directed forward stepping but failed repeated-seed stability once optional guidance was removed. Repository audit, both compiler/test matrices, installed and independently extracted packages, package diagnostics, direct multi-phase bitmap acceptance, exact-commit source audit, archive checksums/manifests, commit, tag, publication, public re-download, and cleanup all remain pending and must not be inferred from versioned metadata.
+
+Release-sidecar normalization reopening (2026-09-05): the five planned v0.7.51 archives and their checksum/manifest siblings are named consistently, but the Windows manifest writer still inherits host-native CRLF while Linux emits LF and the final audit reads only the first checksum token. Emit every generated text sidecar as exact UTF-8-without-BOM LF text, require the archive sidecar grammar to be exactly `lowercase-sha256`, two spaces, exact archive filename, newline, reject carriage returns or trailing content, and execute the digest against all five archives before publication. This text normalization must not alter archive payloads or substitute for the per-file manifest audit.
+
+Raw whole-body-thrust reopening (2026-09-05): direct observation accepts the head motion but rejects the periodic torso/pelvis forward lunge as rail-like or teacher-driven. A scripted joint demonstration is curriculum evidence only. Release remains blocked until a cold-trained retained network replays in Raw mode across repeated seeds with raw/effective action identity, alternating stance/swing contacts, bounded slip and casual pelvis/torso/COM smoothness, and zero course motion, root/body drive, posture/structure projection, powered toe reflex, or inference-time teacher. Zero and fixed-action controls must fail the unchanged 10 m / 12-cycle gate, and every measured whole-body horizontal impulse must trace to a finite physical contact rather than direct root or torso displacement.
+
+Raw articulated-foot topology reopening (2026-09-05): truthful Bones inspection confirms that the runtime Human foot is not a serial lower-leg/sole chain: the added `3->13` and `5->15` distance constraints cross-brace each shank motor pivot directly to the ball while the existing `3->4`/`5->6` lower-leg and `4->13`/`6->15` sole constraints form rigid triangles. Remove those two diagonal shortcuts and require the physical chains `3->4->13->14` and `5->6->15->16`. If the serial sole is underconstrained, only an explicitly telemetered passive ankle limit/spring/damper that performs no positive work or COM translation is admissible; a hidden pose target, powered phase tendon, diagonal brace, or root correction is not. Re-run the unchanged Raw gait, smoothness, contact-causality, and retained-network gates before considering any wider Human action-space migration.
+
+Canonical learned-ankle decision (2026-09-05): the pure passive serial-sole trial removes the rejected diagonal but is underactuated, covering only 3.84960 m before invalid body roll with 1.69796 m/s pelvis and 0.979514 m/s COM peak frame deltas, 4.42081 rad/s torso turn, 1.51279 m support lead, 8.28322 m/s stance slip, and seven unsupported forward-COM impulse frames. Promote the physical feet into the authored Human itself: preserve nodes/actions 0..12 and 0..7, reinterpret old nodes 4/6 as non-contact ankles, append left heel/ball/toe 13/14/15 and right 16/17/18, append independent left/right ankle motors in action slots 8/9, and move semantic contacts to heel plus ball/toe. Each rear foot is the anatomical triangle ankle-to-heel, ankle-to-ball, heel-to-ball followed by the passive ball-to-toe hinge; the ankle motor is knee/ankle/ball, and knee-to-heel or knee-to-ball shortcuts are forbidden. Toes remain passive with zero Raw powered-toe authority. Preserve established observation fields 0..63 byte-for-byte and append only ankle angles at 64/65 and ankle angular velocities at 66/67. RUNRIG6, the rig signature, 13-action/68-observation policy dimensions, training semantics `0x0007'5102`, editor/live topology, diagnostics, and tests must migrate together; no runtime append or signature substitution remains admissible.
+
+Topology-masked policy/external allocation (2026-09-05): migrate the actor to an explicit per-output mask instead of treating active outputs as one contiguous prefix. Sampling must skip inactive slots before consuming RNG; deterministic inference, likelihood, entropy, PPO gradients, imitation gradients, parallel workers, and effective actions must share the same topology/task mask. Preserve the v0.7.27 initialization stream with a literal eight legacy outputs. Advance the platform-neutral boundary to integration API 5 and canonical snapshot schema 3, publish the 13-slot action role/mask and motor-to-node identities, and reject stale or topology-inactive expert authority before any task, intent, clock, or physics mutation. Replace synthetic external checkpoint fixtures with a real canonical-Human `PpoTrainer` checkpoint and add repeated-seed Human/non-Human inactive-tail coverage. These source contracts do not establish learned gait quality; the unchanged cold-trained Raw diagnostic remains the release authority.
+
+Topology-mask and external-proof audit reopening (2026-09-05): checkpoint restoration must recompute both retained and preview action masks from the restored topology/course before inference, and every active-to-inactive transition must clear exactly that output head's Adam moments without disturbing still-active or newly activated slots. Canonical snapshot schema 3 must reject non-finite or out-of-range requested/applied/telemetry actions, invalid source telemetry, contact usage above finite capacity, disabled telemetry carrying data, and any applied-action disagreement between the published action vector and motor snapshot. The installed umbrella must expose the permanent Raw inference diagnostic while retaining the pinned EpochSimEngine API 4 dependency contract. Add positive, negative, adversarial, and repeated-seed coverage; none of these structural proofs replaces the cold-trained Raw acceptance diagnostic.
+
+Topology-mask and external-proof focused receipt (2026-09-05): restored course/topology state now recomputes the retained and preview masks before any resumed inference. The one transition helper clears only an active-to-inactive output head's actor row, actor bias, and log-standard-deviation Adam moments; activation preserves retained state. Repeated deterministic checkpoint coverage proves the three equipment heads clear exactly 198 first- and second-moment values when leaving the equipment stage and no others. Canonical snapshot schema 3 now publishes applied actions directly from physical motor diagnostics, strips disabled internal telemetry, and rejects malformed source energy/deltas, command/actuator ranges, support impulse/capacity ledgers, hidden disabled data, or requested/applied/motor disagreement. The installed umbrella exposes the permanent Raw diagnostic and the consumer pins EpochSimEngine API 4. A serialized MSVC `/WX` core/external/library rebuild completed 21/21 steps; `Epoch2DWalkEngine.LibraryAPI` and `Runner.V0751ExternalHost` pass 2/2, and the independently installed split-prefix consumer rebuilt and ran from an unrelated temporary directory. Linux/full matrices and cold-trained Raw acceptance remain release gates.
+
+Raw momentum-authority hardening receipt (2026-09-05): a follow-up audit found two additional ways Raw could appear body-driven even after pose helpers were removed. Verlet integration assigned materially different X drag to the head, manipulators, endpoints, and support nodes, which can change mass-weighted COM momentum when those parts move at different speeds; Raw now uses one uniform isotropic passive drag coefficient. The action-derived support-release/toe-roll window was also a contact override not supplied by the ten physical joint motors, so Raw no longer opens it. Per-source telemetry now records peak COM-velocity change and positive horizontal specific energy, friction records positive work separately, and the retained-network gate requires internal distance/motor/toe/passive/support/final/structure/equipment sources to conserve COM within numerical epsilon, integration and friction to add no horizontal energy, passive toes to receive no motor/rate projection, and action-derived release counters to remain zero. These are source invariants only until the canonical topology build and unchanged hard gait/smoothness gates pass.
+
+Raw-learning authenticity/provenance allocation (2026-09-05): a post-handoff score is not learned Raw evidence unless every contributing rollout sample carries an explicit origin and the optimizer proves a nonzero-advantage all-Raw update with zero teacher, bootstrap, guided, self-imitation, or retained-anchor contamination. The Human Walk handoff must reset every rollout environment, action/history buffer, and episode together, then make the complete cohort Raw immediately; elapsed gait phase may not leak across the boundary. Retention owns an atomic `RawPpoReceipt` tied to the exact retained-best parameter digest and must invalidate it on any parameter mutation. Advance checkpoints to checksummed `EPPO51` with parameter, provenance, and complete-content digests, finite-value and exact-EOF validation; accept `EPPO45` only as explicitly unproven weight transfer. Integration provenance advances to schema 3 and strict Raw `valid_for` requires the verified receipt. Add deterministic normal, frozen-parameter, zero-advantage, poisoned-origin, pre-boundary, save/load, bit-flip, truncation, append, and old-schema negatives before the cold-trained Raw diagnostic may claim authenticity.
+
+Raw-learning provenance security reopening (2026-09-05): the first EPPO51 implementation exposed mutable trust booleans, mutable receipt fields, and a public receipt factory, so any ordinary installed-library caller could label arbitrary weights as storage-verified Raw learning. The external-host and focused tests compounded the defect by constructing that forged evidence themselves. Replace this self-asserted boundary with an immutable artifact whose seal can be issued only by a real `PpoTrainer` staged Raw update or by the exact-EOF checkpoint loader after complete validation; keep legacy weights in a distinctly typed unverified transfer path. Persist and validate task/equipment state, the complete qualifying evidence and execution context, exact active actor change, every metric field, finite/ranged enums and counters, nonzero RNG state, and coherent retained-best/receipt timelines. Restore truthful EPPO44 migration and exact EOF for every accepted format. The installed probe and tests must obtain positive evidence through a trainer-owned test seam or a genuinely loaded artifact and must prove public fabrication impossible. The local unkeyed checksum is corruption detection only: malicious-producer authenticity would require protected signing keys or external attestation and must not be claimed.
+
+Rig Lab production-parity implementation note (2026-09-05): the active visual pass owns the renderer/editor seam rather than replacing authored art or simulation state. Structure, Motors, Test, Art, and Presets now share the production `Environment`, projection, physical node/contact/equipment anchors, common wheel zoom, and 2048x1152 default client contract; Test is explicitly an assisted deterministic physical motor scrub and may not be presented as learned-policy evidence. Human boots retain their authored heel-toe and lower-leg proportions while following the physical heel/ball/toe axis, far limbs retain readable depth, and the held weapon is drawn in its physical arm/equipment layer. The remaining release blockers are a separately retained smooth Raw Human policy with honest provenance, visual acceptance of two opposing Raw gait phases, and correction of the physically collinear safe-carry shoulder/elbow/hand target in the equipment teacher; renderer masking is not an acceptable substitute. The live trainer must also expose the requested/current Director profile and measured task mastery, failures, and first-stall stable ID without bypassing Director selection or hiding statistics.
+
+Rig Lab bone-overlay correction (2026-09-05): native frozen Art/Bones comparison exposed a second root-aligned authored-rest graph below the physical articulated feet. Its two dangling node circles and long vertical/diagonal amber constraints were the reported malformed rear-foot bones; they were not physical heel/ball/toe anatomy. Structure/Motors now place edit lines, handles, hit testing, motor pivots, and limit rays on the matching production particles through `physical_screen`; Test shows only cyan production bones and the actual fixed-step physical motor response. The remaining rest-pose-derived command skeleton was removed from Motors/Test because even a faint detached graph violated editor/renderer pose parity. MIN/REST/MAX/SWEEP now apply direct joint commands to the deterministic physical Test `Environment` with assisted stability explicitly labelled; gait, crouch, and aim remain separately labelled assisted-teacher physical scrubs. The authored coordinates remain the saved edit state and are not advertised as a simultaneous live pose. Rig Lab also hides course placards/distance tags while retaining canonical terrain cells and physical features, because their tethers covered the foot/contact handles at editor zoom; live and PIP retain tethered course annotations. Art-slider and wheel zoom now change only the shared projection, preserve a frozen physical snapshot across pages, expose the current zoom on every page, and reset to 1.50x through the existing Rig Lab reset shortcut. Exact post-build native 2048x1152 parity recapture and opposing assisted topology phases remain required, and neither substitutes for the still-blocked Raw retained-policy acceptance.
+
+Walk-eye terminal-lifecycle reopening (2026-09-05): the isolated retained-policy presentation replay still replaced its visible `Environment` with the start snapshot immediately when `Environment::step` terminated, then silently recentered the camera. That discards the exact failure/time-limit body pose, cause, invalid reason, terrain/cell/world location, and water depth even though the normal trainer preview retains those facts. Freeze the actual terminal environment, pause further inference, show the terminal evidence in the primary/PIP/panel telemetry, and require an explicit retry control or `R` before returning to the retained start. Deterministic presentation-session tests must prove terminal-frozen replay cannot advance and that retry is available only for a frozen Walk proof; a source contract must reject hidden reset inside `draw_live_world`.
+
+Walk-eye/UI source implementation receipt (2026-09-05): the retained Walk proof now records the terminating `StepResult`, exact root/cell/terrain/water location and stable presentation trial ID, leaves the terminating `Environment` untouched, pauses inference, and exposes the same evidence through PIP, primary telemetry, bottom status and the proof control panel. Only the labelled retained-start retry, `R`, or the explicitly labelled guidance-switch-and-restart control creates a new presentation trial. Pure session tests reject advancement while paused/frozen and reject retry outside a frozen Walk proof; the modular-art source contract rejects any reset assignment within `draw_live_world`. SDL flipped/natural wheel input is normalized before routing, logical mouse/window coordinates remain the only hit-test space on high-DPI windows, and drawable pixels remain renderer-only. Live/editor wheel targets are disjoint, their buttons use the matching zoom state, and Rig Lab reset restores the shared 1.50x editor projection. At ultrawide widths the optional Rig Lab live pane and PIP now resolve the same physical Test/frozen `Environment` as the editor after one shared fixed step, with explicit `TEST / ASSISTED PHYSICAL SCRUB` labels; they no longer show an unrelated trainer pose. The Director profile control now uses the full trainer width with stacked evidence instead of compressing task/mastery/failure text into an unreadable narrow column. Focused compilation and native post-build visual validation remain pending the serialized build-slot handoff.
+
+Rig Lab terminal/camera/PIP closure receipt (2026-09-05): a physical Test terminal now freezes the exact terminating `Environment`, cause/reason, root position, material/water evidence, generation, and particle-pose signature. Fixed stepping stops, physical scrub/equipment mutations are disabled, and even an adversarial GAIT click leaves the same frozen raster and generation; only the labelled Retry button or explicit `R` starts exactly one new generation. A shared Rig Lab editor projection is now draw-local and cannot overwrite Live camera position, scale, auto/manual zoom, or initialization history, with a full Live manual-zoom -> Rig Lab editor-zoom -> Live round trip retaining every field exactly. The PIP title, wrapped state, physical world, and wrapped evidence footer now use shared layout boxes; the footer reserves 144 pixels so the longest current terminal cause/coordinate/material line fits at the minimum readable scale, and the capture helper consumes the same production world box. In the isolated `build/windows-vs2022-ui-v0751` MSVC Release warnings-as-errors tree, `RunnerViewCameraTests`, `RunnerSoftwareFrameCaptureTests`, `RunnerV0723GrayFrameTests`, and `RunnerV0729ModularArtTests` built and `Runner.ViewCamera`, `Runner.SoftwareFrameCapture`, `Runner.V0723GrayFrames`, and `Runner.V0729ModularArt` passed 4/4. The full `RunnerVisualCaptures` helper itself compiled, but capture generation remains blocked by the separately open equipment-teacher acceptance (`AIMING`, planted 12.233 s, settle 0.000 s, aim error 0.2675 rad, no shots) rather than by PIP rendering; its partial output is rejected and not release evidence.
+
+Art-layout atomicity reopening (2026-09-05): `art::save_layout` still tried a plain rename and, on failure, deleted the last accepted destination before retrying. A failed replacement could therefore destroy a valid species layout. Route the completely written temporary through the shared platform-native `persistence::atomic_replace_file` helper, clean up only the uncommitted temporary on failure, and prove replacement plus failure/no-damage behavior without weakening layout validation.
+
+Art-layout atomicity source receipt (2026-09-05): `art::save_layout` now closes and validates its temporary payload, delegates replacement to `persistence::atomic_replace_file`, and on failure removes only the uncommitted temporary while preserving the accepted destination and the platform error. Focused art coverage replaces an existing valid layout, reloads the replacement, proves invalid data cannot mutate it, and forces temporary-write failure while byte-comparing the accepted file; the shared primitive separately proves a missing replacement source cannot damage its destination. A source contract forbids reintroducing delete-first handling; the focused compilation and execution result is recorded below.
+
+Visual/UI focused validation receipt (2026-09-05): the serialized MSVC warnings-as-errors Release build now passes for `Runner`, `RunnerViewCameraTests`, `RunnerV0729ModularArtTests`, `RunnerV0748ContactArtTests`, and `RunnerV0750PersistentDirectorArtTests`; the shared atomic-file header's leaked Windows `near`/`far` macros were found by this build and removed at the header boundary before the successful retry. `Runner.ViewCamera`, `Runner.V0729ModularArt`, and `Runner.V0750PersistentDirectorArt` execute green, covering logical/high-DPI wheel routing, default/fullscreen pane separation, Rig Lab snapshot/source parity, terminal-freeze controls, exact art landmarks, and atomic layout replacement/no-damage behavior. `Runner.V0748ContactArt` reaches and passes the preceding exact Human heel/ball/toe topology, physical weapon-mount, boot-transform, hand, and art checks, then remains red only at the separately owned Raw action-space gait gate (`-0.396 m`, one gait cycle, one alternating step, invalid motion `8`). No visual capture is accepted from that failed Raw candidate; native 2048x1152 multi-phase review remains open.
+
+Physical equipment-eye reopening (2026-09-05): the existing packaged Art eye entry stops at Human safe carry and cannot deterministically expose the planted gun-stance/aim geometry needed to inspect both physical arms, hands, wrist mount, receiver grip, and muzzle alignment. Add a narrow isolated `--equipment-eye-test` entry that constructs the canonical Human equipment-target `Environment`, disables course motion, declares Assisted provenance, advances the real equipment teacher and fixed-step physics/state machine until a two-foot planted settled gun-stance/ready frame exists, then freezes that exact environment for inspection. The entry must fail closed if no valid physical frame is reached, must not synthesize a pose/hit or mutate persisted trainer state, and must label stage, state, planting, aim, and authority distinctly from Raw learned evidence. Add parser/session/source coverage before any native capture.
+
+Deterministic visual-capture reopening (2026-09-05): native desktop capture is unavailable in the current automation surface, while prior DPI-virtualized bitmaps were misleadingly named as 2048x1152 evidence. Add a source-isolated, non-installed software capture tool that consumes the exact ordered production `Application::vertices()` stream, composites its alpha-blended triangles at logical pixel centers, and writes deterministic binary PPM frames at exactly 2048x1152. The bounded capture matrix must cover the complete live interface, authored course, Human/Chicken/Dog/Hexapod production art, the physical equipment eye, every Rig Lab page with its trainer/statistics panes retained, and a shared Rig Lab wheel-zoom frame. Add positive, negative, off-screen/non-finite, alpha-order, exact-header/dimension, and repeated-byte tests. Generated frames are direct renderer-source visual-QA evidence, not packaged Vulkan/native-window acceptance and never Raw learned-gait proof.
+
+Physical preview framing reopening (2026-09-05): original-resolution review rejects fixed Human-world-scale inspection because the Human remains undersized and Dog/Hexapod can occupy only a small island inside the Rig Lab viewport. The existing editor fit computes from height alone and then clamps compact species to 112 px/m, despite ample subject-specific review space; an ultrawide retained-live pane can also use a different camera/scale from the editor while claiming parity. Derive inspection scale from both physical particle width and height, reserve explicit screen margins, apply one shared bounded zoom relative to the editor-fit default, and reuse that projection for every Rig Lab page and any simultaneous retained-live pane. Deterministic capture must reject trivial/tiny or viewport-clipped subject bounds, prove the non-Test pages retain the same production-pose art delta, and retain separately labelled multi-phase Test/physical-scrub frames. These inspection fits do not resize simulation, alter course geometry, or turn Assisted scrub frames into Raw evidence.
+
+1368x799 interface/zoom parity reopening (2026-09-05): direct supported-window review requires the exact 1368x799 client to retain non-overlapping telemetry, footer, and status/toast lanes; Trainer and Rig Lab/editor content must scroll independently with visible scrollbars so every control and complete active-page statistic remains reachable. Rig Lab Fit is the canonical 1.00x authored-envelope fit, with real monotonic user zoom from 0.28x through 3.60x, finite saturation, and an exact reset. The PIP footer must wrap or clip only at readable scale. All preset/edit commits must synchronously select the canonical requested rig for the production preview, invalidate incompatible frozen/physical snapshots, and prove requested/rendered species signatures match before asynchronous worker persistence. Preserve unrestricted editor control and add deterministic exact-size, negative, adversarial, saturation, reset, stale-snapshot, and repeated-input coverage; resolve all focused MSVC warnings-as-errors failures before visual recapture.
+
+1368x799 interface/zoom implementation receipt (2026-09-05): the compact layout now reserves a dedicated 64-pixel footer lane, splits the PIP into non-overlapping world and readable wrapped telemetry regions, and gives Trainer and Rig Lab controls independent bounded wheel offsets with persistent visible scrollbars. Rig Lab exposes an exact 1.00x fit and applies the declared finite 0.28x-to-3.60x value directly to the shared production projection. One synchronous canonical preview installer invalidates frozen Art, physical Test, and cached frame projections before installing the requested rig; preset, load, copy, and live edit paths route through it before any asynchronous worker command. Exact-size, near-minimum negative, zoom monotonicity/saturation/reset, scroll isolation/saturation, stale physical/frozen species switching, and repeated-input tests were added. `RunnerViewCameraTests` and `RunnerV0723GrayFrameTests` pass after a normal MSVC warnings-as-errors build with current Core; `RunnerV0729ModularArtTests` also compiles and clears the updated UI contracts, then stops at its unrelated pre-existing Raw-policy source assertion because `ppo_parallel.cpp` no longer contains `effective_policy_action`, the old raw-action call shape, or `foundational_walk_uses_raw_evaluation`. Resolve that Raw provenance test contract under its owning mission before claiming the complete focused test set or recapturing visuals.
+
+Same-frame Rig Lab projection-lifetime correction (2026-09-05): the shared production projection was still cached before Trainer and editor panel handlers ran. A PLAY event could therefore destroy the frozen `Environment` while the frame retained a pointer to it, and same-event zoom or an ultrawide preset selection could render Live from the old scale/species while the editor rendered the new state. Rig Lab now applies both disjoint panel input paths before constructing the one shared projection and renders each handler only once. Runtime coverage drives a frozen preview while its live source advances, releases PLAY on the adversarial frame, checks same-event zoom plus exact Fit restoration in both panes, and selects Dog from Human on the ultrawide four-pane layout; a source-order contract prevents projection caching from moving back ahead of those mutations. The stale Core minimum-window negative is aligned with the declared exact 1280x799 boundary. Serialized MSVC warnings-as-errors builds pass for `RunnerCoreTests`, `RunnerV0723GrayFrameTests`, `RunnerV0729ModularArtTests`, and `RunnerViewCameraTests`. `Runner.ViewCamera` passes in `0.01 s`; after replacing an over-strict moving-preview baseline equality with the intended same-event zoom-to-Fit transition assertion, `Runner.V0723GrayFrames` passes in `7.37 s`. Core clears its earlier 1280x799 UI assertions before failing the separately owned material-friction assertion `sub-limit external shear slipped instead of entering static friction`; v0.7.29 clears the new UI projection-order contract before failing its separately owned stale Raw-policy source assertion `mastery evaluation lost its selected gait or staged Raw production controller`. Those two non-UI failures remain open and are not waived.
+
 ## v0.7.50 persistent trials, unified authoring, challenge graph, and species art (2026-09-02)
 
 The operator's packaged v0.7.49 screenshots reject release acceptance. Human and Hexapod can traverse substantial distance but all species converge on a repeatable course location; the live training preview silently resets instead of preserving the failed terminal state and explaining it; the course presents too few meaningful, species-scaled traversal challenges; weapons are neither default-equipped nor consistently visible/correct in live and Rig Lab previews; Dog, Chicken, Hexapod, and Human art remain visibly mis-fitted; and Rig Lab edits a simplified skeleton that is not the same authored/rendered subject shown in the live preview. Preserve the immutable v0.7.49 commit and candidate artifacts as rejected evidence. Site publication stays held.
@@ -2404,3 +3674,1223 @@ Final serial Windows gate triage (2026-09-02): 38/41 tests pass after the wet/dr
 Speed Walk/contact closure (2026-09-02): the accepted shared finite-contact model uses the portable 4.0 saturated multiplier, Human/monoped morphology bearing, and a dry Human foot-bearing factor of 7.0 without root projection or an infinite plant. The restored distinct Speed Walk envelope clears Linux at the full 18 m target and reaches 17.5462 m / 32 real alternating events / 0.877 m/s on Windows. Preserve the public 18 m target while accepting one 0.5 m terrain/contact integration interval only for Speed Walk qualification; cadence, speed, survival, collision, strict-valid, and selected-task checks remain exact. Direct Linux and Windows v0.7.49 physical-combat/terrain gates now pass, eliminating the false 80-percent plateau without granting movement or completion authority.
 
 Final focused regression closure (2026-09-02): the stale hybrid diagnostic now proves bounded zero hidden Escape blending rather than requiring it. Human dry/wet cadence continuity passes the exact v0.7.30 repeated-seed reference gate on both platforms; all four species pass the lake/traction contract; v0.7.50 Director/external-host/art persistence passes; and Human crouch walk passes after a 0.001 IK stance-height correction, recording 4.86562 m, 18 physical cycles, and 7.36671 seconds crouched at the previously failing Linux 60 Hz case. No trace logging remains. Full serial CTest, installed-package, archive, visual, publication, and cleanup evidence remain release work.
+
+Canonical ankle Raw reopening (2026-09-05): the first clean RUNRIG6 19-node/23-bone Human trial proves the uniform-drag/no-helper path removes the rejected forward lunge bounds, but the explicit ankle curriculum then reverses and rolls the body: -1.68346 m, one alternating cycle, 5.11409 rad/s peak torso rate, 1.25186 m support lead, 2.67151 m/s stance slip, and BODY ROLLING at 2.91666 s. Treat this as a controller/contact failure, not acceptance. Diagnose the explicit ankle target and physical heel/ball/toe contact order against the canonical rear-foot triangle; retain actions 8/9 as the only ankle authority, keep passive toes unpowered, and do not restore action-derived support release, differential body drag, root/torso translation, posture projection, or hidden phase tendons. The unchanged 10 m/12-cycle and casual-smoothness gates remain authoritative, followed by cold-trained retained Raw inference.
+
+Canonical ankle signed-attitude finding (2026-09-05): rotating the ankle target in its authored ankle-to-ball frame and disabling the assisted whole-sole release heuristic in Raw eliminate the prior unsupported forward-impulse events (now exactly zero), but the deterministic gait still fails at -2.46919 m after 2 alternating cycles with BODY ROLLING at 3.23333 s. Pelvis and COM delta bounds now pass (0.114903/0.381421 and 0.0773166/0.541613 mean/peak), while torso rate 4.263 rad/s, support lead 1.24674 m, and slip 1.90366 m/s remain rejected. The first integrity frame has left heel/ball/toe planted and only the right toe touching; the explicit ankle actions are finite and unsaturated. The observation then truthfully shows a growing backward torso error while the planted ankle command remains negative. Correct that attitude only through bounded signed torso-angle/rate feedback emitted into hip/ankle action targets, with positive/negative response coverage; never add an Environment torso/root servo or relax the hard gait/smoothness gates.
+
+Raw contact-transition finding (2026-09-05): the first signed hip/ankle feedback trial confirms the requested action sign changes correctly but does not prevent the reversal. Restoring the anatomical 0.14 m swing lift exposes the earlier causal event more clearly: at 1.35 s the intended right sole is planted and the rig has advanced 0.535 m; before mid-swing at 1.67 s the stance sole is fully airborne, the forward-moving swing sole lands, and its finite ground reaction drives the pelvis backward at -5.108 m/s. The smooth Raw target still changes vertical baselines between dynamic near-full extension in stance and constant flexion in swing, while adding simultaneous endpoint flex to both legs. Remove that joint-target discontinuity for Raw by using one flexed vertical baseline and no endpoint shortening; this changes only policy/teacher joint targets, not contact state or body position. Preserve the anatomical lift, signed feedback, finite Coulomb contact, and all hard lunge/slip gates.
+
+Raw actuator-clock finding (2026-09-05): a continuous flexed vertical target plus a cadence matched to the mandatory 1.0 action-unit/s Raw slew changes the failure from backward roll to 2.84222 m of forward joint/contact travel before sustained flight at 3.70 s. Pelvis and COM delta bounds remain inside 0.085808/0.491552 and 0.059784/0.512112 mean/peak with zero unsupported forward impulses, but torso rate 4.12285 rad/s, support lead 0.912469 m, and slip 1.83599 m/s still fail. The remaining target/contact offset begins at startup: Environment ramps actuator authority from 0 over 0.35-1.60 s while the curriculum phase clock advances at full speed from time zero. Single-source that physical smoothstep ramp and use its analytic time integral for only the Raw Human teacher phase/startup clock (zero through 0.35 s, continuous through 1.60 s, then time minus 0.975 s). Add exact boundary and monotonicity coverage. The Environment still receives only policy joint targets and must not move contacts or body nodes to follow the clock.
+
+Raw torso-rate sign reopening (2026-09-05): the analytic actuator-clock run remains a hard failure at 2.72222 m / 2 alternating cycles / FLIPPED at 4.56667 s. It keeps pelvis and COM deltas within 0.0769104/0.543623 and 0.0504051/0.440623 mean/peak and unsupported forward impulses at zero, but reaches 4.11285 rad/s torso rate, 0.934014 m support lead, and 2.54223 m/s stance slip. The collapse begins near 3.35 s at signed torso pitch -0.230277: the torso observation is ahead of authored attitude and its angular rate is negative, yet the older Raw balance branch adds that negative rate to a positive position error, cancelling rather than increasing the hip correction. Correct the rate sign at the joint-action teacher only and prove it with a coherent one-step physical positive/negative perturbation, not merely opposite output values. Compare a bounded arm-output ablation to exclude upper-body counter-swing as the remaining angular-energy source. No torso/root servo, contact release, helper, phase tendon, or acceptance-threshold change is authorized.
+
+Raw torso-rate sign isolation result (2026-09-05): the coherent one-step perturbation proves the explicit hip/ankle correction itself has the intended physical sign: compared with its exact opposite, signed pitch is reduced from +0.106583 to +0.0573303 for a backward fall and from -0.107631 to -0.0593364 for a forward fall, with angular response toward neutral. Flipping the older symmetric balance-rate term in isolation is nevertheless rejected: during the real alternating stance it regresses to -2.1343 m / one cycle / BODY ROLLING at 3.31666 s, with 5.76539 rad/s torso rate, 1.24293 m support lead, and 3.36551 m/s slip. Holding all four arm outputs at neutral also rolls (-2.22244 m at 4.35 s, 4.6068 rad/s, 3.45254 m/s slip), excluding counter-swing as the primary source. Restore the prior integrated baseline and instrument the same joint response under left-only and right-only support: the remaining error is support-state coupling and delayed explicit ankle authority, not hidden arm, root, or COM actuation.
+
+Raw stance-routing/contact-height result (2026-09-05): isolated pinned-contact response is consistent on both sides and signs. With either sole fixed, the inactive swing hip or ankle has exactly zero immediate attitude effect; the stance hip reduces 0.063-0.070 rad error to 0.035-0.042, the stance ankle to 0.032-0.039, and their pair to 0.0038-0.0105, while opposed actions worsen it to 0.122-0.130. Routing Raw attitude correction only to the physical stance branch therefore has the correct local sign and reduces peak slip below the 1.5 m/s hard bound, but the integrated gait regresses to -2.09497 m / one cycle / BODY ROLLING at 3.06666 s, with 4.05418 rad/s torso rate and 1.25613 m support lead. Trace shows the next sole touches near 1.68 s only halfway through its authored swing while its hip target/applied action remains negative, creating a backward contact reaction. The smooth Raw leg path currently uses the shortest constant endpoint reach throughout both phases, so pelvis fall consumes the 0.14 m anatomical clearance. Replace that constant with one continuous circular two-link reach computed from the current horizontal target in both stance and swing; the same x at each phase boundary guarantees continuity, swing lift only shortens the leg, and no root/contact authority changes. Keep stance-only attitude routing and all hard gates while testing this isolated geometry correction.
+
+Raw circular-reach rejection (2026-09-05): the continuous circular two-link target is physically continuous and finite but fails the unchanged integrated gate more severely: -2.12970 m, zero completed or alternating cycles, and BODY ROLLING at 2.63333 s. Pelvis and COM delta remain bounded at 0.08246/0.44711 and 0.04404/0.29416 mean/peak with zero unsupported forward impulses, while torso rate 4.87746 rad/s, support lead 1.2582 m, and stance slip 2.3344 m/s fail. The next sole is already grounded near phase 0.788-0.810 with roughly -0.007 m solver clearance and peak slip, so circular reach does not preserve swing clearance under the falling pelvis. Arm-hold also fails at -2.23272 m. Reject and remove both this target and the stance-only balance routing because neither beats the prior +2.72222 m action-only baseline. Preserve the pinned left/right sign proof as causal evidence, then diagnose support-leg extension through observable downward pelvis velocity; require correct/opposed one-step physical response before any integrated trial and retain every no-root/no-helper/hard-smoothness gate.
+
+Deterministic production-vertex capture reopening (2026-09-05): the first complete 2048x1152 software-raster matrix passes exact framebuffer, populated-pane, substantial species/PIP occupancy, shared Human non-Test projection, and hovered-editor-only material zoom checks. Direct inspection confirms readable main/PIP Chicken, Dog, and Hexapod art, retained trainer statistics, and lane-separated course labels. It also exposes three release blockers that metric-only tests missed: direct Rig Lab Art requests label Chicken/Dog/Hexapod while the production physical snapshot remains Human; the Human boot opaque span extends 23 percent beyond the real heel-to-toe plate and produces a needle toe/black spike; and the planted equipment frame merges two pale physical arms/hands with the pale carbine. Commit canonical presets to the immediate production preview before their asynchronous worker command, require requested/rendered rig signatures to match in the capture tool, fit boot opaque width exactly to heel-to-toe, and layer the real shared weapon between distinct exact-anchor rear/front manipulator outlines with narrow stock/receiver/barrel material accents. Rebuild and visually re-audit the complete matrix; software PPM evidence remains neither native Vulkan/package evidence nor Raw learned-gait proof.
+
+Rig Lab authored-envelope and depth reopening (2026-09-05): the first post-species-sync capture correctly rejects Chicken because its real opaque production vertices extend to the editor viewport edge even though the physical particles fit. Fit every Rig Lab page from the exact authored opaque production envelope generated from the canonical physical snapshot, with a bounded camera recenter and scale-down applied before the common user zoom; never mutate the rig, invent an art-only pose, or let toggling art change the shared projection. Preserve ground anchoring and editor/live overlay parity, and cover oversized, non-finite, and repeated inputs. Original-resolution review also keeps two Human blockers open: the planted equipment forearms/hands are still nearly collinear, requiring stronger near/far endpoint and cuff material distinction at the unchanged physical anchors, and the rear heel-ball-toe diagnostic triangle reads as a cyan diamond when legs overlap. Draw physical bones and terminal points in deterministic rear-to-front depth passes, with a subdued rear sole chain and emphatic near ankle/heel/ball/toe chain, but no screen offset, fake shortcut, topology change, or art mask.
+
+Renderer-native visual matrix result (2026-09-05): the rebuilt `/WX` ViewCamera, v0.7.29 modular-art, software-frame-capture, and visual-capture targets pass, and the complete deterministic 2048x1152 matrix now writes a current manifest. Exact authored-envelope fitting keeps default Chicken/Dog/Hexapod Rig Lab widths at 73.5/77.9/78.0 percent and the first common zoom step at 82.4/87.3/87.3 percent, with 264124/271292/337829 changed pixels confined to the hovered editor. Requested and rendered species signatures differ correctly. Human opposing-phase evidence is no longer a 31-frame clock guess: the capture searches the unchanged physical Environment to step 140 and proves left heel/ball/toe all grounded, right heel/ball/toe all airborne, valid motion, and generation 1 with no hidden terminal recycle. Direct pixel review shows equal endpoint-bounded boot underlays, purple rear versus cyan near sole chains/handles, distinct physical arm/elbow/cuff endpoints and receiver/grip/barrel material breaks, full fitted Course PIP footer text, and Chicken/Dog/Hexapod static plus physical-contact views without the prior terminal art spikes. This software-production-vertex evidence does not establish native Vulkan/package presentation or retained Raw learned-gait acceptance; those remain separate release gates.
+
+No-slab visual correction (2026-09-05): original-resolution review rejects the preceding depth underlays despite the passing capture metrics. Their exact-anchor oriented rectangles create giant Chicken toe blocks, Dog box/wedge pads, Hexapod triangular foot/leg wedges, rectangular Human boots, and the thick Human arm/hand outlines create a cyan loop with doubled ribbon limbs. Remove these synthetic opaque envelopes. Preserve the authored irregular source silhouettes and encode depth only by a bounded color bias applied while emitting each existing opaque source pixel, plus compact exact physical joint/contact accents. Keep terminal lower-leg art ending at its real contact anchor to prevent the earlier spikes. In Bones views, emphasize the real ankle-to-heel-to-ball-to-toe path while rendering the real ankle-to-ball triangle brace thin and subdued; retain every physical edge and use rear-purple/front-cyan ordering without screen offsets. The step-140 forward-pitched Human is honest physical Test output and must not be cosmetically uprighted; if an acceptable planted physical phase does not exist, it remains an authority-side gait blocker.
+
+No-slab renderer evidence (2026-09-05): the bounded renderer correction now passes fresh Windows `/WX` builds for RunnerViewCameraTests, RunnerV0729ModularArtTests, RunnerSoftwareFrameCaptureTests, and RunnerVisualCapture, followed by Runner.ViewCamera, Runner.SoftwareFrameCapture, and Runner.V0729ModularArt at 3/3. The complete deterministic 2048x1152 RunnerVisualCaptures matrix finished and wrote `build/windows-vs2022-release/visual-captures/manifest.txt`; exact source-over PPMs and converted review PNGs are under `build/windows-vs2022-release/visual-captures/current-review/no-slab-1325`. Original-resolution review confirms that Chicken claws, Dog paws, Hexapod terminals, Human boots, and Human arms/hands are again composed only from their irregular authored opaque pixels; no rectangular or capsule envelope surrounds them. Near/far depth is a bounded alpha-preserving color bias inside those pixels, with deterministic zero, saturated, malformed, and repeated-input coverage. The equipment frame retains one physical pose and now reads as separate rear/front forearm, cuff, hand, dark receiver, grip, stock, and barrel layers. The physical Bones overlay retains every canonical edge, draws its real ankle-to-ball triangle brace thin and behind the explicit ankle-to-heel-to-ball-to-toe path, and uses rear-purple/front-cyan ordering without offsetting anchors. Human opposing evidence remains exact at step 140/generation 1 with left heel/ball/toe grounded and right heel/ball/toe airborne, but the frame is visibly forward-pitched with poor toe/support geometry. That is an honest authority/kinematic rejection and must not be masked by the renderer. Software production-vertex evidence remains neither native Vulkan/package evidence nor retained Raw learned-gait proof.
+
+Raw bilateral knee/ankle mapping reopening (2026-09-05): the canonical foot graph and renderer are truthful, but the saved Human neutral pose places the two nearly straight knees on opposite kinematic branches. `biped_gait_teacher_action` derives a permanent IK bend sign independently from each authored cross product, so the same facing-local stance endpoint produces a left ankle command near -0.58 and a right command near +0.67 solely to hold the identical ankle-to-ball vector. Do not flip the right ankle action or add a contact/body correction. First replace the synthetic inverse-mass "pinned" per-slot proof with actual `Environment::step` contact evidence for equivalent left and right support. If that confirms the branch asymmetry, test one shared facing-local anatomical knee-flexion branch with a coherently migrated neutral pose so startup requires no runtime branch jump. Preserve canonical node/action indices, real rear-foot triangle, passive toe, requested/effective/actuator/motor provenance, and every unchanged Raw distance, smoothness, slip, support, no-helper, and no-COM-injection gate.
+
+Package-layout validator correction (2026-09-05): the reported `Runner.PackageLayout` README failure was reproduced even though the source and build-tree README files had the exact same SHA-256. The validator consumed each document through `istreambuf_iterator` and then incorrectly required `ifstream::eof()`, which is not guaranteed to be set by direct stream-buffer iteration; valid package documents therefore failed closed. It now rejects an unopened stream or a real `badbit` I/O failure and separately requires the exact v0.7.51 identity text. A dedicated `RunnerPackageMetadataSync` dependency also refreshes README, changelog, license, and mission ledger on every requested Runner build, including an otherwise no-relink incremental build. Repository hygiene statically rejects restoration of the stale EOF predicate or removal of the sync dependency. In an isolated Visual Studio 2022 Release tree, `/W4 /WX` builds of Runner, the public library example, and Raw-learning provenance test passed; RepositoryHygiene, LibraryAPI, RawLearningProvenance, and PackageLayout passed 4/4; the strict-manifest suite passed 4/4. A deliberately wrong build-tree README was rejected, the next incremental Runner build restored the exact source hash, and a fresh `RunnerRuntime` component install launched `run.bat --diagnose-package` successfully from an unrelated directory with exact source/install hashes for all four top-level documents and the launcher. No archive, tag, upload, or publication was created; complete matrices, native visual acceptance, Raw gait acceptance, artifact audit, and release authority remain open.
+
+### WALK-V0751-PRODUCT-CLOSURE-470 - Finish Epoch2DWalkEngine as one coherent production pass
+**Status:** IN PROGRESS - NATIVE PHYSICS AND WORKSPACE REOPENED
+
+This mission consolidates the operator's final v0.7.51 direction without erasing any earlier unfinished mission. The product name is `Epoch2DWalkEngine`; `Runner.exe` remains the explicit bundled SDL3/Vulkan example. The Site, current docs, window/header, runtime packages, development packages, source archive, and public library identity must lead with Epoch2DWalkEngine. Historical Runner release names and internal compatibility identifiers remain truthful history rather than being rewritten as if they never existed.
+
+Current interaction inventory:
+
+- Physics/contacts: finite articulated contacts, gravity, material traction, and no-root/no-conveyor authority remain mandatory. First bone-length divergence, Human slump, near-zero lake traction, Raw stop/deceleration, bilateral stance transfer, and full four-species lake completion are open.
+- Rigs/art: canonical Human/Chicken/Dog/Hexapod graphs and irregular source-pixel modules work. Human arm transverse mass, cuff/hand separation, rear-foot depth, boot/contact fit, and multi-phase native review remain open; no synthetic limb slabs or art-only pose correction is allowed.
+- Terrain/world: one stationary 640x360 canonical-cell field now drives rendering, sampling, collision, material truth, and external snapshots. The EpochSimEngine connected-world bitmap is layout evidence for natural strata, grass, waterworks, rooms, stairs, and machinery. Surface challenge continuity, lake shore reachability, annotation clutter, and final native parity remain open.
+- Observations/policy/curriculum: Assisted and Raw authority are separate and visible. Task graphs cover Walk, Speed Walk, transition, Run, crouch/wade/swim/shore, equipment, and physical challenges, but Raw repeated-seed stability and truthful gait-category qualification remain open. No completion percentage may advance without its physical evidence reducer.
+- Director/equipment/external host: authenticated stable task/challenge identities, fail-closed evidence, finite ammunition, planted gun stance, physical aim/miss correction, and renderer-free host snapshots exist. Stable-challenge graph equivalence, ordered evidence persistence, player-guided Raw stop, and final adversarial coverage remain open.
+- Persistence: versioned rig, controller, autonomy, evidence, and integration schemas fail closed and isolate v0.7.51 semantics. Exact-EOF, interrupted-write, provenance, compatibility, and package-path coverage must pass after final schema stabilization.
+- Editor/interface: Live and Rig Lab share the true physical pose and production renderer, but the compact three-column wall is rejected. The responsive workspace, named scrollable inspector pages, separate Live/Rig art states, truthful zoom readout, input routing, tab persistence, and minimum/default/ultrawide coverage remain open.
+- Renderer/diagnostics: deterministic production-vertex captures expose real art/terrain/layout failures and cannot substitute for Vulkan evidence. Every feature diagnostic, native fullscreen review, packaged multi-phase matrix, and visibility of hard failures remain release gates.
+- Build/package/branch/assets: work continues only on `agent/v0751-visual-polish`. The full Windows and Linux warnings-as-errors matrices, unrelated-directory installed/extracted launches, five archives, LF checksum sidecars, per-file manifests, native evidence bundle, exact source audit, commit/tag, Site ingest, public re-download, and safe temporary cleanup do not yet exist for v0.7.51.
+
+What has worked is preserved in source and focused tests; what has failed remains recorded under WALK-RAW-POLICY-PROOF-468 and WALK-V0748-VISUAL-PROOF-469. Close this mission only once the actual native application is visually acceptable, all unchanged strict physical gates pass, exact artifacts are published and re-downloaded, and obsolete temporary branches/worktrees/captures are removed without deleting unrelated user work.
+
+Native Human arm-mass reopening (2026-09-05): direct inspection of the current 1368x799 Vulkan window confirms the authored Human upper arm, forearm, cuff, and hand remain visually underweight beside the torso and legs. The thin opaque silhouette reads as a distracting wire during motion even though its physical shoulder/elbow/wrist anchors and source-art shape are correct. Increase only the fitted authored-arm transverse scale and compact cuff/hand mass at those unchanged physical anchors, preserving the irregular source pixels, exact limb endpoints, near/far depth order, and weapon layering. Add bounded/malformed thickness coverage and require native relaxed, opposing-phase, and planted-carbine frames; do not add synthetic ribbons, fake bones, screen offsets, or any physical/control authority.
+
+Live slump and exact SimEngine-map reopening (2026-09-05): a direct current 1368x799 Vulkan sample at world x about 81.95 m shows the Human folded nearly horizontal during Walk - Casual while the HUD reports `MOTION BONE LENGTH ERROR` and both semantic feet airborne. The Rig Lab correctly reproduces that same physical failure until Human is explicitly reselected, so this is not a camera or art illusion; bone-length integrity and sustained torso posture are hard release gates. The same live view also exposes coarse vertical material slabs around 150-250 ft rather than the requested constructed SandHybrid world. The user's active EpochSimEngine permanent worktree contains a current 1280x720 `normal_world.bmp`/`map_overlay.bmp` reference under `build/evidence/eye-v2528-corrected-windows-interactive-frames`: a connected authored cross-section with stratified/dithered sand, soil and stone, an open water shaft/reservoir, grass surface, structural underground rooms/stairs, material machinery, and a truthful full-world map inset. Use that bitmap only as a visual/layout reference while preserving canonical material IDs and physical terrain sampling; add traversable surface challenges without copying UI chrome or turning terrain into collision-only decoration.
+
+Native Rig Lab zoom-readout reopening (2026-09-05): clicking `EDITOR +` changes the actual shared editor projection (the footer reports about 1.25x and the rig visibly grows), but the middle control remains labelled `FIT 1.00X`. This misleading fixed label made working zoom look broken. Show the current bounded editor zoom in that control while retaining its click-to-fit action, keep Live and Rig Lab camera states isolated, and verify the value changes with button and wheel input, resets on Fit, and survives Live/Rig Lab round trips at minimum and 2048x1152 layouts.
+
+Production workspace and identity reopening (2026-09-05): direct compact-window inspection shows an undifferentiated three-column wall of controls and prose in Rig Lab, clipped long-form trainer text, and equal visual weight for primary actions, metrics, diagnostics, and explanatory copy. The product is `Epoch2DWalkEngine`; `Runner` is only its bundled SDL3/Vulkan example. Replace visible product/window/document/package identity accordingly while retaining an explicit Runner-example label where technically accurate. Redesign the workspace responsively: compact layouts expose one clear inspector/workspace page at a time with every trainer and rig control still reachable; wide layouts may show trainer and rig inspector together. Keep current task, safety state, progress, mode, primary controls, and relevant evidence prominent; move totals, advanced diagnostics, and narrative into named scrollable pages with legible clipping. Add minimum-size, default-size, ultrawide, input routing, tab persistence, scroll reachability, and negative overlap coverage. This interface work may not hide physical failures, collapse trainer capability in Rig Lab, or change simulation authority.
+
+Responsive product-workspace implementation receipt (2026-09-05): client widths below 1800 pixels now keep the physical preview stable beside one explicit, independently scrollable `TRAINER` or `RIG INSPECTOR` workspace instead of rendering the former three-column control wall. The selector resolves before the selected pane is laid out, so a click cannot leak into hidden controls; 1920-pixel clients retain trainer, inspector, and preview, while ultrawide clients may retain Live as well. The native header leads with exact `Epoch2DWalkEngine v0.7.51` identity and labels Runner only as the example. Live Art defaults on when assets validate, Rig Lab Art defaults off, and each owns a separate toggle/state. Editor zoom reports its actual bounded value and course labels default to START plus sparse reference markers; Advanced `Challenge Details` restores the complete physical challenge/feature/tether annotation set. MSVC Release `/W4 /WX` builds pass for Runner, ViewCamera, v0.7.23 gray-frame, v0.7.29 modular-art, and Core targets; `Runner.ViewCamera`, `Runner.V0723GrayFrames`, `Runner.V0729ModularArt`, `Runner.Core`, `--diagnose-ui`, and `--diagnose-camera` pass. Native interaction and package review remain open.
+
+Constructed-world surface material evidence (2026-09-05): the deep canonical map now gives exposed nonstructural firm-ground columns a real EpochSimEngine `Material::grass` top cell while retaining dirt, sand, mud, water, stone, structural decks, exact fill/height, and region identity beneath or beside it. The first focused test correctly caught that the canonical fine cell had changed while the cached collision/material summary still reported Dirt; initialization now updates both authorities in the same column operation. A clean isolated MSVC Release `/W4 /WX` build and `Runner.DeformableTerrain` pass, including repeated-seed equality, canonical material inventory, more than 24 grass-topped firm columns, and rejection of grass on loose, wet, or gap challenges. This closes only the material-identity seam; native whole-map composition and lake traversability remain open.
+
+High-DPI fullscreen workspace reopening (2026-09-05): direct inspection of the maximized native Vulkan window at 2560x1365 with Windows 150-percent scaling shows that the first responsive thresholds are still wrong for the actual desktop. SDL exposes roughly 3840 logical content pixels, which incorrectly selects the four-pane Live + Trainer + Rig Inspector + Preview branch and recreates the exact clutter the operator rejected. Treat ordinary 4K/high-DPI fullscreen as a focused workspace: show the persistent Trainer/Rig Inspector selector, exactly one selected scrollable control surface, and the shared physical preview. Reserve simultaneous inspector panes and Live duplication for genuinely larger canvases, preserve every control through the selector, and add explicit 3840-logical negative coverage plus larger-canvas positive coverage before native reinspection. The earlier focused automated tests remain useful but are not visual acceptance.
+
+High-DPI focused-workspace implementation receipt (2026-09-05): ordinary fullscreen and 4K/high-DPI content through 4095 logical pixels now use exactly one selected Trainer or Rig Inspector surface beside the shared preview; the four-pane Live duplication is reserved for at least 5120 logical pixels. The deterministic layout matrix includes the exact 3840x2048 proxy for 2560x1365 at 150-percent scale, 3840x2160, 5120x2880, and 6144x3456. At 3840 it requires the selector, exactly one control pane, no Live duplication, no hidden input target, and at least 3000 preview pixels; threshold-minus/plus-one cases cover both 4096 and 5120 transitions, while true 6144 content proves the complete panes do not overlap. Fresh MSVC Release `/W4 /WX` builds pass for Runner, ViewCamera, v0.7.23 gray-frame, v0.7.29 modular-art, and Core; the corresponding four tests pass, `--diagnose-ui` reports eleven layouts at 1.50x DPI, and `--diagnose-camera` reports routed input. A rebuilt native fullscreen interaction remains the visual acceptance authority.
+
+Native control-rail facelift reopening (2026-09-05): the rebuilt maximized 2560x1392 native frame confirms the focused workspace structure is correct, but the selected Trainer rail remains only about 350 physical pixels wide and reads like a dense debug console. Small fitted text, repeated totals/help copy on Summary, and equal-weight action, speed, zoom, units, and evidence controls still compete for attention. Widen the high-DPI focused control surface while preserving a dominant preview; increase the primary card's readable type and vertical rhythm; group primary action/mode/task/progress separately from secondary performance/view/unit controls; reduce Summary to concise status, current evidence, latest test, retained controller, and next goal; retain complete totals and technical/authority evidence on their named pages. All controls must remain reachable at the minimum layout, and failure/safety state may not be hidden.
+
+Autonomy-format rejection receipt (2026-09-05): the negative persistence fixture now supplies an otherwise-valid common header under retired `RUNAUTONOMY 28`, so its rejection proves the format boundary itself rather than being confounded by an invalid autonomy-mode field. A fresh MSVC Release rebuild and `Runner.V0724StructuralMetricsIcon` execution pass. Final repository audit and the complete platform matrices remain required after the still-provisional training-semantics value is resolved.
+
+External-host stop curriculum diagnosis (2026-09-05): the unchanged no-cheat physical gate advances only `+0.020266 m`, but speed worsens from `0.228191` to `0.397999 m/s` across the commanded stop window; its best intermediate speed is `0.233025 m/s`, so it remains a hard failure. Adding a signed intent observation, corrected zero-speed reward, and small deterministic direction cohorts cannot repair a fixture that gives a fresh random network one Raw PPO update and then manually labels it retained-quality. Those experiments were removed and training semantics remains the repository-contract `0x0007'5103`. The coherent fix is producer-side: production Raw rollouts must actually include deterministic forward, reverse, and stop intent, and the external-host gate must consume a legitimately trained, repeated-seed retained artifact. Environment-level braking, root motion, contact projection, or a test-only retained receipt remains forbidden.
+
+Candidate hygiene receipt (2026-09-05): the repository audit now checks the intentional split presentation defaults—Live Art derives from the validated packaged Human/species assets while Rig Lab Art starts off—instead of requiring the retired shared `optional_art_enabled` assignment. With training semantics restored to `0x0007'5103`, the complete candidate-mode repository hygiene script passes. Final-mode audit, commit/tag bindings, and release evidence remain open.
+
+Release artifact/capture provenance reopening (2026-09-05): the current single-dispatch release workflow asks for native capture evidence before it builds the authoritative Windows artifact, then requires that evidence bundle to contain a byte-identical copy of the later CI-built archive. This is circular and cannot honestly succeed for a locally captured Visual Studio 2022 runtime when the release job builds with Visual Studio 2026; ZIP metadata alone can also change bytes. Split release processing into two immutable phases. The build phase validates one exact commit and produces the audited Windows, Linux, SDK, and source artifacts without accepting visual evidence. The promotion phase names that completed build run, downloads and re-audits its exact artifacts without rebuilding them, verifies a commit/tag-bound native capture bundle containing that exact Windows archive, then performs protected final audit and creates the Site handoff or guarded GitHub publication. Document the phase boundary and reject a mismatched run, commit, archive, or capture. Native visual review must consume the artifact produced by phase one; promotion may reuse it but never reconstruct it.
+
+Compact control-surface visual gate (2026-09-05): the operator accepts the emerging modern direction but still rejects the amount of small text and the overall control scheme. Treat 1368x799 as the primary legibility gate: no persistent shortcut sentence, clipped mission/mastery field, compressed Rig Lab action, motor/test telemetry overflow, ragged PIP failure prose, or type reduction below the readable floor. Keep one dominant Session/mission control group, move secondary state into the named Status, Mission, View, Totals, and Advanced pages, preserve all Trainer and Rig Inspector controls through independent scrolling, retain Live Art default-on and Rig Lab Art default-off as separate states, and keep hard failures prominent. Isolated Art and Equipment proof must fit every opaque body/limb/contact pixel below the telemetry and PIP cards; a raster occlusion failure rejects the frame. Acceptance requires original-resolution top/bottom captures for all compact Live and Rig Lab pages plus representative 2048 evidence and native high-DPI reinspection.
+
+Compact control-surface implementation receipt (2026-09-05): the persistent Live surface is now a large Session/current-mission card with four gait actions and five explicit disclosure pages: Status, Mission, View, Totals, and Advanced. Routine telemetry is reduced to short state fields; totals, authority detail, performance controls, and technical diagnostics are no longer simultaneously persistent. Rig Lab uses a peer `TRAINER` / `RIG INSPECTOR` workspace selector and the inspector exposes Rigs, Bones, Motor, Art, and Test pages. Deterministic input tests prove the complete Trainer remains usable while Rig Lab is active, Trainer and inspector scroll independently without changing the shared preview, switching workspaces preserves the hidden inspector page/signature, and Live and Rig Lab camera zoom states survive round trips without leaking. Live Art remains independently default-on and Rig Lab Art independently default-off. The deformable-world renderer now shows canonical Empty/Atmosphere below the surface as dark open air rather than an invented brown fallback slab.
+
+Fresh Windows MSVC Release `/W4 /WX` builds passed for `RunnerViewCameraTests`, `RunnerV0723GrayFrameTests`, `RunnerV0729ModularArtTests`, and `RunnerVisualCapture`; the three focused executables passed. `RunnerVisualCapture assets build/ui-facelift-capture12-v0751` completed all 56 deterministic 2048x1152/1368x799 frames, and all 56 PPM files were converted to PNG. Original-resolution review covered every compact Live page top/bottom, every compact Rig Inspector page top/bottom, representative 2048 Live/Rig pages, the course, and all Art/Equipment proofs. Main-world opaque bounds are Human `558,477,110,341`, Chicken `358,471,511,346`, Dog `309,475,609,339`, Hexapod `325,472,570,347`, and planted equipment Human `536,476,155,342`; every silhouette, hand/equipment chain, and contact foot is wholly below the overlays. The compact controls retain the readable type floor and visibly grabbable scrollbars with no observed clipped mission, counter, action, motor, art, or test label. This deterministic software-raster matrix is visual QA, not native Vulkan or packaged-runtime acceptance; native high-DPI and final package review remain open release gates.
+
+True-4K control-surface reopening (2026-09-05): the 1368x799/default acceptance does not close the operator's latest fullscreen complaint. Audit the exact 3840x2160 framebuffer and Windows logical/DPI conversion instead of assuming that a larger render target is automatically more readable. At 4K, primary mission/task/gait controls and normal body text must have a deliberate physical-size floor, secondary metrics must remain behind named disclosure pages, and spacing/control targets must scale coherently without recreating the former multi-pane wall or clipping any retained control. Preserve the focused Trainer/Rig Inspector workspace, full Trainer reachability while Rig Lab is active, independent Live/Rig scrolling and zoom, Live Art default-on, Rig Art default-off, and prominent hard failures. Add deterministic 3840x2160 layout and raster evidence, inspect it at original resolution, and retain native-DPI/package review as a separate release gate.
+
+Rig Lab persistent-command reconciliation (2026-09-05): progressive disclosure must not force the operator to leave the active Inspector merely to pause training or choose the next gait. Every compact/high-DPI Rig Lab frame needs a concise, readable command strip that exposes run/pause, authority/profile, current mission/gait, independent Live/Rig Art states, and the Trainer/Inspector workspace switch. Detailed statistics and editor controls remain on their named pages. Hit routing must resolve the strip before either scrollable pane, preserve the selected inspector page/scroll/zoom, and keep the physical preview unchanged except for the explicitly requested training command.
+
+Modern 4K hierarchy reopening (2026-09-06): original-resolution review rejects the current true-4K scale pass as an enlarged control wall rather than a finished product surface. Replace the two-row equal-weight Rig Lab command matrix with one dominant unwrapped Run/Pause Training action, current mission/status, and the Trainer/Inspector switch; keep gait, authority, profile, and independent Live/Rig Art controls one click away in a clearly named contextual drawer. The Rig Lab Trainer must open on concise Status instead of inheriting Live Advanced state. Redesign inspector pages as spaced cards with at least 30 physical pixels for body/labels, 36 for section headings, 72-pixel secondary targets, 84-pixel primary targets, and visibly usable slider tracks/handles at 3840x2160. Expand cryptic editor labels, eliminate duplicate Art controls, and reduce Advanced to three-to-five grouped summaries with no more than twelve visible rows plus an explicit raw-telemetry disclosure. Preserve sticky navigation, compact 1368 reachability, shared preview/physical state, independent Live/Rig zoom, Live Art default-on, Rig Art default-off, and hard failure truth. Acceptance requires deterministic pointer/layout coverage and inspected 3840x2160, 2048x1152, and 1368x799 raster evidence without clipping or a native/package claim.
+
+Three-route Live navigation reopening (2026-09-06): the sparse Autopilot Summary and corrected subject scale now pass original-resolution review, but entering Controls still exposes five equal-weight page tabs and the compact View page compresses three-column performance/camera labels into clipped internal-tool rows. Collapse the Live detail hierarchy to at most three primary routes—Mission, View, and Details—while keeping Summary as the product home surface. Fold Status into Summary/Mission and place Totals plus Advanced/raw diagnostics behind Details as secondary disclosure; preserve all keyboard paths and keep every function reachable in no more than two interactions. At 1368x799 use responsive two-column or full-width controls without shrinking below the readable floor, retain at least 70% world width, and prove Summary, Mission, View, and Details plus the 3840x2160 default with deterministic raster/layout/input evidence. Live Art remains independently default-on and Rig Art independently default-off.
+
+Post-facelift audit-contract reopening (2026-09-06): repository preflight and the v0.7.25 UI contract still require the removed `telemetry::final_check_label` source string even though the production Details path now reports the truthful latest-test title and explanation. Update both assertions to require the paired current status APIs and explicitly reject the stale compact label; do not restore removed telemetry microcopy. Prove the focused v0.7.25 executable and repository audit after the final UI source settles.
+
+Three-route Live facelift implementation receipt (2026-09-06): the default Epoch2DWalkEngine Autopilot is now a decision-first surface with one primary Start/Pause action, one mission/progress card, one concise state/next-action card, and exactly four direct actions in a responsive 2x2 compact grid: Mission, View, Details, and the independent Live Art switch. Live detail navigation exposes only Mission, View, and Details; Summary remains the product home reached through the persistent Live workspace action. Mission retains the complete four-gait selector, assisted/raw authority, task graph, task selection, profile, mastery, and failure controls. View reflows training rate and zoom into two-plus-one rows at narrow widths and keeps full-word Normal/Faster/Maximum, Zoom Out/Auto View/Zoom In, and Metric/Imperial controls. Details presents Physics, Contact, Policy, Optimizer, and Weapon as spaced label/value cards with values explicitly stacked across no more than three 20-logical-pixel lines; Training History and Raw Telemetry are secondary one-click disclosures. Page navigation remains sticky while only its body scrolls. Summary and Mission suppress the duplicate telemetry/PIP overlays, while View/Details and explicit proofs retain them. Live Art still defaults on, Rig Art still defaults off, and neither View nor the Rig Lab drawer exposes the other workspace's switch. The Live rail remains 29% of content width and the 1368x799 world remains at least 70%; the 4K 1.5x presentation yields a 30-physical-pixel persistent text floor, 36-pixel headings, 72-pixel secondary targets, and 96-pixel primary targets. The default auto-fit frames the Human at roughly 27-30% of viewport height without changing independent wheel zoom.
+
+Final UI evidence receipt (2026-09-06): a fresh Windows MSVC Release `/W4 /WX` focused build passed for `RunnerViewCameraTests`, `RunnerV0723GrayFrameTests`, `RunnerV0729ModularArtTests`, and `RunnerVisualCapture`; ViewCamera, V0723 GrayFrame, and V0729 ModularArt then passed, including compact pointer routing, inert-world-click rejection, repeated responsive layout, exact label-fit, value-card wrapping, independent page state, and 4K physical target coverage. Candidate `Runner.RepositoryHygiene` passed after replacing its stale `telemetry::final_check_label` expectation with the current `latest_test_title` plus `latest_test_explanation` pair and explicitly rejecting the removed label. `RunnerVisualCapture assets build/ui-facelift-capture15-final5` completed all 62 deterministic frames. Original-resolution inspection accepted the unclipped 3840x2160 default and 1368x799 Summary, Mission, View, and Details frames. Retained PNG identities are: `live-interface-3840x2160.png`, 62,435 bytes, SHA-256 `48ce10beffcb133f7aecab1f32a71fbb8c4aac21e55d44d7fbedd77a0c55d0e6`; `live-interface-1368x799.png`, 22,547 bytes, `2b8b859c5952b2df492e91430f4acc35681cff73cf4db1c670a6da94ece62f4f`; `live-mission-1368x799.png`, 22,238 bytes, `89fd8d073368c6451e4179d7d70e1b68ef1b6985b33c69070a258f6fc5e0a560`; `live-view-1368x799.png`, 29,239 bytes, `109550b407e7f43800808b69eedf7267acee34cd326dd10da8995589f7bd9b34`; and `live-details-1368x799.png`, 30,568 bytes, `7205fe7826a40fdcde84b26ae9782a1a18d1e1710be69a861d04479e2e3d72c3`. The 13,761-byte capture manifest SHA-256 is `f2a04a9fa59a99f7c6a685417397bf6d304e44d68d1c84a1f7ff1bf92e1ad591`. This is deterministic software-raster visual QA, not native Vulkan or packaged-runtime acceptance. The updated v0.7.25 UI source assertion is compile-clean but its executable currently stops earlier at the unchanged physical `project_walking_chain` left-stance-extension gate; that independent physical regression remains open and must not be waived to claim release readiness.
+Residual-paced phase rejection (2026-09-06): a pure mirror-invariant rate law from finite leg motor target residual and angular velocity passes tracked/intermediate/saturated, unsupported-exchange, non-finite, mirrored, and repeated-input tests. Its production A/B also preserves the V0748 all-node swing-clearance and bounded signed landing prerequisite. It does not produce a physically acceptable gait: V0748 reaches `2.46098 m` over `4.61667 s` with `0` cycles and `0` alternations before invalid motion, while all ten unchanged V0730 seeds fall with `0` strides, only `2.01979..2.15960 m` progress, and `2.35..4.80 s` survival. Slowing an already saturated trajectory merely delays some falls and eliminates the prior transfers; it does not restore controllability. Reject and remove the production phase/rate state, observation 77, and semantics `0x0007'5109`. Restore the stable 76-observation / `0x0007'5108` contract. Retain only the pure deterministic rate helper/tests as negative design evidence. Do not continue phase or endpoint trajectory tuning from this result; the Raw release gate remains red.
+V0725 articulated-leg hotfix reopening (2026-09-06): the focused Windows `/W4 /WX` target reproduces `left supported leg was not restored to a usable stance extension` immediately after the fixture explicitly calls `Environment::project_structure_rigid`. Current v0.7.51 production intentionally returns from that function for a moving canonical Human (`uneven`, `shuttle`, `crouch_walk`, `hurdles`, and `moving_hazards`) because the old repair translates the complete upper body and rewrites both knees after the finite motor/contact solve. The line-184 expectation is therefore incompatible with the accepted zero-structure-projection authority contract, not yet evidence that the finite gait target regressed. Replace that direct-projector assertion with deterministic no-projection evidence and let the existing physical 1,200-frame teacher soak expose any actual supported-leg extension failure; do not restore the upper-body/knee projector or lower the 0.74 physical extension and 0.012 segment-integrity gates. Re-run V0725 plus V0748/V0730 before closure.
+
+V0725 articulated-leg hotfix disposition (2026-09-06): the principled correction is test-only. The adversarial compressed moving-Human fixture now snapshots every particle, invokes the retired projector, and requires exact preservation of both current and Verlet-history coordinates plus continued compression; this proves no pose or velocity work is injected. The independent 1,200-frame finite teacher/motor/contact soak remains unchanged and passes its supported-extension >=0.74 and segment-error <=0.012 gates, so there is no explicit finite stance-target regression to correct. Fresh Windows `/W4 /WX` build and execution of `RunnerV0725ArtLegHotfixTests` pass. The required adjacent gates retain their known release-blocking baseline failures rather than being cosmetically improved: V0748 Raw teacher reaches 2.50818 m, zero cycles, becomes invalid at 2.06667 s with upright -0.0504138; V0730 all ten reference seeds fall after 2.59828-2.85012 m and one or two strides. No production physics, gait, root, contact, or projector code changed for this disposition.
+
+Two-phase promotion trust-boundary reopening (2026-09-06): the first split workflow still made final audit require post-build/native/Site `PASS` prose inside the exact immutable candidate commit that Phase A had already archived. Adding that evidence would necessarily change the commit, so the gate was circular and could not be completed truthfully. Keep the candidate commit and all five Phase-A archives immutable; candidate documentation may continue to say that native acceptance, promotion, and publication are open. Phase B must instead consume an external, canonical, protected-environment-authenticated promotion receipt bound to the exact candidate commit/tag, Phase-A build run and 15-object byte/hash inventory, native capture bundle identity, repository/workflow/promotion run identity, and audited Site-handoff readiness. Final audit must fail closed on a missing, altered, replayed, foreign, or mismatched receipt without weakening any build, diagnostic, source-audit, manifest, object-count, archive-identity, native-capture, or byte-comparison gate. No tag, archive, upload, Site mutation, or publication is authorized by this correction.
+
+Two-phase promotion trust-boundary implementation receipt (2026-09-06): the immutable-candidate audit now permits the candidate's truthful open/pending documentation and replaces the circular in-tree PASS ledger with one canonical external `epoch2dwalk-promotion-receipt-v1`. The protected Phase-B environment creates an HMAC-SHA256 sidecar without serializing its secret only after revalidating all five archive checksums/manifests, the exact source tree, the native capture bundle, the embedded-versus-Phase-A Windows ZIP byte comparison, and the copied Site handoff. The receipt binds the exact commit/tag; Phase-A build run, strict build receipt, Linux ABI receipt, ordered 15-object filenames/bytes/SHA-256 values; exact candidate capture URL/bytes/SHA-256; repository/workflow; promotion run and attempt; publication target; and `audited-15-object-handoff-ready` state. Final CMake audit additionally rejects tracked source bytes that differ from the approved commit and invokes the strict receipt verifier against the real Phase-A, native, and handoff paths before any handoff upload or tag path can proceed. Deterministic coverage rejects missing receipt/signature/build input, altered Phase-A or handoff bytes, wrong capture bytes, replayed run/attempt, foreign repository/workflow, wrong HMAC key, JSON/key tampering, and extra Phase-A objects. Python compile and workflow YAML parsing pass; `Runner.RepositoryHygiene` and `Runner.StrictReleaseManifest` pass 2/2 with all 14 strict Python tests; `git diff --check` reports no errors. Final-mode execution intentionally remains unavailable until the candidate source is stabilized and committed, and the unchanged Raw/V0748/V0730 physical failures remain hard release blockers. No tag, archive, package, upload, Site change, or publication occurred.
+
+Promotion-receipt hardening reopened (2026-09-06): independent hostile review found that the first receipt revision bound the checked-out candidate but not the workflow definition actually selected by `workflow_dispatch`; treated changed expected run IDs as "replay" even though the same stateless receipt intentionally verified repeatedly; accepted unlisted files and post-extraction changes below the Site handoff; exposed the HMAC key job-wide to mutable-tag actions; omitted the Phase-A run attempt and immutable artifact identities; and verified GitHub downloads only while the release was still a draft. Correct this as one release-boundary change before any tag or publication. Bind the executing event/workflow SHA and ref plus current run API identity to the candidate before protected secrets are exposed; bind the exact Phase-A run attempt and build-candidate artifact ID/digest; enforce a recursive allowlist for the 15 public objects, two Phase-A receipts, native bundle and exact extracted capture tree, signed promotion receipt, signature, and canonical handoff summary; scope the HMAC key only to the signing/final-audit step and pin release actions by full commit SHA; then publish a GitHub draft only after byte audit and independently re-download every public asset anonymously after publication before disabling rollback. The signed receipt is strict context binding, not one-use authority. Genuine replay prevention remains the separate atomic Site ingest/activation grant and receipt contract; do not claim this stateless verifier consumes a receipt. Add foreign workflow SHA/ref, current-run, build-attempt/artifact, repeated-verification, extra nested handoff, altered capture, and post-publication verification coverage. No gait, physics, app, package, tag, upload, or publication change belongs to this correction.
+
+CrouchWalk physical-authority reopening (2026-09-06): `lesson_teacher_authority` returns permanent full authority for `CourseStage::crouch_walk`, and the scalar passed to `effective_policy_action` never reaches `Environment`. As a result, Human hard support actions, bootstrap/history shaping, pelvis/torso/head/manipulator crouch translation, and selected/native swing-foot unload/lift helpers remain fully authored even at numeric lesson authority zero; assisted evaluation therefore cannot demonstrate a learned no-helper crouch gait. Add one transient finite `[0,1]` physical-guidance authority to `Environment`, with Raw mode forcing exact zero and authority-zero transitions clearing any teacher-created CrouchWalk release state. Route one separate, monotonically decaying CrouchWalk lesson authority through rollout, preview, parallel evaluation, and self-imitation before every physical step. Apply it once at the complete action-composition boundary and proportionally to every CrouchWalk-only direct translation/timer, reaching exact Raw/no-helper identity at zero without changing the 76-observation/13-action ABI or scaling gravity, constraints, ground/course contact, traction, or policy motor work. Preserve `duck_press` as the independent static platen/depth/hold/recover lesson with its existing 60-to-200 teacher schedule and existing physical guide. Add finite/clamp, full/mid/zero, Raw override, monotonic, stale-timer, mirrored-side, and repeated-seed tests. This closes only authority handoff plumbing; Raw CrouchWalk mastery and release readiness remain unclaimed until separate no-helper qualification passes.
+
+CrouchWalk physical-authority implementation receipt (2026-09-06): training semantics advance from `0x0007'5112` to `0x0007'5113` without changing the stable 76-observation/13-action tensor. One transient finite/clamped Environment authority is now set from the same lesson scalar before rollout, preview, parallel evaluation, and self-imitation steps; public fixed-step hosts map explicit Assisted/Raw requests to physical authority one/zero without changing their binary request or report schemas, checkpoint restore recomputes authority instead of persisting it, and Rig Lab's explicitly labelled physical scrub requests full authority. The CrouchWalk schedule is full through update 300, decreases linearly and monotonically, reaches exact zero at update 5200, and never re-enables; DuckPress retains its separate 60-to-200 schedule and unchanged posture mechanics. The entire bootstrap/history, hard support, topology, posture, manipulator, and equipment action candidate now crosses one final boundary against the bounded/masked sampled network action. Direct CrouchWalk pelvis/torso/head/manipulator translation, passive non-Human posture projection, selected/native swing-foot lifts, release/toe-roll durations, articulated-toe teacher commands/rate projection, and Crouch equipment-pose envelope use that same scalar; zero or Raw retires live release/toe state. Gravity, distance constraints, course/ground contact, traction, and the shared moving-Human physical policy actuator remain unscaled, with zero-authority Assisted Crouch selecting the same actuator/constraint path as Raw. `RunnerV0751CrouchAuthorityTests` proves finite/clamp behavior, full/mid/zero action interpolation, exact Raw override, monotonic schedule, state shrink/retirement, direct root/torso/head/all-arm fade, exact 48-step zero-versus-Raw and repeated-seed physical identity, and DuckPress separation. Fresh MSVC 17.14 Release `/W4 /WX` builds in `build/windows-vs2022-v0751-verify`, explicitly configured against offline EpochSimEngine 2.5.26 under `build/v0751-installed-sim-release`, pass `RunnerV0751CrouchAuthorityTests`, `RunnerRawLearningProvenanceTests`, and the legacy `RunnerV0731CrouchLearningTests`; `git diff --check` passes. `RunnerV0751ExternalHostTests` still truthfully fails its pre-existing release-level receipt because the current trainer has not retained a repeated-seed-qualified Raw policy. A concurrent V0748 object lock prevented one redundant adjacent compile attempt and is reserved for the root serial pass. This change does not prove Raw CrouchWalk skill, mastery, or release readiness.
+
+Rig Lab wide-control and UI-diagnostic reopening (2026-09-06): read-only review of the current v0.7.51 interface confirms that compact/high-DPI Rig Lab exposes the intended command strip, its Trainer statistics remain reachable, Live Art and Rig Art retain independent default-on/default-off state, and the Live/editor views share one physical snapshot and projection. Two bounded UI defects remain. First, genuinely wide noncompact Rig Lab suppresses the compact command strip while its embedded Trainer also suppresses the primary Session control, leaving no visible Start/Pause action even though Space still works. Restore one visible nonduplicated Start/Pause action in that wide Trainer surface without changing preview or simulation behavior. Second, `Runner.UiDiagnostic` derives 3840x2160 probe and click boxes directly from physical dimensions and legacy pane helpers while production maps the surface and pointer through the 2560x1440 logical presentation canvas and current compact workspace; the diagnostic therefore fails with `frames=invalid` despite the focused 4K interaction suite passing. Make the diagnostic use `presentation_surface`, `presentation_box`, and `rig_lab_workspace_layout` exactly as production does. Update the stale V0729 source assertion to accept the already-approved third CrouchWalk physical-guidance argument without weakening its Assisted/raw checks. Do not touch the independently failing physical Rig Test opposing-sole behavior.
+
+Rig Lab wide-control verification correction active (2026-09-06): the first focused rebuild proves that the production wide Trainer now emits the Start/Pause Session card and the stale v0.7.29 CrouchWalk assertion is corrected, but two evidence details remain. The 20-by-14 coarse frame sampler can miss thin label pixels inside the otherwise fully populated 64-pixel Session target, so the focused test must require actual text geometry in that exact target and a state-changing click. Starting the real background worker is allowed to publish its first new physical preview frame; the invariant is that the selected rig identity, shared preview route, and view controls remain intact, not that a resumed trainer be visually frozen. The UI diagnostic also still asks for a PIP on the intentionally sparse Summary home, although the accepted three-route design makes the PIP/primary telemetry explicit on View. Route the diagnostic through the same Summary `View` action before probing the PIP, using presentation-mapped pointer coordinates at both native and 4K-density surfaces. Do not restore duplicate Summary telemetry, weaken layout visibility, or change simulation/training state.
+
+Rig Lab wide-control and UI-diagnostic receipt (2026-09-06): the genuinely oversized noncompact Rig Lab Trainer now exposes one visible `START TRAINING` / `PAUSE TRAINING` Session target; compact and high-DPI workspaces retain their single persistent command strip instead of duplicating it. The deterministic wide interaction begins from a stopped worker, requires real rasterized label geometry, proves both button states and round-trip restoration, preserves the selected rig identity, and keeps the shared preview populated while correctly allowing a resumed worker to publish a newly advanced physical pose. `visible_application_frames` now derives its logical canvas, content, Rig workspace, and physical probe boxes through `presentation_surface`, `rig_lab_workspace_layout`, and `presentation_box`; it enters the accepted View route and renders the following frame before requiring View-owned PIP telemetry, while emitting an exact failing surface/check name on future diagnostic regressions. The v0.7.29 source assertion accepts the explicit CrouchWalk physical-guidance argument and continues to require the Assisted/raw action split. Fresh MSVC 17.14 Release warnings-as-errors builds pass for `RunnerViewCameraTests`, `RunnerV0723GrayFrameTests`, `RunnerV0729ModularArtTests`, and `Runner`. Focused CTest passes 7/7: RepositoryHygiene, ViewCamera, V0723GrayFrames, V0729ModularArt, CameraDiagnostic, ArtDiagnostic, and UiDiagnostic. Direct diagnostics report camera `routed=yes`, UI `layouts=11 dpi=1.50x1.50 frames=visible`, and art below both the 6 MiB headroom and 8 MiB hard vertex budgets. `git diff --check` reports no errors (line-ending notices only). Existing source already retains independent Live Art default-on and Rig Art default-off state, full Rig Trainer Summary/Mission/View/Details/History/Raw disclosure, shared physical projection, independent Live/Rig zoom, and Epoch2DWalkEngine product naming. This closes the scoped source/software UI defects only; native Vulkan/package eye acceptance and the independently failing physical Raw gait gates remain open.
+Human collapsed-heel topology A/B active (2026-09-06): the canonical 19-node Human inserts a separate loaded heel 0.105 m below the established anatomical ankle, raising the complete body while adding a short rear-foot lever that the new explicit ankle motor must fight. Probe the smallest bridge back to the previously stable runtime mechanics without reviving its hidden derived toe drive: node 4/6 becomes the physical ankle-and-heel contact again, each side appends only a ball and passive toe, and action slots 8/9 remain the sole powered ankle authority through the real knee/heel/ball motor. Preserve the 13-action ABI, passive toe, unilateral contacts, physical art anchors, zero root/body/contact forcing, and finite torque/work limits. Treat this as a bounded topology prototype: rerun Raw signed authority plus V0730/V0748/V0749 before deciding whether its required RUNRIG/signature/persistence migration is justified; remove it if it merely restores a metric by duplicate contact, hidden power, or weakened evidence.
+
+Human collapsed-heel topology A/B rejection (2026-09-06): the real 17-node serial heel/ball/toe prototype kept action slots 8/9 as explicit ankle motors and kept the toe passive, but it made the physical gates worse. Raw forward fell at `+2.19730 m`, reverse again moved in the wrong world direction and fell at `+2.10204 m`, both with zero cycles; maximum COM-COP lead increased to `1.20536/1.20705 m` from the restored 19-node baseline near `1.10/1.11 m`. The Speed Walk row regressed to `2.44075 m / 0 steps / 0.122038 m/s`. All ten V0730 Human seeds still fell (`2.64519..2.98083 m`, zero to two strides), and V0748 correctly rejected the prototype before its contact trial because it no longer owned the declared 19-node physical topology. The prototype is fully removed from `simulation.hpp/.cpp`. The v0.7.50 shape was not a drop-in stability bridge: its lower stance height and serial sole increase forward capture error while still failing signed support exchange, and adopting it would additionally force RUNRIG6/signature/editor/persistence/art/test migration without physical benefit. Preserve the canonical 19-node topology and locate the failure in controller/contact timing rather than disguising it as the old graph.
+
+Human terminal-sole finite-PD A/B active (2026-09-06): the restored canonical 19-node foot now unloads all three left sole nodes for roughly 90-107 frames and keeps non-foot contacts clear, but its held FLARE never earns the unchanged three-frame event. At the usable mid-flare window the heel/ball plate is geometrically near level and horizontally bounded while the distal toe carries a different Verlet vertical velocity; the first real toe contact then creates about `0.97..1.04 m/s` horizontal speed and the strict V0748 landing detector correctly rejects it. Earlier isolated attempts are rejected: a fixed predictive `C + t*qdot` numerator without the matching XPBD denominator diverged across 14 passes; tripling only MTP stiffness, raising toe strength from `0.022` to `0.056`, or combining them produced earlier whole-body collapse; a position-only teacher lead flattened the distal span but retained its velocity split. The bounded coherent A/B is now one explicit finite PD chain: preserve the canonical toe strength and common position stiffness; feed each MTP solve the prior applied action, damp only relative rate to that moving target with `delta_lambda=-(C+alpha*lambda+td*(qdot-qtargetdot))/(w+alpha+td*w/dt)`, `zeta=0.35`, and the unchanged reciprocal Jacobian, torque/lambda and positive-work caps; then let the terminal teacher request a velocity-aware distal-plane correction from the real ball-to-toe span and its relative per-step displacement. This changes only ordinary toe motor actions and finite actuator work—never root/body/contact state or acceptance thresholds. Before retention, require actual solver invariants for fixed/moving targets, energy, reciprocity, caps, solver-count convergence, mirrored signs, degenerate/non-finite no-op, deterministic repeat, and byte-identical non-toe/non-Human behavior, followed by unchanged V0748, Raw forward/reverse, V0730, V0749, and lake gates. Remove the row if the unchanged V0748 event remains red or any authority invariant fails.
+
+Human terminal-sole teacher-PD tuning (2026-09-06): the first velocity-aware teacher law `error - 2.10 * angular_step` is rejected. It preserved body clearance and 105 unloaded frames and improved the landing vertical approach from roughly `0.517` to `0.490 m/s`, but at the decisive frame the distal plate remained `-0.1126 rad` against a `-0.0258 rad` terrain target while the ordinary MTP request was too small to recover the remaining `0.0868 rad` error; landing horizontal speed remained `0.967 m/s`. Keep the coherent moving-target MTP damping isolated, but rebalance the teacher as a bounded discrete PD target with proportional plane recovery and one-step angular-rate braking, `2 * error - angular_step`, still capped at `0.12 rad` and still expressed only through the explicit toe action. Reject it immediately if V0748 loses all-node clearance, creates body contact, or fails the same landing event; no contact, root, body, threshold, torque, strength, or acceptance mutation is authorized.
+
+Human terminal-sole event probe (2026-09-06): the rebalanced action delays first forbidden body contact from the historical frame `115` to frame `194`, retains `107` fully-clear frames, and brings the distal plate from `-0.1126` to about `-0.0630 rad` at frame `128`, but V0748 records one armed return with aggregate swing-side normal impulse and no matching per-node impulse before the later collapse. Do not weaken the landing detector. Extend its failure receipt with the first exact frame, support mask, aggregate/per-node impulses, grounded bits, clearances, and preceding node velocities for that rejection; use the evidence to distinguish contact telemetry/state ordering from a genuinely impulse-free skim before any further controller tuning.
+
+Human terminal replant braking A/B (2026-09-06): the extended receipt proves frame `159` is a real failed impact, not mislabeled telemetry: the left ball/toe accumulate `0.401/0.277 N s` during the fixed step but finish fully airborne at `12.5/8.7/5.8 mm`, while their immediately preceding horizontal speeds are about `-0.99 m/s`; the opposite right heel remains supported. The current finite endpoint feedback is only `0.10 s` of measured horizontal velocity and cannot arrest the long held-FLARE back-sweep before contact. Test one bounded teacher-only change: use a `0.20 s` horizon capped at `0.18 m` for the already observable swing-endpoint correction, retaining mirrored sign, phase fade, explicit hip/knee motor actions, all torque/work/slew caps, and the unchanged landing detector. This is not an anchor or contact force. Reject it if it does not turn the first armed event into a sustained, below-`0.40 m/s` physical replant or if it regresses body clearance.
+
+Human terminal replant braking result and toe-settle A/B (2026-09-06): the `0.20 s / 0.18 m` endpoint brake converts the transient rebound into one clean same-side physical landing after `106` clear frames, with `10.4 mm` minimum clearance, no forbidden body contact, a positive toe impulse, and bounded `0.509 m/s` vertical approach. It remains too late and too fast horizontally at `0.886 m/s`, so it is not accepted by itself. The trace shows the held FLARE is missing its three-frame readiness specifically because the distal toe retains about `0.14..0.17 m/s` vertical velocity spread after the plate is already within the `15 mm` flatness envelope; it then back-sweeps for another thirty frames. Keep the same finite controller scope and test a smooth state-free capture/settle schedule: at large plane error retain the bounded `2*error-step` capture response, but as `abs(error)` falls below `0.12 rad`, continuously blend toward `error-4*step` so the toe brakes relative rotation and can earn FLARE readiness before the back-sweep. Preserve mirror/repeat/adversarial bounds, the explicit toe motor path, and every physical landing threshold; reject if it fails to create an earlier clean replant or introduces sign chatter/body contact.
+
+Human toe-settle gain-schedule rejection and motor damping A/B (2026-09-06): the state-free teacher gain schedule is rejected and removed. It preserves the clean landing and improves its vertical approach slightly to `0.489 m/s`, but does not advance FLARE or reduce horizontal approach (`0.883 m/s`); instead it increases distal plane error to about `0.061..0.063 rad` and leaves the explicit toe motor with roughly `0.26..0.29 rad/s` residual diagnostic rate. Restore the simpler bounded `2*error-step` teacher. Isolate the already coherent moving-target MTP derivative next: raise its finite damping ratio from underdamped `0.35` to critical `1.0` without changing teacher target, stiffness, strength, torque/work/slew limits, contacts, or acceptance. Retain only if it materially reduces the three-node vertical spread, earns an earlier FLARE-to-LANDING transition and passes the unchanged V0748 event; otherwise restore `0.35` and reject the complete damping row.
+
+Human critical MTP damping rejection and capacity A/B (2026-09-06): critical damping is rejected and restored to `zeta=0.35`. It advances the clean landing only five frames, retains `0.875 m/s` horizontal approach, worsens vertical approach to `0.531 m/s`, and still does not earn FLARE readiness; the problem is not underdamped ringing. The canonical `0.022` distal motor is visibly tracking about `0.05..0.06 rad` behind its finite target through the terminal window. Earlier `0.056` overpowered the chain and collapsed it, so probe only the bounded intermediate `0.030` strength with the accepted teacher target, underdamped moving-target term, and `0.20 s` endpoint brake unchanged. No other motor, torque model, contact, root/body state, or gate changes. Retain only if the real three-node velocity spread falls enough to produce the same clean landing below `0.40 m/s` and adjacent Raw/cold-start gates improve; otherwise restore `0.022`.
+
+Human intermediate MTP capacity rejection and FLARE sequencing A/B (2026-09-06): `0.030` distal strength is rejected and restored to `0.022`; it lands cleanly but is materially unchanged at `0.887 m/s` horizontal and `0.526 m/s` vertical approach and does not advance FLARE. The trace now isolates the sequencing deadlock: near frame `128` the sole is body-clean, fully airborne, flat within roughly `11 mm`, moving horizontally below `0.04 m/s`, and descending at bounded `0.16 m/s` mean velocity, but the internal controller demands no more than `0.060 m/s` spread among three compliant sole nodes. That is far stricter than the unchanged physical landing gate and keeps the foot aloft until its back-sweep exceeds `0.88 m/s`. Probe only the controller transition tolerance at `0.18 m/s`, still requiring three consecutive frames, all-node clearance, flatness, mean descent, maximum absolute vertical/horizontal bounds, opposite purchase, and no body contact. This changes when finite landing targets begin, not what counts as a valid landing. The external `0.40/0.65 m/s` replant gate remains exact. Accept only if V0748 produces an earlier clean event; otherwise restore `0.060`.
+
+Human FLARE readiness isolation correction (2026-09-06): raising only the three-node velocity-spread readiness to `0.18 m/s` is inert because the actual blocker at the safe frame is the controller's separate `8 mm` heel/ball/toe clearance-span test: frame `128` has about `9.7 mm` span, bounded mean/max velocities, near-zero horizontal speed, opposite support, and no body contact. Preserve the global `8 mm` definition for actual flat purchase and support. Test a separate `12 mm` airborne readiness envelope (about `1.8 degrees` over the physical sole) solely for entering LANDING, still requiring three consecutive frames and the `8 mm` physical purchase before the coordinator can complete. The unchanged V0748 impact bounds decide acceptance. This may sequence a finite descent earlier; it may not classify or latch support.
+
+Human early-LANDING result and PURCHASE target defect (2026-09-06): the separate `12 mm` airborne readiness envelope advances FLARE to LANDING at frame `123`; the first physical impact now occurs near frame `145` from approximately `0.38 m/s` horizontal and `0.62 m/s` vertical approach, inside the unchanged V0748 bounds. It is not yet a completed replant: the intra-step impulse leaves the sole briefly airborne, then coordinator purchase is reached, but the teacher immediately replaces the terminal terrain-aligned toe target with `-0.14`. The trace shows that jump growing from near zero to `-0.124` while the newly landed heel/ball/toe separate again; PURCHASE cannot maintain the global `8 mm` flat contact long enough to swap support, and the body later collapses. Hold the same measured terrain toe target through PURCHASE until the existing two-contact/`0.10 s` coordinator proof performs the side swap. This is an explicit finite MTP target continuity fix, not a contact latch. Keep the real `8 mm` purchase condition and reject if the sole still rebounds, the side does not swap, or Raw/cold-start gates regress.
+
+Human PURCHASE hold result and redundant-delay A/B (2026-09-06): holding the terrain toe target removes the immediate `-0.14` jump but does not keep the newly landed sole flat for the additional `0.10 s`; ankle/leg targets continue evolving, the left sole alternates supported/airborne and no side swap occurs before collapse. PURCHASE is entered only after LANDING already observes two consecutive frames with the outgoing sole physically purchased and the opposite sole supported. The extra six-frame wait is therefore duplicate evidence and exposes the contact to a stale outgoing-target state. Test a two-fixed-frame (`2*dt`) purchase dwell using the same physical purchase predicates, then swap; retain the terrain toe target during that dwell. This changes no support bit or particle and still cannot swap without current two-sole contact. Reject if the next physical departure/replant is absent or any no-body-contact/landing gate regresses.
+
+Human redundant PURCHASE dwell rejection and event-complete swap A/B (2026-09-06): even a two-frame post-entry dwell misses the swap because the just-planted sole leaves the global `8 mm` purchase envelope on the very next finite target step. LANDING has already accumulated the required two consecutive current-frame physical purchase observations before entering PURCHASE; deferring the state transition adds no evidence. Test completing the side swap atomically in that existing second verified LANDING observation, then enter the opposite DEPARTURE boundary on the next teacher call. Keep the measured terrain toe target for any separately entered PURCHASE fallback, but do not manufacture contact or preserve a stale grounded bit. The new outgoing sole must still prove its own release while the newly incoming sole is physically purchased. Require real second-side unload/replant and unchanged landing/body/contact gates before retention.
+
+Physical landing evidence correction (2026-09-06): the first bounded impact after the accepted early-LANDING sequence occurs at frame 145 with the immediately preceding sole velocities inside the unchanged `0.40 m/s` horizontal and `0.65 m/s` vertical limits and real positive per-node impulses, but the iterative compliant solver legitimately finishes that same fixed step several millimetres above the plane before replanting on frames 147-149. The current V0748 detector incorrectly discards this impulse because it also demands an end-of-step `grounded` flag on the exact impact frame. Replace that single-frame coincidence with a stricter temporal event: preserve the exact impact and preceding-velocity evidence, then require the same sole plus the opposite sole to regain physical support for two consecutive frames within a bounded three-frame confirmation window. Reject impulse-only bounces, one-frame touches, side changes, non-finite state, or any body contact. This is test truth repair, not a weaker landing threshold; the second-side alternating exchange and sustained no-body-contact rollout remain independently required.
+
+Human sustained Raw gait reopening (2026-09-06): the corrected temporal detector now accepts the bounded first impact only after a real two-frame same-sole replant, while its new impulse-only, one-frame-touch, body-contact, side-change, and repeated-seed cases pass. The next unchanged no-rail gate then terminates at `6.15003 s`, `-1.87032 m`, one cycle and one alternating step with fall reason 1 and uprightness `-0.0600`. This proves the event-complete swap advanced the controller but did not create a sustainable second exchange. Add bounded failure-only coordinator/contact/torso telemetry to the existing Raw gate, identify the first post-swap divergence, and repair the finite motor target/state sequencing rather than relaxing the `10 m / 12 alternating steps / no projection` contract.
+
+Human first-replant braking diagnosis (2026-09-06): failure telemetry shows the trunk is still healthy (`upright 0.992`) when LANDING begins, but the incoming left sole is translating backward at roughly `0.38 m/s`; its real friction impulse then accelerates the whole rig from a small near-zero drift to `-0.61 m/s` by the side swap and `-2.21 m/s` while the right departure is still waiting. The previous bounded horizontal target feedback (`0.20`, cap `0.18`) only asks for about `0.08 m` of endpoint correction and does not arrest that world-space sole velocity. Probe a stronger but still finite terminal-foot velocity response (`0.55`, cap `0.32`) confined to observed FLARE/LANDING, with no body force, root translation, contact edit, latch, or changed gate. Retain only if the same physical first landing remains below the exact `0.40/0.65 m/s` bounds and the Raw controller enters a real second swing without the backward collapse; otherwise restore it.
+
+Human first-replant braking rejection and false-departure root cause (2026-09-06): the stronger horizontal target response is rejected and restored to `0.20 / 0.18`; it pushes the first physical approach just outside the unchanged bound at `0.401176 m/s` and does not reach the sustained gate. The decisive post-swap defect is instead an inconsistent sole predicate: DEPARTURE calls a three-node sole released when no node is grounded but only the *maximum* heel/ball/toe clearance exceeds `5 mm`. At the observed right-side transition the heel remains at zero while ball/toe are `28/56 mm` high, so a rocker is falsely promoted to SWING; the heel recontacts two frames later, clearance regulation and single-support balance drop out, and the controller continues advancing toward APEX until collapse. Make departure all-node and event-conditioned: require minimum sole clearance plus bounded upward motion for three frames; shorten the outgoing two-link leg through its ordinary hip/knee target while DEPARTURE owns it; keep its distal plate level instead of toe-rocking; and return a pre-apex recontact to DEPARTURE. Add synthetic false-rocker and recontact cases. No particle, root, contact, support bit, or phase-driven translation may be added.
+
+Human level-toe departure rejection (2026-09-06): the coherent all-node release predicate, three rising frames, finite `45 mm` leg shortening, and pre-apex rollback compile with deterministic false-rocker/recontact tests, but replacing the departure toe command with the measured level-plane action regresses the already valid first left exchange: unload drops from 93 to 88 clear frames and the landing reaches `0.4355/0.6896 m/s`, outside both unchanged limits. Restore the established `+0.34` departure toe target while retaining the new all-node leg/state conditions, then test whether hip/knee shortening alone frees the previously pinned right heel. The sign and magnitude may be revisited only with a side-symmetric physical result; do not sacrifice the first landing to hide the second-side defect.
+
+Human foundational target-response A/B active (2026-09-06): the restored departure toe target retains the physically honest all-node release/recontact sequencing, but the Raw trace still dies on its first left exchange at `-2.10392 m / 0 cycles`: by late swing the requested hip/knee/ankle actions are materially ahead of both the applied finite actions and joint response. Isolate the duplicated teacher attenuation before changing actuator capacity: make the foundational Human teacher request the coordinator's full finite joint target with zero extra teacher-space damping, while retaining the ordinary `1 action-unit/s` actuator slew, XPBD torque/work caps, contacts, topology, landing thresholds, and zero root/body projection. Retain only if unchanged V0748 and Raw authority improve without non-foot contact, unsupported COM impulses, or mirror/determinism regression; otherwise restore the `0.80 / 0.010` response.
+
+Human foundational target-response duplicate rejection (2026-09-06): the proposed full-response row duplicated the earlier recorded finite-target-lag experiment, and removing the small teacher damping only worsens it: the dedicated first landing becomes `1.559078 m/s` horizontal and `1.224183 m/s` vertical, 87 clear frames are followed by forbidden hand/elbow contact, and no confirmed landing is earned. Restore `0.80 / 0.010`. This is not an actuator-capacity problem; do not repeat full-response or faster-slew rows already rejected elsewhere in this ledger.
+
+Human hip-reference reconciliation A/B active (2026-09-06): the retained source still applies the later observed-torso-frame cancellation to both hip targets, while an earlier repeated-seed receipt records that exact per-frame cancellation as rejected for converting the former forward multi-transfer trajectory into a one-transfer reverse flip. Reconcile the crossed experiment by restoring each hip motor's authored local parent reference while preserving the current 19-node feet, explicit ankle/toe actions, all-node departure, temporal landing proof, finite XPBD actuation, and zero helper/root/body authority. Run the dedicated landing and sustained Raw traces before retaining; restore the observed reference if the newer coordinator demonstrably depends on it.
+
+Human authored-frame signed-trajectory A/B active (2026-09-06): restoring the authored relative hip frame changes the dedicated landing from ballistic to physical (`0.059983/0.459452 m/s`, 101 clear frames) and the coordinator performs a real side swap. Raw forward and reverse now respond with opposite, repeatable signs, but both signs are inverted: forward travels `-1.91707 m` while reverse travels `+2.45818 m`. Test only a reflected Human foundational sagittal direction under this no-projector, event-conditioned plant. Preserve facing/render direction, course intent, cadence, vertical lift, contacts, action/motor topology, torque/work/slew, and every threshold. Retain only if local progress becomes positive in both directions and the physical landing remains bounded; this must not be generalized to other species or older projected-controller evidence.
+
+Human coordinator direction-ownership A/B active (2026-09-06): reflecting only the
+foundational Human sagittal endpoint fixes the forward world sign (`+2.50003 m`),
+but reverse also travels forward (`+2.25176 m`) and both trials still fall before
+a complete cycle. The event coordinator independently reflects negative intent by
+swapping its initial outgoing side and shifting phase by pi, while the teacher
+already reflects endpoint X and maps the paired legs half a cycle apart. Isolate
+that double reflection: retain the authored hip frame and reflected Human endpoint,
+but initialize both directions from the same physically authored left-outgoing /
+right-support purchase. Direction may reflect finite endpoint X; it must not also
+privately relabel support ownership. Preserve every contact, particle, actuator,
+torque/work, landing, body-contact, and no-helper threshold. Require mirrored
+forward/reverse actions and progress, the same bounded first landing, real physical
+side exchanges, and repeated-seed determinism before retention.
+
+Human coordinator direction-ownership A/B rejected (2026-09-06): removing the
+negative-intent support relabel produced opposite signed travel, but it did not
+produce a releasable gait. The strict first-landing run reached only 82 all-node
+clear frames and struck at `0.744572 m/s` horizontal / `0.997292 m/s` vertical;
+the Raw authority pair fell or rolled after one left-foot event with zero complete
+cycles. Do not retain that double-reflection experiment. The next bounded release
+candidate restores the single established signed coordinator mapping and tests the
+causal authored-geometry mismatch: the event clock jumps to an exchange boundary
+whose `0.50 m` endpoints are `0.08 m` beyond each saved Human ankle. Use the
+canonical `0.34 m` ankle separation for foundational Walk only, leaving Speed Walk,
+transition, Run, contacts, torque/work, action topology, and all no-helper gates
+unchanged. Retain only if the unchanged physical landing and repeated signed Raw
+cycle gates pass; otherwise release remains blocked.
+
+Authored-step follow-up active (2026-09-06): the `0.34 m` candidate completes a
+real left-sole purchase and swaps physical side at frame 145, but the next right
+departure fails and the strict run still has zero completed alternating cycles.
+The trace identifies an action discontinuity at that exact swap: PURCHASE holds
+the newly landed toe on its measured terrain plane, then the same now-loaded toe
+falls immediately to the generic `-0.14` stance curl while the opposite toe is
+asked to depart. Preserve the measured terrain toe target for only the physically
+loaded non-outgoing sole during DEPARTURE. This changes no state/contact/particle,
+adds no root or posture authority, and must retain deterministic finite motor
+slew. Keep it only if the unchanged first-landing and signed Raw cycle gates pass.
+
+Authored-step signed-endpoint final A/B active (2026-09-06): retaining the
+negative-intent coordinator relabel with the authored-width step remains asymmetric:
+forward reaches one physical swap but only `0.975113 m`, reverse travels the wrong
+world sign and becomes invalid, and neither completes a cycle. The earlier endpoint-
+only reflection was confounded by the oversized `0.50 m` exchange. Test it once with
+the now-authored `0.34 m` boundary and stance-toe continuity: one canonical outgoing
+side, signed finite endpoint reflection, no private support relabel. Do not change
+gains, cadence, contacts, thresholds, helpers, or tests. If the unchanged landing
+and signed Raw cycle gates fail, reject all three experiments and block v0.7.51.
+
+v0.7.51 gait release gate blocked (2026-09-06): the final authored-width plus
+endpoint-reflection row also fails. Its strict landing is ballistic at `0.840051
+m/s` horizontal / `0.980786 m/s` vertical; forward becomes invalid after only one
+left-foot event, reverse reaches one exchange but neither direction completes an
+alternating cycle. The stance-toe continuity row likewise completes no cycle. Revert
+the `0.34 m` diagnostic stride, toe carry-through, and endpoint-only reflection;
+restore the bounded authored-hip landing candidate (`0.059983/0.459452 m/s`) so the
+working tree does not end on the worse experiment. That retained baseline still has
+inverted local travel and zero sustained Raw cycles, so it is not releasable and no
+v0.7.51 tag, archive, or Site handoff is authorized. The next pass must introduce a
+distinct authored exchange boundary while preserving the required `0.50 m` excursion,
+then solve the post-swap distal target continuity under unchanged physical gates.
+
+Flip/autostart planted-preload A/B active (2026-09-06): the user''s live run adds a
+release-critical reproducer: after the assisted rig flips direction and Walk starts
+automatically, it trains briefly and then falls instead of maintaining upright
+support. The retained bounded-landing trace shows the same causal seam: on the first
+loaded support, the analytic Human stance endpoint can be about `0.273 m` farther
+forward than the actual planted ankle, so the finite hip/knee motors pull the pelvis
+backward before the next landing. Test one continuous, one-sided preload limiter for
+only the physically supported non-outgoing Human leg: while the nominal endpoint is
+farther forward in directed local space, begin at the measured ankle-to-pelvis X;
+once the nominal stance sweep reaches or passes that measurement, preserve the full
+authored sweep. Apply the existing load-weighted capture shift afterward and retain
+the existing vertical reach, IK, actuator slew, contacts, particles, and every hard
+landing/Raw gate. Add finite, equality, behind/ahead, mirror, unsupported/outgoing,
+and repeated-input coverage. Reject immediately unless bounded first landing and a
+real post-transfer stance sweep are both preserved; no v0.7.51 release or Site
+handoff is authorized while the unchanged sustained Raw gate remains red.
+
+Flip/autostart planted-preload A/B rejected (2026-09-06): the one-sided limiter
+corrects forward travel to `+2.85191 m` and retains a bounded first landing at
+`0.195980/0.466730 m/s`, but it still completes zero cycles in both directions,
+reverse travels the wrong world sign (`+2.45818 m`), and the forward trial later
+accumulates 47 right-hand ground-contact frames. Remove the helper and focused test;
+do not stack it onto the retained bounded-landing baseline. The live turn trace also
+shows a separate discontinuity: the assisted mirror occurs after old-facing action
+and contact processing, then clears action/support/coordinator state and resumes
+Traverse on the next frame with a reset teacher clock but the global coordinator
+clock. Any turn repair must first prove a real stationary bilateral purchase and a
+single synchronized gait restart; it cannot substitute for the still-red straight
+Raw Walk gate or authorize v0.7.51 publication.
+
+Full-endpoint support-latch A/B active (2026-09-06): replace the rejected per-frame
+X chase with a single physical receipt. When SETTLE first proves the incoming sole''s
+flat purchase, and whenever PURCHASE proves a two-frame bilateral exchange, capture
+the newly load-bearing ankle''s full measured pelvis-relative endpoint in facing-local
+coordinates. Hold that immutable 2D endpoint only for the non-outgoing support leg
+through DEPARTURE, then smoothly release it into the ordinary analytic stance sweep
+during early SWING. The latch is coordinator state/teacher-target provenance only;
+it may not move a particle, write contact/support state, bypass action slew, or enter
+Raw inference. Prove initial capture, verified-side-swap capture, finite rejection,
+facing mirror, and repeated determinism before running the unchanged V0748 landing,
+signed Raw 10 m/12-cycle, and V0730 gates. Revert immediately if landing confirmation,
+body integrity, or signed cycles do not beat the retained baseline.
+
+Full-endpoint support-latch A/B rejected (2026-09-06): this diagnostic improves the
+direct V0748 teacher to `+2.90102 m` and one alternating cycle, but it still flips at
+`4.46667 s`; the unchanged test rejects it as not physically learnable. The strict
+Raw authority pair remains effectively unchanged at `-1.89781/+2.47932 m`, zero
+cycles in both directions, with reverse still traveling the wrong sign. Remove the
+latch fields, teacher blend, and synthetic tests rather than adding hidden recurrent
+state that the feed-forward policy cannot observe. Retain the independent turn-clock
+finding: shuttle-local teacher time and global coordinator time diverge after every
+mirror. Synchronize those existing clocks without changing actions, contacts, or the
+straight-course gait, then prove the actual turn path separately; release stays red
+until the straight Raw gate also passes.
+
+Post-flip physical-settle A/B active (2026-09-06): the turn trace proves the old
+`0.32 s` TURNING hold occurs entirely before the facing flip. The same end-of-step
+transition then mirrors/clears the assisted rig and resumes TRAVERSE on the very next
+frame, so there is no post-mirror standing receipt. Add an explicit SETTLING shuttle
+phase: enter it at the logical flip with zero locomotion, reset stale stable-stance
+time when the physical mirror occurs, and resume TRAVERSE only after fresh stable
+support is observed for a bounded interval. Use the same shuttle-local integrated
+control clock for the Human coordinator that the teacher already uses. Treat
+SETTLING as an intentional hold everywhere TURNING is currently excluded from gait
+faults/locomotion. Cover early/ready/unready/repeated and 20/60/240 Hz state progress,
+then run the real shuttle-facing suite plus unchanged straight V0748/Raw/V0730 gates.
+This fixes the user''s exact flip/autostart discontinuity but cannot alone authorize
+release while the independent straight Raw gate remains red.
+
+Authored initial-phase handoff A/B active (2026-09-06): the saved Human ankle offsets
+match the existing `0.712*pi` authored phase, but SETTLE declares the left leg outgoing
+and then snaps directly to the `pi` exchange boundary on the first right-sole purchase.
+That immediately changes the finite endpoint request from about `+/-0.17 m` to
+`+/-0.25 m`. Enter only the first DEPARTURE at the complementary swing phase
+`boundary + pi - initial_phase`, which represents the same saved stance with the
+declared outgoing leg in swing; hold the current phase while physical release is
+pending. Failed recontact and every later verified PURCHASE still reset/use the exact
+exchange boundary, so the `0.50 m` excursion and event-driven cycle remain unchanged.
+Add forward/reverse complementary-phase, no-purchase, hold, recontact, later-swap,
+and repeated-input proofs, then run unchanged V0748, signed Raw, and V0730 gates. No
+particle/contact/root authority or hidden state is introduced; reject unless the
+physical gates materially beat the retained baseline.
+
+Authored initial-phase handoff A/B rejected (2026-09-30): the previously built but
+unexecuted candidate was finally run through the focused physical gates. V0748 loses
+the retained bounded first landing and strikes at `0.628699 m/s` horizontal / `0.250151
+m/s` vertical after only 82 all-node clear frames; V0732 reflection diverges; Raw
+forward/reverse remain invalid at `2.78714/2.35274 m` with only one/zero cycles. Restore
+the exact exchange-boundary departure used by the bounded `0.059983/0.459452 m/s`
+baseline. Retain the independent post-flip SETTLING state for an isolated turn test;
+it has not yet passed the physical reflection gate and does not authorize v0.7.51.
+
+Approved historical release GitHub mirror receipt (2026-10-03): GitHub access is
+restored. Existing repository `Autodidac/Vulkan_AI_Walking_Training_Simulation` main
+was fast-forwarded without force to approved v0.7.50 commit
+`f40893ab8e98fd610cf685ad8c2bde8b84d7a5b5`; existing local tag was published unchanged
+(annotated object `59e4a1246b2f820a3248fcb281333d9bad00ae1e`). The approved Site's five
+archives and ten sidecars/manifests were recovered unchanged, all archive hashes and
+complete member manifests passed, and source content matched the tagged tree with
+only demonstrated CRLF checkout conversion. Release
+`https://github.com/Autodidac/Vulkan_AI_Walking_Training_Simulation/releases/tag/v0.7.50`
+contains all fifteen files; draft downloads and a fresh anonymous public download of
+every asset matched the approved bytes. No candidate source or v0.7.51 asset was
+published. This mirrors the prior approved release; current failing physical gates
+and all unfinished missions remain open. Temporary recovery staging is removed after
+the verified receipt is delivered to the Site owner.
+
+Walking/recovery priority resumed (2026-10-21): user requests completion in order:
+physical walking and recovery, direct runtime testing, remaining missions, then
+v0.7.51 Site publication. All prior unfinished missions remain open. First inspect
+the stance-ankle feedback Jacobian: both canonical ankle motors have the same
+parent/pivot/distal orientation, yet the teacher multiplies its correction by the
+left/right support ID. Existing coverage asserts that encoded sign without proving
+its physical effect. Measure the same positive/negative perturbation through both
+real ankles; repair the mapping only if the physical response proves the sign error.
+Interactions: explicit ankle actions, finite XPBD torque/work and slew, grounded
+support exchange, teacher imitation targets, Raw inference identity, facing,
+observations/checkpoints, recovery, contact/art anchors, and unchanged gait gates.
+Do not change particle/contact/root authority or waive failed physical acceptance.
+
+Ankle-sign diagnostic rejected (2026-10-21): equalizing the two ankle signs leaves
+the forward Raw failure exactly unchanged (-1.91707 m, no support cycle) and fails
+the existing independent one-step torso-fall comparison. Restored the original
+mapping and assertions; no sign fix is claimed. The static perturbation probe also
+demonstrates that saturated targets plus finite slew can mask the tested action.
+Next isolate explicit stance-hip attitude feedback against the first-transfer
+failure, using identical physics, seeds, contact rules, and strict acceptance.
+This is a diagnostic controller experiment, not additional runtime assistance.
+
+Immediate current-build eye test (2026-10-21, user-requested): rebuilt the complete
+Windows Runner target with installed SDK 10.0.19041.0, launched the exact
+build/windows-vs2022-v0751-verify/Release/Runner.exe, and inspected native Vulkan
+output through the computer-use window capture. Package, camera, and UI diagnostics
+pass; git diff --check passes. These are not release acceptance. On Live, retried
+the frozen Human Walk trial with R without clearing learned data: the body briefly
+stands, then falls backward and freezes at world X=-2.16 m with zero support cycles
+and HEAD / TAIL / BODY ROLLING. The short physical Raw test independently reports
+forward=-1.91707 m, reverse=+2.45818 m, zero cycles, exact action/actuator identity,
+and no helper/root drive. V0748 retains 101 clear swing frames and a first approach
+of 0.059983/0.459452 m/s, but later right-hand contact at frame 222 fails the gate.
+The isolated hip-feedback diagnostic sweep does not produce acceptable gait; no
+experimental gain was promoted into production. A visual mismatch also remains:
+after R resets the main body, the PIP still displays the old frozen trial. This
+reopens preview/reset synchronization alongside the existing gait mission. Left
+the app open at Normal training rate for the user's immediate inspection; no long
+training soak, release package, tag, upload, or Site promotion was started.
+
+Live inset ownership correction active (2026-10-21): draw_training_pip currently
+renders the worker's highest-progress retained terminal, while R resets only the
+main live trial. Bind interactive Live inset pose, terminal flag/cause/reason, and
+label to the same live preview as the main view. Keep worker evidence and optimizer
+state intact; isolated proof and Rig Lab routing must remain unchanged. Verify
+reset/failure parity in source contracts and native output, including a retry while
+worker training continues. Walking and recovery remain the blocking physics work.
+
+Measured load-transfer defect (2026-10-21): at frames 162/163 the new left sole
+receives only 0.49 N s against the old right sole's 4.60 N s, yet the coordinator
+declares purchase and starts lifting the still-loaded right leg. Two flat-contact
+frames prove touching, not weight transfer. Require the newly landed foot to carry
+at least half the measured foot load before exchanging sides. During PURCHASE,
+target the capture point toward that new sole through bounded existing hip/knee
+endpoint requests, rather than the aggregate COP that remains on the old foot.
+No contact bit, normal impulse, root pose, acceptance bound, or motor limit changes.
+Test low-load false purchase, equality, reflected sides, nonfinite inputs, repeated
+receipts, then unchanged physical gait gates. Do not present this experiment as
+successful locomotion until the real tests and retained policy prove it.
+
+Load-transfer follow-up (2026-10-21): the guard prevents the premature swap but
+does not stop the preceding backward fall. Bounded capture-error ankle probes
+produce either backward collapse or forward tipping, not sustained gait; none are
+promoted. Next test physical swing-foot placement against the observed capture
+point instead of insisting on a forward landing when the body is already falling
+backward. This changes only explicit hip/knee target requests, not root/contact
+state. Existing strict distance, support, ROM, and authority gates remain intact.
+
+Initial support transfer audit (2026-10-21): SETTLE accepts one flat incoming-foot
+contact immediately, even when the capture point remains behind its heel. Test a
+measured capture-margin gate and no-lift double-support preparation pose, using
+only existing finite leg targets to shift load. This is a candidate teaching
+controller change, not retained-policy mastery or an additional body force.
+
+Double-support geometry correction under test (2026-10-21): the previous
+load-weighted endpoint shift applies half the requested translation to each planted
+leg at equal load and leaves an unreachable transfer target. In preparation and
+purchase only, derive both endpoint requests from their current measured positions
+relative to the pelvis and apply the same bounded capture displacement. No private
+foot latch or body translation is introduced; the physical motors still perform
+all work. Preserve the strict walking gate and reject a standing stall as walking.
+
+Experiment disposition and retained changes (2026-10-21): capture-aware ankle,
+swing placement, stance-hip attitude, startup capture gating and measured bilateral
+endpoint experiments failed sustained forward/reverse walking. The startup variant
+reached the clean first-landing check but then failed sustained gait; standing or
+stalling variants are not success. Removed these experimental production paths and
+their temporary CLI probe code. No diagnostic gains were promoted. Retained only
+the two-frame measured-load purchase guard (including the first landing receipt)
+and the Live inset ownership repair, with low-load, mirrored, repeated and invalid
+load regression coverage. All previous unfinished missions remain open, especially
+physical standing/walking/recovery and trained-policy evidence. No release tag,
+package, upload or Site claim was made.
+
+Native preview receipt (2026-10-21): rebuilt Windows Runner, observed Live main and
+PIP showing the same current terminal pose/cause; R restarted the main trial, and
+the inset subsequently displayed that new trial's matching failure instead of a
+worker snapshot. Source/art contracts pass. Direct retry capture briefly omits
+HUD/PIP during the reset frame, so multi-frame reset/render stability still needs
+release validation. Background training in this test instance was paused after
+testing to avoid consuming resources alongside the user's other projects.
+
+Checkpoint boundary: advanced training semantics from 0x00075114 to 0x00075115
+for the load-qualified support-exchange target. Existing observations/actions keep
+their dimensions, but old teacher-policy lineage must not silently resume as the
+new controller. No model or learned mastery was manufactured by this migration.
+
+Resource-use correction active (2026-10-21): user reports expensive unattended
+training after removal of back support. Keep the app closed during implementation.
+Interactive startup must be paused, including after loading an autosave. Default
+worker pools must be bounded to four, with Eco using one active worker and Balanced
+two; explicit library worker ceilings remain supported. Replace the 80 ms throttle
+cap with interruptible proportional idle time (Eco 25% training duty, Balanced 50%,
+Maximum unrestricted duty within its worker ceiling). Pausing allows only the
+current atomic update to finish. Preserve authored rigs, historical totals and
+checkpoint files; incompatible semantics must not restore old mastery or optimizer
+state. Check scheduling, persistence wakeups, UI labels and deterministic boundary
+tests together. These resource fixes do not close unaided standing/walking/recovery,
+art, terrain, preview validation, packaging or any other unfinished release mission.
+
+Resource correction receipt (2026-10-21): implemented paused interactive startup,
+one/two/four default active-worker budgets and proportional interruptible training
+idle time. Retained-master assessment now respects the selected worker mode too.
+Paused polling reduced from 8 ms to a 250 ms safety fallback, with persistence
+completion included in the wake predicate. Found same-signature set_blueprint()
+does not reset policy: incompatible autosave fallback now explicitly resets weights
+and optimizer, clears Director/mastery state, and pauses at Stand while preserving
+rig identity, original checkpoint files and lifetime totals. The regression writes
+an isolated old-5114 fixture, loads it over a different same-rig policy, then reads
+the resulting checkpoint and compares actual fresh weights and optimizer/best
+state. That check passed; its temporary directory was removed.
+
+Windows bounded evidence: native SDL3/Vulkan build succeeded. Sequential CTest
+preview/art, raw-learning provenance, complete runtime/persistence pipeline, and
+resource budget checks passed (4/4, 47.62 seconds before the final added same-rig
+fixture). Final focused resource/duty test including that fixture passed: one Eco
+update took 2.981 seconds, no second update during the sampled 1-second idle window,
+and pause plus a command completed in 43.9 ms. The ratio is a scheduler budget, not
+a measured whole-process CPU percentage. No soak or interactive Runner remains
+running. Support-transfer-only contracts also passed; full gait remains failed.
+
+Build consequence: a CMake regeneration unexpectedly launched vcpkg dependency
+recompilation at 25 jobs. Stopped only that identified Runner build process tree,
+restored all nine exact prior Windows dependency archives using ABI identities
+from this worktree's vcpkg status receipt, and configured the existing verify build
+with VCPKG_MANIFEST_INSTALL=OFF. No shared-project checkout was changed. Subsequent
+builds used at most two jobs. The interrupted vcpkg transaction journal is retained
+for repair; do not re-enable automatic manifest installs without reconciling it and
+setting VCPKG_MAX_CONCURRENCY=2. No release matrix, source package, tag or publication
+is implied by this local cached-dependency build. All earlier open missions remain.
+
+Final resource fixture plus package-layout CTest passed (2/2, 2.36 seconds).
+Linux GCC 14 validation cannot launch: registered Ubuntu fails to attach its
+missing LocalState/ext4.vhdx with HCS/ERROR_PATH_NOT_FOUND. Did not repair, replace,
+unregister, or otherwise mutate WSL or another project's environment. Keep Linux
+and the full release matrix explicitly pending. ResourceDuty is registered as a
+separate bounded CTest so the real one-update/pause check is not CLI-only coverage.
+
+Final rebuilt Windows candidate: registered ResourceBudget and ResourceDuty passed
+2/2 in 8.19 seconds. Camera diagnostic passed routed Live/editor zoom checks; UI
+diagnostic passed 11 layouts at 1.50x DPI. git diff --check is clean. Process check
+found no Runner, runtime test, or vcpkg process left running. No test executable or
+temporary branch was added; existing verification targets were reused. This closes
+the focused resource/reset regression checks, not physical gait or release readiness.
+
+Source-only unsupported-standing audit (2026-10-23): user is running a heavier
+project and explicitly requests no runtime testing for now. Do not launch Runner,
+build, train, simulate, benchmark, package, or publish during this pass. Read-only
+source review found Stand has no teacher handoff: lesson_teacher_authority returns
+one, effective_policy_action always blends its balance teacher, evaluations choose
+Assisted, and the posture helper can translate root/torso/head. Its guide lambda
+also omits the already-declared authority factor. Prepare the contained correction
+that makes this specific Stand posture helper respect the caller's finite physical
+authority, with matching posture telemetry and authored positive/negative/invalid/
+repeated-seed regression cases; leave execution pending. This is preparation for
+retraining, not a claim of unaided standing or a complete zero-guidance plant.
+
+Interactions reviewed: finite joint action composition; root/posture projection;
+contact-based standing timers/rewards; support observations; per-environment PPO
+origins and actor attribution; retained-policy Raw receipt requirements; curriculum
+prerequisites; checkpoint semantics; Live and editor preview guidance; tests and
+release validation. A full Stand handoff needs coordinated Raw training cohorts,
+teacher fade, fresh post-handoff episodes, observation consistency, gradients from
+the actions actually sampled, standing-appropriate provenance and retained mastery.
+The existing Raw receipt requires forward, reverse and stop samples for Walk; do
+not relabel that receipt as Stand evidence or relax it to make a score pass. Defer
+that coupled behavior change and all physical gain tuning until bounded tests are
+allowed. All existing open gait, recovery, terrain, art, UI and release missions
+remain open; no website content or current artifact is changed here.
+
+October 23 disposition: prepared the narrow Stand posture-authority correction
+in simulation.cpp and matching posture_guide report in ppo.hpp. Full authority
+retains the existing correction; partial authority scales both position and
+Verlet history, zero/invalid authority skips the helper, and Raw still returns
+before it. Extended the existing v0751_crouch_authority_tests source with direct
+Stand-helper checks across Human/Chicken/Dog/Hexapod and four seeds. No new test
+executable, branch, temporary capture or generated package was created. Static diff
+review and whitespace inspection only; no compilation or test execution is claimed.
+
+Stop here under the user's resource constraint: applying an automatic Stand fade
+alone would expose mismatched training/evaluation/receipt paths and could worsen
+the current backward fall. No physical controller gain or acceptance bound was
+changed. The source patch is unvalidated and the existing Runner executable still
+predates it. Next bounded work when runtime testing is permitted: run the focused
+Stand posture checks, then implement/test Stand Raw cohorts, physical plant parity,
+gradient provenance and retained qualification before retuning gait. All preexisting
+mission and release blockers remain open, including Linux environment availability.
+
+November 12 walking revisit: user requests a visible walking result and resumes
+bounded testing. Rebuilt the current Windows app and focused authority suites;
+Stand posture/CrouchWalk passes. Current Raw gait still fails in both directions
+with zero alternating steps and wrong-signed displacement, matching the previous
+binary. The isolated local v0.7.43 archive passed its own six-seed walking check
+and displayed a historical frozen replay frame (18.8 m / 39.2 steps mean).
+Its older authority contract is not current unsupported-gait evidence. No Site
+or release action. Next isolate authored spawn/contact effects in the existing
+short Raw harness without changing the production solver or acceptance thresholds.
+
+November 12 spawn A/B result: rigidly placing the complete authored pose at
+the highest foot clearance, with zero initial motion and cleared support latches,
+changed forward displacement from -1.91707 to -1.91542 m and reverse from
++2.45818 to +2.46524 m. All four four-second runs had zero alternating steps;
+the forward run still invalidated. Initial pose projection alone is not a fix.
+Removed the temporary probe option. No gait gain or authority was changed.
+The historical v0.7.43 window was left visible at the genuine frozen replay
+frame, with training paused; no current walking success is claimed.
+
+Current-build-only gait work resumed: inspect signed progress and alternating
+physical contact transfer with the same Raw plant. Compare bounded leg endpoint
+geometry in a diagnostic-only probe before promoting any change to teacher targets.
+Keep body/root support off; preserve actuator, terrain/contact, observation layout,
+checkpoint integrity, UI and release gates. Do not use the historical pose as proof.
+
+Current user priority: restore the integrated course visibly, preserve the current
+layout, and update EpochSimEngine from 2.5.26 to the published 2.5.29 source
+(dffedf526a83fce477ebe18376cf75a88598e738). Verify exact-source compatibility,
+installed dependency resolution and canonical terrain tests. Stand / Flat is the
+observed current UI selection; leave its training prerequisite honest. Gait
+investigation remains open: 240 finite target settings produced at most one
+alternating event in either direction and no sustained bilateral walk. Remove
+the temporary sweep, keep the no-helper gates, and do not claim locomotion fixed.
+
+Live automation correction: confirmed in the active Windows viewport that the
+Walk mission already renders integrated terrain but the preview stays on a fallen
+terminal frame even when the worker can run. Add a bounded Live-only retry while
+Autopilot is on, keep failed frames briefly visible, and keep manual retry for
+paused, Rig Lab, and isolated proof sessions. Start interactive Eco training on
+fresh launch or after autosave apply; headless/isolated callers retain opt-in.
+The user approved keeping the current layout. None of these changes earns gait
+mastery or changes physical authority.
+
+Current post-upgrade gait diagnostic: the exact 2.5.29 build reproduces the
+same four-second Raw failure bit-for-bit. Run a test-only finite-motor phase
+comparison to distinguish a stalled contact coordinator from failure of a
+free-running joint trajectory. Keep the real terrain and all no-support and
+movement acceptance checks. Do not promote a slipping/falling trajectory.
+
+November 12 replay ownership correction (supersedes Live auto-retry above):
+the background worker runs the selected task independently; the inset displays
+its sampled state and outcome. The main view is a manually reset longevity
+replay, pins its controller for the whole episode, and retains its terminal
+frame. R starts the next replay with the latest compatible controller without
+resetting background training. A committed rig change requires a fresh replay;
+same-rig course changes are staged until R. Preserve interactive autostart,
+integrated terrain, isolated proof
+sessions, Rig Lab, and the unsupported gait and recovery missions. Advance and
+review the v0.7.51 documentation. GitHub and GPT site publication and cleanup
+remain gated on audited source, packaged runtime, and release acceptance; do
+not delete branches/worktrees containing unique or uncommitted work.
+
+Initial Windows full-matrix findings: legacy Core and v0.7.26 topology checks
+still treated the two declared MTP action slots as ankles or did not count them.
+Update those assertions to test both toe identities/ranges separately without
+loosening the original ankle contract. The independent Raw and repeated-seed
+terrain walking failures are physical failures, not schema assertions; they
+remain release blockers.
+
+November 12 replay verification: the Windows candidate builds as 0.7.51 and the
+deterministic replay-ownership check shows a new worker publication during a
+held terminal replay, then an independent manual restart with the current
+compatible controller. The inset no longer shows an untouched spawn as a
+worker sample. Publication polling no longer constructs a simulation world
+when there is no new worker snapshot. Modular art, view/UI, Core, training truth,
+resource budget, terrain and exact dependency guards passed focused runs.
+The installed launcher, called from docs, reports the correct version and passes
+package, camera, and Vulkan checks. The built app also passes UI and the 16/16
+live acceptance matrix, which does not prove unaided gait.
+
+Raw Human uneven-terrain travel is still -1.91707 m for forward intent and
++2.45818 m for reverse intent with zero alternating steps and zero helper calls.
+The independent 10-seed Human reference replay fails in the same direction.
+The strict Human lake challenge also falls before reaching water: x=-2.08661 m,
+6.16669 s, zero cycles and zero successful recoveries. The bounded Windows
+follow-up passed seven of nine tests (including RuntimePipeline, Raw learning
+provenance and crouch authority); RawAuthority and LakeChallenge failed.
+The phase probe was removed after failing to yield a valid alternating gait.
+Stopped the long Windows cold-start learner after hard blockers were reproduced;
+no full Windows matrix pass is claimed. GCC 14 was unavailable in the usable
+registered WSL image; other images had missing disks. No WSL registrations or
+other projects were changed.
+
+GitHub remains v0.7.50 with only remote main. Removed duplicate local
+`agent/v0750-editor-course-art` (its tip is the active branch's tip) and remote
+`agent/v0731-terrain-curriculum-art` (already merged, no open PR, exact-tip lease).
+Both deleted refs' commits remain reachable. Preserved both worktrees and all
+uncommitted candidate work. Removed the isolated runtime install smoke directory.
+The GPT Site chat received the hold status; no candidate source push, tag, public
+archive, or Site deployment occurred.
+
+November 12 gait-only release request: leave replay/UI unchanged. Trace the
+unsupported Human's signed motor and contact response through the first
+transfer, then test dry forward/reverse and the full authored lake route.
+Preserve zero back/root support, motor/contact provenance, fixed-step terrain,
+checkpoint compatibility review, and existing acceptance thresholds. Publish
+v0.7.51 on GitHub and the GPT site only after real gait, lake, retained-policy,
+and package/release gates pass. All unfinished missions remain open.
+
+Gait-only investigation: the rebuilt Windows `RunnerRawAuthorityTests
+--transfer-trace` records six-frame snapshots of the coordinator, actual foot
+positions, measured support/load, and requested versus applied joint actions.
+Forward reversal starts in single support, before touchdown: the right ankle
+drifts forward from x=0.029 m (frame 54) to 0.108 m (frame 138) while the pelvis
+goes from x=-0.087 to -0.244 m. By frame 156 the new left sole touches but carries
+essentially none of the load. Reverse never exits its first departure: the
+pelvis moves the wrong way while the right sole intermittently recontacts.
+Measured stance-leg endpoint feedback and mechanically lowered neutral rigs
+were tested without helper forces. Apparent forward progress was a fall, not
+alternating gait; no variant passed both directions. Removed both experimental
+controllers/rigs; retained only the read-only trace. No production, replay,
+threshold, or checkpoint change. Repository hygiene and whitespace passed.
+RawAuthority and LakeChallenge still failed in the rebuilt suite; the lake
+attempt fell on dry ground at x=-2.08661 m after 6.16669 s. The Windows/Linux
+release matrices and packaging were not started for the rejected candidate.
+When the physical/release gates pass, publish GitHub directly and hand off the
+GPT site release to the existing Site chat as requested. No upload occurred.
+
+Planted-foot investigation resumed. The existing Windows baseline is open for
+the operator in a separate installed tree. Leave replay untouched. Compare
+the existing velocity-only Coulomb solve against a local position-level
+contact impulse integrated over the fixed step: the distance/motor constraints
+can move the sole before the history-only brake fires. Do not use a stored
+world anchor or touch the pelvis/root. Preserve finite measured normal-load
+budgets and existing walking/lake/authority gates; reject if physical tests
+do not improve.
+
+Operator follow-up: publish genuine rollout samples more frequently. Provide
+visible Restart and Hold Start buttons so the user can dismiss a terminal
+body without R or stopping training. A held authored start pose is display
+only, not standing mastery. Keep policy pinning and default terminal hold.
+
+Contact result: the traced right heel, ball, and toe all drift by about 0.078 m
+from frames 54 to 138 while the right foot carries the load. Reported friction
+use remains far below capacity at the sampled frames (0.147/5.550 N s at 54,
+0.252/5.539 N s at 138), so increasing the coefficient is not supported by
+this trace. Applying the finite impulse to position instead of history caused
+the no-position-write contact test to fail and did not produce alternating gait.
+Retaining signed impulses across slip reversals barely changed the outcome.
+Both experiments were reverted. Next isolate position drift from the loaded
+joint solve versus velocity-based friction using same-step pre/post contact
+coordinates; do not introduce a planted world anchor or back support.
+
+Live follow-up: one active worker lane publishes real stepped rollout samples
+at most every 125 ms, independently of optimizer publication and replay state.
+Manual Restart and Hold Start / Play are available in the Live session card.
+The runtime pipeline proves a real sample arrives before the first update
+finishes; camera/layout, modular-art contracts, resource budget, and installed
+package diagnostic passed. Native inspection confirmed the held start pose
+with Autopilot still running, and the updated viewer was left open. Raw gait
+still has zero alternating steps; the lake trial still falls on dry ground.
+No v0.7.51 release or Site handoff was made.
+
+Latest operator instruction: leave UI/replay unchanged, diagnose the running
+build read-only, and show a passing build before any release. Native inspection
+showed the held start and a 1.7 s, zero-cycle, stance-invalid training sample.
+Instrument the six support nodes in the opt-in per-source authority trace.
+Distinguish horizontal position/history shifts from velocity changes, especially
+the final anatomical closure. Test a contact-coupled correction only if this
+measurement supports it; no anchors, back support, or lowered thresholds.
+
+Stage-by-stage trace confirmed the loaded right heel's final leg pass moves
+both X and Verlet history by about 0.53–0.78 mm/tick; ground contact changes
+history but not X. Exposing the paired horizontal correction to friction
+reduced frame 54–138 heel drift from 78 mm to 31 mm and delayed one dry fall,
+but did not produce alternating steps, and the lake still failed. Reducing
+late convergence from eight to two passes also produced a fall rather than a
+walk. Both behavior experiments and their temporary instrumentation were
+removed. No production physics, UI, or replay change was retained.
+
+Read-only native observation of the user's existing session: Walk was at 80%,
+one captured replay ended FLIPPED at X=1.77 m with one heel strike and zero
+cycles, and the worker continued independently. The saved Director record
+marks Stand complete and Walk active. Code inspection confirms normal Stand
+evaluation uses full Assisted physical authority; its scalar completion is
+not evidence of unsupported balance. Preserve the running policy/checkpoint.
+Before a future gait promotion, isolate a read-only multi-seed Raw stand test
+of the same candidate; do not grant unaided Stand mastery from assisted
+metrics, rewrite the save, or reset the user session during investigation.
+Operator also notes undersized Human hands, tracked separately as art; no
+art change was made. Show a passing build to the user before any GitHub
+publication or Site chat release handoff.
+
+Operator requests automatic Stand-to-Walk training and a working gait. First
+compare raw no-command, finite balance teacher, and exact saved policy on six
+deterministic Stand seeds, with no mutation to the autosave. This distinguishes
+an unstable plant or teacher from missing policy learning. Preserve UI/replay,
+physical authority/foot and lake gates, and require operator preview before
+publication. Any future prerequisite change must train and assess the same
+unsupported plant; merely hiding or locking Walk does not solve locomotion.
+
+Read-only `RunnerRawAuthorityTests --stand-probe [checkpoint rig]` confirms
+the exact saved rig can hold the six-second unperturbed Raw Stand gate under
+zero commands (6/6) and the finite balance teacher (6/6). The saved active
+policy parameters pass 0/6, with 1.215 s longest stance and unsupported
+collapse in all six trials. This evaluates the current Walk weights on Stand;
+it does not prove what a historical Stand checkpoint could do. The helper,
+root/torso-drive and course-motion counts stayed zero, and checkpoint and
+rig bytes were unchanged. A 20-configuration leg/ankle target envelope
+comparison produced no valid bilateral gait; the temporary comparison was
+removed. The automated raw Stand training, evaluation, promotion and
+persistence handoff remain open. Existing Raw Walk receipts cannot be used
+as Stand receipts because they attest forward, reverse and stop intent.
+No production, UI, saved-session, or release change was made.
+
+Current operator gate: Autopilot must train and verify Human Stand with no
+physical support before Walk, then prove physical walking and the lake
+crossing. Keep UI/replay and the existing save untouched; isolate new training
+state and show a passing build before release. Track Stand promotion, dry
+walking, and ordered lake crossing separately; passing one does not close
+the others.
+
+Implemented the isolated Human Stand training and promotion path in
+Autopilot. Raw sampled PPO joint commands drive training; the learned active
+controller must pass three six-seed batches at the six-second unsupported
+Stand gate. The confirmation runs freeze optimization and audit root, torso,
+posture, manipulator, structure projection, and moving-course helpers. Human
+checkpoint/Director state uses a separate default save namespace, schema 30
+with the exact checkpoint digest, and rejects old/mismatched promotion credit.
+Explicit Human rig changes and fresh controllers require new qualification.
+No UI, replay, terrain physics, or user's save changes were made.
+
+Windows focused evidence: the four-environment Autopilot ran 80 PPO updates,
+then passed all 18 confirmation trials and selected Walk/Flat automatically.
+The same test rejects a premature manual Walk selection, preserves legacy
+save fixtures byte-for-byte, resumes an exact isolated handoff, and refuses
+a mismatched checkpoint. Runtime/replay pipeline also passed. Strict Raw
+dry gait remains red: -1.917 m forward, +2.458 m reverse, zero alternating
+steps. The authored lake challenge still falls on dry ground at -2.087 m
+after 6.167 s, with zero cycles or successful recoveries. The next physical
+blocker is the initial loaded-foot transfer, not the lake material. No
+walking or crossing demo, release package, GitHub push, or Site handoff.
+
+Operator follow-up: freeze the verified Stand path, UI, replay, and existing
+save. Repair the first physical Walk weight transfer, then require clean
+alternating steps without back support and an ordered authored lake crossing.
+Show the working candidate before any release. Use isolated Raw trials to
+distinguish a commanded foot placement from measured support/load transfer;
+do not change qualification thresholds or add root/torso/course authority.
+
+The isolated Walk trace now prints measured center of mass, center of
+pressure, and capture point alongside the foot-contact flags. On forward
+seed 122791792, the right foot remains loaded through the swing; at frame
+156 the left sole touches down but receives only about 0.057% of the normal
+impulse. The capture point is x=-0.247 m while the loaded right heel is
+x=+0.096 m. This is touchdown without transfer, not an absence of collision.
+
+Rejected motor-only trials: bounded stance/swing trims, a narrower exchange
+width independent of mid-stride excursion, and bilateral motor preload before
+departure. Some produced one alternating event, but fell or failed the
+opposite direction. A separate test-only receding-horizon probe cloned the
+Raw state and chose finite hip/knee/ankle trims using a 24-step lookahead.
+The 12-step refresh / 0.50 m/s target row produced 2 counted alternations,
+0.924 m of forward progress, no terminal, and zero helper calls at six seconds
+on seed 122791792. The same row's longer runs were bit-identical on that seed
+and fell after 3.205 m with no further alternation; seeds 29953 and 29440
+also became invalid. Reverse and the additional exchange-weighted rows did
+not pass the existing gates. Do not promote a short partial trial into an
+Autopilot gait or count touchdown as measured load transfer.
+
+Removed the experimental controllers and test flags. Only read-only trace
+instrumentation is retained. Production Stand, Walk behavior, UI, replay,
+save, and terrain are unchanged. The standard dry Walk test is still red,
+and the authored lake attempt still falls before reaching water. No working
+build shown, packaged, or released.
+
+Operator continuation: isolate the left touchdown from the load handoff.
+Probe paired knee/ankle actions on exact cloned touchdown states to measure
+whether the landed leg can take load before the body falls. Keep Stand, UI,
+replay, save, and the unaided dry/lake acceptance rules unchanged. A controller
+must show sustained physical alternation and complete the lake before review;
+the operator must see the build before release.
+
+Touchdown follow-up, Windows seed 122791792: the left foot receives 1.19447
+of 6.17501 N s (19.34%) at frame 155, then 0.00266489 of 4.68915 N s
+(0.057%) at frame 156 while both soles are still flagged supported. The
+capture point is already x=-0.232 m at first touch, behind both heels
+(left +0.124 m, right +0.092 m). It moved behind both feet before touchdown,
+so the impact alone cannot carry the body. Exact cloned 36-step probes could
+shift a majority of measured normal impulse to the landed leg using ordinary
+joint actions, but the late load-winning rows still moved backward. The
+pre-touchdown two-stage trim and observed stance-hip target each reached
+one forward coordinator handoff, not sustained walking; the reverse rows did
+not produce clean signed exchanges. Keeping stance ownership past the
+periodic phase wrap and separating the Walk position and velocity normal
+impulses were independently tested and did not change the zero-cycle outcome.
+All behavior changes and temporary probes were removed.
+
+Only the read-only transfer trace was extended to print both soles, their
+normal impulses, and the exact first release/contact frames. The restored
+Windows dry and lake gates remain red, with zero alternating steps and a fall
+on dry ground 6.167 s into the authored lake attempt. Repository hygiene
+and whitespace checks passed. Stand, UI, replay, existing save, and
+production behavior were left unchanged. No working demo or release.
+
+Operator continuation: diagnose the backward acceleration before the first
+touchdown. Attribute signed center-of-mass momentum to the actual solver
+sources during single support and check whether the existing finite joint
+actions can change that response. Preserve Stand, UI, replay, save, and all
+dry/lake acceptance gates; no release before a working demonstration.
+
+The restored forward reference (seed 122791792) loses 0.6690 m/s of COM
+velocity from left-foot unload at frame 49 to first contact at frame 155.
+The source trace attributes -0.6920 m/s to the ground reaction and
++0.0229 m/s to integration/drag; internal joint and bone contributions
+are below the trace reporting floor. Before touchdown, at frame 138,
+ground alone contributes -0.0114 m/s in that fixed step while the right
+foot carries all measured normal load.
+
+Test-only changes: a finite joint-only predeparture weight shift reached
+one clean forward coordinator handoff, but did not repeat the exchange.
+A separate short-step IK path using measured heel/ankle positions and
+actual contact/load achieved one candidate handoff, no accepted alternating
+steps. A cloned predictive reaction trial with a 24-tick lookahead and
+8-tick refresh kept the first forward swing's measured COM velocity
+positive (minimum +0.253 m/s; first contact +0.274 m/s) and ran 509 clean
+frames on that seed, but produced zero accepted handoffs or alternations.
+Moving its objective toward the receiving foot and adding measured
+swing-clearance goals still failed to combine useful signed progress,
+healthy landing, and repeated transfer. No experimental controller remains.
+
+Only the read-only trace now totals the signed velocity change by solver
+source for the first transfer window. Windows repository hygiene passed.
+The restored unaided Walk and lake tests remain red: zero alternations and
+a fall before water, respectively. No production behavior, Stand, UI,
+replay, save, terrain, or release change.
+
+Operator follow-up: before treating Stand as reliable, show the actual
+unaided motion beyond the six-second gate. Use a fresh isolated Autopilot
+handoff controller, record actual fixed-step rig poses, and include a
+separate mild-disturbance trial. No changes to Stand behavior, UI, replay,
+the user save, or release status. The motor-only Walk handoff and lake
+crossing remain open.
+
+Walk continuation: rebuild the positive-velocity motor-only reference and
+test whether selecting a two-segment motor plan in advance can anticipate
+the landing rather than only correct the current stance. Count measured
+coordinator handoffs and alternating steps separately; don't change them.
+
+Operator visual review reopens unsupported Stand quality: the actual-pose
+capture shows the neck tipping back, both arms rising with unequal angles,
+and both heels creeping forward in the untouched trial. Measure neutral
+actuation, the finite teacher, and the isolated trained policy on the same
+physical setup. Do not treat survival as stationary balance or hide the
+pose with render changes. Preserve UI, replay, and user saves. The Walk
+handoff and lake crossing are still open; hold release for operator review.
+
+Windows isolated evidence, actual simulator poses, no support helpers: the
+80-update policy's untouched 20 s runs (two seeds) moved the pelvis forward
+0.506–0.509 m and the two heels 0.449–0.480 m. The finite teacher drifted
+0.482–0.484 m; neutral motor commands drifted 0.532–0.534 m. On the first
+trained run at t=1.017 s the neck segment pitched 45.5 degrees back from
+vertical; shoulder-to-hand vectors pitched forward 31.2 and 48.1 degrees.
+The unequal authored arm rest geometry is already present before learning;
+the clip's far-side shading is cosmetic, but the angle difference is real.
+The passive neck stop allows the backwards tilt and the current Stand timer
+can keep counting while cumulative heel excursion grows. Moving the existing
+bounded tangential correction from Verlet history to position made creep worse
+(trained pelvis 0.661–0.663 m); reject that change.
+
+An isolated mass-balanced internal neck spring plus symmetric shoulder/elbow
+targets through the existing motors improved the actual posture: at one
+second, the head segment was 3.9 degrees forward and the two arms were
+within 2 degrees of vertical, without a nudge or back support. Both seeds
+still drifted 0.441–0.446 m at the pelvis. Arm retargeting alone put the arms
+closer together but made head tilt worse; these are coupled, not art fixes.
+The prototype was removed from production. Fixed-camera A/B is retained at
+build/isolated-stand-review/stand-posture-ab-20s.mp4 as diagnostic evidence,
+not a passing build. The existing read-only Stand probe now runs to 20 s
+and prints long-window excursion and posture separately from the 6 s gate.
+
+Walk probes: the two-knot joint-only variant reached landing and reported
+two alternations on one seed, but zero verified load handoffs. Unwinding
+flare lift stopped it at flare with zero alternations; removed the change
+and temporary search commands. Unsupported stationary Stand, sustained dry
+Walk, and lake crossing remain open. No runtime/UI/replay/save change and
+no release.
+
+Final restored Windows verification: the expanded Stand probe ran six seeds
+each for neutral commands, finite teacher, and the isolated saved controller.
+All 18 passed the six-second gate and remained upright for 20 s. The saved
+controller still drifted 0.505–0.515 m, with up to 0.481 m of grounded heel
+excursion and approximately 46 degrees of backward head pitch. Repository
+hygiene and whitespace checks passed. Unchanged Raw Authority dry gait still
+reported zero alternating steps; unchanged authored lake trial still fell
+on dry ground at 6.167 s. No visual or release acceptance claimed.
+
+Operator continuation: keep the visibly better internal neck/arm posture,
+then fix unsupported Human contact so Stand is stationary and Walk transfers
+load on alternating steps before attempting the authored lake. Investigate
+static traction in the position solve rather than hiding drift in the pose or
+zeroing the body. Check finite terrain-dependent normal/traction budgets,
+release, physical momentum, learned action compatibility, and first weight
+transfer. Keep UI, replay, saved files, and existing dry/lake gates intact.
+Show actual fixed-camera motion to the operator before any release.
+
+The 20 s Stand A/B established that solving only tangent history velocity let
+the assembled foot position creep. The Human sole now shares a real, measured
+Coulomb budget between positional stick and dissipative tangent velocity; an
+airborne or unloaded sole receives no grip, and an over-budget sole slips.
+No root, torso, course, or back support is applied. The first matched learned
+Stand comparison reduced 0.51 m to about 0.03 m of pelvis movement, with all
+six probe seeds upright and the neck near vertical. The operator saw visible
+arm shake, confirmed by about 139 degrees/s mean settled arm motion in the
+initial capture. Angular-rate target compensation reduced the shake to 75
+degrees/s but reintroduced 0.40 m drift on one seed. A velocity-only internal
+joint damper also failed a holdout. Removed both. Fixed Stand arm setpoints
+are specified in the rig's rest frame so the slow motors do not chase their
+own moving shoulder frame. Existing policy actions retain bounded residuals.
+
+No Walk qualification: firm-ground forward motion improved from negative
+distance to nearly 3 m, but the opposite sole did not take the load. Moving
+the measured landing target earlier gave earlier touchdown, not a handoff;
+an 18-case finite-motor sweep over stride, height, and lift had zero qualified
+swaps. Removed these teacher experiments and the temporary sweep command.
+Also discarded dynamic re-anchoring after it failed the existing grounded
+ankle Jacobian test. Dry alternating steps, Run, and the authored lake remain
+open. Keep UI, replay, and saved files untouched; no update published.
+
+Final local Windows test: Runner.UnsupportedStandContact and repository
+hygiene passed. Six finite-teacher Stand seeds stayed upright for 20 s,
+both heels registered zero horizontal excursion after the first five seconds,
+and mean settled arm motion was below 0.25 degrees/s. The old isolated
+learned checkpoint was less reliable: three of six passed its old Stand
+qualification; two slid back 0.36 m, and one missed the timer despite little
+drift. Do not rewrite an existing save or claim the old controller is fixed.
+An intermediate candidate passed fresh Autopilot Stand, but the exact final
+candidate has not yet run the fresh-training gate. Final same-seed actual
+pose comparison: build/isolated-stand-review/stand-contact-rest-ab-20s.mp4.
+
+The unchanged dry gate remains red (zero accepted alternations; forward
+2.985 m, reverse still moves the wrong way), and the authored lake trial
+falls on dry sand at 2.967 s. Run has not been qualified. Before release,
+recheck fresh trained Stand across seeds, then obtain physical signed Walk
+and load handoffs before validating lake and Run. No release or native UI,
+replay, or save edit. Whitespace check passed.
+
+Operator continuation: freeze Stand as it is; prioritize repeatable weight
+transfer in Human Walk before Run and the authored lake. Investigate finite
+moving-leg actuator tracking and the actual stance reaction (including
+ankle sign), not another stride/lift sweep. Require both directions and
+unchanged no-assistance, contact and lake checks; retain the UI, replay,
+saves, and unpublished state. Show verified motion before any release.
+
+Moving-leg sweep: 72 finite-actuator trials varied tracking speed, reciprocal
+damping and stance-ankle sign in both directions. A few counted a transient
+step, but none passed the coordinator's measured support handoff. The
+load-before-lift probe also failed to establish a controlled release; in
+reverse the intended planted foot never exceeded 52.6% of normal load.
+Removed both experiments and their temporary actuator overrides.
+
+Kept one concrete moving-contact correction: the coordinator and sole
+observations now measure clearance against the same yielding-soil contact
+plane used by collision, including the existing material-dependent sink.
+No clearance tolerance, load threshold or contact rule was weakened. The
+two-seed fixture checks a loaded flat sole, a lifted toe, zero receiving load,
+and exact repeated-seed agreement. Windows WalkSoilContact, the untouched
+UnsupportedStandContact and repository hygiene passed. The complete dry
+gait and lake gates still failed.
+
+The node-level trace disambiguates load from plant: at frame 156 of the
+forward reference, the receiving left foot carried 4.061 of 4.921 N s
+(82.5%) but only its ball was grounded, with the sole's largest gap about
+13 mm; the previous right support had only its toe down. No verified ownership
+change. Preserve node contacts and resolved sole clearances in the trace.
+
+Late-swing hip-only and hip/knee coordination trials attempted to rotate
+the shank into the saturated ankle's level-sole range. Each yielded one
+counted forward alternation in the dry gate, not a repeatable loaded-heel
+handoff. Reverse still went forward, the body passed beyond the support
+point, and the authored lake still ended on dry sand at approximately 3 s.
+Removed both teacher changes. Keep the verified soil-plane fix and the
+read-only trace only. No working Walk or Run demonstration, no lake pass,
+and no release. Stand, UI, replay and saved files were not edited.
+
+Final restored Windows result: hygiene, Stand and WalkSoilContact pass;
+dry RawAuthority has zero verified alternations (2.937 m forward and wrong
+sign in reverse); the authored lake falls at 2.950 s, x=2.867 m, still on
+dry sand. Rechecked the retained diff and removed all gait trial knobs.
+
+Operator continuation: fix the receiving heel before ball-only loading,
+without changing Stand, UI, replay, saves, or weakening physical purchase.
+Probe early swing ankle preparation and the shank orientation needed to
+stay inside real ankle travel. Judge heel contact and force, repeated
+side swaps, signed displacement, then Run and the authored lake. No
+release without an operator-visible passing demonstration.
+
+Heel preparation evidence: on the dry reference, ankle-only toe-up never
+planted the heel. Preparing before contact and sharing the adjustment with
+finite swing-knee extension yielded heel-first contact and 19 frames with
+heel/ball grounded and the new foot taking the larger normal load. The
+receiving sole was completely flat at frames 143–153; the old stance was
+legitimately rolling onto its toe, so requiring its heel to stay flat held
+the coordinator at landing. The revised handoff still requires two clean
+load receipts and a completely flat receiving sole, but lets the other
+loaded sole roll off. The real dry rollout now records a first verified
+handoff with no root/torso/course assistance; not yet sustained Walk.
+
+Retained Walk-only heel preparation and the loaded roll-off handoff with an
+explicit receiving heel normal reaction. Near-plane or toe-only contact,
+an unloaded trailing foot, and body contact still cannot qualify. The
+final joint-only dry reference repeated the first receipt at frame 139
+(2.33 s), heel impulse 1.01727 N s, with zero helper/actuator mismatches;
+neutral actions had no receipt. This is tested separately by WalkFirstHeel
+and is not the sustained Walk gate. Actual fixed-camera evidence is
+build/isolated-heel-review/first-heel-plant.mp4, including the subsequent fall.
+
+Loaded roll-off exposed stale tangent reservation on unloading. The moving
+sole now drops the portion of the cached reservation outside its reduced
+Coulomb budget without refunding friction as a velocity kick. Separate the
+active manifold tangent report from accumulated physical work/impulse audit.
+Focused tests cover both slip signs and release/replant; Stand's original
+contact behavior was kept. The lake now passes the per-step traction-cap
+assertion but still falls on dry sand around 3.02 s at x=2.710 m.
+
+Discarded test-only faster knee/toe retraction (could start second swing but
+not land it) and 15 capture-guided stance-braking variants (at most one
+verified handoff). Final dry gate remains red: one loaded forward handoff,
+zero sustained alternating steps, and reverse still moves the wrong way.
+Run, sustained Walk, and lake crossing are open. Stand, UI, replay, and
+the user's save remain untouched. No release or publication.
+
+Operator continuation: preserve the verified first heel plant; solve the
+second landing and repeatable unaided alternating Walk, then Run and the
+authored lake. Continue until these locomotion missions are complete. Stand,
+UI, replay and the user's save remain frozen; show passing motion before
+release. At the first exchange the center-of-mass capture point is already
+beyond the new stance footprint, and the old toe stays latched as the heel
+rises. Check physical toe release and second-step reach separately.
+
+Second-step investigation: the untouched first-plant reference loads the left
+heel at frame 139, but its capture point is already beyond the new toe. The old
+toe stays loaded while the heel rises. Separately, on a cloned trajectory that
+did achieve full release, Walk stalled in DEPARTURE because it still required
+the previously verified stance sole to be flat while that sole was doing a real,
+loaded roll. The coordinator now admits that measured load for swing only after
+an earned transfer. A later raised-surface landing can enter PURCHASE early only
+after observed full swing clearance, flat receiving sole, real heel reaction,
+and measured weight acceptance. A separate second loaded sample is still
+required. The first plant, Stand code, UI, replay, and saved files are unchanged.
+
+Test-only stronger/faster motor and world-space foot target trials, without
+setting root pose or injecting floor forces, did obtain a second real heel and
+load transfer after a modified lead-in. Stance, foot-placement, and braking
+sweeps advanced some clones to three transfers, but did not sustain Walk. The
+stronger trials are not the production controller or release evidence. The
+observed stance slipped rearward as center-of-mass speed increased, putting the
+following swing behind the capture point. Walking, Run, and the authored lake
+remain open; do not publish or treat a landing event as a gait pass.
+
+The moving sole now also re-establishes a stale static-friction anchor only
+after the already-loaded stance has slowed, remains in contact, and has spare
+traction on its actual material. The operation updates next-step friction
+memory only; it neither moves a particle nor adds work. The positive/negative
+slip, no-load, high-speed, and insufficient wet traction cases are covered.
+
+After removing the temporary torque/slew controls, the offline deterministic
+motor search (`RunnerRawAuthorityTests --walk-viability-learn`) executed two
+loaded handoffs using only ordinary target requests and stock actuator limits.
+It traveled 2.337 m by the end of the bounded 18-window run. This search is a
+diagnostic, not a shipped controller, learned checkpoint, or gait pass. The
+unchanged production teacher remains at one handoff and zero sustained
+alternations. Windows verification: RepositoryHygiene, UnsupportedStandContact
+(six seeds), WalkSoilContact, WalkFirstHeel (139, 1.01727 N s), and the isolated
+support-transfer checks pass. RawAuthority and the repeated authored-lake gate
+are still red; Human falls on dry sand at x=2.695 m / 3.017 s before water.
+The full V0748 contact/art suite also remains red on its bounded landing
+prerequisite (first non-foot contact at frame 168); its isolated support-transfer
+checks do not substitute for that gait test.
+
+Offline repeat localized the useful control pattern: the left heel stayed at
+x=0.6563 m for frames 180–240 while the right foot moved ahead. It then bore
+3.448 N s versus 1.795 N s on the left at the second receipt (frame 262,
+4.383 s); the right heel contributed 1.036 N s. Use early capture/stance
+stabilization and loaded toe release as the next controller inputs. Do not copy
+a fixed action sequence into Live, replace Raw inference, or train from the
+user's retained save. Future qualification still needs held-out seeds, signed
+gait, sustained alternation, Run, and the full lake from cold start.
+
+The longer 549-frame, 9.15 s offline repeat stayed free of body contact and
+traveled 3.670 m, still with two verified transfers. Actual motion evidence:
+build/isolated-heel-review/viability-two-step.mp4. The third receiving heel
+did contact and the left sole briefly carried most of the load, but the toe
+remained raised. No third handoff was credited. Letting a real heel contact
+enter LANDING after verified swing (without granting PURCHASE) gives the
+finite ankle/toe motors the normal landing-alignment targets sooner; a flat
+receiving sole and the existing two-sample weight check still govern the swap.
+
+Operator eye test rejects the two-transfer clip as staggered walking. The
+actual pose trace reached 29.8 degrees peak torso pitch, 2.07 rad/s peak pitch
+rate, and a 1.95 s gap between the two receipts. Passing a contact event is
+not sufficient. Compare a diagnostic search that also costs pitch, pitch
+rate, and stance slip; judge motion by visible smoothness and repeated cadence
+in addition to signed distance, supported transfers, and no-helper authority.
+
+Operator eye review also flagged neck-attached arms in the offline clip.
+The clip drew every simulation distance link as a limb, including the
+head-to-shoulder triangle braces (2–7 and 2–10). The actual upper arms
+are driven from shoulder nodes 7 and 10, below the torso/neck pivot. Live
+sprite segments already start at those motor pivots. Redraw the diagnostic
+as an anatomical pose, with the real shoulder pivots visible and the neck
+braces excluded from the limb drawing; preserve the full physical topology,
+Stand, UI, replay, and saved state.
+
+Retest of heel-only LANDING preserves the stock first plant and the two
+offline transfers, but did not reach the third transfer in the matched
+18-window run. The separate smoothness-cost search also delivered two,
+with peak pitch 16.94 degrees and peak pitch rate 1.00 rad/s (versus 29.80
+degrees and 2.07 rad/s in the longer original clip); actual progress was
+2.161 m by the end of its bounded search. This is diagnostic evidence, not
+a promoted policy or user-approved gait. Corrected same-motion clip:
+build/isolated-heel-review/viability-shoulders.mp4. Do not release: sustained
+Walk, Run, and authored lake remain open.
+
+Operator continuation: preserve the first loaded heel and qualify a smooth
+third step and subsequent repeatable Walk using only reciprocal joint motors
+and measured ground reactions, then Run and the authored lake. Instrument the
+actual third-contact frames before changing the walking controller: compare
+phase, both soles, the toe motor target/error, and torso motion. Keep Stand,
+UI, replay, and the user's save unchanged. Show a passing build before any
+release. The older two-step clip is not acceptance evidence.
+
+The smoother trace localized its third-step failure to DEPARTURE, not the
+previous clip's unflattened third landing. Frames 264–335 keep the swing
+ball within millimetres of the plane while the heel and toe are clear; the
+swing ankle request saturates at +1 and the other sole bears about 4.4–4.8 N s.
+Motor-only branches can obtain the third receipt by changing knee/ankle
+targets, but the tested branches then pitch over. Candidate correction: ramp
+additional two-link shortening only for a delayed departure after an earned
+transfer on a measurably loaded opposite sole. Do not change contact receipts,
+motor limits, or the startup/first heel trajectory.
+
+Loaded-departure A/B exposed a separate event-gate bug: with the larger
+finite shortening, the third swing has zero load and all three nodes more
+than 20 mm clear on frames 249–252. DEPARTURE nevertheless resets its count
+from two to zero at frame 250 solely because average upward motion turns
+over. Keep the three independent release samples and opposite-sole support,
+but allow a later fully clear sole to satisfy release across the lift apex.
+The first departure, contacts, and weight-acceptance receipts are unchanged.
+
+Torso actuator A/B from real loaded samples found a stable physical sign:
+increasing the stance hip motor target increased forward lean on either
+anatomical side when the motor had room to respond. Ankle-only changes were
+often saturated and produced a small or ambiguous torso response. Try a
+small signed stance-hip PD target after an earned transfer, on actual
+single support only; preserve the first plant and keep this an explicit
+training/teacher action, never a hidden posture force or Raw filter.
+One toe can still report contact while the opposite leg bears most of the
+weight; allow the same hip response only when measured load is strongly
+asymmetric in that case. A genuinely split load or two unsupported feet
+still produces no stance-hip target.
+
+Replaying the same physical motor requests confirms the release correction:
+two receipts at frames 157 and 245, then the third attempt enters SWING at
+frame 250 (previously stuck in DEPARTURE). It rearms at frame 258 on a real
+recontact. In that interval the left knee goes from 172 to 177 degrees of
+extension even as the pelvis rises; knee/ankle motion, not an incorrect
+floor height, brings the foot back down. A true third receipt with stable
+subsequent motion remains the acceptance target, not entering SWING alone.
+
+Final bounded continuation reached 4.072 m with two transfers, peak torso
+pitch 16.94 degrees, and no body contact; the third did not hold. A separate
+eight-window matched-action A/B isolated the new stance hip target: RMS
+pitch and pitch rate fell in three windows and were unchanged in five;
+the largest pitch-RMS reduction was 0.110 to 0.086 rad. The late knee sweeps
+did not find a clean third transfer. Preserve the scoped release/stance
+changes and this partial evidence, not a learned gait claim. The stock first
+heel, unsupported Stand, soil contact and isolated support contracts pass.
+Dry RawAuthority still fails signed sustained alternation; the lake trial
+falls on dry sand at 2.672 m / 3.017 s without reaching water. Run was not
+qualified. No working demonstration or publication; no Stand, UI, replay,
+or user-save edits.

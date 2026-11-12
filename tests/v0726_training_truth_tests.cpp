@@ -18,8 +18,29 @@ int main() {
     const auto quadruped = sim::CreatureBlueprint::quadruped();
     const auto crawler = sim::CreatureBlueprint::crawler4();
     const auto hexapod = sim::CreatureBlueprint::hexapod();
-    for (std::size_t i = 0; i < 4u; ++i) if (!rl::motor_drives_support_branch(humanoid, humanoid.motors[i])) return fail("humanoid leg was not support");
-    for (std::size_t i = 4u; i < humanoid.active_motor_count; ++i) if (rl::motor_drives_support_branch(humanoid, humanoid.motors[i])) return fail("humanoid arm was support");
+    std::size_t humanoid_support_motors = 0u;
+    std::size_t humanoid_manipulator_motors = 0u;
+    std::size_t humanoid_mtp_motors = 0u;
+    for (std::size_t i = 0; i < humanoid.active_motor_count; ++i)
+    {
+        if (rl::motor_drives_support_branch(humanoid, humanoid.motors[i]))
+        {
+            if (i == sim::human_left_toe_action || i == sim::human_right_toe_action)
+                ++humanoid_mtp_motors;
+            else
+                ++humanoid_support_motors;
+        }
+        else if (rl::motor_drives_manipulator_chain(humanoid, i))
+            ++humanoid_manipulator_motors;
+        else
+            return fail("humanoid motor had neither support nor manipulator topology");
+    }
+    if (humanoid_support_motors != 6u)
+        return fail("humanoid did not expose four leg and two ankle support motors");
+    if (humanoid_mtp_motors != 2u)
+        return fail("humanoid did not expose two distinct MTP support motors");
+    if (humanoid_manipulator_motors != 4u)
+        return fail("humanoid did not expose two physical two-joint arms");
     if (!all_support_motors(quadruped)) return fail("quadruped support classification");
     if (!all_support_motors(crawler)) return fail("crawler support classification");
     if (!all_support_motors(hexapod)) return fail("hexapod support classification");

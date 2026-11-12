@@ -6,6 +6,7 @@
 #include <iostream>
 #include <limits>
 #include <string_view>
+#include <vector>
 namespace runner::sim
 {
     struct EnvironmentTestAccess
@@ -100,7 +101,7 @@ namespace runner::sim
                 }
             }
         }
-        static float terrain_volume(const Environment& environment) noexcept
+        static double terrain_volume(const Environment& environment) noexcept
         {
             return environment.terrain_.total_height_volume();
         }
@@ -144,6 +145,294 @@ int main()
         require(std::abs(first.cells()[i].height-second.cells()[i].height)<1.0e-7f, "same seed changed height");
         require(std::abs(first.cells()[i].firmness-second.cells()[i].firmness)<1.0e-7f, "same seed changed firmness");
     }
+    std::array<bool, sandhybrid::material_count> canonical_materials{};
+    std::size_t canonical_occupied_cells = 0u;
+    std::size_t underground_air_cells = 0u;
+    for (std::size_t index = 0; index < first.fine_cells().size(); ++index)
+    {
+        const auto& lhs = first.fine_cells()[index];
+        const auto& rhs = second.fine_cells()[index];
+        require(lhs.same_state(rhs),
+            "same seed changed canonical SandHybrid material cells");
+        const auto material_index = static_cast<std::size_t>(lhs.material());
+        if (lhs.fill > 1.0e-6f
+            && lhs.material() != sandhybrid::Material::empty
+            && lhs.material() != sandhybrid::Material::atmosphere)
+        {
+            ++canonical_occupied_cells;
+            if (material_index < canonical_materials.size())
+                canonical_materials[material_index] = true;
+        }
+        else if (index / sim::DeformableTerrain::cell_count < 152u
+            && lhs.material() == sandhybrid::Material::atmosphere)
+        {
+            ++underground_air_cells;
+        }
+    }
+    require(sim::DeformableTerrain::world_bottom <= -25.0f
+            && sim::DeformableTerrain::world_top >= 25.0f,
+        "canonical 640x360 map does not straddle the authored surface");
+    require(canonical_occupied_cells
+            > sim::DeformableTerrain::cell_count * 140u,
+        "canonical map leaves the visible underground viewport as fallback fill");
+    require(canonical_materials[static_cast<std::size_t>(sandhybrid::Material::sand)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::dirt)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::silt)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::stone)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::grass)],
+        "canonical map omitted a SandHybrid surface or substrate layer");
+    require(canonical_materials[static_cast<std::size_t>(sandhybrid::Material::steel)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::glass)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::water)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::crystal)]
+            && canonical_materials[static_cast<std::size_t>(sandhybrid::Material::power_cell)]
+            && underground_air_cells > 8u * 8u * 16u,
+        "canonical training map omitted constructed rooms, waterworks, or cavern cells");
+    std::size_t grass_surface_columns{};
+    for (std::size_t column = 0u;
+        column < sim::DeformableTerrain::cell_count; ++column)
+    {
+        const auto& surface = first.cells()[column];
+        if (surface.region == sim::TerrainRegion::firm
+            && surface.surface_material == sandhybrid::Material::grass)
+            ++grass_surface_columns;
+        require(surface.region == sim::TerrainRegion::firm
+                || surface.surface_material != sandhybrid::Material::grass,
+            "grass veneer replaced a loose, wet, or gap challenge material");
+    }
+    require(grass_surface_columns > 24u,
+        "connected-world map omitted its canonical firm-ground grass veneer");
+
+    const auto natural_material = [](sandhybrid::Material material) noexcept
+    {
+        return material == sandhybrid::Material::sand
+            || material == sandhybrid::Material::dirt
+            || material == sandhybrid::Material::silt
+            || material == sandhybrid::Material::stone
+            || material == sandhybrid::Material::mud
+            || material == sandhybrid::Material::iron_ore;
+    };
+    std::size_t geology_transitions{};
+    for (std::size_t row = 4u; row < 150u; ++row)
+    {
+        for (std::size_t column = 1u;
+            column < sim::DeformableTerrain::cell_count; ++column)
+        {
+            const auto& left = first.fine_cell(column - 1u, row);
+            const auto& right = first.fine_cell(column, row);
+            if (left.occupied() && right.occupied()
+                && natural_material(left.material())
+                && natural_material(right.material())
+                && left.material() != right.material())
+                ++geology_transitions;
+        }
+    }
+    const bool natural_geology_density = geology_transitions > 900u
+        && geology_transitions < 18'000u;
+    if (!natural_geology_density)
+        std::cerr << "Observed geology transitions: " << geology_transitions
+                  << '\n';
+    require(natural_geology_density,
+        "canonical subsurface is still a flat slab or became checker noise");
+
+    // The facility, waterworks, natural gallery, and construction bay must be
+    // one orthogonally connected canonical-air network.  This catches the old
+    // presentation-only boxes and sealed cavern even when every material was
+    // individually present in the map.
+    constexpr std::size_t network_left = 24u;
+    constexpr std::size_t network_right = 632u;
+    constexpr std::size_t network_bottom = 64u;
+    constexpr std::size_t network_top = 152u;
+    constexpr std::size_t network_cell_count =
+        sim::DeformableTerrain::cell_count
+        * sim::DeformableTerrain::vertical_cell_count;
+    const auto network_index = [](std::size_t column,
+        std::size_t row) noexcept
+    {
+        return row * sim::DeformableTerrain::cell_count + column;
+    };
+    const auto open_at = [&](std::size_t column, std::size_t row) noexcept
+    {
+        return column >= network_left && column < network_right
+            && row >= network_bottom && row < network_top
+            && !first.fine_cell(column, row).occupied();
+    };
+    constexpr std::size_t start_column = 64u;
+    constexpr std::size_t start_row = 116u;
+    require(open_at(start_column, start_row),
+        "west operations gallery lost its canonical-air interior");
+    std::vector<std::uint8_t> visited(network_cell_count, 0u);
+    std::vector<std::size_t> pending{};
+    pending.push_back(network_index(start_column, start_row));
+    visited[pending.back()] = 1u;
+    std::size_t connected_open_cells{};
+    while (!pending.empty())
+    {
+        const std::size_t index = pending.back();
+        pending.pop_back();
+        ++connected_open_cells;
+        const std::size_t column = index
+            % sim::DeformableTerrain::cell_count;
+        const std::size_t row = index
+            / sim::DeformableTerrain::cell_count;
+        const std::array<std::array<std::ptrdiff_t, 2>, 4> neighbors{{
+            {{ -1, 0 }}, {{ 1, 0 }}, {{ 0, -1 }}, {{ 0, 1 }} }};
+        for (const auto& offset : neighbors)
+        {
+            const auto next_column = static_cast<std::ptrdiff_t>(column)
+                + offset[0];
+            const auto next_row = static_cast<std::ptrdiff_t>(row) + offset[1];
+            if (next_column < 0 || next_row < 0)
+                continue;
+            const auto candidate_column = static_cast<std::size_t>(next_column);
+            const auto candidate_row = static_cast<std::size_t>(next_row);
+            if (!open_at(candidate_column, candidate_row))
+                continue;
+            const std::size_t candidate = network_index(
+                candidate_column, candidate_row);
+            if (visited[candidate] != 0u)
+                continue;
+            visited[candidate] = 1u;
+            pending.push_back(candidate);
+        }
+    }
+    const auto connected = [&](std::size_t column, std::size_t row) noexcept
+    {
+        return visited[network_index(column, row)] != 0u;
+    };
+    const std::array<bool, 4> network_portals{
+        connected(190u, 128u), connected(320u, 105u),
+        connected(410u, 116u), connected(560u, 124u) };
+    if (!std::ranges::all_of(network_portals,
+            [](bool connected_portal) { return connected_portal; }))
+    {
+        std::cerr << "Observed connected portals: waterworks="
+            << network_portals[0] << " west-cavern=" << network_portals[1]
+            << " east-cavern=" << network_portals[2]
+            << " construction=" << network_portals[3]
+            << " component-cells=" << connected_open_cells
+            << " open=" << open_at(190u, 128u) << '/'
+            << open_at(320u, 105u) << '/' << open_at(410u, 116u) << '/'
+            << open_at(560u, 124u) << '\n';
+    }
+    require(std::ranges::all_of(network_portals,
+                [](bool connected_portal) { return connected_portal; }),
+        "lab, waterworks, cavern, and construction bay are disconnected");
+    require(connected_open_cells > 7'000u
+            && connected_open_cells < 22'000u,
+        "connected training facility is missing or became a screen-sized void");
+
+    std::size_t maximum_network_horizontal_run{};
+    std::size_t maximum_network_vertical_run{};
+    std::size_t maximum_network_horizontal_row{};
+    std::size_t maximum_network_vertical_column{};
+    for (std::size_t row = network_bottom; row < network_top; ++row)
+    {
+        std::size_t run{};
+        for (std::size_t column = network_left;
+            column < network_right; ++column)
+        {
+            run = connected(column, row) ? run + 1u : 0u;
+            if (run > maximum_network_horizontal_run)
+            {
+                maximum_network_horizontal_run = run;
+                maximum_network_horizontal_row = row;
+            }
+        }
+    }
+    for (std::size_t column = network_left; column < network_right; ++column)
+    {
+        std::size_t run{};
+        for (std::size_t row = network_bottom; row < network_top; ++row)
+        {
+            run = connected(column, row) ? run + 1u : 0u;
+            if (run > maximum_network_vertical_run)
+            {
+                maximum_network_vertical_run = run;
+                maximum_network_vertical_column = column;
+            }
+        }
+    }
+    if (maximum_network_horizontal_run
+            > runner::course_geometry::maximum_cavern_open_span_cells
+        || maximum_network_vertical_run
+            > runner::course_geometry::maximum_facility_clear_height_cells)
+    {
+        std::cerr << "Observed connected open runs: horizontal="
+            << maximum_network_horizontal_run << "@row"
+            << maximum_network_horizontal_row << " vertical="
+            << maximum_network_vertical_run << "@column"
+            << maximum_network_vertical_column << '\n';
+    }
+    require(maximum_network_horizontal_run
+                <= runner::course_geometry::maximum_cavern_open_span_cells
+            && maximum_network_vertical_run
+                >= runner::course_geometry::minimum_facility_clear_height_cells
+            && maximum_network_vertical_run
+                <= runner::course_geometry::maximum_facility_clear_height_cells,
+        "connected facility regressed to a giant rectangular compartment");
+    require(first.fine_cell(40u, 104u).structural()
+            && first.fine_cell(40u, 104u).authored()
+            && first.fine_cell(40u, 104u).material()
+                == sandhybrid::Material::steel,
+        "natural room boundary lost its canonical authored steel support");
+
+    const auto shallow_water = first.challenge_for(
+        director::ChallengeKind::shallow_water);
+    require(shallow_water.has_value(),
+        "surface progression lost the shallow-water challenge");
+    const std::size_t lake_column = static_cast<std::size_t>(std::lround(
+        shallow_water->center() / sim::DeformableTerrain::fine_cell_spacing));
+    std::size_t lake_surface_row{};
+    for (std::size_t row = 0u;
+        row < sim::DeformableTerrain::vertical_cell_count; ++row)
+        if (first.fine_cell(lake_column, row).occupied())
+            lake_surface_row = row;
+    const auto& lake_surface_cell = first.fine_cell(
+        lake_column, lake_surface_row);
+    const auto& lake_aquifer_cell = first.fine_cell(
+        lake_column, lake_surface_row - 4u);
+    require(lake_surface_cell.material() != sandhybrid::Material::water
+            && lake_aquifer_cell.material() == sandhybrid::Material::water
+            && lake_aquifer_cell.authored()
+            && !lake_aquifer_cell.structural(),
+        "graded surface lake is not coupled to canonical capped groundwater");
+    require(canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::conveyor)]
+            && canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::smelter)]
+            && canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::assembler)]
+            && canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::factory_core)]
+            && canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::gold)]
+            && canonical_materials[static_cast<std::size_t>(
+                sandhybrid::Material::aluminum)],
+        "constructed labs lost their aligned machinery/material language");
+
+    sim::DeformableTerrain alternate_substrate{};
+    alternate_substrate.reset(0x87654321u, 0.72f);
+    bool found_seeded_deep_transition = false;
+    for (std::size_t row = 0;
+        row + 24u < sim::DeformableTerrain::vertical_cell_count; ++row)
+    {
+        for (std::size_t column = 0;
+            column < sim::DeformableTerrain::cell_count; ++column)
+        {
+            const auto& lhs = first.fine_cell(column, row);
+            const auto& rhs = alternate_substrate.fine_cell(column, row);
+            if (lhs.material() != rhs.material())
+            {
+                found_seeded_deep_transition = true;
+                break;
+            }
+        }
+        if (found_seeded_deep_transition)
+            break;
+    }
+    require(found_seeded_deep_transition,
+        "different seeds produced an identical canonical substrate map");
     bool found_exact_cell_transition = false;
     for (std::size_t i = 0; i + 1u < sim::DeformableTerrain::cell_count; ++i)
     {
@@ -163,8 +452,6 @@ int main()
         break;
     }
     require(found_exact_cell_transition, "seed did not expose an exact-cell terrain transition");
-    std::array<sim::TerrainRegion, 3> previous_middle{};
-    bool saw_distinct_middle_order = false;
     for (std::uint64_t seed = 1u; seed <= 16u; ++seed)
     {
         sim::DeformableTerrain varied{};
@@ -198,6 +485,12 @@ int main()
             "seeded terrain omitted a firm, sand, mud, water, or hole region");
         require(middle_count == middle.size(),
             "seeded terrain middle-band order could not be observed");
+        require(middle == std::array{
+                sim::TerrainRegion::firm,
+                sim::TerrainRegion::waterlogged,
+                sim::TerrainRegion::shallow_water },
+            "course no longer progresses from dry recovery through saturated "
+            "ground into open water");
         require(maximum_shallow_depth > 0.05f,
             "shallow-water band has no physical interior water depth");
         require(minimum_hole_height < -0.20f,
@@ -216,12 +509,161 @@ int main()
             require(boundary_delta < 0.11f,
                 "foundation terrain contains an invisible curb-sized ledge");
         }
-        if (seed > 1u && middle != previous_middle)
-            saw_distinct_middle_order = true;
-        previous_middle = middle;
+        const auto challenges = varied.terrain_challenges();
+        require(challenges[0].region == sim::TerrainRegion::firm
+                && challenges[1].region == sim::TerrainRegion::dry_sand
+                && challenges[2].region == sim::TerrainRegion::firm
+                && challenges[3].region == sim::TerrainRegion::waterlogged
+                && challenges[4].region == sim::TerrainRegion::shallow_water
+                && challenges[5].stable_id
+                    == sim::DeformableTerrain::post_lake_recovery_challenge_id
+                && challenges[5].region == sim::TerrainRegion::firm
+                && challenges[6].region == sim::TerrainRegion::hole,
+            "terrain challenge graph lost its progressive approach/lake/"
+            "recovery/gap sequence");
+        require(challenges[3].length() >= 6.0f
+                && challenges[4].length() >= 7.0f
+                && challenges[5].length() >= 3.25f
+                && challenges[6].length() >= 5.0f,
+            "a physical terrain lesson or post-lake recovery runway is too short");
+        for (std::size_t left = 0u; left < challenges.size(); ++left)
+        {
+            require(challenges[left].stable_id != 0u
+                    && challenges[left].sequence == left
+                    && challenges[left].end > challenges[left].begin,
+                "terrain challenge identity, order, or extent is invalid");
+            for (std::size_t right = left + 1u; right < challenges.size(); ++right)
+                require(challenges[left].stable_id != challenges[right].stable_id,
+                    "terrain challenge graph reused a stable physical identity");
+        }
+
+        const auto shallow = varied.challenge_for(
+            director::ChallengeKind::shallow_water);
+        require(shallow.has_value(),
+            "progressive terrain graph omitted its open-water lesson");
+        const float lake_center = shallow->center();
+        const float lake_depth = varied.water_depth_at(lake_center);
+        require(lake_depth >= 0.24f
+                && std::abs(varied.water_surface_at(lake_center - 0.50f)
+                    - varied.water_surface_at(lake_center + 0.50f)) < 1.0e-6f,
+            "lake lost its full-depth, level canonical-cell interior");
+        require(varied.region_at(challenges[5].center())
+                    == sim::TerrainRegion::firm
+                && varied.water_depth_at(challenges[5].center()) == 0.0f,
+            "far shore does not provide a real dry recovery plant before the gap");
+
+        require(!varied.fine_cell(64u, 116u).occupied()
+                && !varied.fine_cell(320u, 105u).occupied()
+                && !varied.fine_cell(410u, 116u).occupied()
+                && !varied.fine_cell(560u, 124u).occupied(),
+            "a different seed sealed a stable facility/cavern portal");
+        const std::size_t seeded_lake_column = static_cast<std::size_t>(
+            std::lround(lake_center
+                / sim::DeformableTerrain::fine_cell_spacing));
+        std::size_t seeded_lake_surface_row{};
+        for (std::size_t row = 0u;
+            row < sim::DeformableTerrain::vertical_cell_count; ++row)
+            if (varied.fine_cell(seeded_lake_column, row).occupied())
+                seeded_lake_surface_row = row;
+        require(seeded_lake_surface_row >= 4u
+                && varied.fine_cell(seeded_lake_column,
+                    seeded_lake_surface_row).material()
+                    != sandhybrid::Material::water
+                && varied.fine_cell(seeded_lake_column,
+                    seeded_lake_surface_row - 4u).material()
+                    == sandhybrid::Material::water,
+            "a different seed separated the graded lake from its capped aquifer");
+
+        for (std::size_t column = 0u;
+            column + 1u < sim::DeformableTerrain::cell_count; ++column)
+        {
+            const auto material = varied.cells()[column].surface_material;
+            require(material == sandhybrid::Material::grass
+                    || material == sandhybrid::Material::dirt
+                    || material == sandhybrid::Material::sand
+                    || material == sandhybrid::Material::mud
+                    || material == sandhybrid::Material::stone,
+                "an underground facility protrudes into walk-course collision");
+            const float rise = std::abs(varied.cells()[column + 1u].height
+                - varied.cells()[column].height);
+            if (rise
+                > runner::course_geometry::traversable_neighbor_rise_meters)
+            {
+                std::cerr << "terrain seam seed=" << seed
+                    << " column=" << column
+                    << " x=" << static_cast<float>(column)
+                        * sim::DeformableTerrain::fine_cell_spacing
+                    << " rise=" << rise
+                    << " left=" << varied.cells()[column].height
+                    << " right=" << varied.cells()[column + 1u].height
+                    << " regions="
+                    << sim::terrain_region_name(varied.cells()[column].region)
+                    << '/' << sim::terrain_region_name(
+                        varied.cells()[column + 1u].region) << '\n';
+            }
+            require(rise
+                    <= runner::course_geometry::traversable_neighbor_rise_meters,
+                "natural course surface contains a curb-sized hidden seam");
+        }
+
+        for (const director::ChallengeKind kind : {
+            director::ChallengeKind::step, director::ChallengeKind::ramp })
+        {
+            const auto challenge = varied.challenge_for(kind);
+            require(challenge.has_value(),
+                "step/ramp overlay disappeared from the connected course");
+            const std::size_t column = static_cast<std::size_t>(std::lround(
+                challenge->center() / sim::DeformableTerrain::fine_cell_spacing))
+                % sim::DeformableTerrain::cell_count;
+            const sim::DeformableTerrain::FineCell* top = nullptr;
+            for (std::size_t row = 0u;
+                row < sim::DeformableTerrain::vertical_cell_count; ++row)
+            {
+                const auto& candidate = varied.fine_cell(column, row);
+                if (candidate.occupied())
+                    top = &candidate;
+            }
+            require(top != nullptr && top->authored() && !top->structural()
+                    && varied.region_at(challenge->center())
+                        == sim::TerrainRegion::firm,
+                "walk/run step or ramp is a structural wall or loose compound test");
+        }
     }
-    require(saw_distinct_middle_order,
-        "terrain material-band order is fixed across seeds");
+
+    // Difficulty changes physical magnitude, never ordering, shore topology,
+    // or the deterministic cell construction for an identical input tuple.
+    for (const float difficulty : { 0.0f, 1.0f })
+    {
+        constexpr std::array<std::uint64_t, 3> adversarial_seeds{
+            1ULL, 0x8000000000000000ULL, 0xffffffffffffffffULL };
+        for (const std::uint64_t seed : adversarial_seeds)
+        {
+            sim::DeformableTerrain extreme_a{};
+            sim::DeformableTerrain extreme_b{};
+            extreme_a.reset(seed, difficulty);
+            extreme_b.reset(seed, difficulty);
+            const auto shallow = extreme_a.challenge_for(
+                director::ChallengeKind::shallow_water);
+            require(shallow.has_value()
+                    && extreme_a.water_depth_at(shallow->center())
+                        >= 0.10f + difficulty * 0.16f,
+                "adversarial seed/difficulty removed the lake interior");
+            require(extreme_a.terrain_challenges()
+                    == extreme_b.terrain_challenges(),
+                "repeated seed/difficulty changed challenge construction");
+            for (std::size_t column = 0u;
+                column < sim::DeformableTerrain::cell_count; ++column)
+            {
+                require(extreme_a.cells()[column].height
+                            == extreme_b.cells()[column].height
+                        && extreme_a.cells()[column].water_depth
+                            == extreme_b.cells()[column].water_depth
+                        && extreme_a.fine_cell(column, 0u).same_state(
+                            extreme_b.fine_cell(column, 0u)),
+                    "repeated adversarial terrain tuple changed canonical state");
+            }
+        }
+    }
 
     const auto same_terrain = [](const sim::DeformableTerrain& subject,
         const auto& cells, const auto& fine_cells)
@@ -310,13 +752,13 @@ int main()
     constexpr float x=3.5f;
     const auto immutable_cells = first.cells();
     const auto immutable_fine_cells = first.fine_cells();
-    const float volume=first.total_height_volume();
+    const double volume=first.total_height_volume();
     for(int i=0;i<240;++i){first.apply_pressure(x,4.0f,5.0f,1.0f/20.0f);first.step(1.0f/20.0f);}
     require(same_terrain(first,immutable_cells,immutable_fine_cells),
         "foot contact changed immutable authored pixel cells");
     require(std::abs(first.total_height_volume()-volume)<2.0e-5f,
         "immutable contact path changed terrain volume");
-    const float deposited=first.total_height_volume(); first.deposit(18.0f,0.12f,0.20f);
+    const double deposited=first.total_height_volume(); first.deposit(18.0f,0.12f,0.20f);
     require(std::abs((first.total_height_volume()-deposited)-0.12f)<2.0e-4f,"deposit lost volume");
     const float slope=first.maximum_neighbor_delta();
     for(int i=0;i<240;++i) first.step(1.0f/60.0f);
@@ -343,7 +785,7 @@ int main()
     }
     require(found_firm, "material-truth test could not find firm dirt");
     const float firm_height = firm_truth.height_at(firm_x);
-    const float firm_volume = firm_truth.total_height_volume();
+    const double firm_volume = firm_truth.total_height_volume();
     const sandhybrid::Material firm_material = firm_truth.surface_material_at(firm_x);
     for (int iteration = 0; iteration < 120; ++iteration)
         firm_truth.apply_pressure(firm_x, 4.0f, 5.0f, 1.0f / 60.0f);
@@ -389,7 +831,7 @@ int main()
             && granular.material_particles().empty()
             && !granular.granular_block_present(),
         "granular hazards spawned before gait and shuttle readiness");
-    const float granular_volume = sim::EnvironmentTestAccess::terrain_volume(granular);
+    const double granular_volume = sim::EnvironmentTestAccess::terrain_volume(granular);
     sim::EnvironmentTestAccess::prepare_granular_event(granular, 0u);
     require(granular.material_event_count() == 1u
             && !granular.material_particles().empty()
@@ -442,7 +884,8 @@ int main()
             static_cast<float>(subject.granular_hazard_active()),
             static_cast<float>(subject.granular_hazard_safe()),
             static_cast<float>(subject.granular_block_present()),
-            sim::EnvironmentTestAccess::terrain_volume(subject) };
+            static_cast<float>(
+                sim::EnvironmentTestAccess::terrain_volume(subject)) };
         for (const sim::MaterialParticle& particle : subject.material_particles())
             result.insert(result.end(), { static_cast<float>(particle.kind),
                 particle.position.x, particle.position.y,
@@ -545,11 +988,22 @@ int main()
     escape.set_course(sim::CourseStage::moving_hazards,0.75f);
     sim::EnvironmentTestAccess::set_terrain_progress(escape, 6.0f);
     const Vec2 escape_root=sim::EnvironmentTestAccess::root_position(escape);
-    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-1.05f,14.0f,0.22f);
-    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.35f,10.0f,0.18f);
-    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x+0.10f,7.0f,0.20f);
+    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-1.35f,3.50f,0.22f);
+    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.85f,3.50f,0.22f);
+    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x-0.35f,2.50f,0.18f);
+    sim::EnvironmentTestAccess::deposit_world(escape,escape_root.x+0.10f,1.75f,0.20f);
     sim::EnvironmentTestAccess::refresh_material_metrics(escape,1.0f/60.0f);
     require(escape.burial_depth()>0.05f,"partial burial scenario produced no burial depth");
+    if (escape.free_space_direction() <= 0.0f)
+        std::cerr << "partial burial diagnostic root=" << escape_root.x
+            << " burial=" << escape.burial_depth()
+            << " free=" << escape.free_space_direction()
+            << " ground=" << escape.ground_height_at(escape_root.x - 1.50f)
+                << ',' << escape.ground_height_at(escape_root.x - 0.75f)
+                << ',' << escape.ground_height_at(escape_root.x)
+                << ',' << escape.ground_height_at(escape_root.x + 0.75f)
+                << ',' << escape.ground_height_at(escape_root.x + 1.50f)
+            << '\n';
     require(escape.free_space_direction()>0.0f,"partial burial did not identify the open escape side");
 
     sim::Environment trapped(sim::CreatureBlueprint::quadruped(),0xB091EDu);

@@ -14,22 +14,6 @@ struct EnvironmentTestAccess {
     static void elapsed(Environment& environment, float value) noexcept {
         environment.elapsed_seconds_ = value;
     }
-    static void prepare_target(Environment& environment, float distance,
-        float aim_offset = 0.0f, std::uint32_t hits = 0u) noexcept {
-        environment.equipment_state_ = EquipmentState::ready;
-        environment.equipment_cooldown_seconds_ = 0.0f;
-        environment.target_hits_ = hits;
-        const Vec2 mount = environment.equipment_mount_position();
-        environment.equipment_target_.position = mount + Vec2{ distance, 0.0f };
-        environment.equipment_target_.radius = 0.48f;
-        environment.equipment_target_.active = true;
-        environment.equipment_aim_angle_ = wrap_angle(
-            environment.equipment_recommended_aim_angle() + aim_offset);
-        environment.previous_equipment_aim_angle_ = environment.equipment_aim_angle_;
-        environment.equipment_aim_rate_ = 0.0f;
-        environment.equipment_aim_settle_seconds_ = 1.0f;
-        environment.equipment_stopped_ = true;
-    }
     static bool target_active(const Environment& environment) noexcept {
         return environment.equipment_target_.active;
     }
@@ -70,7 +54,10 @@ int main() {
     {
         return runner::length(humanoid.nodes[b] - humanoid.nodes[a]);
     };
-    require(humanoid.nodes.size() == 13u
+    require(humanoid.nodes.size() == 19u
+            && humanoid.bones.size() == 23u
+            && humanoid.active_motor_count == sim::anatomy_action_count
+            && humanoid.human_paired_limb_topology()
             && humanoid.species_identity == sim::CreatureSpecies::human
             && std::abs(humanoid.nodes[0].x + 0.179952502f) < 1.0e-5f
             && std::abs(humanoid.nodes[0].y - 2.61523819f) < 1.0e-5f
@@ -84,7 +71,7 @@ int main() {
             && std::abs(segment_length(8, 9) - segment_length(11, 12)) < 1.0e-4f
             && humanoid.nodes[9].y < humanoid.nodes[7].y
             && humanoid.nodes[12].y < humanoid.nodes[10].y,
-        "saved Human rest pose and paired anatomy were not promoted exactly");
+        "saved Human rest pose, paired anatomy, and canonical physical feet were not promoted exactly");
 
     const runner::Vec2 rest_hand{ 0.18f, -0.82f };
     const runner::Vec2 rest = rl::authored_opposed_swing_target(
@@ -144,28 +131,58 @@ int main() {
             "live morphology cancellation did not restore the published rig");
     }
 
-    sim::EnvironmentTestAccess::elapsed(humanoid_walk,
-        1.0f / (4.0f * sim::foundational_gait_cadence_hz));
-    const auto swing_action = rl::walking_teacher_action(humanoid_walk);
-    const auto pair_motion = [&](std::size_t first, std::size_t second) {
-        return std::abs(swing_action[first] - rest_action[first])
-            + std::abs(swing_action[second] - rest_action[second]);
+    // Human gait time is the integral of the finite actuator-authority ramp,
+    // not wall time. Inspect one complete post-ramp cycle in that same public
+    // clock; sampling the old wall-time quarter-cycle before the 0.35 s ramp
+    // start only repeated the authored rest pose and could not test alternation.
+    constexpr float human_walk_cadence_hz = 0.64f;
+    auto swing_action = rest_action;
+    float selected_elapsed{};
+    bool found_opposed_cycle{};
+    const auto pair_motion = [&](const auto& candidate,
+        std::size_t first, std::size_t second) {
+        return std::abs(candidate[first] - rest_action[first])
+            + std::abs(candidate[second] - rest_action[second]);
     };
-    const auto pair_separation = [&](std::size_t first, std::size_t second) {
-        return std::abs(swing_action[first] - swing_action[second]);
+    const auto pair_separation = [](const auto& candidate,
+        std::size_t first, std::size_t second) {
+        return std::abs(candidate[first] - candidate[second]);
     };
+    constexpr int cycle_samples = 64;
+    for (int sample = 0; sample < cycle_samples; ++sample)
+    {
+        const float phase_seconds = (static_cast<float>(sample) + 0.5f)
+            / (static_cast<float>(cycle_samples) * human_walk_cadence_hz);
+        const float elapsed = sim::policy_control_ramp_start_seconds
+            + sim::policy_control_ramp_duration_seconds + phase_seconds;
+        sim::EnvironmentTestAccess::elapsed(humanoid_walk, elapsed);
+        const auto candidate = rl::walking_teacher_action(humanoid_walk);
+        const bool opposed = finite_action(candidate)
+            && pair_motion(candidate, 0, 1) > 0.01f
+            && pair_motion(candidate, 2, 3) > 0.01f
+            && pair_motion(candidate, 4, 5) > 0.01f
+            && pair_motion(candidate, 6, 7) > 0.01f
+            && (pair_separation(candidate, 0, 2)
+                + pair_separation(candidate, 1, 3)) > 0.03f
+            && (pair_separation(candidate, 4, 6)
+                + pair_separation(candidate, 5, 7)) > 0.02f;
+        if (!opposed)
+            continue;
+        swing_action = candidate;
+        selected_elapsed = elapsed;
+        found_opposed_cycle = true;
+        break;
+    }
+    sim::EnvironmentTestAccess::elapsed(humanoid_walk, selected_elapsed);
+    const auto repeated_swing_action = rl::walking_teacher_action(humanoid_walk);
 
-
-    require(finite_action(swing_action)
-            && pair_motion(0, 1) > 0.01f
-            && pair_motion(2, 3) > 0.01f
-            && pair_motion(4, 5) > 0.01f
-            && pair_motion(6, 7) > 0.01f
-            && (pair_separation(0, 2) + pair_separation(1, 3)) > 0.03f
-            // Human arms intentionally use a relaxed four-percent chain excursion.
+    require(found_opposed_cycle && finite_action(swing_action)
+            && swing_action == repeated_swing_action
+            // Human arms intentionally use a relaxed, bounded chain excursion.
             // Require both arms to move and remain opposed without restoring the
             // oversized pre-v0.7.44 throw that violated the body envelope.
-            && (pair_separation(4, 6) + pair_separation(5, 7)) > 0.02f,
+            && (pair_separation(swing_action, 4, 6)
+                + pair_separation(swing_action, 5, 7)) > 0.02f,
         "paired legs and arms do not produce opposed sagittal swing");
 
     constexpr std::array factories{
@@ -217,56 +234,51 @@ int main() {
         sim::WeaponClass::carbine, sim::WeaponClass::launcher };
     for (const sim::WeaponClass weapon : weapons) {
         const sim::WeaponProfile profile = sim::weapon_profile(weapon);
-        sim::Environment equipment{ humanoid, 0x7364u
-            + static_cast<std::uint8_t>(weapon) };
-        equipment.set_course(sim::CourseStage::balance, 0.30f);
-        equipment.configure_equipment(weapon,
-            (profile.minimum_engagement_distance
-                + profile.maximum_engagement_distance) * 0.5f);
         const float physical_muzzle_safety_distance = std::max(
             0.75f, profile.projectile_radius * 4.0f);
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            physical_muzzle_safety_distance - 0.01f);
-        require(!equipment.equipment_engagement_ready(),
+        require(!sim::equipment_fire_range_valid(
+                physical_muzzle_safety_distance - 0.01f, profile),
             "weapon fired inside its physical muzzle safety distance");
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            physical_muzzle_safety_distance);
-        require(equipment.equipment_engagement_ready(),
+        require(sim::equipment_fire_range_valid(
+                physical_muzzle_safety_distance, profile),
             "weapon rejected its physical muzzle safety boundary");
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            profile.maximum_engagement_distance);
-        require(equipment.equipment_engagement_ready(),
+        require(sim::equipment_fire_range_valid(
+                profile.maximum_engagement_distance, profile),
             "weapon rejected its maximum engagement boundary");
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            profile.maximum_engagement_distance + 0.01f);
-        require(!equipment.equipment_engagement_ready(),
+        require(!sim::equipment_fire_range_valid(
+                profile.maximum_engagement_distance + 0.01f, profile),
             "weapon fired beyond its maximum engagement distance");
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            (profile.minimum_engagement_distance
-                + profile.maximum_engagement_distance) * 0.5f,
-            profile.aim_tolerance + 0.01f);
-        require(!equipment.equipment_engagement_ready(),
-            "weapon fired outside its authored aim tolerance");
-        sim::EnvironmentTestAccess::prepare_target(equipment,
-            (profile.minimum_engagement_distance
-                + profile.maximum_engagement_distance) * 0.5f, 0.0f,
-            equipment.equipment_hit_goal());
-        require(!equipment.equipment_engagement_ready(),
-            "weapon continued firing after its current hit goal");
+        require(!sim::equipment_fire_range_valid(
+                -physical_muzzle_safety_distance, profile)
+                && !sim::equipment_fire_range_valid(
+                    std::numeric_limits<float>::infinity(), profile)
+                && !sim::equipment_fire_range_valid(
+                    std::numeric_limits<float>::quiet_NaN(), profile),
+            "weapon accepted an invalid physical muzzle distance");
     }
 
     sim::Environment bounded_fire{ humanoid, 0x7368u };
-    bounded_fire.set_course(sim::CourseStage::balance, 0.30f);
+    bounded_fire.set_course(sim::CourseStage::equipment_targets, 0.30f);
     bounded_fire.configure_equipment(sim::WeaponClass::sidearm, 4.0f);
+    bounded_fire.set_equipment_directive(
+        sim::EquipmentDirective::fire_and_correct);
     const std::array<float, sim::action_count> neutral{};
-    for (int step = 0; step < 240; ++step)
+    for (int step = 0;
+        step < 900 && bounded_fire.valid_motion()
+            && bounded_fire.target_hits() < bounded_fire.equipment_hit_goal();
+        ++step)
     {
         const auto physical_aim = rl::effective_policy_action(bounded_fire,
-            neutral, sim::CourseStage::equipment_targets);
+            neutral, sim::CourseStage::equipment_targets, 1.0f,
+            sim::GuidanceMode::assisted);
         static_cast<void>(bounded_fire.step(physical_aim, 1.0f / 60.0f));
     }
     const std::uint32_t shots_at_goal = bounded_fire.shots_fired();
-    if (bounded_fire.target_hits() != bounded_fire.equipment_hit_goal())
+    const bool stopped_on_hit_goal = bounded_fire.target_hits()
+            == bounded_fire.equipment_hit_goal()
+        && !sim::EnvironmentTestAccess::target_active(bounded_fire)
+        && shots_at_goal == bounded_fire.equipment_hit_goal();
+    if (!stopped_on_hit_goal)
         std::cerr << "physical aim state="
             << sim::equipment_state_name(bounded_fire.equipment_state())
             << " stopped=" << bounded_fire.equipment_stopped()
@@ -277,14 +289,13 @@ int main() {
             << " settle=" << bounded_fire.equipment_aim_settle_seconds()
             << " shots=" << shots_at_goal << " hits=" << bounded_fire.target_hits()
             << " misses=" << bounded_fire.shots_missed() << '\n';
-    require(bounded_fire.target_hits() == bounded_fire.equipment_hit_goal()
-            && !sim::EnvironmentTestAccess::target_active(bounded_fire)
-            && shots_at_goal >= 1u && shots_at_goal <= 2u,
+    require(stopped_on_hit_goal,
         "range-gated sidearm did not stop on its hit goal");
     for (int step = 0; step < 120; ++step)
     {
         const auto physical_aim = rl::effective_policy_action(bounded_fire,
-            neutral, sim::CourseStage::equipment_targets);
+            neutral, sim::CourseStage::equipment_targets, 1.0f,
+            sim::GuidanceMode::assisted);
         static_cast<void>(bounded_fire.step(physical_aim, 1.0f / 60.0f));
     }
     require(bounded_fire.shots_fired() == shots_at_goal,

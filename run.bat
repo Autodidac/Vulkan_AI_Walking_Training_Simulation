@@ -19,7 +19,7 @@ goto failed
 set "RUNNER_EXE=%~dp0build\windows-release\Release\Runner.exe"
 if exist "%RUNNER_EXE%" goto launch
 
-echo Runner has not been built yet. Building the Windows Release target...
+echo Epoch2DWalkEngine Runner example has not been built yet. Building the Windows Release target...
 echo.
 
 where cmake >nul 2>nul
@@ -53,16 +53,19 @@ set "RUNNER_RESULT=%ERRORLEVEL%"
 popd
 if not "%RUNNER_RESULT%"=="0" (
     echo.
-    echo Runner exited with code %RUNNER_RESULT%.
-    pause
+    echo Epoch2DWalkEngine Runner example exited with code %RUNNER_RESULT%.
+    rem Diagnostics and CI launch this file with arguments. Never turn a
+    rem non-interactive failure into an unbounded pause; retain the friendly
+    rem prompt only for a user who opened the launcher without arguments.
+    if "%~1"=="" pause
 )
 exit /b %RUNNER_RESULT%
 
 :build_failed
 echo.
-echo ERROR: Runner failed to configure or build.
+echo ERROR: Epoch2DWalkEngine Runner example failed to configure or build.
 
 :failed
 echo.
-pause
+if "%~1"=="" pause
 exit /b 1

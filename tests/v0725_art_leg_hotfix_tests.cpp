@@ -31,14 +31,14 @@ namespace runner::sim
 
             const std::uint16_t hip = rig.motors[0].pivot;
             const std::uint16_t left_knee = rig.motors[0].c;
-            const std::uint16_t left_foot = rig.motors[1].c;
+            const std::uint16_t left_ankle = rig.motors[1].c;
             const std::uint16_t right_knee = rig.motors[2].c;
-            const std::uint16_t right_foot = rig.motors[3].c;
+            const std::uint16_t right_ankle = rig.motors[3].c;
             if (!environment.valid_node(hip)
                 || !environment.valid_node(left_knee)
-                || !environment.valid_node(left_foot)
+                || !environment.valid_node(left_ankle)
                 || !environment.valid_node(right_knee)
-                || !environment.valid_node(right_foot))
+                || !environment.valid_node(right_ankle))
                 return;
 
             for (Particle& particle : environment.particles_)
@@ -49,8 +49,8 @@ namespace runner::sim
                     environment.particles_[index].grounded = true;
             }
 
-            const Vec2 left_support = environment.particles_[left_foot].position;
-            const Vec2 right_support = environment.particles_[right_foot].position;
+            const Vec2 left_support = environment.particles_[left_ankle].position;
+            const Vec2 right_support = environment.particles_[right_ankle].position;
             const Vec2 old_hip = environment.particles_[hip].position;
             const Vec2 collapsed_hip{
                 0.5f * (left_support.x + right_support.x),
@@ -61,6 +61,7 @@ namespace runner::sim
             for (std::size_t index = 0; index < environment.particles_.size(); ++index)
             {
                 if (index == left_knee || index == right_knee
+                    || index == left_ankle || index == right_ankle
                     || rig.is_support_seed(index))
                     continue;
                 environment.particles_[index].position += upper_body_delta;
@@ -178,15 +179,22 @@ int main()
                 && leg_extension_ratio(environment, false) < 0.45f,
             "forced regression pose must begin visibly compressed");
 
+        const auto before_projection = environment.particles();
         runner::sim::EnvironmentTestAccess::project_walking_chain(environment);
-        require(leg_extension_ratio(environment, true) >= 0.82f,
-            "left supported leg was not restored to a usable stance extension");
-        require(leg_extension_ratio(environment, false) >= 0.82f,
-            "right supported leg was not restored to a usable stance extension");
-        require(segment_error(environment, true) <= 0.004f,
-            "left upper/lower leg lengths changed during stance repair");
-        require(segment_error(environment, false) <= 0.004f,
-            "right upper/lower leg lengths changed during stance repair");
+        const auto& after_projection = environment.particles();
+        require(after_projection.size() == before_projection.size(),
+            "retired Human stance projector changed particle topology");
+        for (std::size_t index = 0; index < after_projection.size(); ++index)
+        {
+            require(after_projection[index].position.x == before_projection[index].position.x
+                    && after_projection[index].position.y == before_projection[index].position.y
+                    && after_projection[index].previous.x == before_projection[index].previous.x
+                    && after_projection[index].previous.y == before_projection[index].previous.y,
+                "retired Human stance projector injected position or velocity work");
+        }
+        require(leg_extension_ratio(environment, true) < 0.45f
+                && leg_extension_ratio(environment, false) < 0.45f,
+            "retired Human stance projector still rewrote a compressed moving pose");
     }
 
     {
@@ -246,8 +254,12 @@ int main()
             "legacy bitmap-cell font multiplier remains in the renderer");
         require(app.find("font::make_bitmap_font_metrics") != std::string::npos,
             "renderer is not using shared logical font metrics");
-        require(app.find("telemetry::final_check_label") != std::string::npos,
-            "sample-ready state is not delegated to the tested plain-language final-check formatter");
+        require(app.find("telemetry::latest_test_title") != std::string::npos
+                && app.find("telemetry::latest_test_explanation")
+                    != std::string::npos
+                && app.find("telemetry::final_check_label")
+                    == std::string::npos,
+            "Details does not use the current title/explanation pair or restored the stale compact final-check label");
         require(app.find("format_work_counter(\"RUNS\"") != std::string::npos
                 && app.find("format_work_counter(\"TESTS\"") != std::string::npos,
             "overflowing compact progress fractions were not replaced by READY states");

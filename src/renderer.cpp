@@ -379,10 +379,10 @@ namespace runner::render
 
             VkApplicationInfo application = vulkan_structure<VkApplicationInfo>(
                 VK_STRUCTURE_TYPE_APPLICATION_INFO);
-            application.pApplicationName = "Runner";
-            application.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
-            application.pEngineName = "built-in bitmap UI";
-            application.engineVersion = VK_MAKE_API_VERSION(0, 0, 88, 70);
+            application.pApplicationName = "Epoch2DWalkEngine Runner example";
+            application.applicationVersion = VK_MAKE_API_VERSION(0, 0, 7, 51);
+            application.pEngineName = "Epoch2DWalkEngine";
+            application.engineVersion = VK_MAKE_API_VERSION(0, 0, 7, 51);
             application.apiVersion = VK_API_VERSION_1_3;
             VkInstanceCreateInfo instance_info = vulkan_structure<VkInstanceCreateInfo>(
                 VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO);

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ai_director.hpp"
+#include "course_geometry.hpp"
+
 #include <sandhybrid/camera_policy.hpp>
 #include <sandhybrid/library.hpp>
 #include <sandhybrid/material.hpp>
@@ -14,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -47,9 +51,13 @@ namespace runner::sim
     {
         std::uint32_t stable_id{};
         std::uint16_t sequence{};
+        director::ChallengeKind kind{ director::ChallengeKind::flat };
         TerrainRegion region{ TerrainRegion::firm };
         float begin{};
         float end{};
+
+        friend bool operator==(const TerrainChallenge&,
+            const TerrainChallenge&) = default;
 
         [[nodiscard]] float center() const noexcept
         {
@@ -141,7 +149,8 @@ namespace runner::sim
         };
 
         static constexpr std::size_t macro_cell_side = sandhybrid::terrain::tile_size;
-        static constexpr float fine_cell_spacing = 0.140625f;
+        static constexpr float fine_cell_spacing =
+            course_geometry::fine_cell_spacing_meters;
         static constexpr float cell_spacing = fine_cell_spacing;
         static constexpr float macro_tile_size = fine_cell_spacing
             * static_cast<float>(macro_cell_side);
@@ -163,18 +172,46 @@ namespace runner::sim
         static constexpr std::size_t macro_columns = cell_count / macro_cell_side;
         static constexpr std::size_t macro_rows = vertical_cell_count / macro_cell_side;
         static constexpr std::size_t macro_tile_count = macro_columns * macro_rows;
-        static constexpr float period = static_cast<float>(cell_count) * fine_cell_spacing;
-        static constexpr std::size_t terrain_challenge_count = 9u;
+        static constexpr float period = course_geometry::authored_span_meters;
+        static constexpr std::size_t terrain_challenge_count = 10u;
+        static constexpr std::uint32_t primary_flat_challenge_id = 0xE2D00001u;
+        static constexpr std::uint32_t loose_cells_challenge_id = 0xE2D00002u;
+        static constexpr std::uint32_t middle_flat_challenge_id = 0xE2D00003u;
+        static constexpr std::uint32_t waterlogged_cells_challenge_id = 0xE2D00004u;
+        static constexpr std::uint32_t shallow_water_challenge_id = 0xE2D00005u;
+        static constexpr std::uint32_t gap_challenge_id = 0xE2D00006u;
+        static constexpr std::uint32_t tail_loose_cells_challenge_id = 0xE2D00007u;
+        static constexpr std::uint32_t tail_flat_challenge_id = 0xE2D00008u;
+        static constexpr std::uint32_t return_flat_challenge_id = 0xE2D00009u;
+        static constexpr std::uint32_t shore_challenge_id = 0xE2D0000Au;
+        static constexpr std::uint32_t step_challenge_id = 0xE2D0000Bu;
+        static constexpr std::uint32_t ramp_challenge_id = 0xE2D0000Cu;
+        static constexpr std::uint32_t post_lake_recovery_challenge_id =
+            0xE2D0000Du;
+        static constexpr float step_challenge_begin = 61.875f;
+        static constexpr float step_challenge_end = 66.09375f;
+        static constexpr float ramp_challenge_begin = 69.75f;
+        static constexpr float ramp_challenge_end = 78.1875f;
         static constexpr float launch_pad_half_width = 0.70f;
         static constexpr float launch_transition_width = 0.55f;
-        static constexpr float world_bottom = -4.5f;
+        // Keep the authored surface at the middle row of SandHybrid's canonical
+        // 640x360 footprint.  A shallow -4.5 m floor populated only ~32 rows
+        // and left most of the visible cross-section as a renderer fallback.
+        // The deeper half-world is real SceneCell-compatible material state:
+        // presentation, save/export, and collision inspection all see the same
+        // cells instead of an opaque decorative slab.
+        static constexpr float world_bottom =
+            -static_cast<float>(vertical_cell_count / 2u) * fine_cell_spacing;
         static constexpr float world_top = world_bottom
             + static_cast<float>(vertical_cell_count) * fine_cell_spacing;
 
         static_assert(macro_cell_side == 8u);
+        static_assert(cell_count == course_geometry::authored_cell_count);
         static_assert(cell_count % macro_cell_side == 0u);
         static_assert(vertical_cell_count % macro_cell_side == 0u);
         static_assert(macro_tile_size == 1.125f);
+        static_assert(world_bottom == -25.3125f);
+        static_assert(world_top == 25.3125f);
         static_assert(sandhybrid::material_count < 256u);
 
         void reset(std::uint64_t seed, float difficulty) noexcept
@@ -193,6 +230,8 @@ namespace runner::sim
 
             for (std::size_t column = 0; column < cell_count; ++column)
                 initialize_column(column);
+            author_natural_geology_texture();
+            author_training_map_features();
             for (std::size_t column = 0; column < cell_count; ++column)
             {
                 refresh_column(column);
@@ -288,41 +327,144 @@ namespace runner::sim
         }
 
         [[nodiscard]] std::array<TerrainChallenge, terrain_challenge_count>
-            terrain_challenges() const noexcept
+        terrain_challenges() const noexcept
         {
             const CourseBoundaries boundaries = course_boundaries();
-            std::array<TerrainRegion, 3> middle_regions{
-                TerrainRegion::firm, TerrainRegion::waterlogged,
-                TerrainRegion::shallow_water };
-            if ((mix(seed_ ^ 0x7315a9d3u) & 1u) != 0u)
-                std::swap(middle_regions[1], middle_regions[2]);
+            const auto kind_for_region = [](TerrainRegion region) noexcept
+            {
+                switch (region)
+                {
+                case TerrainRegion::firm:
+                    return director::ChallengeKind::flat;
+                case TerrainRegion::dry_sand:
+                    return director::ChallengeKind::loose_cells;
+                case TerrainRegion::waterlogged:
+                    return director::ChallengeKind::waterlogged_cells;
+                case TerrainRegion::shallow_water:
+                    return director::ChallengeKind::shallow_water;
+                case TerrainRegion::hole:
+                    return director::ChallengeKind::gap;
+                }
+                return director::ChallengeKind::flat;
+            };
+            const TerrainRegion tail_first = boundaries.sand_first
+                ? TerrainRegion::dry_sand : TerrainRegion::firm;
+            const TerrainRegion tail_second = boundaries.sand_first
+                ? TerrainRegion::firm : TerrainRegion::dry_sand;
             return {{
-                { 0xE2D00001u, 0u, TerrainRegion::firm,
+                { primary_flat_challenge_id, 0u, director::ChallengeKind::flat,
+                    TerrainRegion::firm,
                     0.0f, boundaries.first },
-                { 0xE2D00002u, 1u, TerrainRegion::dry_sand,
+                { loose_cells_challenge_id, 1u,
+                    director::ChallengeKind::loose_cells, TerrainRegion::dry_sand,
                     boundaries.first, boundaries.second },
-                { 0xE2D00003u, 2u, middle_regions[0],
+                { middle_flat_challenge_id, 2u, director::ChallengeKind::flat,
+                    TerrainRegion::firm,
                     boundaries.second, boundaries.third },
-                { 0xE2D00004u, 3u, middle_regions[1],
+                { waterlogged_cells_challenge_id,
+                    3u, director::ChallengeKind::waterlogged_cells,
+                    TerrainRegion::waterlogged,
                     boundaries.third, boundaries.fourth },
-                { 0xE2D00005u, 4u, middle_regions[2],
+                { shallow_water_challenge_id,
+                    4u, director::ChallengeKind::shallow_water,
+                    TerrainRegion::shallow_water,
                     boundaries.fourth, boundaries.fifth },
-                { 0xE2D00006u, 5u, TerrainRegion::hole,
+                { post_lake_recovery_challenge_id, 5u,
+                    director::ChallengeKind::flat, TerrainRegion::firm,
                     boundaries.fifth, boundaries.sixth },
-                { 0xE2D00007u, 6u, boundaries.sand_first
-                        ? TerrainRegion::dry_sand : TerrainRegion::firm,
-                    boundaries.sixth, boundaries.tail_split },
-                { 0xE2D00008u, 7u, boundaries.sand_first
-                        ? TerrainRegion::firm : TerrainRegion::dry_sand,
+                { gap_challenge_id, 6u, director::ChallengeKind::gap,
+                    TerrainRegion::hole,
+                    boundaries.sixth, boundaries.seventh },
+                { tail_first == TerrainRegion::dry_sand
+                        ? tail_loose_cells_challenge_id : tail_flat_challenge_id,
+                    7u, kind_for_region(tail_first), tail_first,
+                    boundaries.seventh, boundaries.tail_split },
+                { tail_second == TerrainRegion::dry_sand
+                        ? tail_loose_cells_challenge_id : tail_flat_challenge_id,
+                    8u, kind_for_region(tail_second), tail_second,
                     boundaries.tail_split, boundaries.tail_end },
-                { 0xE2D00009u, 8u, TerrainRegion::firm,
+                { return_flat_challenge_id, 9u, director::ChallengeKind::flat,
+                    TerrainRegion::firm,
                     boundaries.tail_end, period }
             }};
+        }
+
+        [[nodiscard]] std::optional<TerrainChallenge> challenge_for(
+            director::ChallengeKind kind) const noexcept
+        {
+            std::uint32_t stable_id{};
+            switch (kind)
+            {
+            case director::ChallengeKind::flat:
+                stable_id = primary_flat_challenge_id;
+                break;
+            case director::ChallengeKind::loose_cells:
+                stable_id = loose_cells_challenge_id;
+                break;
+            case director::ChallengeKind::waterlogged_cells:
+                stable_id = waterlogged_cells_challenge_id;
+                break;
+            case director::ChallengeKind::shallow_water:
+                stable_id = shallow_water_challenge_id;
+                break;
+            case director::ChallengeKind::gap:
+                stable_id = gap_challenge_id;
+                break;
+            case director::ChallengeKind::step:
+            {
+                const float center = 0.5f
+                    * (step_challenge_begin + step_challenge_end);
+                return TerrainChallenge{ step_challenge_id, 10u,
+                    director::ChallengeKind::step, region_at(center),
+                    step_challenge_begin, step_challenge_end };
+            }
+            case director::ChallengeKind::ramp:
+            {
+                const float center = 0.5f
+                    * (ramp_challenge_begin + ramp_challenge_end);
+                return TerrainChallenge{ ramp_challenge_id, 11u,
+                    director::ChallengeKind::ramp, region_at(center),
+                    ramp_challenge_begin, ramp_challenge_end };
+            }
+            case director::ChallengeKind::shore:
+            {
+                const auto shallow = challenge_for(
+                    director::ChallengeKind::shallow_water);
+                if (!shallow)
+                    return std::nullopt;
+                return TerrainChallenge{ shore_challenge_id, shallow->sequence,
+                    director::ChallengeKind::shore,
+                    TerrainRegion::shallow_water,
+                    std::max(shallow->begin,
+                        shallow->end - 2.0f * fine_cell_spacing),
+                    std::min(period,
+                        shallow->end + 2.0f * fine_cell_spacing) };
+            }
+            case director::ChallengeKind::ledge:
+            case director::ChallengeKind::low_clearance:
+            case director::ChallengeKind::aim_range:
+            case director::ChallengeKind::moving_target:
+            case director::ChallengeKind::construction_anchor:
+                return std::nullopt;
+            }
+            for (const TerrainChallenge& challenge : terrain_challenges())
+                if (challenge.stable_id == stable_id)
+                    return challenge;
+            return std::nullopt;
         }
 
         [[nodiscard]] TerrainChallenge challenge_at(float course_x) const noexcept
         {
             const float local = wrapped_course_x(course_x);
+            for (const director::ChallengeKind overlay : {
+                director::ChallengeKind::shore,
+                director::ChallengeKind::step,
+                director::ChallengeKind::ramp })
+            {
+                const auto challenge = challenge_for(overlay);
+                if (challenge && challenge->contains(local))
+                    return *challenge;
+            }
             for (const TerrainChallenge& challenge : terrain_challenges())
                 if (challenge.contains(local))
                     return challenge;
@@ -464,7 +606,7 @@ namespace runner::sim
             }
         }
 
-        [[nodiscard]] float total_height_volume() const noexcept
+        [[nodiscard]] double total_height_volume() const noexcept
         {
             double result = 0.0;
             for (const FineCell& cell : fine_cells_)
@@ -473,7 +615,7 @@ namespace runner::sim
                     result += static_cast<double>(cell.fill)
                         * static_cast<double>(fine_cell_spacing);
             }
-            return static_cast<float>(result);
+            return result;
         }
 
         [[nodiscard]] float maximum_neighbor_delta() const noexcept
@@ -661,6 +803,7 @@ namespace runner::sim
             float fourth{};
             float fifth{};
             float sixth{};
+            float seventh{};
             float tail_split{};
             float tail_end{};
             bool sand_first{};
@@ -696,10 +839,16 @@ namespace runner::sim
                 + unit_hash(seed_ ^ 0x40d5u) * 2.5f;
             boundaries.fifth = boundaries.fourth + 7.0f
                 + unit_hash(seed_ ^ 0x50e6u) * 2.5f;
-            boundaries.sixth = boundaries.fifth + 5.0f
-                + unit_hash(seed_ ^ 0x60f7u) * 2.0f;
+            // A dry, level recovery runway follows the complete lake.  The
+            // old lake-to-hole seam asked a rig to establish a far-shore
+            // plant and immediately negotiate a depression on the same foot
+            // transfer, turning the lake into a universal sticking point.
+            boundaries.sixth = boundaries.fifth + 3.25f
+                + unit_hash(seed_ ^ 0x60f7u) * 1.25f;
+            boundaries.seventh = boundaries.sixth + 5.0f
+                + unit_hash(seed_ ^ 0x68f9u) * 1.5f;
             boundaries.tail_end = period - 5.0f;
-            boundaries.tail_split = std::lerp(boundaries.sixth,
+            boundaries.tail_split = std::lerp(boundaries.seventh,
                 boundaries.tail_end, 0.42f + unit_hash(seed_ ^ 0x70a8u) * 0.16f);
             boundaries.sand_first = (mix(seed_ ^ 0x80b9u) & 1u) == 0u;
             return boundaries;
@@ -718,6 +867,7 @@ namespace runner::sim
             const float fourth_boundary = boundaries.fourth;
             const float fifth_boundary = boundaries.fifth;
             const float sixth_boundary = boundaries.sixth;
+            const float seventh_boundary = boundaries.seventh;
             const float tail_end = boundaries.tail_end;
             const float tail_split = boundaries.tail_split;
             const bool return_pad = local > tail_end;
@@ -728,11 +878,6 @@ namespace runner::sim
             sandhybrid::Material material = sandhybrid::Material::dirt;
             float region_begin = 0.0f;
             float region_end = first_boundary;
-            std::array<TerrainRegion, 3> middle_regions{
-                TerrainRegion::firm, TerrainRegion::waterlogged,
-                TerrainRegion::shallow_water };
-            if ((mix(seed_ ^ 0x7315a9d3u) & 1u) != 0u)
-                std::swap(middle_regions[1], middle_regions[2]);
             if (!return_pad && local >= first_boundary && local < second_boundary)
             {
                 region = TerrainRegion::dry_sand;
@@ -742,29 +887,36 @@ namespace runner::sim
             }
             else if (!return_pad && local >= second_boundary && local < third_boundary)
             {
-                region = middle_regions[0];
+                region = TerrainRegion::firm;
                 region_begin = second_boundary;
                 region_end = third_boundary;
             }
             else if (!return_pad && local >= third_boundary && local < fourth_boundary)
             {
-                region = middle_regions[1];
+                region = TerrainRegion::waterlogged;
                 region_begin = third_boundary;
                 region_end = fourth_boundary;
             }
             else if (!return_pad && local >= fourth_boundary && local < fifth_boundary)
             {
-                region = middle_regions[2];
+                region = TerrainRegion::shallow_water;
                 region_begin = fourth_boundary;
                 region_end = fifth_boundary;
             }
             else if (!return_pad && local >= fifth_boundary && local < sixth_boundary)
             {
-                region = TerrainRegion::hole;
+                region = TerrainRegion::firm;
                 region_begin = fifth_boundary;
                 region_end = sixth_boundary;
             }
-            else if (!return_pad && local >= sixth_boundary)
+            else if (!return_pad && local >= sixth_boundary
+                && local < seventh_boundary)
+            {
+                region = TerrainRegion::hole;
+                region_begin = sixth_boundary;
+                region_end = seventh_boundary;
+            }
+            else if (!return_pad && local >= seventh_boundary)
             {
                 const bool sand_first = boundaries.sand_first;
                 const bool first_tail = local < tail_split;
@@ -772,36 +924,59 @@ namespace runner::sim
                     ? TerrainRegion::dry_sand : TerrainRegion::firm;
                 material = region == TerrainRegion::dry_sand
                     ? sandhybrid::Material::sand : sandhybrid::Material::dirt;
-                region_begin = first_tail ? sixth_boundary : tail_split;
+                region_begin = first_tail ? seventh_boundary : tail_split;
                 region_end = first_tail ? tail_split : tail_end;
             }
             if (region == TerrainRegion::waterlogged
                 || region == TerrainRegion::shallow_water)
                 material = sandhybrid::Material::mud;
 
-            float height = 0.0f;
+            const bool step = local >= step_challenge_begin
+                && local < step_challenge_end;
+            const bool ramp = local >= ramp_challenge_begin
+                && local < ramp_challenge_end;
+            // Step and ramp lessons are firm natural earth. Combining them
+            // with a randomly loose tail previously made their geometry and
+            // traction change together, which obscured what was being tested.
+            if (step || ramp)
+            {
+                region = TerrainRegion::firm;
+                material = sandhybrid::Material::dirt;
+                region_begin = step ? step_challenge_begin : ramp_challenge_begin;
+                region_end = step ? step_challenge_end : ramp_challenge_end;
+            }
+
+            const auto smoothstep = [](float value) noexcept
+            {
+                value = std::clamp(value, 0.0f, 1.0f);
+                return value * value * (3.0f - 2.0f * value);
+            };
             const float edge_distance = std::max(0.0f,
                 std::min(local - region_begin, region_end - local));
-            const float edge_fraction = std::clamp(
-                edge_distance / 0.80f, 0.0f, 1.0f);
-            const float region_fade = edge_fraction * edge_fraction
-                * (3.0f - 2.0f * edge_fraction);
+            const float edge_transition = region == TerrainRegion::shallow_water
+                ? course_geometry::shore_transition_meters
+                : region == TerrainRegion::waterlogged
+                    ? 8.0f * fine_cell_spacing
+                    : region == TerrainRegion::hole
+                        ? course_geometry::shore_transition_meters : 0.80f;
+            const float region_fade = smoothstep(edge_distance
+                / edge_transition);
             const float transition = std::clamp((distance_from_launch
                 - launch_pad_half_width) / launch_transition_width, 0.0f, 1.0f);
-            const float smooth_transition = transition * transition
-                * (3.0f - 2.0f * transition);
-            const float roughness = (region == TerrainRegion::firm ? 0.018f
-                : region == TerrainRegion::hole ? 0.025f
-                : 0.028f + difficulty_ * 0.040f) * smooth_transition
+            const float smooth_transition = smoothstep(transition);
+            constexpr float tau = 6.28318530717958647692f;
+            const float broad_phase = unit_hash(seed_ ^ 0x91c51u) * tau;
+            const float detail_phase = unit_hash(seed_ ^ 0xa61d3u) * tau;
+            const float natural_grade = smooth_transition * (
+                std::sin(local * (tau / 45.0f) + broad_phase) * 0.080f
+                + std::sin(local * (tau / 18.0f) + detail_phase) * 0.035f);
+            const float roughness = (region == TerrainRegion::firm ? 0.010f
+                : region == TerrainRegion::hole ? 0.014f
+                : 0.016f + difficulty_ * 0.018f) * smooth_transition
                 * region_fade;
-            height += std::sin(course_x * 0.61f) * roughness;
-            height += std::sin(course_x * 1.73f + 0.7f) * roughness * 0.44f;
-            height += (unit_hash(seed_ ^ static_cast<std::uint64_t>(
-                std::floor(local / fine_cell_spacing))) - 0.5f)
-                * fine_cell_spacing * (region == TerrainRegion::firm ? 0.12f
-                    : region == TerrainRegion::hole ? 0.16f
-                    : 0.18f + difficulty_ * 0.20f)
-                * smooth_transition * region_fade;
+            float height = natural_grade;
+            height += std::sin(local * 0.43f + detail_phase) * roughness;
+            height += std::sin(local * 0.91f + broad_phase) * roughness * 0.38f;
 
             if (region == TerrainRegion::hole)
             {
@@ -823,12 +998,33 @@ namespace runner::sim
                 height -= (0.18f + difficulty_ * 0.20f) * region_fade;
             }
 
+            if (step)
+            {
+                const float edge = std::min(local - step_challenge_begin,
+                    step_challenge_end - local);
+                const float step_shape = smoothstep(edge
+                    / (5.0f * fine_cell_spacing));
+                height += (0.25f + difficulty_ * 0.10f) * step_shape;
+            }
+            else if (ramp)
+            {
+                const float fraction = std::clamp(
+                    (local - ramp_challenge_begin)
+                        / (ramp_challenge_end - ramp_challenge_begin),
+                    0.0f, 1.0f);
+                const float triangular = 1.0f
+                    - std::abs(fraction * 2.0f - 1.0f);
+                const float smooth_ramp = smoothstep(triangular);
+                height += (0.48f + difficulty_ * 0.20f) * smooth_ramp;
+            }
+
             const float water_surface = region == TerrainRegion::shallow_water
                 ? std::lerp(height,
-                    0.06f + std::sin(course_x * 0.19f) * 0.012f, region_fade)
+                    0.065f, region_fade)
                 : region == TerrainRegion::waterlogged
                     ? height + 0.025f * region_fade : height;
-            return { std::clamp(height, -1.25f, 3.50f), launch_pad,
+            return { std::clamp(height, -1.25f, 3.50f),
+                launch_pad,
                 material, region, water_surface };
         }
 
@@ -851,16 +1047,47 @@ namespace runner::sim
             {
                 const std::uint32_t depth = static_cast<std::uint32_t>(
                     complete_rows - 1u - row);
-                sandhybrid::Material base = depth < 8u
-                    ? surface.material
-                    : depth < 18u ? sandhybrid::Material::dirt
-                    : sandhybrid::Material::stone;
+                const std::uint32_t cell_x = static_cast<std::uint32_t>(column);
+                const std::uint32_t cell_y = static_cast<std::uint32_t>(row);
+                const std::uint32_t seed_salt = static_cast<std::uint32_t>(seed_)
+                    ^ static_cast<std::uint32_t>(seed_ >> 32u);
+                const std::int32_t top_boundary = 8
+                    + sandhybrid::resident_ground_boundary_offset(
+                        cell_x, seed_salt ^ 0x51f2a3b7u, 3);
+                const std::int32_t middle_boundary = 44
+                    + sandhybrid::resident_ground_boundary_offset(
+                        cell_x, seed_salt ^ 0x6d31c47bu, 7);
+                const std::int32_t deep_boundary = 108
+                    + sandhybrid::resident_ground_boundary_offset(
+                        cell_x, seed_salt ^ 0x9a27e115u, 11);
+                const std::int32_t signed_depth = static_cast<std::int32_t>(depth);
+                sandhybrid::Material base{};
+                if (signed_depth < middle_boundary)
+                {
+                    base = sandhybrid::resident_transition_material(
+                        surface.material, sandhybrid::Material::dirt,
+                        signed_depth - top_boundary, 4, cell_x, cell_y,
+                        seed_salt ^ 0x2b61d4c9u);
+                }
+                else if (signed_depth < deep_boundary)
+                {
+                    base = sandhybrid::resident_transition_material(
+                        sandhybrid::Material::dirt, sandhybrid::Material::silt,
+                        signed_depth - middle_boundary, 7, cell_x, cell_y,
+                        seed_salt ^ 0x73a918efu);
+                }
+                else
+                {
+                    base = sandhybrid::resident_transition_material(
+                        sandhybrid::Material::silt, sandhybrid::Material::stone,
+                        signed_depth - deep_boundary, 10, cell_x, cell_y,
+                        seed_salt ^ 0xc41752a3u);
+                }
                 if (surface.structural_ledge && depth < 18u)
                     base = sandhybrid::Material::stone;
                 const sandhybrid::terrain::Sample sample =
-                    sandhybrid::terrain::sample(base,
-                        static_cast<std::uint32_t>(column),
-                        static_cast<std::uint32_t>(row), depth);
+                    sandhybrid::resident_ground_sample(
+                        base, cell_x, cell_y, depth);
                 if (sample.material == sandhybrid::Material::empty)
                     continue;
                 set_cell(fine_cells_[fine_index(column, row)], sample.material,
@@ -873,6 +1100,481 @@ namespace runner::sim
                 set_cell(fine_cells_[fine_index(column, complete_rows)], material,
                     surface.structural_ledge, top_fraction, true);
             }
+
+            // EpochSimEngine's authored connected world uses a real material
+            // veneer, not a screen-space green line.  Preserve the exact
+            // collision height/fill/aux state and change only exposed firm
+            // dirt to the canonical Grass material.  Sand, mud, water and
+            // structural challenge decks keep their own physical identity.
+            if (surface.region == TerrainRegion::firm
+                && !surface.structural_ledge && complete_rows > 0u)
+            {
+                const std::size_t exposed_row = top_fraction > 1.0e-5f
+                    ? complete_rows : complete_rows - 1u;
+                FineCell& exposed = fine_cells_[fine_index(column, exposed_row)];
+                if (exposed.occupied()
+                    && exposed.material() == sandhybrid::Material::dirt)
+                {
+                    exposed.state.material = static_cast<std::uint32_t>(
+                        sandhybrid::Material::grass);
+                    cells_[column].surface_material =
+                        sandhybrid::Material::grass;
+                }
+            }
+        }
+
+        void paint_authored_rectangle(std::size_t left, std::size_t right,
+            std::size_t bottom, std::size_t top,
+            sandhybrid::Material material, bool structural) noexcept
+        {
+            right = std::min(right, cell_count);
+            top = std::min(top, vertical_cell_count);
+            for (std::size_t row = bottom; row < top; ++row)
+                for (std::size_t column = left; column < right; ++column)
+                    set_cell(fine_cells_[fine_index(column, row)], material,
+                        structural, 1.0f, true);
+        }
+
+        void clear_authored_rectangle(std::size_t left, std::size_t right,
+            std::size_t bottom, std::size_t top) noexcept
+        {
+            right = std::min(right, cell_count);
+            top = std::min(top, vertical_cell_count);
+            for (std::size_t row = bottom; row < top; ++row)
+                for (std::size_t column = left; column < right; ++column)
+                    clear_cell(fine_cells_[fine_index(column, row)]);
+        }
+
+        [[nodiscard]] static bool natural_substrate_material(
+            sandhybrid::Material material) noexcept
+        {
+            return material == sandhybrid::Material::sand
+                || material == sandhybrid::Material::dirt
+                || material == sandhybrid::Material::silt
+                || material == sandhybrid::Material::stone
+                || material == sandhybrid::Material::mud;
+        }
+
+        void author_natural_geology_texture() noexcept
+        {
+            // EpochSimEngine's authored bitmap reads as material because its
+            // strata contain coherent lenses instead of full-width flat bands
+            // or a grid of rectangular patches.  Apply the same principle to
+            // canonical SceneCells.  The lenses are deliberately below each
+            // column's live surface and retain fill/aux/temperature, so this
+            // cannot become a hidden collision or traction edit.
+            constexpr std::size_t surface_clearance =
+                course_geometry::geology_surface_clearance_cells;
+            const std::uint32_t seed_salt = static_cast<std::uint32_t>(seed_)
+                ^ static_cast<std::uint32_t>(seed_ >> 32u) ^ 0x74ac39d1u;
+
+            std::array<std::size_t, cell_count> surface_rows{};
+            for (std::size_t column = 0u; column < cell_count; ++column)
+            {
+                std::size_t surface_row{};
+                bool found_surface{};
+                for (std::size_t row = 0u; row < vertical_cell_count; ++row)
+                {
+                    if (fine_cells_[fine_index(column, row)].occupied())
+                    {
+                        surface_row = row;
+                        found_surface = true;
+                    }
+                }
+                surface_rows[column] = found_surface ? surface_row : 0u;
+            }
+
+            for (std::size_t lens = 0u;
+                lens < course_geometry::geology_lens_count; ++lens)
+            {
+                const std::uint32_t lens_hash = sandhybrid::terrain::hash(
+                    static_cast<std::uint32_t>(lens), seed_salt,
+                    0x5a17c9e3u);
+                const std::int32_t center_x = static_cast<std::int32_t>(
+                    12u + lens_hash % (cell_count - 24u));
+                const std::int32_t center_depth = static_cast<std::int32_t>(
+                    24u + (lens_hash >> 9u) % 132u);
+                const std::int32_t radius_x = static_cast<std::int32_t>(
+                    13u + (lens_hash >> 17u) % 31u);
+                const std::int32_t radius_y = static_cast<std::int32_t>(
+                    4u + (lens_hash >> 25u) % 8u);
+                const std::uint32_t material_choice = (lens_hash >> 6u) % 9u;
+                const sandhybrid::Material replacement = center_depth < 52
+                    ? (material_choice < 4u ? sandhybrid::Material::sand
+                        : sandhybrid::Material::silt)
+                    : center_depth < 112
+                        ? (material_choice < 5u ? sandhybrid::Material::dirt
+                            : sandhybrid::Material::stone)
+                        : (material_choice < 6u ? sandhybrid::Material::silt
+                            : sandhybrid::Material::iron_ore);
+
+                const std::int32_t left = std::max(0, center_x - radius_x - 2);
+                const std::int32_t right = std::min(
+                    static_cast<std::int32_t>(cell_count) - 1,
+                    center_x + radius_x + 2);
+                for (std::int32_t x = left; x <= right; ++x)
+                {
+                    const std::size_t column = static_cast<std::size_t>(x);
+                    if (surface_rows[column] <= surface_clearance)
+                        continue;
+                    const float normalized_x = static_cast<float>(x - center_x)
+                        / static_cast<float>(radius_x);
+                    const float wave = std::sin((static_cast<float>(x)
+                        + static_cast<float>(lens * 19u)) * 0.083f) * 1.8f;
+                    const float center_y = static_cast<float>(surface_rows[column])
+                        - static_cast<float>(center_depth) + wave;
+                    const std::int32_t bottom = std::max(4,
+                        static_cast<std::int32_t>(std::floor(center_y))
+                            - radius_y - 2);
+                    const std::int32_t top = std::min(
+                        static_cast<std::int32_t>(surface_rows[column]
+                            - surface_clearance - 1u),
+                        static_cast<std::int32_t>(std::ceil(center_y))
+                            + radius_y + 2);
+                    for (std::int32_t y = bottom; y <= top; ++y)
+                    {
+                        const float normalized_y =
+                            (static_cast<float>(y) - center_y)
+                                / static_cast<float>(radius_y);
+                        const std::uint32_t edge_hash = sandhybrid::terrain::hash(
+                            static_cast<std::uint32_t>(x),
+                            static_cast<std::uint32_t>(y),
+                            seed_salt ^ static_cast<std::uint32_t>(lens * 977u));
+                        const float edge = 0.88f
+                            + static_cast<float>(edge_hash & 255u)
+                                / 255.0f * 0.20f;
+                        if (normalized_x * normalized_x
+                                + normalized_y * normalized_y > edge)
+                            continue;
+                        FineCell& cell = fine_cells_[fine_index(column,
+                            static_cast<std::size_t>(y))];
+                        if (!cell.occupied() || cell.fill < 0.999f
+                            || !natural_substrate_material(cell.material()))
+                            continue;
+                        cell.state.material = static_cast<std::uint32_t>(
+                            replacement);
+                    }
+                }
+            }
+        }
+
+        void author_training_map_features() noexcept
+        {
+            // This is a real 640x360 canonical-cell map, built with the same
+            // material IDs and aligned 8x8 construction rule as SandHybrid's
+            // reset world.  These underground facilities do not alter the
+            // surface course: they make the full-map view expose chambers,
+            // reservoirs, structural shells, resources, and access routes
+            // instead of broad decorative rectangles.
+            constexpr std::size_t tile = macro_cell_side;
+            const auto eased_unit = [](float value) noexcept
+            {
+                value = std::clamp(value, 0.0f, 1.0f);
+                return value * value * (3.0f - 2.0f * value);
+            };
+            const auto clear_rounded_chamber = [&](std::size_t left,
+                std::size_t right, std::size_t bottom, std::size_t top,
+                std::size_t radius) noexcept
+            {
+                if (right <= left || top <= bottom)
+                    return;
+                const float inner_left = static_cast<float>(left + radius);
+                const float inner_right = static_cast<float>(right - radius - 1u);
+                const float inner_bottom = static_cast<float>(bottom + radius);
+                const float inner_top = static_cast<float>(top - radius - 1u);
+                const float radius_squared = static_cast<float>(radius * radius);
+                for (std::size_t row = bottom;
+                    row < std::min(top, vertical_cell_count); ++row)
+                {
+                    for (std::size_t column = left;
+                        column < std::min(right, cell_count); ++column)
+                    {
+                        const float x = static_cast<float>(column);
+                        const float y = static_cast<float>(row);
+                        const float dx = x < inner_left ? inner_left - x
+                            : x > inner_right ? x - inner_right : 0.0f;
+                        const float dy = y < inner_bottom ? inner_bottom - y
+                            : y > inner_top ? y - inner_top : 0.0f;
+                        if (dx * dx + dy * dy <= radius_squared)
+                            clear_cell(fine_cells_[fine_index(column, row)]);
+                    }
+                }
+            };
+            const auto carve_gallery = [&](std::size_t left,
+                std::size_t right, float start_row, float end_row,
+                float half_height, float bow, std::uint32_t salt) noexcept
+            {
+                if (right <= left)
+                    return;
+                const float span = static_cast<float>(right - left - 1u);
+                for (std::size_t column = left;
+                    column < std::min(right, cell_count); ++column)
+                {
+                    const float t = span > 0.0f
+                        ? static_cast<float>(column - left) / span : 0.0f;
+                    const std::uint32_t noise_hash = sandhybrid::terrain::hash(
+                        static_cast<std::uint32_t>(column / 4u), salt,
+                        static_cast<std::uint32_t>(seed_));
+                    const float noise = static_cast<float>(noise_hash & 255u)
+                        / 255.0f - 0.5f;
+                    const float center = std::lerp(start_row, end_row, t)
+                        + std::sin(t * 3.14159265358979323846f) * bow
+                        + noise * 1.3f;
+                    const int bottom = std::max(1,
+                        static_cast<int>(std::floor(center - half_height)));
+                    const int top = std::min(
+                        static_cast<int>(vertical_cell_count) - 1,
+                        static_cast<int>(std::ceil(center + half_height)));
+                    for (int row = bottom; row <= top; ++row)
+                        clear_cell(fine_cells_[fine_index(column,
+                            static_cast<std::size_t>(row))]);
+                }
+            };
+
+            // West operations gallery: two rig-scale rooms use the natural
+            // geology as their shell.  Discontinuous glass bays, machinery,
+            // and an actual stair make this read as a constructed place rather
+            // than one viewport-sized framed rectangle.
+            clear_rounded_chamber(32u, 96u, 96u, 138u, 9u);
+            clear_rounded_chamber(88u, 156u, 104u, 144u, 9u);
+            carve_gallery(80u, 108u, 115.0f, 124.0f, 8.0f, 0.0f,
+                0x31f47u);
+            paint_authored_rectangle(40u, 80u, 92u, 96u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(96u, 148u, 100u, 104u,
+                sandhybrid::Material::conveyor, true);
+            paint_authored_rectangle(40u, 56u, 132u, 136u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(64u, 80u, 132u, 136u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(104u, 120u, 138u, 142u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(128u, 144u, 138u, 142u,
+                sandhybrid::Material::glass, true);
+            for (std::size_t step = 0u; step < 3u; ++step)
+                paint_authored_rectangle(80u + step * tile,
+                    88u + step * tile, 94u + step * 2u,
+                    98u + step * 2u, sandhybrid::Material::stone, true);
+            paint_authored_rectangle(40u, 48u, 96u, 128u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(144u, 152u, 104u, 112u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(144u, 152u, 120u, 140u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(104u, 112u, 104u, 112u,
+                sandhybrid::Material::smelter, true);
+            paint_authored_rectangle(112u, 120u, 104u, 112u,
+                sandhybrid::Material::assembler, true);
+            paint_authored_rectangle(120u, 128u, 104u, 112u,
+                sandhybrid::Material::copper, true);
+            paint_authored_rectangle(128u, 136u, 104u, 120u,
+                sandhybrid::Material::power_cell, true);
+            paint_authored_rectangle(136u, 144u, 104u, 120u,
+                sandhybrid::Material::factory_core, true);
+
+            // A sloped service approach ties the lab to a compact waterworks.
+            // The basin has a curved canonical-cell bed and a level waterline;
+            // it is not the old screen-wide rectangular tank.  Air gallery,
+            // pump tower and paired catwalks remain visibly traversable.
+            carve_gallery(148u, 176u, 124.0f, 128.0f, 8.0f, -2.0f,
+                0x8ac21u);
+            clear_rounded_chamber(164u, 272u, 100u, 142u, 10u);
+            constexpr int basin_center = 218;
+            constexpr int basin_half_width = 34;
+            constexpr int basin_waterline = 107;
+            for (int x = basin_center - basin_half_width;
+                x <= basin_center + basin_half_width; ++x)
+            {
+                const float t = static_cast<float>(x - basin_center)
+                    / static_cast<float>(basin_half_width);
+                const std::uint32_t bed_hash = sandhybrid::terrain::hash(
+                    static_cast<std::uint32_t>(x / 3), 0x71a4u,
+                    static_cast<std::uint32_t>(seed_));
+                const int bed = 72 + static_cast<int>(std::lround(
+                    t * t * 13.0f
+                    + (static_cast<float>(bed_hash & 7u) - 3.0f) * 0.28f));
+                for (int row = bed; row < basin_waterline; ++row)
+                {
+                    FineCell& cell = fine_cells_[fine_index(
+                        static_cast<std::size_t>(x),
+                        static_cast<std::size_t>(row))];
+                    set_cell(cell, row < bed + 2
+                        ? sandhybrid::Material::stone
+                        : sandhybrid::Material::water,
+                        row < bed + 2, 1.0f, true);
+                }
+            }
+            paint_authored_rectangle(176u, 184u, 94u, 128u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(252u, 260u, 94u, 128u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(184u, 208u, 112u, 116u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(228u, 252u, 112u, 116u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(208u, 216u, 108u, 136u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(216u, 224u, 108u, 124u,
+                sandhybrid::Material::power_cell, true);
+            paint_authored_rectangle(224u, 232u, 108u, 136u,
+                sandhybrid::Material::steel, true);
+
+            // Couple the visible surface lake to the waterworks through a
+            // shallow, capped aquifer and one glass-lined well.  Keeping two
+            // solid canonical cells at the surface preserves the exact
+            // ground-height/traction contract while the cutaway now explains
+            // where the lake and waterworks meet.
+            const CourseBoundaries boundaries = course_boundaries();
+            const std::size_t lake_left = std::clamp(
+                static_cast<std::size_t>(std::floor(
+                    boundaries.fourth / fine_cell_spacing)), std::size_t{ 2u },
+                cell_count - std::size_t{ 3u });
+            const std::size_t lake_right = std::clamp(
+                static_cast<std::size_t>(std::ceil(
+                    boundaries.fifth / fine_cell_spacing)), lake_left + 1u,
+                cell_count - std::size_t{ 2u });
+            const std::size_t lake_center = (lake_left + lake_right) / 2u;
+            for (std::size_t column = lake_left;
+                column <= lake_right; ++column)
+            {
+                std::size_t surface_row{};
+                for (std::size_t row = 0u; row < vertical_cell_count; ++row)
+                    if (fine_cells_[fine_index(column, row)].occupied())
+                        surface_row = row;
+                if (surface_row < 12u)
+                    continue;
+                const float edge_distance = static_cast<float>(std::min(
+                    column - lake_left, lake_right - column));
+                const float bank = eased_unit(edge_distance
+                    / static_cast<float>(
+                        course_geometry::shore_transition_cell_count));
+                const std::size_t depth = 2u + static_cast<std::size_t>(
+                    std::lround(bank * 7.0f));
+                const std::size_t water_top = surface_row - 2u;
+                const std::size_t water_bottom = water_top > depth
+                    ? water_top - depth : 1u;
+                for (std::size_t row = water_bottom; row < water_top; ++row)
+                    set_cell(fine_cells_[fine_index(column, row)],
+                        sandhybrid::Material::water, false, 1.0f, true);
+            }
+            const std::size_t well_left = lake_center >= 4u
+                ? lake_center - 4u : 0u;
+            const std::size_t well_right = std::min(
+                cell_count, lake_center + 4u);
+            for (std::size_t column = well_left;
+                column < well_right; ++column)
+            {
+                std::size_t surface_row{};
+                for (std::size_t row = 0u; row < vertical_cell_count; ++row)
+                    if (fine_cells_[fine_index(column, row)].occupied())
+                        surface_row = row;
+                // Leave a four-cell service crossover between the pump tower
+                // and the vertical well.  In a side-view world a solid shaft
+                // would otherwise bisect the entire underground route.
+                for (std::size_t row = 140u;
+                    row + 2u < surface_row; ++row)
+                    set_cell(fine_cells_[fine_index(column, row)],
+                        sandhybrid::Material::water, false, 1.0f, true);
+            }
+            if (well_left >= 2u && well_right + 2u < cell_count)
+            {
+                paint_authored_rectangle(well_left - 2u, well_left,
+                    140u, 158u, sandhybrid::Material::glass, true);
+                paint_authored_rectangle(well_right, well_right + 2u,
+                    140u, 158u, sandhybrid::Material::glass, true);
+            }
+
+            // The waterworks feeds a seed-stable natural gallery.  Two modest
+            // rounded chambers sit on a bowed access path, so the cavern is a
+            // connected destination instead of a sealed dark lens.
+            carve_gallery(260u, 302u, 123.0f, 108.0f, 7.0f, -4.0f,
+                0x6d31u);
+            clear_rounded_chamber(290u, 356u, 88u, 122u, 10u);
+            clear_rounded_chamber(374u, 442u, 100u, 132u, 10u);
+            carve_gallery(338u, 390u, 110.0f, 116.0f, 6.0f, 18.0f,
+                0x11c493u);
+            const auto paint_vein = [&](std::int32_t center_x,
+                std::int32_t center_y, std::int32_t radius_x,
+                std::int32_t radius_y, sandhybrid::Material material,
+                std::uint32_t salt) noexcept
+            {
+                for (std::int32_t y = center_y - radius_y;
+                    y <= center_y + radius_y; ++y)
+                {
+                    for (std::int32_t x = center_x - radius_x;
+                        x <= center_x + radius_x; ++x)
+                    {
+                        if (x < 0 || y < 0
+                            || x >= static_cast<std::int32_t>(cell_count)
+                            || y >= static_cast<std::int32_t>(vertical_cell_count))
+                            continue;
+                        const float nx = static_cast<float>(x - center_x)
+                            / static_cast<float>(radius_x);
+                        const float ny = static_cast<float>(y - center_y)
+                            / static_cast<float>(radius_y);
+                        const std::uint32_t noise = sandhybrid::terrain::hash(
+                            static_cast<std::uint32_t>(x),
+                            static_cast<std::uint32_t>(y),
+                            static_cast<std::uint32_t>(seed_) ^ salt);
+                        const float edge = 0.82f
+                            + static_cast<float>(noise & 255u) / 255.0f * 0.22f;
+                        FineCell& cell = fine_cells_[fine_index(
+                            static_cast<std::size_t>(x),
+                            static_cast<std::size_t>(y))];
+                        if (nx * nx + ny * ny <= edge && cell.occupied())
+                            set_cell(cell, material, false, 1.0f, true);
+                    }
+                }
+            };
+            paint_vein(296, 78, 11, 6,
+                sandhybrid::Material::iron_ore, 0x41f331u);
+            paint_vein(348, 72, 9, 5,
+                sandhybrid::Material::copper, 0x6b28a7u);
+            paint_vein(438, 82, 10, 6,
+                sandhybrid::Material::crystal, 0x8e4cd9u);
+
+            // A rising gallery opens into the compact east construction bay.
+            // Its broken glass clerestory and natural roof remove the last
+            // giant boxed silhouette while retaining aligned production cells.
+            carve_gallery(438u, 518u, 116.0f, 124.0f, 7.0f, 3.5f,
+                0xb512u);
+            paint_authored_rectangle(432u, 440u, 100u, 124u,
+                sandhybrid::Material::stone, true);
+            paint_authored_rectangle(432u, 440u, 132u, 140u,
+                sandhybrid::Material::stone, true);
+            paint_authored_rectangle(464u, 472u, 100u, 112u,
+                sandhybrid::Material::stone, true);
+            paint_authored_rectangle(464u, 472u, 120u, 140u,
+                sandhybrid::Material::stone, true);
+            clear_rounded_chamber(504u, 628u, 100u, 144u, 10u);
+            paint_authored_rectangle(512u, 620u, 96u, 100u,
+                sandhybrid::Material::stone, true);
+            paint_authored_rectangle(512u, 520u, 100u, 136u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(612u, 620u, 100u, 136u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(544u, 552u, 100u, 132u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(544u, 552u, 140u, 144u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(560u, 584u, 140u, 144u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(592u, 612u, 140u, 144u,
+                sandhybrid::Material::glass, true);
+            paint_authored_rectangle(584u, 592u, 100u, 120u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(584u, 592u, 128u, 140u,
+                sandhybrid::Material::steel, true);
+            paint_authored_rectangle(560u, 568u, 100u, 108u,
+                sandhybrid::Material::smelter, true);
+            paint_authored_rectangle(568u, 576u, 100u, 108u,
+                sandhybrid::Material::assembler, true);
+            paint_authored_rectangle(592u, 600u, 100u, 108u,
+                sandhybrid::Material::gold, true);
+            paint_authored_rectangle(604u, 612u, 100u, 108u,
+                sandhybrid::Material::aluminum, true);
+            paint_authored_rectangle(600u, 608u, 108u, 116u,
+                sandhybrid::Material::power_cell, true);
         }
 
         [[nodiscard]] static std::size_t fine_index(std::size_t column,

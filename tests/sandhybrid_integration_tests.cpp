@@ -54,8 +54,9 @@ int main()
 
     require(sandhybrid::library_api_version == 4u,
         "linked EpochSimEngine is not the exact public API 4 contract");
-    require(sandhybrid::library_name == "SandHybrid",
-        "wrong linked SandHybrid library identity");
+    require(sandhybrid::library_name == "EpochSimEngine"
+            && sandhybrid::legacy_library_name == "SandHybrid",
+        "linked library lost its EpochSimEngine identity or SandHybrid compatibility name");
     require(sizeof(sandhybrid::SceneCell) == 16u,
         "canonical SceneCell is not the four-word 16-byte ABI");
     require(sandhybrid::material_count == 68u
@@ -88,6 +89,30 @@ int main()
         "no full 8x8 region promoted to macro metadata");
     require(terrain.hard_ledge_count() == 0u,
         "Walk / Run material terrain unexpectedly contains an impassable structural ledge");
+    const auto challenges = terrain.terrain_challenges();
+    require(challenges.size() == 10u
+            && challenges[0].region == runner::sim::TerrainRegion::firm
+            && challenges[1].region == runner::sim::TerrainRegion::dry_sand
+            && challenges[2].region == runner::sim::TerrainRegion::firm
+            && challenges[3].region == runner::sim::TerrainRegion::waterlogged
+            && challenges[4].region == runner::sim::TerrainRegion::shallow_water
+            && challenges[5].stable_id
+                == DeformableTerrain::post_lake_recovery_challenge_id
+            && challenges[5].region == runner::sim::TerrainRegion::firm
+            && challenges[6].region == runner::sim::TerrainRegion::hole,
+        "canonical course does not expose a progressive dry/wet/lake/recovery/gap contract");
+    require(challenges[4].length()
+                > 2.0f * runner::course_geometry::shore_transition_meters
+            && challenges[5].length() >= 3.25f,
+        "lake has no full-depth interior or dry far-shore recovery runway");
+    for (std::size_t column = 0u;
+        column + 1u < DeformableTerrain::cell_count; ++column)
+    {
+        require(std::abs(terrain.cells()[column + 1u].height
+                    - terrain.cells()[column].height)
+                <= runner::course_geometry::traversable_neighbor_rise_meters,
+            "canonical walk surface contains an undeclared cell-height wall");
+    }
     runner::sim::Environment climb(runner::sim::CreatureBlueprint::humanoid(), 0x7145A11Du);
     climb.set_course(runner::sim::CourseStage::climb_descent, 0.72f);
     const bool authored_climb_ledge = std::ranges::any_of(climb.course_features(),
@@ -140,10 +165,10 @@ int main()
     require(terrain.macro_promotions() > 0u,
         "macro promotion telemetry did not advance");
 
-    const float volume = terrain.total_height_volume();
+    const double volume = terrain.total_height_volume();
     terrain.apply_pressure(12.0f, 2.1f, 0.7f, 1.0f / 60.0f);
     terrain.deposit(18.0f, 0.12f, 0.22f);
-    const float expected = volume + 0.12f;
+    const double expected = volume + 0.12;
     require(std::abs(terrain.total_height_volume() - expected) < 5.0e-4f,
         "fine-cell pressure/deposit path lost represented volume");
     for (int frame = 0; frame < 180; ++frame)

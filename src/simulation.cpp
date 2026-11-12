@@ -112,40 +112,128 @@ namespace runner::sim
             rig.additional_right_contact_nodes.clear();
         }
 
-        void append_runtime_human_articulated_feet(
+        [[nodiscard]] bool legacy_human_paired_limb_topology(
+            const CreatureBlueprint& rig) noexcept
+        {
+            if (rig.nodes.size() != 13u || rig.radii.size() != 13u
+                || rig.active_motor_count != 8u || rig.root_node != 0u
+                || rig.torso_node != 1u || rig.head_node != 2u
+                || rig.left_contact_node != human_left_ankle_node
+                || rig.right_contact_node != human_right_ankle_node
+                || !rig.additional_left_contact_nodes.empty()
+                || !rig.additional_right_contact_nodes.empty())
+                return false;
+            constexpr std::array<MotorConstraint, 8> expected{
+                MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
+                MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
+                MotorConstraint{ 1, 7, 8 }, MotorConstraint{ 7, 8, 9 },
+                MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 }
+            };
+            for (std::size_t index = 0; index < expected.size(); ++index)
+            {
+                if (!rig.motors[index].enabled
+                    || rig.motors[index].a != expected[index].a
+                    || rig.motors[index].pivot != expected[index].pivot
+                    || rig.motors[index].c != expected[index].c)
+                    return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool promote_runrig6_human_explicit_toes(
             CreatureBlueprint& rig) noexcept
         {
-            // Persisted/editor Human rigs remain the exact user-authored
-            // 13-node form. The runtime adds a collision plate so heel, flat,
-            // and toe support are physical states rather than inferred art.
-            if (!rig.human_paired_limb_topology())
-                return;
-            auto append_plate = [&](std::uint16_t heel,
-                std::uint16_t ankle,
-                std::vector<std::uint16_t>& additional)
+            constexpr std::size_t runrig6_motor_count =
+                human_right_ankle_action + 1u;
+            if (rig.nodes.size() != 19u || rig.radii.size() != 19u
+                || rig.active_motor_count != runrig6_motor_count)
+                return false;
+            const CreatureBlueprint previous = rig;
+            rig.motors[human_left_toe_action] = MotorConstraint{
+                human_left_heel_node, human_left_ball_node,
+                human_left_toe_node };
+            rig.motors[human_right_toe_action] = MotorConstraint{
+                human_right_heel_node, human_right_ball_node,
+                human_right_toe_node };
+            rig.active_motor_count = anatomy_action_count;
+            rig.calibrate_motor(human_left_toe_action, 42.0f, 36.0f, 0.022f);
+            rig.calibrate_motor(human_right_toe_action, 42.0f, 36.0f, 0.022f);
+            // Make the newly-recognized RUNRIG7 topology canonical before it
+            // escapes the migration boundary. Otherwise Environment's normal
+            // rest-length rebuild performs the first paired-leg normalization
+            // and silently changes the authored rig signature at construction.
+            rig.rebuild_rest_lengths();
+            if (rig.human_paired_limb_topology() && rig.valid())
+                return true;
+            rig = previous;
+            return false;
+        }
+
+        [[nodiscard]] bool promote_human_articulated_feet(
+            CreatureBlueprint& rig) noexcept
+        {
+            if (!legacy_human_paired_limb_topology(rig))
+                return false;
+
+            // RUNRIG7 owns the complete physical Human. Nodes 0..12 and action
+            // slots 0..7 retain their established meaning. The former terminal
+            // support nodes 4/6 are now anatomical ankles; each receives a
+            // rigid anatomical rear-foot triangle and explicit policy ankle
+            // and distal toe motors. There is
+            // deliberately no knee-to-heel/ball diagonal.
+            auto append_foot = [&](std::uint16_t knee, std::uint16_t ankle,
+                std::uint16_t expected_heel, std::uint16_t expected_ball,
+                std::uint16_t expected_toe, std::size_t ankle_action,
+                std::vector<std::uint16_t>& additional) noexcept
             {
-                const Vec2 heel_position = rig.nodes[heel];
-                const std::uint16_t ball = static_cast<std::uint16_t>(
+                if (rig.nodes.size() != expected_heel
+                    || rig.radii.size() != expected_heel)
+                    return false;
+                const Vec2 ankle_position = rig.nodes[ankle];
+                const std::uint16_t heel = static_cast<std::uint16_t>(
                     rig.nodes.size());
-                const std::uint16_t toe = static_cast<std::uint16_t>(
+                const std::uint16_t ball = static_cast<std::uint16_t>(
                     rig.nodes.size() + 1u);
-                rig.nodes.push_back(heel_position + Vec2{ 0.17f, 0.0f });
-                rig.nodes.push_back(heel_position + Vec2{ 0.38f, 0.0f });
+                const std::uint16_t toe = static_cast<std::uint16_t>(
+                    rig.nodes.size() + 2u);
+                if (heel != expected_heel || ball != expected_ball
+                    || toe != expected_toe)
+                    return false;
+                // All three neutral sole nodes share one solver-space collision
+                // bottom. ground_contact_offset caps large support radii at
+                // 65 mm, so visual radius alone is not the contact plane. A
+                // raised ball/toe leaves the nominal stance heel-only and turns
+                // gravity into an uncommanded rocking/shear impulse at spawn.
+                rig.nodes.push_back(ankle_position + Vec2{ -0.055f, -0.105f });
+                rig.nodes.push_back(ankle_position + Vec2{ 0.155f, -0.105f });
+                rig.nodes.push_back(ankle_position + Vec2{ 0.350f, -0.110f });
+                rig.radii.push_back(0.072f);
                 rig.radii.push_back(0.065f);
                 rig.radii.push_back(0.060f);
-                // Ankle/heel/ball is one stiff loaded plate. The distal toe
-                // is the only compliant rocker and receives its own bounded
-                // derived motor in articulated_toe_motor().
-                rig.bones.push_back({ ankle, ball, 0.0f, 0.98f });
-                rig.bones.push_back({ heel, ball, 0.0f, 0.94f });
-                rig.bones.push_back({ ball, toe, 0.0f, 1.0f });
+                rig.bones.push_back({ ankle, heel, 0.0f, 1.0f });
+                rig.bones.push_back({ ankle, ball, 0.0f, 1.0f });
+                rig.bones.push_back({ heel, ball, 0.0f, 0.98f });
+                rig.bones.push_back({ ball, toe, 0.0f, 0.98f });
+                rig.motors[ankle_action] = MotorConstraint{ knee, ankle, ball };
                 additional = { ball, toe };
+                return true;
             };
-            append_plate(rig.left_contact_node, rig.motors[1].pivot,
-                rig.additional_left_contact_nodes);
-            append_plate(rig.right_contact_node, rig.motors[3].pivot,
-                rig.additional_right_contact_nodes);
+            if (!append_foot(3u, human_left_ankle_node,
+                    human_left_heel_node, human_left_ball_node,
+                    human_left_toe_node, human_left_ankle_action,
+                    rig.additional_left_contact_nodes)
+                || !append_foot(5u, human_right_ankle_node,
+                    human_right_heel_node, human_right_ball_node,
+                    human_right_toe_node, human_right_ankle_action,
+                    rig.additional_right_contact_nodes))
+                return false;
+            rig.left_contact_node = human_left_heel_node;
+            rig.right_contact_node = human_right_heel_node;
+            rig.active_motor_count = human_right_ankle_action + 1u;
             rig.rebuild_rest_lengths();
+            rig.calibrate_motor(human_left_ankle_action, 34.0f, 34.0f, 0.034f);
+            rig.calibrate_motor(human_right_ankle_action, 34.0f, 34.0f, 0.034f);
+            return promote_runrig6_human_explicit_toes(rig) && rig.valid();
         }
 
         void calibrate_grounded_defaults(CreatureBlueprint& rig,
@@ -281,13 +369,13 @@ namespace runner::sim
         CreatureBlueprint result{};
         result.species_identity = CreatureSpecies::human;
         result.nodes = {
-            // Exact v0.7.44 user-authored Human neutral pose. Training,
-            // preview, and newly-created human.rig files share this upright
-            // geometry; paired normalization retains equal anatomical reach.
+            // RUNRIG6 stores both knees on the same forward-facing anatomical
+            // flexion branch. Training, preview, and newly-created human.rig
+            // files therefore start from the same continuous joint neutral.
             { -0.179952502f, 2.61523819f },
             { 0.00281051546f, 3.76404762f },
             { 0.0123144165f, 4.13904762f },
-            { -0.299952507f, 1.52010894f },
+            { -0.233058650f, 1.51483471f },
             { -0.349952519f, 0.459101081f },
             { -0.0599525049f, 1.52010894f },
             { -0.00995250046f, 0.459101081f },
@@ -325,8 +413,6 @@ namespace runner::sim
         result.head_node = 2u;
         result.left_contact_node = 4u;
         result.right_contact_node = 6u;
-        const bool paired_dimensions_valid = result.enforce_human_paired_segment_lengths();
-        (void)paired_dimensions_valid;
         result.rebuild_rest_lengths();
         for (std::size_t index = 0; index < 4u; ++index)
         {
@@ -347,26 +433,66 @@ namespace runner::sim
         result.calibrate_motor(5, 76.0f, 76.0f, 0.022f);
         result.calibrate_motor(6, 62.0f, 62.0f, 0.024f);
         result.calibrate_motor(7, 76.0f, 76.0f, 0.022f);
+        const bool physical_feet_promoted =
+            promote_human_articulated_feet(result);
+        (void)physical_feet_promoted;
         return result;
     }
 
     bool CreatureBlueprint::human_paired_limb_topology() const noexcept
     {
-        if (nodes.size() != 13u || radii.size() != 13u
-            || active_motor_count != 8u || root_node != 0u || torso_node != 1u
-            || head_node != 2u || left_contact_node != 4u
-            || right_contact_node != 6u || !additional_left_contact_nodes.empty()
-            || !additional_right_contact_nodes.empty())
+        if (nodes.size() != 19u || radii.size() != 19u
+            || active_motor_count != anatomy_action_count
+            || root_node != 0u || torso_node != 1u || head_node != 2u
+            || left_contact_node != human_left_heel_node
+            || right_contact_node != human_right_heel_node
+            || additional_left_contact_nodes
+                != std::vector<std::uint16_t>{
+                    human_left_ball_node, human_left_toe_node }
+            || additional_right_contact_nodes
+                != std::vector<std::uint16_t>{
+                    human_right_ball_node, human_right_toe_node }
+            || !direct_bone(*this, 3u, human_left_ankle_node)
+            || !direct_bone(*this, human_left_ankle_node,
+                human_left_heel_node)
+            || !direct_bone(*this, human_left_ankle_node,
+                human_left_ball_node)
+            || !direct_bone(*this, human_left_heel_node,
+                human_left_ball_node)
+            || !direct_bone(*this, human_left_ball_node,
+                human_left_toe_node)
+            || !direct_bone(*this, 5u, human_right_ankle_node)
+            || !direct_bone(*this, human_right_ankle_node,
+                human_right_heel_node)
+            || !direct_bone(*this, human_right_ankle_node,
+                human_right_ball_node)
+            || !direct_bone(*this, human_right_heel_node,
+                human_right_ball_node)
+            || !direct_bone(*this, human_right_ball_node,
+                human_right_toe_node)
+            || direct_bone(*this, 3u, human_left_heel_node)
+            || direct_bone(*this, 3u, human_left_ball_node)
+            || direct_bone(*this, 5u, human_right_heel_node)
+            || direct_bone(*this, 5u, human_right_ball_node))
             return false;
-        const std::array<MotorConstraint, 8> expected{
+        const std::array<MotorConstraint, anatomy_action_count> expected{
             MotorConstraint{ 1, 0, 3 }, MotorConstraint{ 0, 3, 4 },
             MotorConstraint{ 1, 0, 5 }, MotorConstraint{ 0, 5, 6 },
             MotorConstraint{ 1, 7, 8 }, MotorConstraint{ 7, 8, 9 },
-            MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 }
+            MotorConstraint{ 1, 10, 11 }, MotorConstraint{ 10, 11, 12 },
+            MotorConstraint{ 3, human_left_ankle_node,
+                human_left_ball_node },
+            MotorConstraint{ 5, human_right_ankle_node,
+                human_right_ball_node },
+            MotorConstraint{ human_left_heel_node, human_left_ball_node,
+                human_left_toe_node },
+            MotorConstraint{ human_right_heel_node, human_right_ball_node,
+                human_right_toe_node }
         };
         for (std::size_t index = 0; index < expected.size(); ++index)
         {
-            if (motors[index].a != expected[index].a
+            if (!motors[index].enabled
+                || motors[index].a != expected[index].a
                 || motors[index].pivot != expected[index].pivot
                 || motors[index].c != expected[index].c)
                 return false;
@@ -410,6 +536,46 @@ namespace runner::sim
             if (!capture_segment(segment))
                 return false;
         }
+        const Vec2 left_heel_offset = candidate.nodes[human_left_heel_node]
+            - candidate.nodes[human_left_ankle_node];
+        const Vec2 right_heel_offset = candidate.nodes[human_right_heel_node]
+            - candidate.nodes[human_right_ankle_node];
+        const Vec2 left_ball_offset = candidate.nodes[human_left_ball_node]
+            - candidate.nodes[human_left_ankle_node];
+        const Vec2 right_ball_offset = candidate.nodes[human_right_ball_node]
+            - candidate.nodes[human_right_ankle_node];
+        const Vec2 left_toe_offset = candidate.nodes[human_left_toe_node]
+            - candidate.nodes[human_left_ball_node];
+        const Vec2 right_toe_offset = candidate.nodes[human_right_toe_node]
+            - candidate.nodes[human_right_ball_node];
+        const bool left_foot_edited = edited_node == human_left_ankle_node
+            || edited_node == human_left_heel_node
+            || edited_node == human_left_ball_node
+            || edited_node == human_left_toe_node;
+        const bool right_foot_edited = edited_node == human_right_ankle_node
+            || edited_node == human_right_heel_node
+            || edited_node == human_right_ball_node
+            || edited_node == human_right_toe_node;
+        const auto paired_foot_offset = [left_foot_edited, right_foot_edited](
+            Vec2 left, Vec2 right) noexcept
+        {
+            if (left_foot_edited != right_foot_edited)
+                return left_foot_edited ? left : right;
+            return (left + right) * 0.5f;
+        };
+        const Vec2 heel_offset = paired_foot_offset(
+            left_heel_offset, right_heel_offset);
+        const Vec2 ball_offset = paired_foot_offset(
+            left_ball_offset, right_ball_offset);
+        const Vec2 toe_offset = paired_foot_offset(
+            left_toe_offset, right_toe_offset);
+        if (!std::isfinite(heel_offset.x) || !std::isfinite(heel_offset.y)
+            || !std::isfinite(ball_offset.x) || !std::isfinite(ball_offset.y)
+            || !std::isfinite(toe_offset.x) || !std::isfinite(toe_offset.y)
+            || length(heel_offset) < 0.05f || length(ball_offset) < 0.05f
+            || length(ball_offset - heel_offset) < 0.05f
+            || length(toe_offset) < 0.05f)
+            return false;
         const auto pair_target = [&](const Segment& a, const Segment& b)
         {
             const bool source_a = edited_node == a.to
@@ -452,29 +618,47 @@ namespace runner::sim
         candidate.nodes[6] = candidate.nodes[5] + segments[3].direction * shin;
         if (edited_node == std::numeric_limits<std::size_t>::max())
         {
-            // A saved/default human uses a compact layered side-view stance.
-            // Direct manipulation keeps the exact edited chain direction above;
-            // persistence normalization removes wide crab stances without
-            // changing the locked paired lengths.
-            constexpr float knee_half_span = 0.12f;
+            // Preserve each ankle endpoint and paired segment length while
+            // selecting the forward-facing knee solution on both sides.
+            constexpr float authored_upper_horizontal = 0.12f;
             constexpr float foot_half_span = 0.17f;
-            constexpr float distal_horizontal = foot_half_span - knee_half_span;
-            if (thigh <= knee_half_span || shin <= distal_horizontal)
+            constexpr float authored_lower_horizontal = foot_half_span
+                - authored_upper_horizontal;
+            if (thigh <= authored_upper_horizontal
+                || shin <= authored_lower_horizontal)
                 return false;
             const float knee_drop = std::sqrt(thigh * thigh
-                - knee_half_span * knee_half_span);
+                - authored_upper_horizontal * authored_upper_horizontal);
             const float shin_drop = std::sqrt(shin * shin
-                - distal_horizontal * distal_horizontal);
+                - authored_lower_horizontal * authored_lower_horizontal);
             const float left_sign = candidate.nodes[3].x <= candidate.nodes[5].x
                 ? -1.0f : 1.0f;
-            candidate.nodes[3] = candidate.nodes[0]
-                + Vec2{ left_sign * knee_half_span, -knee_drop };
-            candidate.nodes[5] = candidate.nodes[0]
-                + Vec2{ -left_sign * knee_half_span, -knee_drop };
-            candidate.nodes[4] = candidate.nodes[3]
-                + Vec2{ left_sign * distal_horizontal, -shin_drop };
-            candidate.nodes[6] = candidate.nodes[5]
-                + Vec2{ -left_sign * distal_horizontal, -shin_drop };
+            const auto rebuild_anatomical_leg = [&](std::uint16_t knee,
+                std::uint16_t ankle, float stance_sign) noexcept
+            {
+                const Vec2 ankle_delta{ stance_sign * foot_half_span,
+                    -(knee_drop + shin_drop) };
+                const float ankle_distance = length(ankle_delta);
+                if (!std::isfinite(ankle_distance) || ankle_distance <= 0.05f)
+                    return false;
+                const Vec2 direction = ankle_delta / ankle_distance;
+                const float along = (thigh * thigh - shin * shin
+                        + ankle_distance * ankle_distance)
+                    / (2.0f * ankle_distance);
+                const float bend_squared = thigh * thigh - along * along;
+                if (!std::isfinite(along) || bend_squared <= 1.0e-8f)
+                    return false;
+                const Vec2 facing_normal{ -direction.y, direction.x };
+                candidate.nodes[knee] = candidate.nodes[0]
+                    + direction * along
+                    + facing_normal * std::sqrt(bend_squared);
+                candidate.nodes[ankle] = candidate.nodes[0] + ankle_delta;
+                return true;
+            };
+            if (!rebuild_anatomical_leg(3u, human_left_ankle_node, left_sign)
+                || !rebuild_anatomical_leg(5u, human_right_ankle_node,
+                    -left_sign))
+                return false;
 
             // Keep the paired arms layered beside the torso in the saved/default
             // pose. Training may swing them, but morphology normalization must
@@ -504,9 +688,51 @@ namespace runner::sim
             candidate.nodes[12] = candidate.nodes[11] + segments[7].direction * forearm;
         }
 
+        candidate.nodes[human_left_heel_node] =
+            candidate.nodes[human_left_ankle_node] + heel_offset;
+        candidate.nodes[human_left_ball_node] =
+            candidate.nodes[human_left_ankle_node] + ball_offset;
+        candidate.nodes[human_left_toe_node] =
+            candidate.nodes[human_left_ball_node] + toe_offset;
+        candidate.nodes[human_right_heel_node] =
+            candidate.nodes[human_right_ankle_node] + heel_offset;
+        candidate.nodes[human_right_ball_node] =
+            candidate.nodes[human_right_ankle_node] + ball_offset;
+        candidate.nodes[human_right_toe_node] =
+            candidate.nodes[human_right_ball_node] + toe_offset;
+
+        if (edited_node == std::numeric_limits<std::size_t>::max())
+        {
+            // The geometry migration changes joint angles, not calibrated
+            // travel or strength. Rebase only the physical leg/ankle neutrals
+            // so action zero is the saved pose rather than an instant branch
+            // flip on the first simulation step.
+            constexpr std::array<std::size_t, 6> lower_body_motors{
+                0u, 1u, 2u, 3u,
+                human_left_ankle_action, human_right_ankle_action
+            };
+            for (const std::size_t index : lower_body_motors)
+            {
+                if (index >= candidate.active_motor_count)
+                    continue;
+                MotorConstraint& motor = candidate.motors[index];
+                const float negative_span = std::max(0.0f,
+                    motor.neutral_angle - motor.minimum_angle);
+                const float positive_span = std::max(0.0f,
+                    motor.maximum_angle - motor.neutral_angle);
+                const float neutral = candidate.rest_joint_angle(index);
+                motor.neutral_angle = neutral;
+                motor.minimum_angle = neutral - negative_span;
+                motor.maximum_angle = neutral + positive_span;
+            }
+        }
+
         if (!pair_radius(3u, 5u) || !pair_radius(4u, 6u)
             || !pair_radius(7u, 10u) || !pair_radius(8u, 11u)
-            || !pair_radius(9u, 12u))
+            || !pair_radius(9u, 12u)
+            || !pair_radius(human_left_heel_node, human_right_heel_node)
+            || !pair_radius(human_left_ball_node, human_right_ball_node)
+            || !pair_radius(human_left_toe_node, human_right_toe_node))
             return false;
         *this = std::move(candidate);
         return true;
@@ -881,6 +1107,26 @@ namespace runner::sim
     bool CreatureBlueprint::save(const std::filesystem::path& path, std::string& error) const
     {
         CreatureBlueprint normalized = *this;
+        const CreatureSpecies owned_species = normalized.presentation_species();
+        if (owned_species == CreatureSpecies::human)
+        {
+            if (legacy_human_paired_limb_topology(normalized))
+            {
+                if (!promote_human_articulated_feet(normalized))
+                {
+                    error = "Legacy Human feet could not be promoted to RUNRIG7.";
+                    return false;
+                }
+            }
+            else if (normalized.nodes.size() == 19u
+                && normalized.active_motor_count
+                    == human_right_ankle_action + 1u
+                && !promote_runrig6_human_explicit_toes(normalized))
+            {
+                error = "RUNRIG6 Human feet could not be promoted to RUNRIG7.";
+                return false;
+            }
+        }
         if (!normalized.enforce_human_paired_segment_lengths())
         {
             error = "Human paired limb dimensions could not be normalized.";
@@ -892,14 +1138,14 @@ namespace runner::sim
             error = "Rig is structurally invalid and was not saved.";
             return false;
         }
-        const CreatureSpecies owned_species = normalized.presentation_species();
         if (!normalized.topology_compatible_with_species(owned_species))
         {
             error = "Rig topology is incompatible with its owned species identity.";
             return false;
         }
-        // Saving a legacy rig is its one-time migration into an explicitly
-        // species-owned RUNRIG 5 document.
+        // Saving a legacy rig is its one-time migration into a RUNRIG7
+        // document whose Human signature includes the canonical physical feet
+        // and independently authored ankle and toe motors.
         normalized.species_identity = owned_species;
 
         std::filesystem::path temporary = path;
@@ -917,7 +1163,7 @@ namespace runner::sim
                 error = "Could not open temporary rig file for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNRIG 5\n";
+            output << "RUNRIG 7\n";
             output << normalized.nodes.size() << ' ' << normalized.bones.size()
                 << ' ' << normalized.active_motor_count << '\n';
             output << "P " << creature_species_slug(*normalized.species_identity) << '\n';
@@ -1018,11 +1264,11 @@ namespace runner::sim
         input >> magic >> version >> node_count >> bone_count >> motor_count;
         if (!input || magic != "RUNRIG"
             || (version != 1 && version != 2 && version != 3 && version != 4
-                && version != 5)
+                && version != 5 && version != 6 && version != 7)
             || node_count < 3 || node_count > 128 || bone_count > 256
             || motor_count == 0u || motor_count > anatomy_action_count)
         {
-            error = "Invalid or unsupported Runner rig file.";
+            error = "Invalid or unsupported Epoch2DWalkEngine rig file.";
             return humanoid();
         }
 
@@ -1153,6 +1399,23 @@ namespace runner::sim
             result.motors[index] = motor;
         }
 
+        if (version < 6
+            && (!declared_species.has_value()
+                || *declared_species == CreatureSpecies::human)
+            && legacy_human_paired_limb_topology(result)
+            && !promote_human_articulated_feet(result))
+        {
+            error = "Legacy Human feet could not be promoted to RUNRIG7.";
+            return humanoid();
+        }
+        if (version == 6
+            && (!declared_species.has_value()
+                || *declared_species == CreatureSpecies::human)
+            && !promote_runrig6_human_explicit_toes(result))
+        {
+            error = "RUNRIG6 Human feet could not be promoted to RUNRIG7.";
+            return humanoid();
+        }
         if (!result.enforce_human_paired_segment_lengths())
         {
             error = "Human paired limb dimensions are invalid.";
@@ -1204,7 +1467,6 @@ namespace runner::sim
     Environment::Environment(const CreatureBlueprint& blueprint, std::uint64_t seed)
         : blueprint_(blueprint), random_state_(seed == 0 ? 1 : seed)
     {
-        append_runtime_human_articulated_feet(blueprint_);
         blueprint_.rebuild_rest_lengths();
         reset(seed);
     }
@@ -1212,7 +1474,6 @@ namespace runner::sim
     void Environment::set_blueprint(const CreatureBlueprint& blueprint)
     {
         blueprint_ = blueprint;
-        append_runtime_human_articulated_feet(blueprint_);
         blueprint_.rebuild_rest_lengths();
         course_layout_initialized_ = false;
         reset(random_state_);
@@ -1256,6 +1517,73 @@ namespace runner::sim
         gait_task_ = task;
     }
 
+    void Environment::set_guidance_mode(GuidanceMode mode) noexcept
+    {
+        if (mode == GuidanceMode::raw_policy_audit
+            && guidance_mode_ != GuidanceMode::raw_policy_audit)
+        {
+            // A teacher-created ledge grasp is not policy state. Retire its
+            // live anchors at the authority boundary so a later Raw step
+            // cannot inherit an actionless hand constraint or teacher-earned
+            // climb/descent credit.
+            ledge_grasp_nodes_.fill(std::numeric_limits<std::uint16_t>::max());
+            ledge_grasp_anchors_.fill({});
+            hand_ledge_contacts_ = 0u;
+            climb_support_transfers_ = 0u;
+            ledge_climbs_ = 0u;
+            controlled_descents_ = 0u;
+            ledge_climbed_ = false;
+            ledge_descending_ = false;
+            previous_root_height_ = valid_node(blueprint_.root_node)
+                ? particles_[blueprint_.root_node].position.y : 0.0f;
+            clear_crouch_walk_guidance_state();
+        }
+        guidance_mode_ = mode;
+    }
+
+    void Environment::clear_crouch_walk_guidance_state() noexcept
+    {
+        action_support_unload_side_ = 0;
+        last_action_support_unload_side_ = 0;
+        support_cluster_release_hold_seconds_.fill(0.0f);
+        support_toe_roll_seconds_.fill(0.0f);
+        articulated_toe_commands_.fill(0.0f);
+    }
+
+    void Environment::set_physical_guidance_authority(float authority) noexcept
+    {
+        const float previous = physical_guidance_authority_;
+        const float next = std::isfinite(authority)
+            ? clamp(authority, 0.0f, 1.0f) : 0.0f;
+        physical_guidance_authority_ = next;
+
+        if (guidance_mode_ == GuidanceMode::raw_policy_audit)
+        {
+            clear_crouch_walk_guidance_state();
+            return;
+        }
+        if (course_stage_ != CourseStage::crouch_walk)
+            return;
+        if (next <= 0.0f)
+        {
+            clear_crouch_walk_guidance_state();
+            return;
+        }
+        if (next >= previous || previous <= 0.0f)
+            return;
+
+        // A falling lesson authority may shorten an already-open teacher
+        // release window, but can never extend or re-arm one. This keeps the
+        // stateful contact guide monotone with the same scalar as its lift.
+        const float ratio = next / previous;
+        for (float& hold : support_cluster_release_hold_seconds_)
+            hold *= ratio;
+        for (float& roll : support_toe_roll_seconds_)
+            roll *= ratio;
+        for (float& command : articulated_toe_commands_)
+            command *= ratio;
+    }
+
     void Environment::configure_equipment(WeaponClass weapon,
         float target_distance)
     {
@@ -1274,10 +1602,10 @@ namespace runner::sim
 
     void Environment::disarm_equipment() noexcept
     {
-        if (equipment_state_ != EquipmentState::safe_carry
-            && equipment_state_ != EquipmentState::gun_stance
-            && equipment_state_ != EquipmentState::aiming
-            && equipment_state_ != EquipmentState::ready)
+        if (weapon_class_ == WeaponClass::none
+            || equipment_state_ == EquipmentState::unarmed
+            || equipment_state_ == EquipmentState::disarmed
+            || equipment_state_ == EquipmentState::dropped)
             return;
         equipment_state_ = EquipmentState::disarmed;
         dropped_equipment_position_ = equipment_mount_position();
@@ -1325,6 +1653,48 @@ namespace runner::sim
         return best;
     }
 
+    std::uint16_t Environment::equipment_foregrip_node() const noexcept
+    {
+        constexpr std::uint16_t invalid =
+            std::numeric_limits<std::uint16_t>::max();
+        const std::uint16_t rear = equipment_mount_node();
+        std::uint16_t front = invalid;
+        for (std::size_t index = 0; index < blueprint_.nodes.size(); ++index)
+        {
+            if (index == rear || index == blueprint_.head_node
+                || index == blueprint_.root_node || index == blueprint_.torso_node
+                || blueprint_.is_support_seed(index)
+                || !manipulator_endpoint(blueprint_, index))
+                continue;
+            if (front != invalid)
+                return invalid;
+            front = static_cast<std::uint16_t>(index);
+        }
+        return front;
+    }
+
+    std::uint16_t Environment::equipment_mount_shoulder_node() const noexcept
+    {
+        constexpr std::uint16_t invalid =
+            std::numeric_limits<std::uint16_t>::max();
+        const std::uint16_t rear = equipment_mount_node();
+        for (const MotorConstraint& distal : blueprint_.motors)
+        {
+            if (!distal.enabled || distal.c != rear
+                || distal.pivot >= blueprint_.nodes.size())
+                continue;
+            for (const MotorConstraint& proximal : blueprint_.motors)
+            {
+                if (!proximal.enabled || proximal.a != blueprint_.torso_node
+                    || proximal.c != distal.pivot
+                    || proximal.pivot >= blueprint_.nodes.size())
+                    continue;
+                return proximal.pivot;
+            }
+        }
+        return invalid;
+    }
+
     std::uint16_t Environment::equipment_mount_parent_node() const noexcept
     {
         const std::uint16_t mount = equipment_mount_node();
@@ -1358,6 +1728,79 @@ namespace runner::sim
         return particles_[node].position;
     }
 
+    EquipmentGripFrame Environment::equipment_grip_frame() const noexcept
+    {
+        EquipmentGripFrame frame{};
+        if (weapon_class_ == WeaponClass::none
+            || !valid_node(blueprint_.root_node)
+            || !valid_node(blueprint_.torso_node))
+            return frame;
+        frame.rear_node = equipment_mount_node();
+        frame.front_node = equipment_foregrip_node();
+        frame.rear_shoulder_node = equipment_mount_shoulder_node();
+        if (!valid_node(frame.rear_node) || !valid_node(frame.front_node)
+            || !valid_node(frame.rear_shoulder_node)
+            || frame.rear_node == frame.front_node)
+            return frame;
+
+        frame.rear = particles_[frame.rear_node].position;
+        frame.front = particles_[frame.front_node].position;
+        const Vec2 grip_delta = frame.front - frame.rear;
+        frame.span = length(grip_delta);
+        const bool finite_grips = std::isfinite(frame.rear.x)
+            && std::isfinite(frame.rear.y) && std::isfinite(frame.front.x)
+            && std::isfinite(frame.front.y) && std::isfinite(frame.span);
+        if (!finite_grips || frame.span <= 1.0e-4f)
+            return frame;
+
+        frame.axis = grip_delta / frame.span;
+        const WeaponGeometry geometry = weapon_geometry(weapon_class_);
+        frame.muzzle = frame.rear + frame.axis * geometry.rear_to_muzzle;
+        frame.stock_butt = frame.rear - frame.axis * geometry.butt_to_rear_grip;
+
+        const Vec2 body_up = normalized(
+            particles_[blueprint_.torso_node].position
+                - particles_[blueprint_.root_node].position,
+            { 0.0f, 1.0f });
+        const float facing = facing_direction() < 0.0f ? -1.0f : 1.0f;
+        const Vec2 body_forward = facing * Vec2{ body_up.y, -body_up.x };
+        const Vec2 shoulder = particles_[frame.rear_shoulder_node].position;
+        frame.shoulder_pocket = geometry.shouldered
+            ? shoulder + body_forward * 0.04f - body_up * 0.10f
+            : shoulder + body_forward * 0.28f - body_up * 0.16f;
+        frame.stock_seat_error = geometry.shouldered
+            ? length(frame.stock_butt - frame.shoulder_pocket) : 0.0f;
+        frame.resolved = std::isfinite(frame.axis.x)
+            && std::isfinite(frame.axis.y) && std::isfinite(frame.muzzle.x)
+            && std::isfinite(frame.muzzle.y)
+            && std::isfinite(frame.stock_seat_error);
+        if (!frame.resolved)
+            return frame;
+
+        const float span_tolerance = geometry.shouldered ? 0.10f : 0.06f;
+        const float forward_alignment = dot(frame.axis, body_forward);
+        const bool span_valid = std::abs(frame.span
+            - geometry.rear_to_foregrip) <= span_tolerance;
+        const bool stock_valid = !geometry.shouldered
+            || frame.stock_seat_error <= 0.12f;
+        frame.valid = span_valid && stock_valid
+            && forward_alignment >= 0.85f;
+        return frame;
+    }
+
+    Vec2 Environment::equipment_muzzle_position() const noexcept
+    {
+        const EquipmentGripFrame frame = equipment_grip_frame();
+        if (frame.resolved
+            && equipment_state_ != EquipmentState::dropped
+            && equipment_state_ != EquipmentState::disarmed)
+            return frame.muzzle;
+        const Vec2 direction{
+            std::cos(equipment_aim_angle_), std::sin(equipment_aim_angle_) };
+        return equipment_display_position()
+            + direction * weapon_geometry(weapon_class_).rear_to_muzzle;
+    }
+
     Vec2 Environment::equipment_display_position() const noexcept
     {
         if (equipment_state_ == EquipmentState::dropped
@@ -1366,14 +1809,103 @@ namespace runner::sim
         return equipment_mount_position();
     }
 
+    Vec2 Environment::equipment_display_direction() const noexcept
+    {
+        if (equipment_state_ != EquipmentState::dropped
+            && equipment_state_ != EquipmentState::disarmed)
+        {
+            const EquipmentGripFrame frame = equipment_grip_frame();
+            if (frame.resolved)
+                return frame.axis;
+        }
+        return { std::cos(equipment_aim_angle_), std::sin(equipment_aim_angle_) };
+    }
+
     float Environment::equipment_recommended_aim_angle() const noexcept
     {
         if (weapon_class_ == WeaponClass::none || !equipment_target_.active)
             return facing_direction() < 0.0f ? pi : 0.0f;
         const WeaponProfile profile = weapon_profile(weapon_class_);
-        return wrap_angle(ballistic_low_arc_angle(equipment_mount_position(),
+        return wrap_angle(ballistic_low_arc_angle(equipment_muzzle_position(),
             equipment_target_.position, profile.projectile_speed,
             profile.gravity, facing_direction()) + equipment_aim_correction_);
+    }
+
+    float Environment::equipment_obstruction_fraction(Vec2 beginning,
+        Vec2 ending, float radius) const noexcept
+    {
+        if (!std::isfinite(beginning.x) || !std::isfinite(beginning.y)
+            || !std::isfinite(ending.x) || !std::isfinite(ending.y)
+            || !std::isfinite(radius) || radius < 0.0f)
+            return 0.0f;
+        const Vec2 segment = ending - beginning;
+        const float span = length(segment);
+        const int samples = std::clamp(static_cast<int>(std::ceil(
+            span / std::max(DeformableTerrain::fine_cell_spacing * 0.50f,
+                0.0125f))), 1, 256);
+        for (int sample = 1; sample <= samples; ++sample)
+        {
+            const float fraction = static_cast<float>(sample)
+                / static_cast<float>(samples);
+            const Vec2 point = beginning + segment * fraction;
+            if (point.y - radius <= ground_height_at(point.x) + 0.002f)
+                return fraction;
+            for (const CourseFeature& feature : course_features_)
+            {
+                if (feature.kind == CourseFeatureKind::projectile)
+                    continue;
+                bool blocked{};
+                if (feature.kind == CourseFeatureKind::rock
+                    || feature.kind == CourseFeatureKind::moving_hazard)
+                    blocked = length(point - feature.center)
+                        <= radius + feature.radius;
+                else
+                {
+                    const Vec2 minimum = feature.center - feature.half_extent
+                        - Vec2{ radius, radius };
+                    const Vec2 maximum = feature.center + feature.half_extent
+                        + Vec2{ radius, radius };
+                    blocked = point.x >= minimum.x && point.x <= maximum.x
+                        && point.y >= minimum.y && point.y <= maximum.y;
+                }
+                if (blocked)
+                    return fraction;
+            }
+        }
+        return 2.0f;
+    }
+
+    bool Environment::equipment_target_visible() const noexcept
+    {
+        if (weapon_class_ == WeaponClass::none || !equipment_target_.active)
+            return false;
+        const WeaponProfile profile = weapon_profile(weapon_class_);
+        const float angle = equipment_recommended_aim_angle();
+        const Vec2 direction{ std::cos(angle), std::sin(angle) };
+        const Vec2 origin = equipment_muzzle_position();
+        const float horizontal_velocity = direction.x * profile.projectile_speed;
+        if (std::abs(horizontal_velocity) <= 1.0e-5f)
+            return false;
+        const float flight_seconds = (equipment_target_.position.x - origin.x)
+            / horizontal_velocity;
+        if (!std::isfinite(flight_seconds) || flight_seconds <= 0.0f
+            || flight_seconds > profile.projectile_lifetime_seconds)
+            return false;
+        const int samples = std::clamp(static_cast<int>(std::ceil(
+            flight_seconds * 120.0f)), 8, 384);
+        Vec2 previous = origin;
+        for (int sample = 1; sample < samples; ++sample)
+        {
+            const float time = flight_seconds * static_cast<float>(sample)
+                / static_cast<float>(samples);
+            Vec2 current = origin + direction * (profile.projectile_speed * time);
+            current.y -= 0.5f * profile.gravity * time * time;
+            if (equipment_obstruction_fraction(previous, current,
+                    profile.projectile_radius) <= 1.0f)
+                return false;
+            previous = current;
+        }
+        return true;
     }
 
     std::uint32_t Environment::equipment_hit_goal() const noexcept
@@ -1385,29 +1917,65 @@ namespace runner::sim
         return weapon_class_ == WeaponClass::none ? 0u : 1u;
     }
 
-    bool Environment::equipment_engagement_ready() const noexcept
+    EquipmentFireBlock Environment::equipment_fire_block() const noexcept
     {
-        if (weapon_class_ == WeaponClass::none
-            || equipment_state_ != EquipmentState::ready
-            || !equipment_stopped_
+        if (weapon_class_ == WeaponClass::none)
+            return EquipmentFireBlock::unarmed;
+        if (equipment_state_ == EquipmentState::reloading)
+            return EquipmentFireBlock::reloading;
+        if (equipment_rounds_remaining_ == 0u)
+            return EquipmentFireBlock::empty;
+        if (equipment_hit_goal() > 0u
+            && target_hits_ >= equipment_hit_goal())
+            return EquipmentFireBlock::goal_complete;
+        if (!equipment_target_.active)
+            return EquipmentFireBlock::no_target;
+        if (!equipment_grip_valid())
+            return EquipmentFireBlock::invalid_grip;
+        if (equipment_body_speed_ > 0.18f)
+            return EquipmentFireBlock::moving;
+        if (!equipment_stopped_)
+            return EquipmentFireBlock::unplanted;
+        if (equipment_state_ != EquipmentState::ready)
+            return EquipmentFireBlock::wrong_state;
+        if (equipment_state_seconds_ < 0.05f
             || equipment_aim_settle_seconds_ < 0.30f
-            || equipment_aim_rate_ > 0.28f
-            || !equipment_target_.active
-            || target_hits_ >= equipment_hit_goal()
-            || equipment_cooldown_seconds_ > 0.0f
-            || (granular_hazard_active() && !granular_hazard_safe()))
-            return false;
+            || equipment_aim_rate_ > 0.28f)
+            return EquipmentFireBlock::unsettled;
+        if (equipment_cooldown_seconds_ > 0.0f
+            || equipment_recoil_recovery_seconds_ > 0.0f)
+            return EquipmentFireBlock::cooldown;
+        if (granular_hazard_active() && !granular_hazard_safe())
+            return EquipmentFireBlock::hazardous_footing;
         const WeaponProfile profile = weapon_profile(weapon_class_);
-        const Vec2 delta = equipment_target_.position - equipment_mount_position();
+        const Vec2 delta = equipment_target_.position - equipment_muzzle_position();
         const float distance = length(delta);
-        const float muzzle_safety_distance = std::max(
-            0.75f, profile.projectile_radius * 4.0f);
-        if (!std::isfinite(distance) || distance < muzzle_safety_distance
-            || distance > profile.maximum_engagement_distance)
-            return false;
+        if (!equipment_fire_range_valid(distance, profile))
+            return EquipmentFireBlock::unsafe_range;
+        if (!equipment_target_visible())
+            return EquipmentFireBlock::occluded;
         const float desired = equipment_recommended_aim_angle();
         const float aim_error = std::abs(wrap_angle(desired - equipment_aim_angle_));
-        return std::isfinite(aim_error) && aim_error <= profile.aim_tolerance;
+        return std::isfinite(aim_error) && aim_error <= profile.aim_tolerance
+            ? EquipmentFireBlock::none : EquipmentFireBlock::unsettled;
+    }
+
+    bool Environment::equipment_engagement_ready() const noexcept
+    {
+        return equipment_fire_block() == EquipmentFireBlock::none;
+    }
+
+    void Environment::record_equipment_miss(Vec2 impact) noexcept
+    {
+        if (equipment_target_.active)
+        {
+            last_shot_miss_error_ = impact.y - equipment_target_.position.y;
+            equipment_aim_correction_ = aim_correction_from_miss(
+                equipment_aim_correction_, last_shot_miss_error_,
+                std::abs(equipment_target_.position.x
+                    - equipment_muzzle_position().x));
+        }
+        ++shots_missed_;
     }
 
     void Environment::reset_equipment() noexcept
@@ -1426,6 +1994,13 @@ namespace runner::sim
         equipment_aim_correction_ = 0.0f;
         last_shot_miss_error_ = 0.0f;
         equipment_stopped_ = false;
+        equipment_body_speed_ = 0.0f;
+        equipment_plant_seconds_ = 0.0f;
+        equipment_state_seconds_ = 0.0f;
+        equipment_reload_seconds_ = 0.0f;
+        equipment_recoil_recovery_seconds_ = 0.0f;
+        equipment_rounds_remaining_ = 0u;
+        equipment_fire_block_ = EquipmentFireBlock::unarmed;
         shots_missed_ = 0u;
         equipment_cooldown_seconds_ = 0.0f;
         dropped_equipment_position_ = {};
@@ -1445,17 +2020,16 @@ namespace runner::sim
             weapon_class_ = configured_weapon_class_;
         equipment_state_ = weapon_class_ == WeaponClass::none
             ? EquipmentState::unarmed : EquipmentState::safe_carry;
-        const std::uint16_t mount = equipment_mount_node();
-        const std::uint16_t mount_parent = equipment_mount_parent_node();
-        if (weapon_class_ != WeaponClass::none
-            && valid_node(mount) && valid_node(mount_parent)
-            && mount != mount_parent)
+        if (weapon_class_ != WeaponClass::none)
         {
-            const Vec2 physical_barrel =
-                particles_[mount].position - particles_[mount_parent].position;
-            if (length(physical_barrel) > 1.0e-4f)
-                equipment_aim_angle_ = std::atan2(
-                    physical_barrel.y, physical_barrel.x);
+            equipment_rounds_remaining_ =
+                weapon_profile(weapon_class_).magazine_capacity;
+            equipment_fire_block_ = EquipmentFireBlock::unplanted;
+        }
+        const EquipmentGripFrame grip = equipment_grip_frame();
+        if (weapon_class_ != WeaponClass::none && grip.resolved)
+        {
+            equipment_aim_angle_ = std::atan2(grip.axis.y, grip.axis.x);
             previous_equipment_aim_angle_ = equipment_aim_angle_;
             equipment_commanded_aim_angle_ = equipment_aim_angle_;
         }
@@ -1471,7 +2045,7 @@ namespace runner::sim
             ? configured_target_distance_
             : lerp(profile.minimum_engagement_distance,
                 profile.maximum_engagement_distance, range_fraction);
-        equipment_target_.position.x = equipment_mount_position().x
+        equipment_target_.position.x = equipment_muzzle_position().x
             + target_distance * facing_direction();
         equipment_target_.position.y = ground_height_at(equipment_target_.position.x)
             + 0.85f + static_cast<float>((random_state_ >> 16u) % 4u) * 0.42f;
@@ -1485,34 +2059,46 @@ namespace runner::sim
         target_hit_this_step_ = false;
         equipment_cooldown_seconds_ = std::max(0.0f,
             equipment_cooldown_seconds_ - dt);
+        equipment_recoil_recovery_seconds_ = std::max(0.0f,
+            equipment_recoil_recovery_seconds_ - dt);
+        equipment_reload_seconds_ = std::max(0.0f,
+            equipment_reload_seconds_ - dt);
+        equipment_state_seconds_ += dt;
 
         const float local_aim = clamp(actions[equipment_aim_action], -1.0f, 1.0f)
             * (pi * 0.42f);
         equipment_commanded_aim_angle_ = wrap_angle(facing_direction() < 0.0f
             ? pi - local_aim : local_aim);
         previous_equipment_aim_angle_ = equipment_aim_angle_;
-        const std::uint16_t mount = equipment_mount_node();
-        const std::uint16_t mount_parent = equipment_mount_parent_node();
-        if (valid_node(mount) && valid_node(mount_parent) && mount != mount_parent)
+        const EquipmentGripFrame grip = equipment_grip_frame();
+        if (grip.resolved)
         {
-            const Vec2 physical_barrel =
-                particles_[mount].position - particles_[mount_parent].position;
-            if (length(physical_barrel) > 1.0e-4f)
-                equipment_aim_angle_ = std::atan2(
-                    physical_barrel.y, physical_barrel.x);
+            equipment_aim_angle_ = std::atan2(grip.axis.y, grip.axis.x);
         }
         equipment_aim_rate_ = dt > 1.0e-5f
             ? std::abs(wrap_angle(equipment_aim_angle_
                 - previous_equipment_aim_angle_)) / dt
             : 0.0f;
-        equipment_stopped_ = std::abs(forward_speed_) <= 0.18f
-            && (left_supported() || right_supported())
+        equipment_body_speed_ = 0.0f;
+        if (valid_node(blueprint_.root_node) && dt > 1.0e-5f)
+            equipment_body_speed_ = std::abs(
+                particles_[blueprint_.root_node].position.x
+                    - previous_pelvis_.x) / dt;
+        const bool plant_frame = equipment_body_speed_ <= 0.18f
+            && left_supported() && right_supported()
+            && stance_slip_speed_ <= 0.12f
             && torso_uprightness() >= 0.72f;
+        equipment_plant_seconds_ = plant_frame
+            ? equipment_plant_seconds_ + dt : 0.0f;
+        equipment_stopped_ = equipment_plant_seconds_ >= 0.16f;
         auto transition = [&](EquipmentState next)
         {
             if (equipment_state_ == next)
                 return;
             equipment_state_ = next;
+            equipment_state_seconds_ = 0.0f;
+            if (next != EquipmentState::ready)
+                equipment_aim_settle_seconds_ = 0.0f;
             ++equipment_transition_count_;
         };
 
@@ -1526,8 +2112,23 @@ namespace runner::sim
                 && physical_error <= profile.aim_tolerance
                 && equipment_aim_rate_ <= 0.28f;
             equipment_aim_settle_seconds_ = settled
+                    && (equipment_state_ == EquipmentState::aiming
+                        || equipment_state_ == EquipmentState::ready)
                 ? equipment_aim_settle_seconds_ + dt : 0.0f;
-            if (equipment_state_ == EquipmentState::disarmed
+            const bool engage_requested = state_action > 0.55f;
+            const bool aim_requested = state_action > 0.70f;
+
+            if (equipment_state_ == EquipmentState::reloading)
+            {
+                if (equipment_reload_seconds_ <= 0.0f)
+                {
+                    equipment_rounds_remaining_ = profile.magazine_capacity;
+                    transition(equipment_stopped_
+                        ? EquipmentState::gun_stance
+                        : EquipmentState::low_ready);
+                }
+            }
+            else if (equipment_state_ == EquipmentState::disarmed
                 || equipment_state_ == EquipmentState::dropped)
             {
                 const float pickup_distance = length(
@@ -1543,20 +2144,38 @@ namespace runner::sim
             }
             else if (state_action > 0.28f && state_action <= 0.55f)
                 transition(EquipmentState::low_ready);
-            else if (state_action > 0.55f && !equipment_stopped_)
-                transition(EquipmentState::low_ready);
-            else if (state_action > 0.55f
-                && equipment_state_ != EquipmentState::gun_stance
-                && equipment_state_ != EquipmentState::aiming
-                && equipment_state_ != EquipmentState::ready)
-                transition(EquipmentState::gun_stance);
-            else if (state_action > 0.55f
-                && (!settled || equipment_aim_settle_seconds_ < 0.30f))
-                transition(EquipmentState::aiming);
-            else if (state_action > 0.55f)
-                transition(EquipmentState::ready);
             else if (state_action < -0.18f)
                 transition(EquipmentState::safe_carry);
+            else if (engage_requested && !equipment_stopped_)
+                transition(EquipmentState::low_ready);
+            else if (engage_requested
+                && (equipment_state_ == EquipmentState::safe_carry
+                    || equipment_state_ == EquipmentState::low_ready))
+                transition(EquipmentState::gun_stance);
+            else if (equipment_state_ == EquipmentState::gun_stance
+                && aim_requested && equipment_state_seconds_ >= 0.16f)
+                transition(EquipmentState::aiming);
+            else if (equipment_state_ == EquipmentState::aiming
+                && !aim_requested)
+                transition(EquipmentState::gun_stance);
+            else if (equipment_state_ == EquipmentState::aiming
+                && settled && equipment_aim_settle_seconds_ >= 0.30f
+                && equipment_recoil_recovery_seconds_ <= 0.0f)
+                transition(EquipmentState::ready);
+            else if (equipment_state_ == EquipmentState::ready
+                && (!aim_requested || !settled))
+                transition(aim_requested
+                    ? EquipmentState::aiming : EquipmentState::gun_stance);
+
+            if (equipment_rounds_remaining_ == 0u && aim_requested
+                && equipment_target_.active && equipment_stopped_
+                && equipment_state_ != EquipmentState::dropped
+                && equipment_state_ != EquipmentState::disarmed
+                && equipment_state_ != EquipmentState::reloading)
+            {
+                equipment_reload_seconds_ = profile.reload_seconds;
+                transition(EquipmentState::reloading);
+            }
         }
 
         if ((equipment_state_ == EquipmentState::dropped
@@ -1575,20 +2194,29 @@ namespace runner::sim
         }
 
         const WeaponProfile profile = weapon_profile(weapon_class_);
+        equipment_fire_block_ = equipment_fire_block();
         if (actions[equipment_trigger_action] > 0.45f
-            && equipment_engagement_ready())
+            && equipment_fire_block_ == EquipmentFireBlock::none)
         {
-            const Vec2 muzzle = equipment_mount_position();
-            const Vec2 direction{
-                std::cos(equipment_aim_angle_), std::sin(equipment_aim_angle_) };
+            const Vec2 muzzle = grip.muzzle;
+            const Vec2 direction = grip.axis;
             equipment_projectiles_.push_back({
-                weapon_class_, muzzle + direction * 0.24f,
+                weapon_class_, muzzle,
                 direction * profile.projectile_speed, profile.projectile_radius,
-                ++equipment_projectile_sequence_, true, false });
+                ++equipment_projectile_sequence_, true, false,
+                profile.projectile_lifetime_seconds });
             equipment_cooldown_seconds_ = profile.cooldown_seconds;
+            equipment_recoil_recovery_seconds_ = std::max(
+                0.12f, profile.cooldown_seconds * 0.65f);
+            --equipment_rounds_remaining_;
             ++shots_fired_;
-            if (valid_node(mount))
-                particles_[mount].previous += direction * (profile.recoil * dt);
+            if (valid_node(grip.rear_node))
+                particles_[grip.rear_node].previous += direction
+                    * (profile.recoil * dt * 0.60f);
+            if (valid_node(grip.front_node))
+                particles_[grip.front_node].previous += direction
+                    * (profile.recoil * dt * 0.40f);
+            transition(EquipmentState::aiming);
         }
 
         for (EquipmentProjectile& projectile : equipment_projectiles_)
@@ -1598,11 +2226,30 @@ namespace runner::sim
             const Vec2 beginning = projectile.position;
             const WeaponProfile projectile_profile = weapon_profile(projectile.weapon);
             projectile.velocity.y -= projectile_profile.gravity * dt;
-            projectile.position += projectile.velocity * dt;
-            if (equipment_target_.active
-                && swept_circle_hit(beginning, projectile.position,
+            const Vec2 ending = projectile.position + projectile.velocity * dt;
+            const float target_fraction = equipment_target_.active
+                ? swept_circle_hit_fraction(beginning, ending,
                     equipment_target_.position,
-                    projectile.radius + equipment_target_.radius))
+                    projectile.radius + equipment_target_.radius)
+                : 2.0f;
+            const float obstruction_fraction = equipment_obstruction_fraction(
+                beginning, ending, projectile.radius);
+            if (obstruction_fraction <= 1.0f
+                && obstruction_fraction <= target_fraction)
+            {
+                projectile.position = beginning
+                    + (ending - beginning) * obstruction_fraction;
+                if (!projectile.miss_recorded)
+                {
+                    record_equipment_miss(projectile.position);
+                    projectile.miss_recorded = true;
+                }
+                projectile.active = false;
+                continue;
+            }
+
+            projectile.position = ending;
+            if (equipment_target_.active && target_fraction <= 1.0f)
             {
                 projectile.active = false;
                 ++target_hits_;
@@ -1615,17 +2262,8 @@ namespace runner::sim
                     equipment_target_.active = false;
                     continue;
                 }
-                const float range_fraction = 0.20f
-                    + static_cast<float>((equipment_target_.sequence
-                        + static_cast<std::uint32_t>(random_state_)) % 4u) * 0.20f;
-                const float distance = lerp(profile.minimum_engagement_distance,
-                    profile.maximum_engagement_distance, range_fraction);
-                equipment_target_.position.x = equipment_mount_position().x
-                    + distance * facing_direction();
-                equipment_target_.position.y =
-                    ground_height_at(equipment_target_.position.x)
-                    + 0.75f + static_cast<float>(
-                        equipment_target_.sequence % 5u) * 0.35f;
+                // Multiple hits represent multiple rounds striking one fixed
+                // range target. The target is never teleported between shots.
                 continue;
             }
             if (equipment_target_.active && !projectile.miss_recorded)
@@ -1643,36 +2281,17 @@ namespace runner::sim
                             / span, 0.0f, 1.0f) : 1.0f;
                     const float crossing_y = lerp(
                         beginning.y, projectile.position.y, fraction);
-                    last_shot_miss_error_ = crossing_y
-                        - equipment_target_.position.y;
-                    equipment_aim_correction_ = aim_correction_from_miss(
-                        equipment_aim_correction_, last_shot_miss_error_,
-                        std::abs(equipment_target_.position.x
-                            - equipment_mount_position().x));
-                    ++shots_missed_;
+                    record_equipment_miss(
+                        { equipment_target_.position.x, crossing_y });
                     projectile.miss_recorded = true;
                 }
             }
-            const float ground = ground_height_at(projectile.position.x);
-            if (projectile.position.y < ground
-                || std::abs(projectile.position.x - equipment_mount_position().x) > 30.0f)
+            projectile.lifetime_remaining_seconds -= dt;
+            if (projectile.lifetime_remaining_seconds <= 0.0f)
             {
                 if (!projectile.miss_recorded)
                 {
-                    if (equipment_target_.active)
-                    {
-                        // A low round can strike terrain before reaching the
-                        // target plane. Its real impact is still observable
-                        // evidence for the next shot; the in-flight round is
-                        // never redirected.
-                        last_shot_miss_error_ = projectile.position.y
-                            - equipment_target_.position.y;
-                        equipment_aim_correction_ = aim_correction_from_miss(
-                            equipment_aim_correction_, last_shot_miss_error_,
-                            std::abs(equipment_target_.position.x
-                                - equipment_mount_position().x));
-                    }
-                    ++shots_missed_;
+                    record_equipment_miss(projectile.position);
                     projectile.miss_recorded = true;
                 }
                 projectile.active = false;
@@ -2144,6 +2763,23 @@ namespace runner::sim
         support_contact_anchor_x_.resize(particles_.size());
         support_traction_capacity_.assign(particles_.size(), 0.0f);
         support_traction_used_.assign(particles_.size(), 0.0f);
+        support_normal_constraint_lambdas_.assign(particles_.size(), 0.0f);
+        support_contact_tangent_impulses_.assign(particles_.size(), 0.0f);
+        support_cluster_traction_capacity_.fill(0.0f);
+        support_cluster_plate_traction_capacity_.fill(0.0f);
+        support_cluster_toe_traction_capacity_.fill(0.0f);
+        support_cluster_traction_used_.fill(0.0f);
+        support_cluster_traction_impulse_.fill(0.0f);
+        support_cluster_plate_membership_mask_.fill(0u);
+        support_cluster_normal_impulse_.fill(0.0f);
+        support_cluster_normal_impulse_moment_x_.fill(0.0f);
+        support_cluster_normal_cop_x_.fill(0.0f);
+        support_cluster_tangential_impulse_.fill(0.0f);
+        human_support_feedback_ = {};
+        human_gait_coordinator_ = {};
+        support_friction_work_joules_ = 0.0f;
+        support_friction_positive_work_joules_ = 0.0f;
+        support_cluster_contact_age_seconds_.fill(0.0f);
         for (std::size_t index = 0; index < particles_.size(); ++index)
             support_contact_anchor_x_[index] = particles_[index].position.x;
         for (std::size_t side = 0;
@@ -2174,10 +2810,24 @@ namespace runner::sim
         }
         const ShuttlePhase prior_phase = shuttle_state_.phase;
         const std::uint32_t prior_turns = shuttle_state_.completed_turns;
+        const bool settled_support = left_supported() && right_supported()
+            && !non_foot_grounded() && uprightness() >= 0.88f
+            && std::isfinite(root_speed)
+            && std::abs(root_speed) <= shuttle_brake_speed;
         shuttle_state_ = advance_shuttle_state(
-            shuttle_state_, root_x, dt, root_speed);
-        if (shuttle_state_.completed_turns != prior_turns)
+            shuttle_state_, root_x, dt, root_speed, settled_support);
+        // Assisted shuttle lessons may reset the articulated pose at their
+        // authored zero-speed turn boundary. Raw policy evaluation cannot
+        // mirror the body or erase its velocity outside the action/physics
+        // path; the controller must negotiate the direction change itself.
+        if (shuttle_state_.completed_turns != prior_turns
+            && !raw_policy_audit())
+        {
             mirror_rig_about_root();
+            // SETTLING must earn support after the mirror; pre-turn stance time
+            // cannot authorize an immediate automatic Walk restart.
+            stable_stance_seconds_ = 0.0f;
+        }
         if (shuttle_state_.phase != prior_phase)
         {
             progress_window_seconds_ = 0.0f;
@@ -2614,6 +3264,23 @@ namespace runner::sim
         support_contact_anchor_x_.resize(particles_.size());
         support_traction_capacity_.assign(particles_.size(), 0.0f);
         support_traction_used_.assign(particles_.size(), 0.0f);
+        support_normal_constraint_lambdas_.assign(particles_.size(), 0.0f);
+        support_contact_tangent_impulses_.assign(particles_.size(), 0.0f);
+        support_cluster_traction_capacity_.fill(0.0f);
+        support_cluster_plate_traction_capacity_.fill(0.0f);
+        support_cluster_toe_traction_capacity_.fill(0.0f);
+        support_cluster_traction_used_.fill(0.0f);
+        support_cluster_traction_impulse_.fill(0.0f);
+        support_cluster_plate_membership_mask_.fill(0u);
+        support_cluster_normal_impulse_.fill(0.0f);
+        support_cluster_normal_impulse_moment_x_.fill(0.0f);
+        support_cluster_normal_cop_x_.fill(0.0f);
+        support_cluster_tangential_impulse_.fill(0.0f);
+        human_support_feedback_ = {};
+        human_gait_coordinator_ = {};
+        support_friction_work_joules_ = 0.0f;
+        support_friction_positive_work_joules_ = 0.0f;
+        support_cluster_contact_age_seconds_.fill(0.0f);
         previous_support_grounded_.assign(particles_.size(), 0u);
         support_swing_seconds_.assign(particles_.size(), 0.0f);
         support_swing_clearance_.assign(particles_.size(), 0.0f);
@@ -2798,7 +3465,443 @@ namespace runner::sim
         append_dynamic_material_features();
     }
 
-    void Environment::solve_distance(const DistanceConstraint& constraint) noexcept
+    Environment::AuthoritySnapshot Environment::authority_snapshot(float dt) const noexcept
+    {
+        if (!raw_authority_telemetry_enabled_ || particles_.empty())
+            return {};
+        const float safe_dt = std::max(dt, 1.0e-5f);
+        double weighted_velocity_x{};
+        double weighted_velocity_y{};
+        double weighted_position_x{};
+        double weighted_position_y{};
+        double weighted_history_x{};
+        double weighted_history_y{};
+        double total_mass{};
+        for (const Particle& particle : particles_)
+        {
+            const double mass = 1.0 / static_cast<double>(
+                std::max(particle.inverse_mass, 1.0e-5f));
+            weighted_velocity_x += static_cast<double>(
+                (particle.position.x - particle.previous.x) / safe_dt) * mass;
+            weighted_velocity_y += static_cast<double>(
+                (particle.position.y - particle.previous.y) / safe_dt) * mass;
+            weighted_position_x += static_cast<double>(particle.position.x) * mass;
+            weighted_position_y += static_cast<double>(particle.position.y) * mass;
+            weighted_history_x += static_cast<double>(particle.previous.x) * mass;
+            weighted_history_y += static_cast<double>(particle.previous.y) * mass;
+            total_mass += mass;
+        }
+        AuthoritySnapshot snapshot{};
+        if (total_mass > 1.0e-9)
+        {
+            snapshot.center_velocity_x = static_cast<float>(
+                weighted_velocity_x / total_mass);
+            snapshot.center_velocity_y = static_cast<float>(
+                weighted_velocity_y / total_mass);
+            snapshot.center_position_x = static_cast<float>(
+                weighted_position_x / total_mass);
+            snapshot.center_position_y = static_cast<float>(
+                weighted_position_y / total_mass);
+            snapshot.center_history_x = static_cast<float>(
+                weighted_history_x / total_mass);
+            snapshot.center_history_y = static_cast<float>(
+                weighted_history_y / total_mass);
+        }
+        snapshot.root_x = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.x : 0.0f;
+        snapshot.root_y = valid_node(blueprint_.root_node)
+            ? particles_[blueprint_.root_node].position.y : 0.0f;
+        snapshot.torso_x = valid_node(blueprint_.torso_node)
+            ? particles_[blueprint_.torso_node].position.x : 0.0f;
+        snapshot.torso_y = valid_node(blueprint_.torso_node)
+            ? particles_[blueprint_.torso_node].position.y : 0.0f;
+        return snapshot;
+    }
+
+    void Environment::update_human_support_feedback(float dt) noexcept
+    {
+        human_support_feedback_ = {};
+        if (!blueprint_.human_casual_gait_plan() || particles_.empty())
+            return;
+
+        const float safe_dt = std::max(dt, 1.0e-5f);
+        double total_mass{};
+        double weighted_x{};
+        double weighted_y{};
+        double weighted_velocity_x{};
+        double weighted_velocity_y{};
+        for (const Particle& particle : particles_)
+        {
+            if (!std::isfinite(particle.inverse_mass)
+                || particle.inverse_mass <= 0.0f
+                || !std::isfinite(particle.position.x)
+                || !std::isfinite(particle.position.y)
+                || !std::isfinite(particle.previous.x)
+                || !std::isfinite(particle.previous.y))
+                return;
+            const double mass = 1.0 / static_cast<double>(
+                std::max(particle.inverse_mass, 1.0e-5f));
+            const double velocity_x = static_cast<double>(
+                (particle.position.x - particle.previous.x) / safe_dt);
+            const double velocity_y = static_cast<double>(
+                (particle.position.y - particle.previous.y) / safe_dt);
+            weighted_x += static_cast<double>(particle.position.x) * mass;
+            weighted_y += static_cast<double>(particle.position.y) * mass;
+            weighted_velocity_x += velocity_x * mass;
+            weighted_velocity_y += velocity_y * mass;
+            total_mass += mass;
+        }
+        if (!std::isfinite(total_mass) || total_mass <= 1.0e-9)
+            return;
+
+        HumanSupportFeedback feedback{};
+        feedback.center_of_mass = {
+            static_cast<float>(weighted_x / total_mass),
+            static_cast<float>(weighted_y / total_mass) };
+        feedback.center_of_mass_velocity = {
+            static_cast<float>(weighted_velocity_x / total_mass),
+            static_cast<float>(weighted_velocity_y / total_mass) };
+
+        const float left_load = std::isfinite(support_cluster_normal_impulse_[0])
+            ? std::max(0.0f, support_cluster_normal_impulse_[0]) : 0.0f;
+        const float right_load = std::isfinite(support_cluster_normal_impulse_[1])
+            ? std::max(0.0f, support_cluster_normal_impulse_[1]) : 0.0f;
+        feedback.total_normal_impulse = left_load + right_load;
+        if (!std::isfinite(feedback.total_normal_impulse)
+            || feedback.total_normal_impulse <= 1.0e-7f)
+        {
+            human_support_feedback_ = feedback;
+            return;
+        }
+
+        const float aggregate_moment =
+            support_cluster_normal_impulse_moment_x_[0]
+            + support_cluster_normal_impulse_moment_x_[1];
+        if (!std::isfinite(aggregate_moment))
+            return;
+        feedback.aggregate_cop_x = aggregate_moment
+            / feedback.total_normal_impulse;
+        const float center_height = feedback.center_of_mass.y
+            - ground_height_at(feedback.aggregate_cop_x);
+        constexpr float gravity_magnitude = 22.0f;
+        const float omega = std::sqrt(gravity_magnitude
+            / std::max(center_height, 0.25f));
+        feedback.capture_point_x = feedback.center_of_mass.x
+            + feedback.center_of_mass_velocity.x / omega;
+
+        float authored_leg_scale{};
+        std::size_t leg_count{};
+        for (const std::size_t hip_index : { 0u, 2u })
+        {
+            const std::size_t knee_index = hip_index + 1u;
+            if (knee_index >= blueprint_.active_motor_count)
+                continue;
+            const MotorConstraint& hip = blueprint_.motors[hip_index];
+            const MotorConstraint& knee = blueprint_.motors[knee_index];
+            if (!hip.enabled || !knee.enabled
+                || hip.pivot >= blueprint_.nodes.size()
+                || hip.c >= blueprint_.nodes.size()
+                || knee.pivot >= blueprint_.nodes.size()
+                || knee.c >= blueprint_.nodes.size())
+                continue;
+            authored_leg_scale += length(blueprint_.nodes[hip.c]
+                    - blueprint_.nodes[hip.pivot])
+                + length(blueprint_.nodes[knee.c]
+                    - blueprint_.nodes[knee.pivot]);
+            ++leg_count;
+        }
+        if (leg_count > 0u)
+            authored_leg_scale /= static_cast<float>(leg_count);
+        else if (blueprint_.root_node < blueprint_.nodes.size()
+            && blueprint_.torso_node < blueprint_.nodes.size())
+        {
+            authored_leg_scale = length(
+                blueprint_.nodes[blueprint_.torso_node]
+                - blueprint_.nodes[blueprint_.root_node]);
+        }
+        authored_leg_scale = std::max(authored_leg_scale, 0.25f);
+        feedback.capture_error_x = clamp(
+            (feedback.capture_point_x - feedback.aggregate_cop_x)
+                / authored_leg_scale,
+            -2.0f, 2.0f);
+        feedback.load_asymmetry = clamp(
+            (right_load - left_load) / feedback.total_normal_impulse,
+            -1.0f, 1.0f);
+        feedback.valid = std::isfinite(feedback.center_of_mass.x)
+            && std::isfinite(feedback.center_of_mass.y)
+            && std::isfinite(feedback.center_of_mass_velocity.x)
+            && std::isfinite(feedback.center_of_mass_velocity.y)
+            && std::isfinite(feedback.aggregate_cop_x)
+            && std::isfinite(feedback.capture_point_x)
+            && std::isfinite(feedback.capture_error_x)
+            && std::isfinite(feedback.load_asymmetry);
+        if (!feedback.valid)
+            feedback = {};
+        human_support_feedback_ = feedback;
+    }
+
+    float Environment::human_sole_clearance(const Particle& particle) const noexcept
+    {
+        const float x = particle.position.x;
+        const float soil_sink = stage_uses_deformable_terrain(course_stage_)
+            ? support_contact_soil_sink(terrain_firmness_at(x)) : 0.0f;
+        // A sole resting at its resolved contact plane is neither airborne
+        // nor buried below the legal contact tolerance. Use the same soil
+        // allowance as the physical collision solve, not the material surface.
+        return particle.position.y - ground_height_at(x)
+            - ground_contact_offset(true, particle.radius) + soil_sink;
+    }
+
+    void Environment::update_human_gait_coordinator(
+        std::span<const float, action_count> actions, float dt) noexcept
+    {
+        HumanGaitCoordinatorInput input{};
+        input.moving = blueprint_.human_casual_gait_plan()
+            && stage_requires_forward_gait(course_stage_)
+            && std::abs(locomotion_direction()) >= 0.5f
+            && !locomotion_stop_requested_ && valid_motion();
+        input.non_foot_contact = non_foot_grounded();
+        input.facing_local_direction = locomotion_direction()
+            * facing_direction();
+        input.left_supported = left_supported();
+        input.right_supported = right_supported();
+        struct SoleKinematics
+        {
+            float minimum_clearance{ std::numeric_limits<float>::infinity() };
+            float maximum_clearance{ -std::numeric_limits<float>::infinity() };
+            float velocity_y_sum{};
+            std::size_t velocity_sample_count{};
+            float maximum_abs_velocity_y{};
+            float maximum_abs_velocity_x{};
+            std::array<float, 3> velocity_y{};
+        };
+        const auto sole_kinematics = [&](bool left) noexcept
+        {
+            const std::array<std::uint16_t, 3> nodes = left
+                ? std::array<std::uint16_t, 3>{ human_left_heel_node,
+                    human_left_ball_node, human_left_toe_node }
+                : std::array<std::uint16_t, 3>{ human_right_heel_node,
+                    human_right_ball_node, human_right_toe_node };
+            SoleKinematics result{};
+            for (const std::uint16_t node : nodes)
+            {
+                if (!valid_node(node))
+                    continue;
+                const Particle& particle = particles_[node];
+                const float clearance = human_sole_clearance(particle);
+                const float velocity_y = (particle.position.y
+                    - particle.previous.y) / std::max(dt, 1.0e-6f);
+                const float velocity_x = (particle.position.x
+                    - particle.previous.x) / std::max(dt, 1.0e-6f);
+                result.maximum_clearance = std::max(
+                    result.maximum_clearance, clearance);
+                result.minimum_clearance = std::min(
+                    result.minimum_clearance, clearance);
+                result.velocity_y_sum += velocity_y;
+                if (result.velocity_sample_count < result.velocity_y.size())
+                    result.velocity_y[result.velocity_sample_count] = velocity_y;
+                ++result.velocity_sample_count;
+                result.maximum_abs_velocity_y = std::max(
+                    result.maximum_abs_velocity_y, std::abs(velocity_y));
+                result.maximum_abs_velocity_x = std::max(
+                    result.maximum_abs_velocity_x, std::abs(velocity_x));
+            }
+            return result;
+        };
+        SoleKinematics left = sole_kinematics(true);
+        SoleKinematics right = sole_kinematics(false);
+        const auto average_velocity_y = [](const SoleKinematics& sole) noexcept
+        {
+            return sole.velocity_sample_count > 0u
+                ? sole.velocity_y_sum
+                    / static_cast<float>(sole.velocity_sample_count) : 0.0f;
+        };
+        const auto maximum_velocity_y_deviation = [&](
+            const SoleKinematics& sole) noexcept
+        {
+            const float average = average_velocity_y(sole);
+            float maximum{};
+            for (std::size_t index = 0; index < sole.velocity_sample_count
+                && index < sole.velocity_y.size(); ++index)
+                maximum = std::max(maximum,
+                    std::abs(sole.velocity_y[index] - average));
+            return maximum;
+        };
+        input.left_minimum_clearance = left.minimum_clearance;
+        input.right_minimum_clearance = right.minimum_clearance;
+        input.left_average_velocity_y = average_velocity_y(left);
+        input.right_average_velocity_y = average_velocity_y(right);
+        input.left_maximum_abs_velocity_y = left.maximum_abs_velocity_y;
+        input.right_maximum_abs_velocity_y = right.maximum_abs_velocity_y;
+        input.left_maximum_velocity_y_deviation =
+            maximum_velocity_y_deviation(left);
+        input.right_maximum_velocity_y_deviation =
+            maximum_velocity_y_deviation(right);
+        input.left_maximum_abs_velocity_x = left.maximum_abs_velocity_x;
+        input.right_maximum_abs_velocity_x = right.maximum_abs_velocity_x;
+        input.left_maximum_clearance = left.maximum_clearance;
+        input.right_maximum_clearance = right.maximum_clearance;
+        input.left_normal_impulse = std::max(0.0f,
+            support_cluster_normal_impulse_[0]);
+        input.right_normal_impulse = std::max(0.0f,
+            support_cluster_normal_impulse_[1]);
+        const auto heel_reaction = [&](std::uint16_t node) noexcept
+        {
+            return valid_node(node) && node < support_normal_constraint_lambdas_.size()
+                    && particles_[node].grounded
+                ? std::max(0.0f, support_normal_constraint_lambdas_[node]
+                    / std::max(dt, 1.0e-6f)) : 0.0f;
+        };
+        input.left_heel_normal_impulse = heel_reaction(human_left_heel_node);
+        input.right_heel_normal_impulse = heel_reaction(human_right_heel_node);
+        const float control_ramp = policy_control_ramp(elapsed_seconds_
+            + policy_control_ramp_start_seconds);
+        const auto terminal_alignment_distance = [&](bool left) noexcept
+        {
+            const std::size_t ankle = left
+                ? human_left_ankle_action : human_right_ankle_action;
+            const std::size_t toe = left
+                ? human_left_toe_action : human_right_toe_action;
+            const auto remaining = [&](std::size_t index) noexcept
+            {
+                if (index >= actions.size()
+                    || index >= previous_applied_actions_.size())
+                    return 0.0f;
+                const float requested = clamp(actions[index], -1.0f, 1.0f)
+                    * control_ramp;
+                return std::abs(requested - previous_applied_actions_[index]);
+            };
+            return std::max(remaining(ankle), remaining(toe));
+        };
+        input.left_terminal_alignment_distance =
+            terminal_alignment_distance(true);
+        input.right_terminal_alignment_distance =
+            terminal_alignment_distance(false);
+        const float cadence = gait_task_nominal_cadence_hz(
+            gait_task_, elapsed_seconds_);
+        // Use the same integrated control clock as the Human teacher target.
+        // The raw wall clock starts while motor targets are still blended to
+        // the authored pose; advancing this coordinator on that clock makes a
+        // nominal exchange precede any finite action capable of unloading it.
+        const float gait_clock_seconds = shuttle_enabled()
+            ? shuttle_state_.phase_seconds : elapsed_seconds_;
+        const float control_seconds = policy_control_phase_seconds(
+            gait_clock_seconds);
+        const float previous_control_seconds = policy_control_phase_seconds(
+            std::max(0.0f, gait_clock_seconds - dt));
+        const float control_dt = std::max(0.0f,
+            control_seconds - previous_control_seconds);
+        human_gait_coordinator_ = step_human_gait_coordinator(
+            human_gait_coordinator_, input,
+            2.0f * pi * cadence * control_dt, control_dt);
+    }
+
+    void Environment::record_authority_delta(AuthoritySource source,
+        const AuthoritySnapshot& before, float dt) noexcept
+    {
+        if (!raw_authority_telemetry_enabled_)
+            return;
+        const AuthoritySnapshot after = authority_snapshot(dt);
+        AuthoritySourceTelemetry& telemetry = raw_authority_telemetry_.sources[
+            static_cast<std::size_t>(source)];
+        const float velocity_delta = after.center_velocity_x
+            - before.center_velocity_x;
+        const float velocity_delta_y = after.center_velocity_y
+            - before.center_velocity_y;
+        const float center_position_delta_x = after.center_position_x
+            - before.center_position_x;
+        const float center_position_delta_y = after.center_position_y
+            - before.center_position_y;
+        const float center_history_delta_x = after.center_history_x
+            - before.center_history_x;
+        const float center_history_delta_y = after.center_history_y
+            - before.center_history_y;
+        const float root_delta = after.root_x - before.root_x;
+        const float root_delta_y = after.root_y - before.root_y;
+        const float torso_delta = after.torso_x - before.torso_x;
+        const float torso_delta_y = after.torso_y - before.torso_y;
+        telemetry.center_velocity_delta_x += velocity_delta;
+        telemetry.center_velocity_delta_y += velocity_delta_y;
+        telemetry.maximum_absolute_center_velocity_delta_x = std::max(
+            telemetry.maximum_absolute_center_velocity_delta_x,
+            std::abs(velocity_delta));
+        telemetry.maximum_absolute_center_velocity_delta_y = std::max(
+            telemetry.maximum_absolute_center_velocity_delta_y,
+            std::abs(velocity_delta_y));
+        telemetry.positive_horizontal_specific_energy += std::max(0.0f,
+            0.5f * (after.center_velocity_x * after.center_velocity_x
+                - before.center_velocity_x * before.center_velocity_x));
+        telemetry.center_position_delta_x += center_position_delta_x;
+        telemetry.center_position_delta_y += center_position_delta_y;
+        telemetry.center_history_delta_x += center_history_delta_x;
+        telemetry.center_history_delta_y += center_history_delta_y;
+        telemetry.root_position_delta_x += root_delta;
+        telemetry.root_position_delta_y += root_delta_y;
+        telemetry.torso_position_delta_x += torso_delta;
+        telemetry.torso_position_delta_y += torso_delta_y;
+        constexpr float meaningful_delta = 1.0e-7f;
+        if (std::abs(velocity_delta) > meaningful_delta
+            || std::abs(velocity_delta_y) > meaningful_delta
+            || std::abs(center_position_delta_x) > meaningful_delta
+            || std::abs(center_position_delta_y) > meaningful_delta
+            || std::abs(center_history_delta_x) > meaningful_delta
+            || std::abs(center_history_delta_y) > meaningful_delta
+            || std::abs(root_delta) > meaningful_delta
+            || std::abs(root_delta_y) > meaningful_delta
+            || std::abs(torso_delta) > meaningful_delta
+            || std::abs(torso_delta_y) > meaningful_delta)
+            ++telemetry.applications;
+
+        const bool direct_helper = source == AuthoritySource::posture_helper
+            || source == AuthoritySource::manipulator_helper
+            || source == AuthoritySource::ledge_training_scaffold
+            || source == AuthoritySource::structure_projection;
+        if (direct_helper && (std::abs(root_delta) > meaningful_delta
+                || std::abs(root_delta_y) > meaningful_delta))
+            ++raw_authority_telemetry_.root_drive_corrections;
+        if (direct_helper && (std::abs(torso_delta) > meaningful_delta
+                || std::abs(torso_delta_y) > meaningful_delta))
+            ++raw_authority_telemetry_.torso_drive_corrections;
+    }
+
+    void Environment::record_maximum_bone_error() noexcept
+    {
+        if (!raw_authority_telemetry_enabled_)
+            return;
+        raw_authority_telemetry_.maximum_bone_error_ratio = 0.0f;
+        raw_authority_telemetry_.maximum_bone_error_index =
+            std::numeric_limits<std::size_t>::max();
+        const std::size_t leg_motors = std::min<std::size_t>(
+            4u, blueprint_.active_motor_count);
+        for (std::size_t bone_index = 0;
+            bone_index < blueprint_.bones.size(); ++bone_index)
+        {
+            const DistanceConstraint& bone = blueprint_.bones[bone_index];
+            bool primary_leg_segment = false;
+            for (std::size_t motor_index = 0;
+                motor_index < leg_motors; ++motor_index)
+            {
+                const MotorConstraint& motor = blueprint_.motors[motor_index];
+                primary_leg_segment = primary_leg_segment
+                    || (bone.a == motor.pivot && bone.b == motor.c)
+                    || (bone.b == motor.pivot && bone.a == motor.c);
+            }
+            if (!primary_leg_segment || bone.a >= particles_.size()
+                || bone.b >= particles_.size() || bone.rest_length <= 1.0e-6f)
+                continue;
+            const float error = bone_length_error_ratio(
+                length(particles_[bone.b].position - particles_[bone.a].position),
+                bone.rest_length);
+            if (error > raw_authority_telemetry_.maximum_bone_error_ratio)
+            {
+                raw_authority_telemetry_.maximum_bone_error_ratio = error;
+                raw_authority_telemetry_.maximum_bone_error_index = bone_index;
+            }
+        }
+    }
+
+    void Environment::solve_distance(const DistanceConstraint& constraint,
+        bool preserve_velocity) noexcept
     {
         if (constraint.a >= particles_.size() || constraint.b >= particles_.size())
             return;
@@ -2815,13 +3918,38 @@ namespace runner::sim
         const Vec2 correction = delta
             * ((distance - constraint.rest_length) / distance
                 * clamp(constraint.stiffness, 0.05f, 1.0f));
-        lhs.position += correction * (lhs.inverse_mass / weight);
-        rhs.position -= correction * (rhs.inverse_mass / weight);
+        const Vec2 lhs_shift = correction * (lhs.inverse_mass / weight);
+        const Vec2 rhs_shift = -correction * (rhs.inverse_mass / weight);
+        lhs.position += lhs_shift;
+        rhs.position += rhs_shift;
+        if (preserve_velocity)
+        {
+            // This mode is reserved for final anatomical closure after the
+            // physical motor/contact solve. Translating Verlet history with the
+            // mass-balanced correction prevents a numerical bone-length cleanup
+            // from becoming a late joint or root impulse.
+            lhs.previous += lhs_shift;
+            rhs.previous += rhs_shift;
+        }
     }
 
     void Environment::project_structure_rigid(float dt) noexcept
     {
         static_cast<void>(dt);
+        const float crouch_authority = course_stage_ == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        if (course_stage_ == CourseStage::crouch_walk
+            && crouch_authority <= 0.0f)
+            return;
+        // A moving Human must expose what its physical motors and contacts can
+        // actually hold. The paired-leg reconstruction below can translate the
+        // complete upper body and directly rewrite both knees after the motor
+        // solve, which is authored pose authority even when Verlet history is
+        // translated with it. Keep it only for non-translating lesson poses.
+        if (blueprint_.human_casual_gait_plan()
+            && course_stage_ != CourseStage::balance
+            && course_stage_ != CourseStage::duck_press)
+            return;
         const bool crouch_walking_stage = course_stage_ == CourseStage::crouch_walk;
         const bool structure_projected_stage = course_stage_ == CourseStage::uneven
             || course_stage_ == CourseStage::shuttle
@@ -2837,36 +3965,40 @@ namespace runner::sim
         {
             std::uint16_t hip{};
             std::uint16_t knee{};
-            std::uint16_t foot{};
+            std::uint16_t ankle{};
+            std::uint16_t contact{};
             float upper_length{};
             float lower_length{};
             bool supported{};
         };
 
         auto make_chain = [&](std::size_t hip_motor_index,
-            std::size_t knee_motor_index) noexcept
+            std::size_t knee_motor_index, bool left) noexcept
         {
             const MotorConstraint& hip_motor = blueprint_.motors[hip_motor_index];
             const MotorConstraint& knee_motor = blueprint_.motors[knee_motor_index];
+            const std::uint16_t contact = left
+                ? blueprint_.left_contact_node : blueprint_.right_contact_node;
             return LegChain{
                 hip_motor.pivot,
                 hip_motor.c,
                 knee_motor.c,
+                contact,
                 length(blueprint_.nodes[hip_motor.c]
                     - blueprint_.nodes[hip_motor.pivot]),
                 length(blueprint_.nodes[knee_motor.c]
                     - blueprint_.nodes[hip_motor.c]),
-                contact_supported(knee_motor.c)
+                contact_supported(contact)
             };
         };
 
         std::array<LegChain, 2> legs{
-            make_chain(0u, 1u), make_chain(2u, 3u)
+            make_chain(0u, 1u, true), make_chain(2u, 3u, false)
         };
         for (const LegChain& leg : legs)
         {
             if (!valid_node(leg.hip) || !valid_node(leg.knee)
-                || !valid_node(leg.foot)
+                || !valid_node(leg.ankle) || !valid_node(leg.contact)
                 || leg.upper_length <= 1.0e-5f
                 || leg.lower_length <= 1.0e-5f)
                 return;
@@ -2891,26 +4023,29 @@ namespace runner::sim
             if (!leg.supported)
                 continue;
             const Vec2 hip = particles_[leg.hip].position;
-            const Vec2 foot = particles_[leg.foot].position;
+            const Vec2 ankle = particles_[leg.ankle].position;
             const float maximum_extension = leg.upper_length + leg.lower_length;
             const float target_extension = maximum_extension * minimum_stance_ratio;
-            const float horizontal = hip.x - foot.x;
+            const float horizontal = hip.x - ankle.x;
             const float horizontal_squared = std::min(
                 horizontal * horizontal,
                 target_extension * target_extension);
             const float target_vertical = std::sqrt(std::max(0.0f,
                 target_extension * target_extension - horizontal_squared));
             required_upper_body_lift = std::max(required_upper_body_lift,
-                target_vertical - (hip.y - foot.y));
+                target_vertical - (hip.y - ankle.y));
         }
 
         if (required_upper_body_lift > 0.0f)
         {
-            const Vec2 lift{ 0.0f, required_upper_body_lift };
+            const Vec2 lift{ 0.0f,
+                required_upper_body_lift * crouch_authority };
             for (std::size_t index = 0; index < particles_.size(); ++index)
             {
                 const bool knee = index == legs[0].knee || index == legs[1].knee;
-                if (knee || blueprint_.is_support_seed(index))
+                const bool ankle = index == legs[0].ankle
+                    || index == legs[1].ankle;
+                if (knee || ankle || blueprint_.is_support_seed(index))
                     continue;
                 particles_[index].position += lift;
                 particles_[index].previous += lift;
@@ -2921,25 +4056,28 @@ namespace runner::sim
         {
             Particle& hip_particle = particles_[leg.hip];
             Particle& knee_particle = particles_[leg.knee];
-            Particle& foot_particle = particles_[leg.foot];
+            Particle& ankle_particle = particles_[leg.ankle];
             Vec2 hip = hip_particle.position;
-            Vec2 foot = foot_particle.position;
-            Vec2 hip_to_foot = foot - hip;
-            float distance = length(hip_to_foot);
+            Vec2 ankle = ankle_particle.position;
+            Vec2 hip_to_ankle = ankle - hip;
+            float distance = length(hip_to_ankle);
             const float minimum_reach = std::abs(
                 leg.upper_length - leg.lower_length) + 0.0001f;
             const float maximum_reach = leg.upper_length + leg.lower_length - 0.0001f;
 
             if (distance > maximum_reach)
             {
-                const Vec2 direction = normalized(hip_to_foot, { 0.0f, -1.0f });
-                const Vec2 correction = direction * (distance - maximum_reach);
+                const Vec2 direction = normalized(hip_to_ankle, { 0.0f, -1.0f });
+                const Vec2 correction = direction
+                    * ((distance - maximum_reach) * crouch_authority);
                 if (leg.supported)
                 {
                     for (std::size_t index = 0; index < particles_.size(); ++index)
                     {
                         const bool knee = index == legs[0].knee || index == legs[1].knee;
-                        if (knee || blueprint_.is_support_seed(index))
+                        const bool ankle_node = index == legs[0].ankle
+                            || index == legs[1].ankle;
+                        if (knee || ankle_node || blueprint_.is_support_seed(index))
                             continue;
                         particles_[index].position += correction;
                         particles_[index].previous += correction;
@@ -2948,24 +4086,28 @@ namespace runner::sim
                 }
                 else
                 {
-                    foot_particle.position -= correction;
-                    foot_particle.previous -= correction;
-                    foot = foot_particle.position;
+                    ankle_particle.position -= correction;
+                    ankle_particle.previous -= correction;
+                    ankle = ankle_particle.position;
                 }
-                hip_to_foot = foot - hip;
-                distance = length(hip_to_foot);
+                hip_to_ankle = ankle - hip;
+                distance = length(hip_to_ankle);
             }
             if (distance < minimum_reach)
             {
-                const Vec2 direction = normalized(hip_to_foot, { 0.0f, -1.0f });
-                const Vec2 correction = direction * (minimum_reach - distance);
+                const Vec2 direction = normalized(hip_to_ankle, { 0.0f, -1.0f });
+                const Vec2 correction = direction
+                    * ((minimum_reach - distance) * crouch_authority);
                 if (leg.supported)
                 {
-                    const Vec2 lift{ 0.0f, minimum_reach - distance };
+                    const Vec2 lift{ 0.0f,
+                        (minimum_reach - distance) * crouch_authority };
                     for (std::size_t index = 0; index < particles_.size(); ++index)
                     {
                         const bool knee = index == legs[0].knee || index == legs[1].knee;
-                        if (knee || blueprint_.is_support_seed(index))
+                        const bool ankle_node = index == legs[0].ankle
+                            || index == legs[1].ankle;
+                        if (knee || ankle_node || blueprint_.is_support_seed(index))
                             continue;
                         particles_[index].position += lift;
                         particles_[index].previous += lift;
@@ -2974,15 +4116,15 @@ namespace runner::sim
                 }
                 else
                 {
-                    foot_particle.position += correction;
-                    foot_particle.previous += correction;
-                    foot = foot_particle.position;
+                    ankle_particle.position += correction;
+                    ankle_particle.previous += correction;
+                    ankle = ankle_particle.position;
                 }
-                hip_to_foot = foot - hip;
-                distance = length(hip_to_foot);
+                hip_to_ankle = ankle - hip;
+                distance = length(hip_to_ankle);
             }
 
-            const Vec2 axis = normalized(hip_to_foot, { 0.0f, -1.0f });
+            const Vec2 axis = normalized(hip_to_ankle, { 0.0f, -1.0f });
             const Vec2 perpendicular{ -axis.y, axis.x };
             const float safe_distance = std::clamp(distance,
                 minimum_reach, maximum_reach);
@@ -3000,8 +4142,9 @@ namespace runner::sim
             // while a fixed world sign broke physical reflection on shuttle turns.
             const float bend_sign = facing_direction();
             const Vec2 target_knee = base + perpendicular * (height * bend_sign);
-            const Vec2 knee_delta = target_knee - knee_particle.position;
-            knee_particle.position = target_knee;
+            const Vec2 knee_delta = (target_knee - knee_particle.position)
+                * crouch_authority;
+            knee_particle.position += knee_delta;
             knee_particle.previous += knee_delta;
         };
 
@@ -3205,6 +4348,59 @@ namespace runner::sim
 
     void Environment::stabilize_passive_appendages() noexcept
     {
+        const bool physical_moving_human = blueprint_.human_casual_gait_plan()
+            && course_stage_ != CourseStage::balance
+            && course_stage_ != CourseStage::duck_press;
+        if (raw_policy_audit() || physical_moving_human)
+        {
+            // Raw Stand uses a compliant internal neck joint. Moving stages
+            // keep their passive travel stop. Neither acts on the world or
+            // applies back support.
+            if (!valid_node(blueprint_.root_node)
+                || !valid_node(blueprint_.torso_node)
+                || !valid_node(blueprint_.head_node))
+                return;
+            MotorConstraint neck{
+                blueprint_.root_node,
+                blueprint_.torso_node,
+                blueprint_.head_node };
+            neck.neutral_angle = signed_angle(
+                blueprint_.nodes[blueprint_.root_node]
+                    - blueprint_.nodes[blueprint_.torso_node],
+                blueprint_.nodes[blueprint_.head_node]
+                    - blueprint_.nodes[blueprint_.torso_node]);
+            constexpr float neck_range = degrees_to_radians(65.0f);
+            neck.minimum_angle = neck.neutral_angle - neck_range;
+            neck.maximum_angle = neck.neutral_angle + neck_range;
+            neck.strength = 0.10f;
+            neck.enabled = true;
+            const float local_current = joint_angle(neck) * facing_direction();
+            const float displacement = wrap_angle(
+                local_current - neck.neutral_angle);
+            if (blueprint_.human_casual_gait_plan()
+                && course_stage_ == CourseStage::balance)
+            {
+                const Vec2 previous_parent = particles_[neck.a].previous
+                    - particles_[neck.pivot].previous;
+                const Vec2 previous_head = particles_[neck.c].previous
+                    - particles_[neck.pivot].previous;
+                const float previous_angle = signed_angle(previous_parent,
+                    previous_head) * facing_direction();
+                const float angular_change = wrap_angle(local_current - previous_angle);
+                const float spring_target = clamp(-angular_change * 2.5f,
+                    -neck_range, neck_range);
+                solve_motor(neck, spring_target / neck_range);
+            }
+            else if (displacement < -neck_range)
+                solve_motor(neck, -1.0f);
+            else if (displacement > neck_range)
+                solve_motor(neck, 1.0f);
+            return;
+        }
+        const float guide_authority = course_stage_ == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        if (guide_authority <= 0.0f)
+            return;
         if (!valid_node(blueprint_.root_node) || !valid_node(blueprint_.torso_node))
             return;
         Vec2 rest_body = blueprint_.nodes[blueprint_.torso_node]
@@ -3240,10 +4436,14 @@ namespace runner::sim
             const float error_length = length(error);
             if (error_length > maximum_error && error_length > 1.0e-6f)
                 error *= maximum_error / error_length;
-            particles_[node].position += error * strength * 0.90f;
-            particles_[parent].position -= error * strength * 0.10f;
-            particles_[node].previous += (particles_[node].position
-                - particles_[node].previous) * (strength * 0.35f);
+            Particle& endpoint = particles_[node];
+            Particle& attachment = particles_[parent];
+            // Preserve the established assisted pose guide. It is explicitly
+            // reported as teacher composition and never runs in raw inference.
+            endpoint.position += error * strength * 0.90f * guide_authority;
+            attachment.position -= error * strength * 0.10f * guide_authority;
+            endpoint.previous += (endpoint.position
+                - endpoint.previous) * (strength * 0.35f * guide_authority);
         };
 
         stabilize(blueprint_.head_node, 0.055f);
@@ -3255,13 +4455,24 @@ namespace runner::sim
     }
     void Environment::stabilize_human_manipulator_envelope() noexcept
     {
-        if (!blueprint_.human_casual_gait_plan()
+        const float guide_authority = course_stage_ == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        if (raw_policy_audit()
+            || guide_authority <= 0.0f
+            || !blueprint_.human_casual_gait_plan()
             || !valid_node(blueprint_.root_node)
-            || blueprint_.root_node >= blueprint_.nodes.size())
+            || blueprint_.root_node >= blueprint_.nodes.size()
+            || (equipment_directive_ == EquipmentDirective::passive
+                && (course_stage_ == CourseStage::uneven
+                    || course_stage_ == CourseStage::shuttle
+                    || course_stage_ == CourseStage::crouch_walk)))
             return;
-        const bool gait_stage = course_stage_ == CourseStage::uneven
-            || course_stage_ == CourseStage::shuttle
-            || course_stage_ == CourseStage::crouch_walk;
+        const bool equipment_pose_owned = weapon_class_ != WeaponClass::none
+            && equipment_directive_ != EquipmentDirective::passive;
+        const bool gait_stage = !equipment_pose_owned
+            && (course_stage_ == CourseStage::uneven
+                || course_stage_ == CourseStage::shuttle
+                || course_stage_ == CourseStage::crouch_walk);
         if (gait_stage)
         {
             // Motors remain the source of the arm pose. This projection only
@@ -3334,8 +4545,9 @@ namespace runner::sim
                 const float height = std::sqrt(std::max(0.0f,
                     upper_length * upper_length - along * along));
                 const Vec2 perpendicular{ -direction.y, direction.x };
-                const Vec2 authored_upper = blueprint_.nodes[shoulder.c]
+                Vec2 authored_upper = blueprint_.nodes[shoulder.c]
                     - blueprint_.nodes[shoulder.pivot];
+                authored_upper.x *= facing_direction();
                 const float authored_cross = hand_offset.x * authored_upper.y
                     - hand_offset.y * authored_upper.x;
                 const Vec2 desired_elbow = shoulder_pivot + direction * along
@@ -3348,7 +4560,8 @@ namespace runner::sim
                     const float correction_length = length(correction);
                     if (correction_length > 0.18f && correction_length > 1.0e-6f)
                         correction *= 0.18f / correction_length;
-                    const Vec2 applied = correction * strength;
+                    const Vec2 applied = correction * strength
+                        * guide_authority;
                     particle.position += applied;
                     particle.previous += applied;
                 };
@@ -3387,14 +4600,15 @@ namespace runner::sim
                     / std::max(0.05f, hard_radius - soft_radius),
                 0.0f, 1.0f);
             const float strength = normalized * normalized
-                * (3.0f - 2.0f * normalized);
+                * (3.0f - 2.0f * normalized) * guide_authority;
             if (outward_velocity > 0.0f && strength > 0.0f)
                 endpoint.previous += direction * outward_velocity * strength;
 
             if (radius > hard_radius)
             {
                 const Vec2 correction = direction
-                    * std::min(radius - hard_radius, 0.018f);
+                    * (std::min(radius - hard_radius, 0.018f)
+                        * guide_authority);
                 endpoint.position -= correction;
                 endpoint.previous -= correction;
             }
@@ -3402,7 +4616,20 @@ namespace runner::sim
     }
     void Environment::stabilize_balance_posture() noexcept
     {
+        // This helper rotates or translates authored body nodes and, in Stand,
+        // can move the pelvis itself. Its authority must remain explicit so a
+        // reduced training hint cannot silently keep holding the complete body.
+        // Raw evaluation exposes only motors and physical constraints.
+        if (raw_policy_audit()
+            || (blueprint_.human_casual_gait_plan()
+                && stage_requires_forward_gait(course_stage_)))
+            return;
         const bool balance_lesson = course_stage_ == CourseStage::balance;
+        const float guide_authority = balance_lesson
+                || course_stage_ == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        if (guide_authority <= 0.0f)
+            return;
         const bool equipment_stance_lesson =
             course_stage_ == CourseStage::equipment_targets
             && !raw_policy_audit();
@@ -3453,7 +4680,8 @@ namespace runner::sim
                     if (magnitude > maximum_step && magnitude > 1.0e-6f)
                         correction *= maximum_step / magnitude;
                     const Vec2 applied = correction
-                        * (guided_monoped ? 0.16f : 0.055f);
+                        * (guided_monoped ? 0.16f : 0.055f)
+                        * guide_authority;
                     for (std::size_t node = 0; node < particles_.size(); ++node)
                     {
                         bool driven_leg_node = blueprint_.is_support_seed(node);
@@ -3514,8 +4742,9 @@ namespace runner::sim
                     : casual_guided_gait ? 0.0250f
                     : human_casual ? 0.0140f
                     : appendaged_biped ? 0.0060f : 0.0060f;
-                const float correction = clamp(-body_rotation * correction_gain,
-                    -maximum_correction, maximum_correction);
+                const float correction = guide_authority
+                    * clamp(-body_rotation * correction_gain,
+                        -maximum_correction, maximum_correction);
                 for (std::size_t node = 0; node < particles_.size(); ++node)
                 {
                     bool guided_body_node = (guided_avian || guided_monoped)
@@ -3585,7 +4814,7 @@ namespace runner::sim
             const float magnitude = length(correction);
             if (magnitude > maximum_step && magnitude > 1.0e-6f)
                 correction *= maximum_step / magnitude;
-            const Vec2 applied = correction * strength;
+            const Vec2 applied = correction * (strength * guide_authority);
             particles_[node].position += applied;
             particles_[node].previous += applied * 0.94f;
         };
@@ -3611,8 +4840,11 @@ namespace runner::sim
     {
         if (course_stage_ == CourseStage::crouch_walk)
         {
+            const float guide_authority =
+                effective_physical_guidance_authority();
             if (!blueprint_.human_casual_gait_plan()
-                || !valid_node(blueprint_.root_node))
+                || !valid_node(blueprint_.root_node)
+                || guide_authority <= 0.0f)
                 return;
             if (crouch_posture_guide_applied_this_step_)
                 return;
@@ -3651,9 +4883,10 @@ namespace runner::sim
             // therefore remains the result of planted-foot reaction forces;
             // it can lower the pelvis into a crouch but cannot pull it down a
             // rail or manufacture odometer progress.
-            const float correction = clamp(desired_root_y
-                - particles_[blueprint_.root_node].position.y,
-                -std::max(0.020f, 0.90f * last_step_dt_), 0.0f);
+            const float correction = guide_authority
+                * clamp(desired_root_y
+                    - particles_[blueprint_.root_node].position.y,
+                    -std::max(0.020f, 0.90f * last_step_dt_), 0.0f);
             // Position and Verlet history receive the same correction below,
             // so this is solver convergence rather than a velocity impulse.
             // A dt-scaled cap lost against the fixed 14 constraint passes at
@@ -3844,29 +5077,13 @@ namespace runner::sim
         if (!valid_node(heel) || !valid_node(ball) || !valid_node(toe))
             return false;
 
-        std::uint16_t ankle = std::numeric_limits<std::uint16_t>::max();
-        for (const DistanceConstraint& bone : blueprint_.bones)
-        {
-            std::uint16_t candidate = std::numeric_limits<std::uint16_t>::max();
-            if (bone.a == ball)
-                candidate = bone.b;
-            else if (bone.b == ball)
-                candidate = bone.a;
-            if (candidate == heel || candidate == toe
-                || candidate >= blueprint_.nodes.size())
-                continue;
-            if (direct_bone(blueprint_, candidate, heel))
-            {
-                ankle = candidate;
-                break;
-            }
-        }
-        if (ankle >= blueprint_.nodes.size())
+        if (!direct_bone(blueprint_, heel, ball)
+            || !direct_bone(blueprint_, ball, toe))
             return false;
 
-        motor = MotorConstraint{ ankle, ball, toe };
+        motor = MotorConstraint{ heel, ball, toe };
         motor.neutral_angle = signed_angle(
-            blueprint_.nodes[ankle] - blueprint_.nodes[ball],
+            blueprint_.nodes[heel] - blueprint_.nodes[ball],
             blueprint_.nodes[toe] - blueprint_.nodes[ball]);
         motor.minimum_angle = motor.neutral_angle - degrees_to_radians(42.0f);
         motor.maximum_angle = motor.neutral_angle + degrees_to_radians(36.0f);
@@ -3878,6 +5095,19 @@ namespace runner::sim
     void Environment::update_articulated_toe_commands(
         std::span<const float, anatomy_action_count> actions, float dt) noexcept
     {
+        if (blueprint_.active_motor_count > human_right_toe_action
+            && blueprint_.motors[human_left_toe_action].enabled
+            && blueprint_.motors[human_right_toe_action].enabled)
+        {
+            // RUNRIG7 toes are ordinary policy motors. The legacy inferred
+            // tendon must be exactly dormant so it cannot add a second hidden
+            // source of work to those same physical hinges.
+            articulated_toe_commands_.fill(0.0f);
+            return;
+        }
+        const float guide_authority = course_stage_ == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        const bool raw = raw_policy_audit() || guide_authority <= 0.0f;
         auto update_side = [&](bool left, std::size_t side,
             std::size_t hip_index, std::size_t knee_index)
         {
@@ -3887,10 +5117,9 @@ namespace runner::sim
                 articulated_toe_commands_[side] = 0.0f;
                 return;
             }
-
             const std::uint16_t heel = left
                 ? blueprint_.left_contact_node : blueprint_.right_contact_node;
-            const bool supported = contact_supported(heel);
+            const bool supported = !raw && contact_supported(heel);
             const float hip = hip_index < blueprint_.active_motor_count
                 ? actions[hip_index] : 0.0f;
             const float knee = knee_index < blueprint_.active_motor_count
@@ -3899,6 +5128,16 @@ namespace runner::sim
                 0.5f * (std::abs(hip) + std::abs(knee)), 0.0f, 1.0f);
 
             float desired = 0.0f;
+            if (raw)
+            {
+                // Human exposes no dedicated toe action. Any inferred
+                // contact-phase tendon would therefore be a hidden actuator,
+                // even if correlated with a hip/knee command. Raw evaluation
+                // leaves this hinge passive; only the ten explicit anatomy
+                // actions may do work.
+                articulated_toe_commands_[side] = 0.0f;
+                return;
+            }
             if (course_stage_ == CourseStage::duck_press)
             {
                 desired = 0.16f + chain_effort * 0.24f;
@@ -3910,6 +5149,7 @@ namespace runner::sim
                     ? -(0.30f + chain_effort * 0.42f)
                     : 0.46f + chain_effort * 0.18f;
             }
+            desired *= guide_authority;
             articulated_toe_commands_[side] = rate_limited_toe_command(
                 articulated_toe_commands_[side],
                 clamp(desired, -0.90f, 0.80f), dt, supported, course_stage_);
@@ -3917,26 +5157,187 @@ namespace runner::sim
 
         update_side(true, 0u, 0u, 1u);
         update_side(false, 1u, 2u, 3u);
+        if (raw_authority_telemetry_enabled_ && raw)
+        {
+            for (const float command : articulated_toe_commands_)
+            {
+                if (std::abs(command) > 1.0e-7f)
+                    ++raw_authority_telemetry_.powered_toe_commands;
+            }
+        }
     }
 
     void Environment::solve_articulated_toes() noexcept
     {
+        if (blueprint_.active_motor_count > human_right_toe_action
+            && blueprint_.motors[human_left_toe_action].enabled
+            && blueprint_.motors[human_right_toe_action].enabled)
+            return;
         for (std::size_t side = 0; side < articulated_toe_commands_.size(); ++side)
         {
+            const float guide_authority = course_stage_ == CourseStage::crouch_walk
+                ? effective_physical_guidance_authority() : 1.0f;
+            // In raw mode a neutral derived command is a passive hinge, not a
+            // hidden neutral-angle servo. Nonzero tendon work must trace back
+            // to current or rate-limited policy leg output.
+            if ((raw_policy_audit() || guide_authority <= 0.0f)
+                && articulated_toe_commands_[side] == 0.0f)
+                continue;
             MotorConstraint toe_motor{};
             if (articulated_toe_motor(side == 0u, toe_motor))
+            {
+                toe_motor.strength *= guide_authority;
                 solve_motor(toe_motor, articulated_toe_commands_[side]);
+            }
         }
+    }
+
+    void Environment::solve_passive_articulated_toe_stop(bool left) noexcept
+    {
+        MotorConstraint toe_motor{};
+        if (!articulated_toe_motor(left, toe_motor))
+            return;
+        // Converge the nonlinear angle constraint locally once at the end of
+        // the physical step. Reapplying this hard stop after every motor pass
+        // would multiply its authority by the solver iteration count.
+        constexpr int passive_limit_passes = 8;
+        for (int pass = 0; pass < passive_limit_passes; ++pass)
+        {
+            Particle& parent = particles_[toe_motor.a];
+            Particle& pivot = particles_[toe_motor.pivot];
+            Particle& driven = particles_[toe_motor.c];
+            const Vec2 parent_arm = parent.position - pivot.position;
+            const Vec2 driven_arm = driven.position - pivot.position;
+            const float parent_length_squared = length_squared(parent_arm);
+            const float driven_length_squared = length_squared(driven_arm);
+            if (parent_length_squared <= 1.0e-8f
+                || driven_length_squared <= 1.0e-8f)
+                return;
+
+            const float facing = facing_direction();
+            const float current_local = signed_angle(
+                parent_arm, driven_arm) * facing;
+            const float deviation = wrap_angle(
+                current_local - toe_motor.neutral_angle);
+            const float minimum_deviation = toe_motor.minimum_angle
+                - toe_motor.neutral_angle;
+            const float maximum_deviation = toe_motor.maximum_angle
+                - toe_motor.neutral_angle;
+            const float bounded_deviation = clamp(deviation,
+                minimum_deviation, maximum_deviation);
+            const float constraint_error = deviation - bounded_deviation;
+            if (std::abs(constraint_error) <= 1.0e-7f)
+                return;
+
+            // This is a unilateral passive joint stop, not a neutral-angle
+            // servo: it is exactly dormant throughout the anatomical range.
+            // Outside the range, the three-particle angular-constraint
+            // gradients apply equal and opposite impulses through the real
+            // heel-ball-toe hinge. Their sum is zero, so the stop cannot
+            // translate the rig or inject a hidden root/contact command.
+            const Vec2 parent_gradient = -perpendicular(parent_arm)
+                / parent_length_squared * facing;
+            const Vec2 driven_gradient = perpendicular(driven_arm)
+                / driven_length_squared * facing;
+            const Vec2 pivot_gradient = -(parent_gradient + driven_gradient);
+            const float inverse_effective_inertia =
+                parent.inverse_mass * length_squared(parent_gradient)
+                + pivot.inverse_mass * length_squared(pivot_gradient)
+                + driven.inverse_mass * length_squared(driven_gradient);
+            if (inverse_effective_inertia <= 1.0e-8f)
+                return;
+
+            const float lambda = -constraint_error
+                / inverse_effective_inertia;
+            parent.position += parent_gradient
+                * (parent.inverse_mass * lambda);
+            pivot.position += pivot_gradient
+                * (pivot.inverse_mass * lambda);
+            driven.position += driven_gradient
+                * (driven.inverse_mass * lambda);
+        }
+    }
+
+    void Environment::damp_passive_articulated_toe_velocity(
+        bool left, float dt) noexcept
+    {
+        if (!(dt > 0.0f))
+            return;
+        MotorConstraint toe_motor{};
+        if (!articulated_toe_motor(left, toe_motor))
+            return;
+
+        Particle& parent = particles_[toe_motor.a];
+        Particle& pivot = particles_[toe_motor.pivot];
+        Particle& driven = particles_[toe_motor.c];
+        const Vec2 parent_arm = parent.position - pivot.position;
+        const Vec2 driven_arm = driven.position - pivot.position;
+        const float parent_length_squared = length_squared(parent_arm);
+        const float driven_length_squared = length_squared(driven_arm);
+        if (parent_length_squared <= 1.0e-8f
+            || driven_length_squared <= 1.0e-8f)
+            return;
+
+        const float facing = facing_direction();
+        const Vec2 parent_gradient = -perpendicular(parent_arm)
+            / parent_length_squared * facing;
+        const Vec2 driven_gradient = perpendicular(driven_arm)
+            / driven_length_squared * facing;
+        const Vec2 pivot_gradient = -(parent_gradient + driven_gradient);
+        const float inverse_effective_inertia =
+            parent.inverse_mass * length_squared(parent_gradient)
+            + pivot.inverse_mass * length_squared(pivot_gradient)
+            + driven.inverse_mass * length_squared(driven_gradient);
+        if (inverse_effective_inertia <= 1.0e-8f)
+            return;
+
+        const Vec2 parent_velocity = (parent.position - parent.previous) / dt;
+        const Vec2 pivot_velocity = (pivot.position - pivot.previous) / dt;
+        const Vec2 driven_velocity = (driven.position - driven.previous) / dt;
+        const float relative_angular_velocity =
+            dot(parent_gradient, parent_velocity)
+            + dot(pivot_gradient, pivot_velocity)
+            + dot(driven_gradient, driven_velocity);
+        // A reciprocal viscous hinge removes relative MTP kinetic energy but
+        // has no preferred angle and is exactly dormant at zero relative rate.
+        // Applying the equal-and-opposite generalized impulse through Verlet
+        // history leaves positions/contact membership untouched and preserves
+        // linear momentum because the three gradients sum to zero.
+        constexpr float passive_velocity_reduction = 0.70f;
+        const float impulse = -passive_velocity_reduction
+            * relative_angular_velocity / inverse_effective_inertia;
+        parent.previous -= parent_gradient
+            * (parent.inverse_mass * impulse * dt);
+        pivot.previous -= pivot_gradient
+            * (pivot.inverse_mass * impulse * dt);
+        driven.previous -= driven_gradient
+            * (driven.inverse_mass * impulse * dt);
     }
 
     void Environment::limit_articulated_toe_rates(float dt) noexcept
     {
+        if (blueprint_.active_motor_count > human_right_toe_action
+            && blueprint_.motors[human_left_toe_action].enabled
+            && blueprint_.motors[human_right_toe_action].enabled)
+            return;
         for (std::size_t side = 0; side < previous_articulated_toe_angles_.size(); ++side)
         {
             const bool left = side == 0u;
             MotorConstraint toe_motor{};
             if (!articulated_toe_motor(left, toe_motor))
                 continue;
+            const float guide_authority = course_stage_ == CourseStage::crouch_walk
+                ? effective_physical_guidance_authority() : 1.0f;
+            if (raw_policy_audit() || guide_authority <= 0.0f)
+            {
+                // Raw toes are an unpowered distance/contact hinge. The
+                // assisted rate limiter below rotates only the distal node and
+                // is therefore an authored projector, not reciprocal passive
+                // physics. Never invoke it in the raw authority path.
+                previous_articulated_toe_angles_[side] =
+                    joint_angle(toe_motor);
+                continue;
+            }
             const std::uint16_t heel = left
                 ? blueprint_.left_contact_node : blueprint_.right_contact_node;
             const bool supported = contact_supported(heel);
@@ -3947,7 +5348,8 @@ namespace runner::sim
             const float bounded_delta = clamp(wrap_angle(current - prior),
                 -maximum_delta, maximum_delta);
             const float bounded = wrap_angle(prior + bounded_delta);
-            const float correction = wrap_angle(bounded - current);
+            const float correction = wrap_angle(bounded - current)
+                * guide_authority;
             if (std::abs(correction) > 1.0e-6f
                 && toe_motor.pivot < particles_.size()
                 && toe_motor.c < particles_.size())
@@ -4113,6 +5515,188 @@ namespace runner::sim
             particle.position += center_correction;
     }
 
+    void Environment::solve_powered_motor_xpbd(
+        const MotorConstraint& motor, float action, float previous_action,
+        float dt,
+        float& accumulated_lambda, float& positive_work_used,
+        std::size_t action_slot) noexcept
+    {
+        if (!motor.enabled || motor.strength <= 1.0e-6f
+            || motor.a >= particles_.size()
+            || motor.pivot >= particles_.size() || motor.c >= particles_.size()
+            || dt <= 1.0e-6f)
+            return;
+
+        Particle& parent = particles_[motor.a];
+        Particle& pivot = particles_[motor.pivot];
+        Particle& driven = particles_[motor.c];
+        const Vec2 parent_arm = parent.position - pivot.position;
+        const Vec2 driven_arm = driven.position - pivot.position;
+        const float parent_length_squared = length_squared(parent_arm);
+        const float driven_length_squared = length_squared(driven_arm);
+        if (parent_length_squared <= 1.0e-8f
+            || driven_length_squared <= 1.0e-8f)
+            return;
+
+        const float facing = facing_direction();
+        const Vec2 parent_gradient = -perpendicular(parent_arm)
+            / parent_length_squared * facing;
+        const Vec2 driven_gradient = perpendicular(driven_arm)
+            / driven_length_squared * facing;
+        const Vec2 pivot_gradient = -(parent_gradient + driven_gradient);
+        const std::array<Vec2, 3> gradients{
+            parent_gradient, pivot_gradient, driven_gradient };
+        const std::array<Particle*, 3> joint{ &parent, &pivot, &driven };
+
+        float inverse_effective_inertia{};
+        float angle_rate{};
+        std::array<Vec2, 3> velocities{};
+        for (std::size_t index = 0; index < joint.size(); ++index)
+        {
+            velocities[index] = (joint[index]->position
+                - joint[index]->previous) / dt;
+            inverse_effective_inertia += joint[index]->inverse_mass
+                * length_squared(gradients[index]);
+            angle_rate += dot(gradients[index], velocities[index]);
+        }
+        if (inverse_effective_inertia <= 1.0e-8f)
+            return;
+
+        float total_mass{};
+        for (const Particle& particle : particles_)
+            total_mass += 1.0f / std::max(particle.inverse_mass, 1.0e-5f);
+        const float strength_fraction = clamp(motor.strength / 0.056f,
+            0.0f, 1.0f);
+        constexpr float gravity_magnitude = 22.0f;
+        const float parent_length = std::sqrt(parent_length_squared);
+        const float driven_length = std::sqrt(driven_length_squared);
+        // Joint torque capacity belongs to the articulated hinge, not only to
+        // whichever side happens to be stored as `c`. Using the short distal
+        // arm made an anatomical ankle roughly six times weaker than the same
+        // finite actuator at a hip or knee. The longer of the two real arms is
+        // a symmetric morphology scale; all torque, impulse and work ceilings
+        // below remain unchanged and finite.
+        const float actuator_length = std::max(parent_length, driven_length);
+        const float maximum_torque = total_mass * gravity_magnitude
+            * actuator_length * (0.10f + 0.30f * strength_fraction);
+        // Travel defines what a joint may request; it must not also make the
+        // same finite actuator softer. A physical position-controlled hinge
+        // reaches its declared torque limit at a bounded tracking error,
+        // independently of whether its anatomical range is 34 or 76 degrees.
+        // Torque, lambda and positive-work limits below remain unchanged.
+        constexpr float full_torque_tracking_error = 0.250f;
+        const float stiffness = maximum_torque
+            / full_torque_tracking_error;
+        const float compliance = 1.0f / std::max(stiffness, 1.0e-5f);
+        const float alpha = compliance / (dt * dt);
+        const float current_local = signed_angle(parent_arm, driven_arm) * facing;
+        const float target_local = motor_target_angle(motor, action);
+        const float constraint_error = wrap_angle(current_local - target_local);
+        float damping_seconds{};
+        float target_angle_rate{};
+        if (action_slot == human_left_toe_action
+            || action_slot == human_right_toe_action)
+        {
+            // The explicit MTP motor is a finite reciprocal PD actuator. Its
+            // derivative term tracks the moving applied target, rather than
+            // resisting authored slew, and is included in the XPBD denominator
+            // so repeated solver passes converge instead of multiplying drag.
+            constexpr float damping_ratio = 0.35f;
+            damping_seconds = 2.0f * damping_ratio
+                / std::sqrt(std::max(stiffness * inverse_effective_inertia,
+                    1.0e-8f));
+            target_angle_rate = wrap_angle(target_local
+                    - motor_target_angle(motor, previous_action)) / dt;
+        }
+        const float relative_angle_rate = angle_rate - target_angle_rate;
+        float delta_lambda = (-constraint_error - alpha * accumulated_lambda
+                - damping_seconds * relative_angle_rate)
+            / (inverse_effective_inertia + alpha
+                + damping_seconds * inverse_effective_inertia / dt);
+
+        const float maximum_lambda = maximum_torque * dt * dt;
+        const float bounded_lambda = clamp(accumulated_lambda + delta_lambda,
+            -maximum_lambda, maximum_lambda);
+        delta_lambda = bounded_lambda - accumulated_lambda;
+        if (std::abs(delta_lambda) <= 1.0e-10f)
+            return;
+
+        // A position-level XPBD correction is a real motor impulse because
+        // Verlet history is intentionally unchanged. Bound its measured
+        // positive work once per fixed step, independently of solver count.
+        const float impulse = delta_lambda / dt;
+        const float requested_work = impulse * angle_rate
+            + 0.5f * impulse * impulse * inverse_effective_inertia;
+        const float maximum_positive_work = maximum_torque * 2.0f * dt;
+        const float remaining_positive_work = std::max(0.0f,
+            maximum_positive_work - positive_work_used);
+        if (requested_work > remaining_positive_work
+            && std::abs(impulse) > 1.0e-9f)
+        {
+            const float impulse_sign = impulse < 0.0f ? -1.0f : 1.0f;
+            const float signed_rate = impulse_sign * angle_rate;
+            const float discriminant = signed_rate * signed_rate
+                + 2.0f * inverse_effective_inertia
+                    * remaining_positive_work;
+            const float bounded_magnitude = std::max(0.0f,
+                (-signed_rate + std::sqrt(std::max(0.0f, discriminant)))
+                    / inverse_effective_inertia);
+            delta_lambda = impulse_sign * std::min(
+                std::abs(impulse), bounded_magnitude) * dt;
+        }
+        if (std::abs(delta_lambda) <= 1.0e-10f)
+            return;
+
+        Vec2 linear_before{};
+        Vec2 linear_after{};
+        double angular_before{};
+        double angular_after{};
+        double kinetic_before{};
+        double kinetic_after{};
+        for (std::size_t index = 0; index < joint.size(); ++index)
+        {
+            const float mass = 1.0f / std::max(
+                joint[index]->inverse_mass, 1.0e-5f);
+            const Vec2 displacement = gradients[index]
+                * (joint[index]->inverse_mass * delta_lambda);
+            const Vec2 resolved_velocity = velocities[index]
+                + displacement / dt;
+            linear_before += velocities[index] * mass;
+            linear_after += resolved_velocity * mass;
+            angular_before += static_cast<double>(mass) * static_cast<double>(
+                cross(joint[index]->position, velocities[index]));
+            kinetic_before += 0.5 * static_cast<double>(mass)
+                * static_cast<double>(length_squared(velocities[index]));
+            joint[index]->position += displacement;
+            angular_after += static_cast<double>(mass) * static_cast<double>(
+                cross(joint[index]->position, resolved_velocity));
+            kinetic_after += 0.5 * static_cast<double>(mass)
+                * static_cast<double>(length_squared(resolved_velocity));
+        }
+        accumulated_lambda += delta_lambda;
+
+        const float work = static_cast<float>(kinetic_after - kinetic_before);
+        positive_work_used += std::max(0.0f, work);
+        if (raw_authority_telemetry_enabled_
+            && action_slot < anatomy_action_count)
+        {
+            raw_authority_telemetry_.motor_torque[action_slot] =
+                accumulated_lambda / (dt * dt);
+            raw_authority_telemetry_.motor_work_joules[action_slot] += work;
+            raw_authority_telemetry_.motor_positive_work_joules[action_slot]
+                += std::max(0.0f, work);
+            raw_authority_telemetry_.motor_maximum_linear_momentum_error =
+                std::max(raw_authority_telemetry_
+                        .motor_maximum_linear_momentum_error,
+                    length(linear_after - linear_before));
+            raw_authority_telemetry_.motor_maximum_angular_momentum_error =
+                std::max(raw_authority_telemetry_
+                        .motor_maximum_angular_momentum_error,
+                    std::abs(static_cast<float>(angular_after
+                        - angular_before)));
+        }
+    }
+
     bool Environment::contact_cluster_contains(std::uint16_t contact_node,
         std::size_t particle_index) const noexcept
     {
@@ -4207,7 +5791,7 @@ namespace runner::sim
         for (std::size_t index = 4; index < blueprint_.active_motor_count; ++index)
         {
             const MotorConstraint& motor = blueprint_.motors[index];
-            if (!motor.enabled)
+            if (!motor.enabled || blueprint_.support_branch_mask(motor) != 0u)
                 continue;
             const float local_angle = joint_angle(motor) * facing_direction();
             maximum = std::max(maximum,
@@ -4443,6 +6027,250 @@ namespace runner::sim
         return false;
     }
 
+    bool Environment::solve_raw_support_tangent_manifold(float dt) noexcept
+    {
+        if (!blueprint_.human_casual_gait_plan() || dt <= 1.0e-6f)
+            return false;
+
+        struct ContactState
+        {
+            std::size_t node{};
+            std::size_t side{};
+            bool toe{};
+            float mass{};
+            float velocity{};
+            float selected_capacity{};
+            float old_constraint_impulse{};
+            float new_constraint_impulse{};
+            float stick_displacement{};
+            bool sticking{};
+        };
+        std::array<ContactState, human_support_contact_nodes.size()> contacts{};
+        std::size_t contact_count{};
+        std::array<std::uint8_t, 2> plate_membership{};
+        std::array<float, 2> plate_constraint_impulse{};
+        std::array<float, 2> plate_capacity{};
+        std::array<float, 2> toe_capacity{};
+        std::array<float, 2> traction_used{};
+        std::array<float, 2> current_tangent{};
+
+        const auto support_slot = [](std::size_t node) noexcept
+        {
+            for (std::size_t slot = 0;
+                slot < human_support_contact_nodes.size(); ++slot)
+            {
+                if (human_support_contact_nodes[slot] == node)
+                    return slot;
+            }
+            return human_support_contact_nodes.size();
+        };
+        const auto solve_contact = [](float mass, float velocity,
+                                      float old_impulse,
+                                      float capacity) noexcept
+        {
+            const float coulomb_minimum = -capacity - old_impulse;
+            const float coulomb_maximum = capacity - old_impulse;
+            float minimum_delta{};
+            float maximum_delta{};
+            constexpr float stationary_velocity = 1.0e-6f;
+            if (velocity > stationary_velocity)
+            {
+                minimum_delta = std::max(0.0f, coulomb_minimum);
+                maximum_delta = std::min(coulomb_maximum,
+                    2.0f * mass * velocity);
+            }
+            else if (velocity < -stationary_velocity)
+            {
+                minimum_delta = std::max(coulomb_minimum,
+                    2.0f * mass * velocity);
+                maximum_delta = std::min(0.0f, coulomb_maximum);
+            }
+            if (minimum_delta > maximum_delta)
+                return old_impulse;
+            return old_impulse + clamp(mass * velocity,
+                minimum_delta, maximum_delta);
+        };
+
+        // Each real heel, ball, and toe contact owns its relative tangential
+        // slip and finite Coulomb interval. Rigid-foot distance constraints
+        // exchange the resulting impulses physically; averaging opposed heel
+        // and ball velocities here would erase the rolling moment and can
+        // accelerate one contact in its current slip direction.
+        for (const std::size_t node : human_support_contact_nodes)
+        {
+            if (node >= particles_.size())
+                continue;
+            const bool left = contact_cluster_contains(
+                blueprint_.left_contact_node, node);
+            const bool right = contact_cluster_contains(
+                blueprint_.right_contact_node, node);
+            if (left == right)
+                continue;
+            const std::size_t side = left ? 0u : 1u;
+            const bool toe = node == (left
+                ? human_left_toe_node : human_right_toe_node);
+            const bool active = blueprint_.is_support_seed(node)
+                && particles_[node].grounded
+                && support_contact_latch_[node] != 0u;
+            if (!active)
+            {
+                support_contact_tangent_impulses_[node] = 0.0f;
+                continue;
+            }
+
+            if (!toe)
+            {
+                const std::size_t heel = left
+                    ? human_left_heel_node : human_right_heel_node;
+                plate_membership[side] |= static_cast<std::uint8_t>(
+                    node == heel ? 0x1u : 0x2u);
+            }
+            Particle& particle = particles_[node];
+            const float mass = 1.0f / std::max(
+                particle.inverse_mass, 1.0e-5f);
+            const float velocity = (particle.position.x
+                - particle.previous.x) / dt;
+            const float old_impulse = support_contact_tangent_impulses_[node];
+            const float normal_impulse = std::max(0.0f,
+                support_normal_constraint_lambdas_[node] / dt);
+            const ContactTraction traction = contact_traction(
+                terrain_firmness_at(particle.position.x),
+                terrain_looseness_at(particle.position.x),
+                water_depth_at(particle.position.x), particle.radius,
+                particle.inverse_mass, dt);
+            const float static_capacity = traction.static_coefficient
+                * normal_impulse;
+            const float dynamic_capacity = traction.dynamic_coefficient
+                * normal_impulse;
+            const float displacement = particle.position.x
+                - support_contact_anchor_x_[node];
+            const float position_impulse = mass * displacement / dt;
+            const float velocity_impulse = mass * velocity;
+            const float shared_impulse = clamp(position_impulse,
+                std::min(0.0f, velocity_impulse), std::max(0.0f, velocity_impulse));
+            const float stick_impulse = old_impulse + position_impulse
+                + (velocity_impulse - shared_impulse);
+            const bool sticking = normal_impulse > 1.0e-7f
+                && std::abs(displacement) <= traction.static_capture_distance
+                && std::abs(position_impulse)
+                    + std::abs(velocity_impulse - shared_impulse) <= static_capacity
+                && std::abs(stick_impulse) <= static_capacity;
+            const float capacity = sticking ? static_capacity : dynamic_capacity;
+            // When a moving foot rolls, the per-pass normal load and its
+            // active Coulomb budget can shrink. Discard excess accumulated
+            // reservation without undoing already dissipated velocity; that
+            // would turn unloading into a propulsive impulse. The remaining
+            // budget governs the next physical velocity correction.
+            const float active_impulse = !sticking && stage_requires_forward_gait(course_stage_)
+                ? clamp(old_impulse, -capacity, capacity) : old_impulse;
+            ContactState& contact = contacts[contact_count++];
+            contact.node = node;
+            contact.side = side;
+            contact.toe = toe;
+            contact.mass = mass;
+            contact.velocity = velocity;
+            contact.selected_capacity = capacity;
+            contact.old_constraint_impulse = active_impulse;
+            contact.new_constraint_impulse = sticking ? stick_impulse
+                : solve_contact(mass, velocity, active_impulse, capacity);
+            contact.stick_displacement = displacement;
+            contact.sticking = sticking;
+        }
+
+        support_cluster_plate_membership_mask_ = plate_membership;
+        for (std::size_t index = 0; index < contact_count; ++index)
+        {
+            const ContactState& contact = contacts[index];
+            Particle& particle = particles_[contact.node];
+            const float delta_constraint = contact.new_constraint_impulse
+                - contact.old_constraint_impulse;
+            const float velocity_change = contact.sticking
+                ? contact.velocity : delta_constraint / contact.mass;
+            const float velocity_after = contact.velocity - velocity_change;
+            const float physical_impulse = -contact.mass * velocity_change;
+            const float work = physical_impulse * 0.5f
+                * (contact.velocity + velocity_after);
+            if (contact.sticking)
+            {
+                // The finite static patch opposes solver displacement, not
+                // just history velocity. Split geometric correction from the
+                // dissipative velocity response so it cannot launch the sole.
+                particle.position.x -= contact.stick_displacement;
+                particle.previous.x = particle.position.x;
+            }
+            else
+                particle.previous.x += velocity_change * dt;
+            support_contact_tangent_impulses_[contact.node] =
+                contact.new_constraint_impulse;
+            support_traction_capacity_[contact.node] =
+                contact.selected_capacity;
+            support_traction_used_[contact.node] =
+                std::abs(contact.new_constraint_impulse);
+            support_friction_work_joules_ += work;
+            support_friction_positive_work_joules_ += std::max(0.0f, work);
+            stance_slip_distance_ = std::max(stance_slip_distance_,
+                std::max(std::abs(particle.position.x
+                        - support_contact_anchor_x_[contact.node]),
+                    std::abs(velocity_after) * dt));
+
+            const std::size_t side = contact.side;
+            current_tangent[side] += physical_impulse;
+            traction_used[side] += std::abs(
+                contact.new_constraint_impulse);
+            if (contact.toe)
+            {
+                toe_capacity[side] += contact.selected_capacity;
+            }
+            else
+            {
+                plate_constraint_impulse[side] +=
+                    contact.new_constraint_impulse;
+                plate_capacity[side] += contact.selected_capacity;
+            }
+            if (raw_authority_telemetry_enabled_)
+            {
+                const std::size_t slot = support_slot(contact.node);
+                if (slot < human_support_contact_nodes.size())
+                {
+                    raw_authority_telemetry_
+                        .support_contact_tangential_impulse[slot]
+                        += physical_impulse;
+                }
+            }
+        }
+
+        for (std::size_t side = 0; side < 2u; ++side)
+        {
+            if (stage_requires_forward_gait(course_stage_))
+                support_cluster_tangential_impulse_[side] = current_tangent[side];
+            else
+                support_cluster_tangential_impulse_[side] += current_tangent[side];
+            support_cluster_traction_impulse_[side] =
+                plate_constraint_impulse[side];
+            support_cluster_plate_traction_capacity_[side] = std::max(
+                support_cluster_plate_traction_capacity_[side],
+                plate_capacity[side]);
+            support_cluster_toe_traction_capacity_[side] = std::max(
+                support_cluster_toe_traction_capacity_[side],
+                toe_capacity[side]);
+            support_cluster_traction_capacity_[side] =
+                support_cluster_plate_traction_capacity_[side]
+                + support_cluster_toe_traction_capacity_[side];
+            support_cluster_traction_used_[side] = traction_used[side];
+            const float normal_impulse =
+                support_cluster_normal_impulse_[side];
+            support_cluster_normal_cop_x_[side] =
+                normal_impulse > 1.0e-7f
+                ? support_cluster_normal_impulse_moment_x_[side]
+                    / normal_impulse
+                : 0.0f;
+        }
+        available_traction_ = support_cluster_traction_capacity_[0]
+            + support_cluster_traction_capacity_[1];
+        used_traction_ = support_cluster_traction_used_[0]
+            + support_cluster_traction_used_[1];
+        return true;
+    }
     void Environment::solve_ground(float dt) noexcept
     {
         const float safe_dt = std::max(dt, 1.0e-5f);
@@ -4458,6 +6286,39 @@ namespace runner::sim
             support_traction_capacity_.assign(particles_.size(), 0.0f);
         if (support_traction_used_.size() != particles_.size())
             support_traction_used_.assign(particles_.size(), 0.0f);
+        if (support_normal_constraint_lambdas_.size() != particles_.size())
+            support_normal_constraint_lambdas_.assign(particles_.size(), 0.0f);
+        if (support_contact_tangent_impulses_.size() != particles_.size())
+            support_contact_tangent_impulses_.assign(particles_.size(), 0.0f);
+
+        const auto raw_support_contact_slot = [](std::size_t node) noexcept
+        {
+            for (std::size_t slot = 0;
+                slot < human_support_contact_nodes.size(); ++slot)
+            {
+                if (human_support_contact_nodes[slot] == node)
+                    return slot;
+            }
+            return human_support_contact_nodes.size();
+        };
+        const auto raw_sole_plate_contains = [this](std::size_t side,
+            std::size_t node) noexcept
+        {
+            const std::uint16_t heel = side == 0u
+                ? blueprint_.left_contact_node : blueprint_.right_contact_node;
+            const auto& additional = side == 0u
+                ? blueprint_.additional_left_contact_nodes
+                : blueprint_.additional_right_contact_nodes;
+            return node == heel || (!additional.empty()
+                && node == additional.front());
+        };
+        const auto raw_articulated_toe = [this](std::size_t node) noexcept
+        {
+            return (blueprint_.additional_left_contact_nodes.size() >= 2u
+                    && node == blueprint_.additional_left_contact_nodes[1])
+                || (blueprint_.additional_right_contact_nodes.size() >= 2u
+                    && node == blueprint_.additional_right_contact_nodes[1]);
+        };
 
         float root_upward_speed = 0.0f;
         if (valid_node(blueprint_.root_node))
@@ -4467,65 +6328,17 @@ namespace runner::sim
         }
         const bool powered_release = powered_joint_launch(
             course_stage_, root_upward_speed, action_change_energy_);
-        const bool static_support = course_stage_ == CourseStage::balance
-            || course_stage_ == CourseStage::duck_press;
-        const bool articulated_human_gait = stage_requires_forward_gait(course_stage_)
-            && blueprint_.human_casual_gait_plan()
-            && blueprint_.additional_left_contact_nodes.size() >= 2u
-            && blueprint_.additional_right_contact_nodes.size() >= 2u;
-        const bool selective_human_unload = action_support_unload_side_ != 0;
-        const bool left_toe_roll = articulated_human_gait
-            && support_toe_roll_seconds_[0] > 0.0f;
-        const bool right_toe_roll = articulated_human_gait
-            && support_toe_roll_seconds_[1] > 0.0f;
-
-        // A physical Human foot rolls heel/ball -> toe before the complete
-        // plate leaves the floor. Release windows come from requested motor
-        // geometry and persist across all constraint passes in this step.
-        const bool retain_release = articulated_human_gait;
-        bool left_cluster_release = (selective_human_unload
-                && action_support_unload_side_ == -1 && !left_toe_roll)
-            || (retain_release && support_cluster_release_hold_seconds_[0] > 0.0f
-                && !left_toe_roll);
-        bool right_cluster_release = (selective_human_unload
-                && action_support_unload_side_ == 1 && !right_toe_roll)
-            || (retain_release && support_cluster_release_hold_seconds_[1] > 0.0f
-                && !right_toe_roll);
-        // Only Human has articulated heel/ball/toe plates. On multi-support
-        // animals, the additional nodes are independent legs, not one foot.
-        if (!static_support && blueprint_.human_casual_gait_plan())
-        {
-            for (std::size_t index = 0; index < particles_.size(); ++index)
-            {
-                if (!blueprint_.is_support_seed(index))
-                    continue;
-                const Particle& particle = particles_[index];
-                const bool in_left_cluster = contact_cluster_contains(
-                    blueprint_.left_contact_node, index);
-                const bool in_right_cluster = contact_cluster_contains(
-                    blueprint_.right_contact_node, index);
-                if (selective_human_unload
-                    && ((in_left_cluster && action_support_unload_side_ != -1)
-                        || (in_right_cluster && action_support_unload_side_ != 1)))
-                    continue;
-                if ((in_left_cluster && left_toe_roll)
-                    || (in_right_cluster && right_toe_roll))
-                    continue;
-                const float upward_speed = (particle.position.y
-                    - particle.previous.y) / safe_dt;
-                if (!support_contact_release_requested(
-                        true, false, powered_release, upward_speed))
-                    continue;
-                if (in_left_cluster)
-                {
-                    left_cluster_release = true;
-                }
-                if (in_right_cluster)
-                {
-                    right_cluster_release = true;
-                }
-            }
-        }
+        const bool static_support = !raw_policy_audit()
+            && (course_stage_ == CourseStage::balance
+                || course_stage_ == CourseStage::duck_press);
+        const bool shared_physical_human_sole =
+            blueprint_.human_casual_gait_plan() && !static_support;
+        // Moving Human heel/ball/toe contacts are physical unilateral
+        // constraints. A gait action may identify the intended swing side for
+        // policy telemetry, but it cannot open collision, clear accumulated
+        // contact impulses, or hold the opposite sole to a world-space rail.
+        // The explicit hip/knee/ankle motors must earn unload by geometrically
+        // separating each contact node from the plane.
 
         for (std::size_t index = 0; index < particles_.size(); ++index)
         {
@@ -4540,7 +6353,7 @@ namespace runner::sim
             const float firmness = terrain_firmness_at(particle.position.x);
             const float looseness = terrain_looseness_at(particle.position.x);
             const float burial_allowance = stage_uses_deformable_terrain(course_stage_)
-                ? (traction_contact ? (1.0f - firmness) * 0.055f
+                ? (traction_contact ? support_contact_soil_sink(firmness)
                     : std::min(particle.radius * 0.78f,
                         (1.0f - firmness + looseness * 0.45f) * 0.18f))
                 : 0.0f;
@@ -4558,52 +6371,39 @@ namespace runner::sim
                 && contact_cluster_contains(blueprint_.left_contact_node, index);
             const bool in_right_cluster = semantic_support
                 && contact_cluster_contains(blueprint_.right_contact_node, index);
-            const std::uint16_t left_toe_node = blueprint_.additional_left_contact_nodes.size() >= 2u
-                ? blueprint_.additional_left_contact_nodes[1]
-                : std::numeric_limits<std::uint16_t>::max();
-            const std::uint16_t right_toe_node = blueprint_.additional_right_contact_nodes.size() >= 2u
-                ? blueprint_.additional_right_contact_nodes[1]
-                : std::numeric_limits<std::uint16_t>::max();
-            const bool toe_roll_release = (left_toe_roll && in_left_cluster
-                    && index != left_toe_node)
-                || (right_toe_roll && in_right_cluster && index != right_toe_node);
-            const bool cluster_release_requested = semantic_support
-                && ((left_cluster_release && in_left_cluster)
-                    || (right_cluster_release && in_right_cluster)
-                    || toe_roll_release);
-            const bool toe_roll_plant = (left_toe_roll && index == left_toe_node)
-                || (right_toe_roll && index == right_toe_node);
-            const bool held_stance_contact = selective_human_unload
-                && semantic_support
-                && (action_support_unload_side_ == 0
-                    || (action_support_unload_side_ == -1
-                        && contact_cluster_contains(
-                            blueprint_.right_contact_node, index))
-                    || (action_support_unload_side_ == 1
-                        && contact_cluster_contains(
-                            blueprint_.left_contact_node, index)));
-            const bool release_requested = cluster_release_requested
-                || (!held_stance_contact && !toe_roll_plant && support_contact_release_requested(
-                    semantic_support, static_support, powered_release, velocity.y));
+            const bool raw_unilateral_support = shared_physical_human_sole
+                && semantic_support && traction_contact;
+            constexpr float unilateral_separation_epsilon = 1.0e-5f;
+            const bool raw_support_separating = raw_unilateral_support
+                && separation >= -unilateral_separation_epsilon
+                && velocity.y > moving_contact_release_speed_mps;
+            const bool raw_support_clear_of_plane = raw_unilateral_support
+                && (raw_support_separating
+                    || (separation > 0.0025f
+                        && support_normal_constraint_lambdas_[index]
+                            <= 1.0e-8f));
+            const bool velocity_release_requested =
+                support_contact_release_requested(semantic_support,
+                    static_support, powered_release, velocity.y);
+            const bool release_requested = raw_unilateral_support
+                ? raw_support_clear_of_plane
+                : velocity_release_requested;
             const bool contact_latched = semantic_support
                 && (was_grounded || support_contact_latch_[index] != 0u);
-            // During an assisted Human crouch step, the stance plate remains
-            // constrained to the world-space plant acquired at landing. Bone
-            // projection can otherwise pull the only planted foot above the
-            // persistence slop before ground resolution, producing a
-            // frame-rate-dependent two-foot launch. The selected swing plate
-            // is still released normally and must earn its next latch through
-            // collision.
-            const bool constrained_stance_plant = (held_stance_contact || toe_roll_plant)
-                && contact_latched && !release_requested;
-            const bool actual_contact = (separation <= 0.0025f
-                    || constrained_stance_plant)
+            const bool actual_contact = separation <= 0.0025f
                 && !release_requested;
             const bool persistent_contact = planted_contact_persists(
                 contact_latched, semantic_support, static_support,
                 separation, velocity.y, release_requested);
             if (actual_contact || persistent_contact)
             {
+                if (raw_authority_telemetry_enabled_)
+                {
+                    if (semantic_support)
+                        ++raw_authority_telemetry_.support_contact_corrections;
+                    else
+                        ++raw_authority_telemetry_.non_support_contact_corrections;
+                }
                 const bool newly_latched = semantic_support
                     && support_contact_latch_[index] == 0u;
                 if (newly_latched)
@@ -4625,14 +6425,38 @@ namespace runner::sim
                     && !release_requested;
                 float resolved_minimum_y = minimum_y;
                 bool static_traction = false;
+                int raw_sole = -1;
+                bool raw_toe_contact = false;
+                float remaining_contact_budget{};
+                bool position_capture_complete{};
                 if (anchored_support_plant)
                 {
                     const float contact_water_depth = water_depth_at(
                         particle.position.x);
+                    const int raw_side = in_left_cluster ? 0
+                        : in_right_cluster ? 1 : -1;
+                    const bool shared_raw_plate = shared_physical_human_sole
+                        && raw_side >= 0
+                        && raw_sole_plate_contains(
+                            static_cast<std::size_t>(raw_side), index);
+                    raw_toe_contact = shared_physical_human_sole
+                        && raw_articulated_toe(index);
+                    raw_sole = shared_raw_plate ? raw_side : -1;
+                    if (shared_raw_plate || raw_toe_contact)
+                    {
+                        // Raw Human heel+ball contacts form one rear-foot plate;
+                        // the passive toe is its own unilateral contact. Both
+                        // share position and velocity traction within a finite
+                        // Coulomb budget in the manifold solve below.
+                        resolved_minimum_y = minimum_y;
+                    }
+                    else
+                    {
+                    const float contact_radius = particle.radius;
+                    const float contact_inverse_mass = particle.inverse_mass;
                     const ContactTraction traction = contact_traction(
                         firmness, looseness, contact_water_depth,
-                        particle.radius,
-                        particle.inverse_mass, safe_dt);
+                        contact_radius, contact_inverse_mass, safe_dt);
                     const float slip = particle.position.x
                         - support_contact_anchor_x_[index];
                     const bool inside_static_capture = std::abs(slip)
@@ -4644,7 +6468,7 @@ namespace runner::sim
                         || contact_region == TerrainRegion::shallow_water;
                     const float material_traction_scale = yielding_contact
                         ? 4.0f : 1.0f;
-                    const float morphology_bearing_scale =
+                    float morphology_bearing_scale =
                         blueprint_.human_casual_gait_plan()
                             ? yielding_contact ? 3.0f : 7.0f
                         : blueprint_.monopedal_gait() ? 3.0f
@@ -4665,14 +6489,16 @@ namespace runner::sim
                             traction.static_capture_distance * 2.5f);
                     support_traction_capacity_[index] = std::max(
                         support_traction_capacity_[index], correction_budget);
-                    const float remaining_budget = std::max(0.0f,
+                    remaining_contact_budget = std::max(0.0f,
                         support_traction_capacity_[index]
                             - support_traction_used_[index]);
                     const float correction = clamp(slip,
-                        -remaining_budget, remaining_budget);
+                        -remaining_contact_budget, remaining_contact_budget);
                     support_traction_used_[index] += std::abs(correction);
-                    static_traction = inside_static_capture
-                        && std::abs(slip) <= remaining_budget + 1.0e-7f;
+                    remaining_contact_budget = std::max(0.0f,
+                        remaining_contact_budget - std::abs(correction));
+                    position_capture_complete = inside_static_capture
+                        && std::abs(slip) <= std::abs(correction) + 1.0e-7f;
                     particle.position.x -= correction;
                     available_traction_ = 0.0f;
                     used_traction_ = 0.0f;
@@ -4686,13 +6512,11 @@ namespace runner::sim
                         - support_contact_anchor_x_[index];
                     stance_slip_distance_ = std::max(stance_slip_distance_,
                         std::abs(residual_slip));
-                    if (!static_traction)
-                        support_contact_anchor_x_[index] = particle.position.x;
                     const float anchored_firmness = terrain_firmness_at(
                         particle.position.x);
                     const float anchored_burial = stage_uses_deformable_terrain(
                         course_stage_)
-                        ? (1.0f - anchored_firmness) * 0.055f : 0.0f;
+                        ? support_contact_soil_sink(anchored_firmness) : 0.0f;
                     float anchored_ground = ground_height_at(particle.position.x);
                     if (course_stage_ == CourseStage::climb_descent
                         && particle.position.x >= ledge_left_edge_
@@ -4704,8 +6528,72 @@ namespace runner::sim
                     resolved_minimum_y = anchored_ground
                         + ground_contact_offset(true, particle.radius)
                         - anchored_burial;
+                    }
                 }
-                particle.position.y = resolved_minimum_y;
+                const bool raw_xpbd_support = shared_physical_human_sole
+                    && semantic_support && traction_contact
+                    && (raw_sole >= 0 || raw_toe_contact);
+                if (raw_xpbd_support)
+                {
+                    // Unilateral accumulated normal XPBD constraint C >= 0.
+                    // Its lambda has position-constraint units; lambda / dt is
+                    // the actual external normal impulse used by Coulomb below.
+                    // No whole-body pseudo-load or per-contact multiplier enters
+                    // this solve, and the Verlet history is deliberately left
+                    // unchanged so the reaction is represented physically.
+                    float& lambda = support_normal_constraint_lambdas_[index];
+                    const float constraint = particle.position.y
+                        - resolved_minimum_y;
+                    const float old_lambda = lambda;
+                    const float delta_lambda = -constraint
+                        / std::max(particle.inverse_mass, 1.0e-8f);
+                    lambda = std::max(0.0f, lambda + delta_lambda);
+                    float applied_lambda = lambda - old_lambda;
+                    particle.position.y += particle.inverse_mass
+                        * applied_lambda;
+                    // Position-level complementarity alone has no reaction
+                    // when a contact is exactly on the plane. Resolve any
+                    // remaining inward Verlet velocity as the velocity-level
+                    // half of the same unilateral constraint, and accumulate
+                    // its impulse in lambda so the Coulomb solve sees the real
+                    // normal capacity. This changes history only: it cannot
+                    // lift the contact or manufacture an upward position kick.
+                    const float resolved_vertical_velocity =
+                        (particle.position.y - particle.previous.y) / safe_dt;
+                    if (resolved_vertical_velocity < 0.0f)
+                    {
+                        const float velocity_lambda =
+                            -resolved_vertical_velocity * safe_dt
+                            / std::max(particle.inverse_mass, 1.0e-8f);
+                        lambda += velocity_lambda;
+                        applied_lambda += velocity_lambda;
+                        particle.previous.y = particle.position.y;
+                    }
+                    const int side = in_left_cluster ? 0
+                        : in_right_cluster ? 1 : -1;
+                    if (side >= 0)
+                    {
+                        const float normal_impulse = applied_lambda / safe_dt;
+                        support_cluster_normal_impulse_[
+                            static_cast<std::size_t>(side)] += normal_impulse;
+                        support_cluster_normal_impulse_moment_x_[
+                            static_cast<std::size_t>(side)]
+                            += particle.position.x * normal_impulse;
+                        if (raw_authority_telemetry_enabled_)
+                        {
+                            const std::size_t slot =
+                                raw_support_contact_slot(index);
+                            if (slot < human_support_contact_nodes.size())
+                            {
+                                raw_authority_telemetry_
+                                    .support_contact_normal_impulse[slot]
+                                    += normal_impulse;
+                            }
+                        }
+                    }
+                }
+                else
+                    particle.position.y = resolved_minimum_y;
                 particle.grounded = true;
                 if (semantic_support)
                 {
@@ -4724,12 +6612,31 @@ namespace runner::sim
                         firmness, looseness, false,
                         left_toe || right_toe);
                 }
-                if (anchored_support_plant && static_traction)
-                    particle.previous.x = particle.position.x;
+                float retained_horizontal_velocity = velocity.x * retention;
+                if (raw_sole >= 0 || raw_toe_contact)
+                {
+                    // Resolve tangent traction after the complete normal pass.
+                    retained_horizontal_velocity = velocity.x;
+                }
                 else
-                    particle.previous.x = particle.position.x
-                        - velocity.x * retention * safe_dt;
-                if (traction_contact)
+                {
+                    static_traction = position_capture_complete;
+                    if (anchored_support_plant && static_traction)
+                        retained_horizontal_velocity = 0.0f;
+                }
+                particle.previous.x = particle.position.x
+                    - retained_horizontal_velocity * safe_dt;
+                if (anchored_support_plant && raw_sole < 0
+                    && !raw_toe_contact && !static_traction)
+                    support_contact_anchor_x_[index] = particle.position.x;
+                if (raw_xpbd_support)
+                {
+                    // The accumulated normal constraint already changed current
+                    // position relative to unchanged Verlet history. Rewriting
+                    // history here would add a second, unreported rebound and
+                    // make the next solver pass release a neutral heel/ball.
+                }
+                else if (traction_contact)
                     particle.previous.y = particle.position.y;
                 else if (velocity.y < 0.0f)
                     particle.previous.y = particle.position.y
@@ -4738,6 +6645,8 @@ namespace runner::sim
             else if (semantic_support && release_requested
                 && separation < 0.0f)
             {
+                if (raw_authority_telemetry_enabled_)
+                    ++raw_authority_telemetry_.support_contact_corrections;
                 // Releasing a sole removes its latch and tangential traction,
                 // not its collision shape. Translate Verlet history with the
                 // normal projection so an unloaded heel/ball/toe cannot tunnel
@@ -4747,6 +6656,8 @@ namespace runner::sim
                 particle.position.y += normal_correction;
                 particle.previous.y += normal_correction;
                 support_contact_latch_[index] = 0u;
+                support_normal_constraint_lambdas_[index] = 0.0f;
+                support_contact_tangent_impulses_[index] = 0.0f;
             }
             else if (semantic_support && !static_support
                 && (release_requested
@@ -4754,6 +6665,314 @@ namespace runner::sim
                     || velocity.y > moving_contact_release_speed_mps))
             {
                 support_contact_latch_[index] = 0u;
+                support_normal_constraint_lambdas_[index] = 0.0f;
+                support_contact_tangent_impulses_[index] = 0.0f;
+            }
+        }
+
+        if (shared_physical_human_sole
+            && raw_support_tangential_impulses_enabled_
+            && !solve_raw_support_tangent_manifold(safe_dt))
+        {
+            // The rigid rear-foot plate spends one finite Coulomb impulse across
+            // heel+ball. The passive toe is a separate unilateral contact, so it
+            // cannot multiply the plate's normal capacity or turn the foot into
+            // a three-node positional rail. Every tangential correction changes
+            // Verlet history only and is therefore an explicit contact impulse.
+            for (std::size_t side = 0; side < 2u; ++side)
+            {
+                const std::uint16_t contact_node = side == 0u
+                    ? blueprint_.left_contact_node
+                    : blueprint_.right_contact_node;
+                float toe_capacity{};
+                float toe_used{};
+                float toe_constraint_impulse{};
+                for (std::size_t index = 0; index < particles_.size(); ++index)
+                {
+                    if (!contact_cluster_contains(contact_node, index)
+                        || !raw_articulated_toe(index))
+                        continue;
+                    toe_constraint_impulse +=
+                        support_contact_tangent_impulses_[index];
+                    if (!blueprint_.is_support_seed(index)
+                        || !particles_[index].grounded
+                        || support_contact_latch_[index] == 0u)
+                        continue;
+
+                    Particle& particle = particles_[index];
+                    const float mass = 1.0f
+                        / std::max(particle.inverse_mass, 1.0e-5f);
+                    const ContactTraction traction = contact_traction(
+                        terrain_firmness_at(particle.position.x),
+                        terrain_looseness_at(particle.position.x),
+                        water_depth_at(particle.position.x), particle.radius,
+                        particle.inverse_mass, safe_dt);
+                    const float normal_impulse = std::max(0.0f,
+                        support_normal_constraint_lambdas_[index] / safe_dt);
+                    const float velocity_before = (particle.position.x
+                        - particle.previous.x) / safe_dt;
+                    const float before_impulse =
+                        support_contact_tangent_impulses_[index];
+                    const float requested_impulse = before_impulse
+                        + mass * velocity_before;
+                    const float static_budget = traction.static_coefficient
+                        * normal_impulse;
+                    const float dynamic_budget = traction.dynamic_coefficient
+                        * normal_impulse;
+                    const bool static_contact = std::abs(requested_impulse)
+                        <= static_budget;
+                    const float capacity = static_contact
+                        ? static_budget : dynamic_budget;
+                    const float after_impulse = clamp(requested_impulse,
+                        -capacity, capacity);
+                    const float delta_impulse = after_impulse - before_impulse;
+                    const float velocity_change = delta_impulse / mass;
+                    const float velocity_after = velocity_before
+                        - velocity_change;
+                    particle.previous.x += velocity_change * safe_dt;
+                    support_contact_tangent_impulses_[index] = after_impulse;
+
+                    const float physical_impulse = -delta_impulse;
+                    const float friction_work = physical_impulse * 0.5f
+                        * (velocity_before + velocity_after);
+                    support_friction_work_joules_ += friction_work;
+                    support_friction_positive_work_joules_ += std::max(
+                        0.0f, friction_work);
+                    toe_capacity = capacity;
+                    toe_used = std::abs(after_impulse);
+                    toe_constraint_impulse = after_impulse;
+                    support_traction_capacity_[index] = capacity;
+                    support_traction_used_[index] = toe_used;
+                    stance_slip_distance_ = std::max(stance_slip_distance_,
+                        std::max(std::abs(particle.position.x
+                                - support_contact_anchor_x_[index]),
+                            std::abs(velocity_after) * safe_dt));
+                    if (raw_authority_telemetry_enabled_)
+                    {
+                        const std::size_t slot = raw_support_contact_slot(index);
+                        if (slot < human_support_contact_nodes.size())
+                        {
+                            raw_authority_telemetry_
+                                .support_contact_tangential_impulse[slot]
+                                += physical_impulse;
+                        }
+                    }
+                }
+
+                float contact_mass{};
+                float contact_radius_squared{};
+                float weighted_firmness{};
+                float weighted_looseness{};
+                float weighted_water_depth{};
+                float weighted_slip{};
+                float plate_normal_impulse{};
+                float material_weight{};
+                std::size_t contact_count{};
+                for (std::size_t index = 0; index < particles_.size(); ++index)
+                {
+                    if (!raw_sole_plate_contains(side, index)
+                        || !blueprint_.is_support_seed(index)
+                        || !particles_[index].grounded
+                        || support_contact_latch_[index] == 0u)
+                        continue;
+                    const Particle& particle = particles_[index];
+                    const float mass = 1.0f
+                        / std::max(particle.inverse_mass, 1.0e-5f);
+                    const float area_weight = std::max(
+                        particle.radius * particle.radius, 4.0e-4f);
+                    contact_mass += mass;
+                    contact_radius_squared += area_weight;
+                    material_weight += area_weight;
+                    weighted_firmness += terrain_firmness_at(
+                        particle.position.x) * area_weight;
+                    weighted_looseness += terrain_looseness_at(
+                        particle.position.x) * area_weight;
+                    weighted_water_depth += water_depth_at(
+                        particle.position.x) * area_weight;
+                    weighted_slip += (particle.position.x
+                        - support_contact_anchor_x_[index]) * mass;
+                    plate_normal_impulse += std::max(0.0f,
+                        support_normal_constraint_lambdas_[index] / safe_dt);
+                    ++contact_count;
+                }
+                float plate_capacity{};
+                if (contact_count == 0u || contact_mass <= 1.0e-5f
+                    || material_weight <= 1.0e-7f)
+                {
+                    plate_capacity = 0.0f;
+                }
+                else
+                {
+                    const float firmness = weighted_firmness / material_weight;
+                    const float looseness = weighted_looseness / material_weight;
+                    const float water_depth = weighted_water_depth / material_weight;
+                    const ContactTraction traction = contact_traction(
+                        firmness, looseness, water_depth,
+                        std::sqrt(contact_radius_squared),
+                        1.0f / contact_mass, safe_dt);
+                    float aggregate_velocity{};
+                    for (std::size_t index = 0;
+                        index < particles_.size(); ++index)
+                    {
+                        if (!raw_sole_plate_contains(side, index)
+                            || !blueprint_.is_support_seed(index)
+                            || !particles_[index].grounded
+                            || support_contact_latch_[index] == 0u)
+                            continue;
+                        const Particle& particle = particles_[index];
+                        const float mass = 1.0f / std::max(
+                            particle.inverse_mass, 1.0e-5f);
+                        aggregate_velocity += (particle.position.x
+                            - particle.previous.x) / safe_dt * mass;
+                    }
+                    aggregate_velocity /= contact_mass;
+                    const float before_impulse =
+                        support_cluster_traction_impulse_[side];
+                    const float requested_impulse = before_impulse
+                        + contact_mass * aggregate_velocity;
+                    const float static_budget = traction.static_coefficient
+                        * plate_normal_impulse;
+                    const float dynamic_budget = traction.dynamic_coefficient
+                        * plate_normal_impulse;
+                    const bool static_contact = std::abs(requested_impulse)
+                        <= static_budget;
+                    plate_capacity = static_contact
+                        ? static_budget : dynamic_budget;
+                    const float after_impulse = clamp(requested_impulse,
+                        -plate_capacity, plate_capacity);
+                    const float delta_impulse = after_impulse - before_impulse;
+                    const float velocity_change = delta_impulse / contact_mass;
+                    const float velocity_after = aggregate_velocity
+                        - velocity_change;
+                    const float physical_impulse = -delta_impulse;
+                    const float friction_work = physical_impulse * 0.5f
+                        * (aggregate_velocity + velocity_after);
+                    support_cluster_traction_impulse_[side] = after_impulse;
+                    support_friction_work_joules_ += friction_work;
+                    support_friction_positive_work_joules_ += std::max(
+                        0.0f, friction_work);
+
+                    for (std::size_t index = 0;
+                        index < particles_.size(); ++index)
+                    {
+                        if (!raw_sole_plate_contains(side, index)
+                            || !blueprint_.is_support_seed(index)
+                            || !particles_[index].grounded
+                            || support_contact_latch_[index] == 0u)
+                            continue;
+                        Particle& particle = particles_[index];
+                        const float mass = 1.0f / std::max(
+                            particle.inverse_mass, 1.0e-5f);
+                        particle.previous.x += velocity_change * safe_dt;
+                        const float fraction = mass / contact_mass;
+                        support_traction_capacity_[index] =
+                            plate_capacity * fraction;
+                        support_traction_used_[index] =
+                            std::abs(after_impulse) * fraction;
+                        stance_slip_distance_ = std::max(
+                            stance_slip_distance_,
+                            std::max(std::abs(particle.position.x
+                                    - support_contact_anchor_x_[index]),
+                                std::abs(velocity_after) * safe_dt));
+                        if (raw_authority_telemetry_enabled_)
+                        {
+                            const std::size_t slot =
+                                raw_support_contact_slot(index);
+                            if (slot < human_support_contact_nodes.size())
+                            {
+                                raw_authority_telemetry_
+                                    .support_contact_tangential_impulse[slot]
+                                    += physical_impulse * fraction;
+                            }
+                        }
+                    }
+                    static_cast<void>(weighted_slip);
+                }
+
+                support_cluster_traction_capacity_[side] = std::max(
+                    support_cluster_traction_capacity_[side],
+                    plate_capacity + toe_capacity);
+                support_cluster_traction_used_[side] = std::abs(
+                        support_cluster_traction_impulse_[side])
+                    + toe_used;
+                support_cluster_tangential_impulse_[side] = -(
+                    support_cluster_traction_impulse_[side]
+                        + toe_constraint_impulse);
+                const float normal_impulse =
+                    support_cluster_normal_impulse_[side];
+                support_cluster_normal_cop_x_[side] = normal_impulse > 1.0e-7f
+                    ? support_cluster_normal_impulse_moment_x_[side]
+                        / normal_impulse
+                    : 0.0f;
+            }
+            available_traction_ = support_cluster_traction_capacity_[0]
+                + support_cluster_traction_capacity_[1];
+            used_traction_ = support_cluster_traction_used_[0]
+                + support_cluster_traction_used_[1];
+        }
+    }
+
+    void Environment::apply_ledge_training_scaffold() noexcept
+    {
+        if (guidance_mode_ != GuidanceMode::assisted)
+            return;
+
+        for (std::size_t particle_index = 0;
+            particle_index < particles_.size(); ++particle_index)
+        {
+            Particle& particle = particles_[particle_index];
+            for (const CourseFeature& feature : course_features_)
+            {
+                if (feature.kind != CourseFeatureKind::ledge)
+                    continue;
+                const float left = feature.center.x - feature.half_extent.x;
+                const float top = feature.center.y + feature.half_extent.y;
+                const bool grasp_candidate = particle_index != blueprint_.head_node
+                    && particle_index != blueprint_.root_node
+                    && particle_index != blueprint_.torso_node
+                    && !blueprint_.is_support_seed(particle_index)
+                    && manipulator_endpoint(blueprint_, particle_index);
+                const bool near_edge = std::abs(particle.position.x - left)
+                        <= particle.radius + 0.18f
+                    && std::abs(particle.position.y - top)
+                        <= particle.radius + 0.22f;
+                if (grasp_candidate && near_edge)
+                {
+                    std::size_t slot = ledge_grasp_nodes_.size();
+                    for (std::size_t index = 0;
+                        index < ledge_grasp_nodes_.size(); ++index)
+                    {
+                        if (ledge_grasp_nodes_[index] == particle_index)
+                        {
+                            slot = index;
+                            break;
+                        }
+                        if (slot == ledge_grasp_nodes_.size()
+                            && ledge_grasp_nodes_[index]
+                                == std::numeric_limits<std::uint16_t>::max())
+                            slot = index;
+                    }
+                    if (slot < ledge_grasp_nodes_.size()
+                        && ledge_grasp_nodes_[slot] != particle_index)
+                    {
+                        ledge_grasp_nodes_[slot] =
+                            static_cast<std::uint16_t>(particle_index);
+                        ledge_grasp_anchors_[slot] = {
+                            left - particle.radius * 0.20f,
+                            top + particle.radius * 0.18f };
+                        ++hand_ledge_contacts_;
+                    }
+                }
+                for (std::size_t slot = 0;
+                    slot < ledge_grasp_nodes_.size(); ++slot)
+                {
+                    if (ledge_grasp_nodes_[slot] != particle_index)
+                        continue;
+                    const Vec2 correction =
+                        (ledge_grasp_anchors_[slot] - particle.position) * 0.62f;
+                    particle.position += correction;
+                    particle.previous += correction;
+                }
             }
         }
     }
@@ -4766,59 +6985,6 @@ namespace runner::sim
             Particle& particle = particles_[particle_index];
             for (const CourseFeature& feature : course_features_)
             {
-                if (feature.kind == CourseFeatureKind::ledge)
-                {
-                    const float left = feature.center.x - feature.half_extent.x;
-                    const float top = feature.center.y + feature.half_extent.y;
-                    const bool grasp_candidate = particle_index != blueprint_.head_node
-                        && particle_index != blueprint_.root_node
-                        && particle_index != blueprint_.torso_node
-                        && !blueprint_.is_support_seed(particle_index)
-                        && manipulator_endpoint(blueprint_, particle_index);
-                    const bool near_edge = std::abs(particle.position.x - left)
-                            <= particle.radius + 0.18f
-                        && std::abs(particle.position.y - top)
-                            <= particle.radius + 0.22f;
-                    if (grasp_candidate && near_edge)
-                    {
-                        std::size_t slot = ledge_grasp_nodes_.size();
-                        for (std::size_t index = 0;
-                            index < ledge_grasp_nodes_.size(); ++index)
-                        {
-                            if (ledge_grasp_nodes_[index] == particle_index)
-                            {
-                                slot = index;
-                                break;
-                            }
-                            if (slot == ledge_grasp_nodes_.size()
-                                && ledge_grasp_nodes_[index]
-                                    == std::numeric_limits<std::uint16_t>::max())
-                                slot = index;
-                        }
-                        if (slot < ledge_grasp_nodes_.size())
-                        {
-                            if (ledge_grasp_nodes_[slot] != particle_index)
-                            {
-                                ledge_grasp_nodes_[slot] =
-                                    static_cast<std::uint16_t>(particle_index);
-                                ledge_grasp_anchors_[slot] = {
-                                    left - particle.radius * 0.20f,
-                                    top + particle.radius * 0.18f };
-                                ++hand_ledge_contacts_;
-                            }
-                        }
-                    }
-                    for (std::size_t slot = 0;
-                        slot < ledge_grasp_nodes_.size(); ++slot)
-                    {
-                        if (ledge_grasp_nodes_[slot] != particle_index)
-                            continue;
-                        const Vec2 correction =
-                            (ledge_grasp_anchors_[slot] - particle.position) * 0.62f;
-                        particle.position += correction;
-                        particle.previous += correction;
-                    }
-                }
                 if (feature.kind == CourseFeatureKind::duck_press)
                 {
                     const float left = feature.center.x - feature.half_extent.x;
@@ -5074,6 +7240,7 @@ namespace runner::sim
     {
         const bool left = contact_supported(blueprint_.left_contact_node);
         const bool right = contact_supported(blueprint_.right_contact_node);
+        const bool locomotion_demanded = locomotion_required();
         // Heel lift and toe roll are still planted support. A leg enters swing
         // only after its complete semantic foot cluster loses ground contact.
         const bool left_swinging = !left;
@@ -5095,7 +7262,8 @@ namespace runner::sim
         const float right_center = (contact_cluster_center_x(
             blueprint_.right_contact_node) - root_x) * facing;
         lower_leg_scissored_this_step_ = false;
-        if (measure_forward_gait_faults(shuttle_state_.phase, elapsed_seconds_)
+        if (locomotion_demanded
+            && measure_forward_gait_faults(shuttle_state_.phase, elapsed_seconds_)
             && blueprint_.paired_leg_chains() && blueprint_.active_motor_count >= 4u)
         {
             const MotorConstraint& left_shank = blueprint_.motors[1];
@@ -5137,7 +7305,7 @@ namespace runner::sim
         backward_brace_ratio_ = 0.0f;
         const bool measure_backward_brace = measure_forward_gait_faults(
                 shuttle_state_.phase, elapsed_seconds_)
-            && stage_requires_forward_gait(course_stage_)
+            && locomotion_demanded
             && !blueprint_.horizontal_body_plan() && !non_foot_grounded_
             && (left || right) && valid_node(blueprint_.root_node)
             && valid_node(blueprint_.torso_node);
@@ -5740,11 +7908,14 @@ namespace runner::sim
 
         const bool intentional_shuttle_hold = shuttle_enabled()
             && (shuttle_state_.phase == ShuttlePhase::braking
-                || shuttle_state_.phase == ShuttlePhase::turning);
-        const bool locomotion_required = stage_requires_forward_gait(course_stage_)
+                || shuttle_state_.phase == ShuttlePhase::turning
+                || shuttle_state_.phase == ShuttlePhase::settling);
+        const bool moving_stage_contact_checks =
+            stage_requires_forward_gait(course_stage_)
             && !intentional_shuttle_hold;
+        const bool locomotion_required = this->locomotion_required();
         const float recent_swing_clearance = std::max(left_clearance, right_clearance);
-        if (locomotion_required && friction_driven_shuffle(root_speed,
+        if (moving_stage_contact_checks && friction_driven_shuffle(root_speed,
                 left, right, stance_slip_speed_, gait_cycles(), recent_swing_clearance))
             wheel_sliding_seconds_ = std::min(3.0f, wheel_sliding_seconds_ + dt);
         else
@@ -5795,7 +7966,7 @@ namespace runner::sim
         const std::size_t lifted_supports = support_seed_lifted_count(0.085f);
         const bool recent_support_transfer = elapsed_seconds_
             - last_support_transfer_seconds_ <= 0.90f;
-        if (locomotion_required && foot_pivot_rolling_motion(root_speed,
+        if (moving_stage_contact_checks && foot_pivot_rolling_motion(root_speed,
             left, right, stance_slip_speed_, obstacle_lift_clearance_, torso_turn_speed_,
             blueprint_.support_seed_count(), lifted_supports, recent_support_transfer,
             blueprint_.monopedal_gait() ? 1u : blueprint_.support_seed_count()))
@@ -5810,7 +7981,8 @@ namespace runner::sim
         else if (foot_pivot_rolling_seconds_ > foot_pivot_rolling_limit(elapsed_seconds_))
             invalidate(InvalidMotion::foot_pivot_rolling);
 
-        if (std::isfinite(nearest_hazard_dx) && hazard_quiver_motion(nearest_hazard_dx,
+        if (locomotion_required && std::isfinite(nearest_hazard_dx)
+            && hazard_quiver_motion(nearest_hazard_dx,
             root_speed, obstacle_lift_clearance_, obstacle_clearance_target_, action_energy))
             hazard_stall_seconds_ += dt;
         else
@@ -5896,37 +8068,95 @@ namespace runner::sim
 
         dt = clamp(dt, 1.0f / 240.0f, 1.0f / 30.0f);
         last_step_dt_ = dt;
+        raw_authority_telemetry_ = {};
+        const AuthoritySnapshot authority_step_start = authority_snapshot(dt);
+        const std::array<bool, 2> support_at_step_start{
+            left_supported(), right_supported() };
         crouch_posture_guide_applied_this_step_ = false;
-        const bool guidance_assisted =
-            guidance_mode_ == GuidanceMode::assisted;
+        const float crouch_walk_guidance_authority = course_stage_
+                == CourseStage::crouch_walk
+            ? effective_physical_guidance_authority() : 1.0f;
+        const bool guidance_assisted = guidance_mode_ == GuidanceMode::assisted
+            && (course_stage_ != CourseStage::crouch_walk
+                || crouch_walk_guidance_authority > 0.0f);
         for (float& hold : support_cluster_release_hold_seconds_)
             hold = std::max(0.0f, hold - dt);
         for (float& roll : support_toe_roll_seconds_)
             roll = std::max(0.0f, roll - dt);
         // Let every body settle onto its feet before the policy can apply a
         // meaningful impulse, then ease control in rather than launching it.
-        const float ramp_t = clamp((elapsed_seconds_ - 0.35f) / 1.25f, 0.0f, 1.0f);
-        const float control_ramp = ramp_t * ramp_t * (3.0f - 2.0f * ramp_t);
+        const bool physical_moving_human_control =
+            blueprint_.human_casual_gait_plan()
+            && course_stage_ != CourseStage::balance
+            && course_stage_ != CourseStage::duck_press;
+        const float control_ramp = policy_control_ramp(elapsed_seconds_
+            + (physical_moving_human_control
+                ? policy_control_ramp_start_seconds : 0.0f));
         std::array<float, anatomy_action_count> applied_actions{};
+        const std::array<float, anatomy_action_count> prior_applied_actions =
+            previous_applied_actions_;
         action_change_energy_ = 0.0f;
+        const bool symmetric_human_actuator = physical_moving_human_control
+            || (raw_policy_audit() && blueprint_.human_casual_gait_plan());
         for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
         {
-            const float desired_action =
-                clamp(actions[index], -1.0f, 1.0f) * control_ramp;
-            applied_actions[index] = conditioned_single_support_motor_action(
-                blueprint_, index, previous_applied_actions_[index],
-                desired_action, dt);
+            raw_authority_telemetry_.commanded_actions[index] =
+                clamp(actions[index], -1.0f, 1.0f);
+            float desired_action = clamp(actions[index], -1.0f, 1.0f) * control_ramp;
+            if (course_stage_ == CourseStage::balance && symmetric_human_actuator
+                && index >= 4u && index < 8u)
+            {
+                // A relaxed Stand setpoint for the four existing arm motors.
+                // Policy outputs keep bounded residual movement; no particle
+                // positions are set and the arm reactions still load the rig.
+                const MotorConstraint& motor = blueprint_.motors[index];
+                const bool shoulder = (index & 1u) == 0u;
+                // Use the same rest frame each step rather than tracking the
+                // moving shoulder reference with a slow position actuator.
+                const Vec2 parent = shoulder
+                    ? blueprint_.nodes[motor.a] - blueprint_.nodes[motor.pivot]
+                    : Vec2{ -0.02f, 1.0f };
+                const Vec2 rest{ shoulder ? 0.02f : 0.10f, -1.0f };
+                const float angle = signed_angle(parent, rest);
+                const float delta = wrap_angle(angle - motor.neutral_angle);
+                const float range = delta < 0.0f
+                    ? motor.neutral_angle - motor.minimum_angle
+                    : motor.maximum_angle - motor.neutral_angle;
+                desired_action = clamp(delta / std::max(range, 1.0e-5f)
+                    + 0.12f * desired_action, -1.0f, 1.0f);
+            }
+            if (symmetric_human_actuator)
+            {
+                // Moving Human training and Raw evaluation share this finite,
+                // symmetric actuator bandwidth. It cannot choose a phase,
+                // contact, direction, root pose, or replacement action, and
+                // there is no plant discontinuity at the learned handoff.
+                constexpr float target_slew_rate = 1.0f;
+                const float maximum_delta = target_slew_rate * dt;
+                applied_actions[index] = previous_applied_actions_[index]
+                    + clamp(desired_action - previous_applied_actions_[index],
+                        -maximum_delta, maximum_delta);
+            }
+            else
+            {
+                applied_actions[index] = conditioned_single_support_motor_action(
+                    blueprint_, index, previous_applied_actions_[index],
+                    desired_action, dt);
+            }
             const float action_delta = applied_actions[index] - previous_applied_actions_[index];
             action_change_energy_ += action_delta * action_delta;
             previous_applied_actions_[index] = applied_actions[index];
+            raw_authority_telemetry_.actuator_actions[index] =
+                applied_actions[index];
         }
         action_support_unload_side_ = 0;
-        const bool articulated_human_gait = stage_requires_forward_gait(course_stage_)
+        const bool assisted_crouch_unload = guidance_assisted
+            && course_stage_ == CourseStage::crouch_walk
             && blueprint_.human_casual_gait_plan()
             && blueprint_.active_motor_count >= 4u
             && blueprint_.additional_left_contact_nodes.size() >= 2u
             && blueprint_.additional_right_contact_nodes.size() >= 2u;
-        if (articulated_human_gait)
+        if (assisted_crouch_unload)
         {
             const bool left_contact = contact_supported(blueprint_.left_contact_node);
             const bool right_contact = contact_supported(blueprint_.right_contact_node);
@@ -5940,22 +8170,30 @@ namespace runner::sim
             last_action_support_unload_side_ = rearm_support_unload_side(
                 last_action_support_unload_side_, requested_side,
                 release_windows_idle);
-            // Collision opens only when policy-requested joint geometry clearly
-            // shortens one leg. No elapsed-time gait clock chooses the foot.
+            // The assisted crouch lesson owns an explicitly classified foot-lift
+            // helper below. Ordinary Human gait never consumes this selected
+            // side or its timers: its unilateral contacts release only through
+            // finite hip/knee/ankle geometry and outward normal velocity.
             if (left_contact && right_contact
                 && release_windows_idle
                 && requested_side != 0
                 && requested_side != last_action_support_unload_side_)
             {
+                if (raw_authority_telemetry_enabled_)
+                    ++raw_authority_telemetry_.action_support_release_requests;
                 if (requested_side < 0)
                 {
-                    support_toe_roll_seconds_[0] = 0.075f;
-                    support_cluster_release_hold_seconds_[0] = 0.145f;
+                    support_toe_roll_seconds_[0] = 0.075f
+                        * crouch_walk_guidance_authority;
+                    support_cluster_release_hold_seconds_[0] = 0.145f
+                        * crouch_walk_guidance_authority;
                 }
                 else
                 {
-                    support_toe_roll_seconds_[1] = 0.075f;
-                    support_cluster_release_hold_seconds_[1] = 0.145f;
+                    support_toe_roll_seconds_[1] = 0.075f
+                        * crouch_walk_guidance_authority;
+                    support_cluster_release_hold_seconds_[1] = 0.145f
+                        * crouch_walk_guidance_authority;
                 }
                 last_action_support_unload_side_ = requested_side;
             }
@@ -5963,6 +8201,9 @@ namespace runner::sim
                 action_support_unload_side_ = -1;
             else if (support_cluster_release_hold_seconds_[1] > 0.0f)
                 action_support_unload_side_ = 1;
+            if (raw_authority_telemetry_enabled_
+                && action_support_unload_side_ != 0)
+                ++raw_authority_telemetry_.action_support_release_active_frames;
         }
         const int native_crouch_swing_side = guidance_assisted
             && course_stage_ == CourseStage::crouch_walk
@@ -5972,25 +8213,38 @@ namespace runner::sim
             : 0;
         constexpr Vec2 gravity{ 0.0f, -22.0f };
         constexpr float damping_at_60_hz = 0.996f;
-        for (std::size_t index = 0; index < particles_.size(); ++index)
         {
-            Particle& particle = particles_[index];
-            float local_damping = damping_at_60_hz;
-            if (index == blueprint_.head_node)
-                local_damping = 0.92f;
-            else if (blueprint_.human_casual_gait_plan()
-                && course_stage_ == CourseStage::uneven
-                && manipulator_branch_node(blueprint_, index)) local_damping = 0.90f;
-            else if (passive_endpoint(blueprint_, index))
-                local_damping = 0.90f;
-            else if (blueprint_.is_support_seed(index))
-                local_damping = 0.985f;
-            else if (node_degree(blueprint_, index) == 1u)
-                local_damping = 0.975f;
-            local_damping = std::pow(local_damping, dt * 60.0f);
-            const Vec2 velocity = (particle.position - particle.previous) * local_damping;
-            particle.previous = particle.position;
-            particle.position += velocity + gravity * (dt * dt);
+            const AuthoritySnapshot before = authority_snapshot(dt);
+            for (std::size_t index = 0; index < particles_.size(); ++index)
+            {
+                Particle& particle = particles_[index];
+                float local_damping = damping_at_60_hz;
+                // Differential per-node drag changes the mass-weighted body
+                // momentum whenever head, hands and feet have different X
+                // velocities. Raw evaluation uses one isotropic coefficient
+                // for every particle, so integration is a passive whole-rig
+                // contraction of velocity rather than an implicit body drive.
+                if (!raw_policy_audit() && !physical_moving_human_control)
+                {
+                    if (index == blueprint_.head_node)
+                        local_damping = 0.92f;
+                    else if (blueprint_.human_casual_gait_plan()
+                        && course_stage_ == CourseStage::uneven
+                        && manipulator_branch_node(blueprint_, index))
+                        local_damping = 0.90f;
+                    else if (passive_endpoint(blueprint_, index))
+                        local_damping = 0.90f;
+                    else if (blueprint_.is_support_seed(index))
+                        local_damping = 0.985f;
+                    else if (node_degree(blueprint_, index) == 1u)
+                        local_damping = 0.975f;
+                }
+                local_damping = std::pow(local_damping, dt * 60.0f);
+                const Vec2 velocity = (particle.position - particle.previous) * local_damping;
+                particle.previous = particle.position;
+                particle.position += velocity + gravity * (dt * dt);
+            }
+            record_authority_delta(AuthoritySource::integration, before, dt);
         }
         if (guidance_assisted
             && course_stage_ == CourseStage::crouch_walk
@@ -6005,7 +8259,8 @@ namespace runner::sim
                 const float clearance = foot.position.y
                     - ground_height_at(foot.position.x) - foot.radius;
                 constexpr float target_clearance = 0.16f;
-                const float lift = std::min(std::max(0.0f,
+                const float lift = crouch_walk_guidance_authority
+                    * std::min(std::max(0.0f,
                         target_clearance - clearance),
                     std::min(0.018f, 0.55f * dt));
                 foot.position.y += lift;
@@ -6021,7 +8276,27 @@ namespace runner::sim
         used_traction_ = 0.0f;
         std::fill(support_traction_capacity_.begin(), support_traction_capacity_.end(), 0.0f);
         std::fill(support_traction_used_.begin(), support_traction_used_.end(), 0.0f);
-        apply_water_forces(dt);
+        std::fill(support_normal_constraint_lambdas_.begin(),
+            support_normal_constraint_lambdas_.end(), 0.0f);
+        std::fill(support_contact_tangent_impulses_.begin(),
+            support_contact_tangent_impulses_.end(), 0.0f);
+        support_cluster_traction_capacity_.fill(0.0f);
+        support_cluster_plate_traction_capacity_.fill(0.0f);
+        support_cluster_toe_traction_capacity_.fill(0.0f);
+        support_cluster_traction_used_.fill(0.0f);
+        support_cluster_traction_impulse_.fill(0.0f);
+        support_cluster_plate_membership_mask_.fill(0u);
+        support_cluster_normal_impulse_.fill(0.0f);
+        support_cluster_normal_impulse_moment_x_.fill(0.0f);
+        support_cluster_normal_cop_x_.fill(0.0f);
+        support_cluster_tangential_impulse_.fill(0.0f);
+        support_friction_work_joules_ = 0.0f;
+        support_friction_positive_work_joules_ = 0.0f;
+        {
+            const AuthoritySnapshot before = authority_snapshot(dt);
+            apply_water_forces(dt);
+            record_authority_delta(AuthoritySource::water, before, dt);
+        }
         collided_this_step_ = false;
         duck_press_contact_this_step_ = false;
         duck_press_max_penetration_ = 0.0f;
@@ -6029,25 +8304,100 @@ namespace runner::sim
         rebuild_course_features();
         append_dynamic_material_features();
         update_articulated_toe_commands(applied_actions, dt);
-        for (int iteration = 0; iteration < 14; ++iteration)
+        powered_motor_lambdas_.fill(0.0f);
+        powered_motor_positive_work_.fill(0.0f);
+        coupled_motor_lambdas_.fill(0.0f);
+        coupled_motor_positive_work_.fill(0.0f);
+        const bool shared_physical_human_actuator =
+            blueprint_.human_casual_gait_plan()
+            && course_stage_ != CourseStage::balance
+            && course_stage_ != CourseStage::duck_press;
+        const float equipment_arm_pose_authority = course_stage_
+                == CourseStage::crouch_walk
+            ? crouch_walk_guidance_authority : 1.0f;
+        const bool physical_equipment_arm_pose = guidance_assisted
+            && equipment_arm_pose_authority > 0.0f
+            && weapon_class_ != WeaponClass::none
+            && blueprint_.presentation_species() == CreatureSpecies::human
+            && blueprint_.human_casual_gait_plan()
+            && (equipment_directive_ != EquipmentDirective::passive
+                || course_stage_ == CourseStage::equipment_targets
+                || course_stage_ == CourseStage::combat_course);
+        const int solver_iterations = std::clamp(
+            solver_iteration_count_, 1, 32);
+        for (int iteration = 0; iteration < solver_iterations; ++iteration)
         {
-            for (const DistanceConstraint& bone : blueprint_.bones)
-                solve_distance(bone);
-            for (std::size_t index = 0; index < blueprint_.active_motor_count; ++index)
             {
-                const MotorConstraint& motor = blueprint_.motors[index];
-                solve_motor(motor, applied_actions[index]);
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                for (const DistanceConstraint& bone : blueprint_.bones)
+                    solve_distance(bone);
+                record_authority_delta(
+                    AuthoritySource::distance_constraints, before, dt);
             }
-            for (const CoupledMotorConstraint& coupled :
-                blueprint_.coupled_support_motors())
             {
-                if (!coupled.motor.enabled
-                    || coupled.source_action >= applied_actions.size())
-                    continue;
-                solve_motor(coupled.motor,
-                    applied_actions[coupled.source_action] * coupled.action_scale);
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                for (std::size_t index = 0;
+                    index < blueprint_.active_motor_count; ++index)
+                {
+                    MotorConstraint motor = blueprint_.motors[index];
+                    if (physical_equipment_arm_pose)
+                    {
+                        const MotorConstraint equipment_motor =
+                            human_equipment_motor_envelope(motor, index);
+                        motor.minimum_angle = lerp(motor.minimum_angle,
+                            equipment_motor.minimum_angle,
+                            equipment_arm_pose_authority);
+                        motor.maximum_angle = lerp(motor.maximum_angle,
+                            equipment_motor.maximum_angle,
+                            equipment_arm_pose_authority);
+                        motor.strength = lerp(motor.strength,
+                            equipment_motor.strength,
+                            equipment_arm_pose_authority);
+                    }
+                    if (raw_policy_audit() || shared_physical_human_actuator)
+                    {
+                        solve_powered_motor_xpbd(motor,
+                            applied_actions[index], prior_applied_actions[index],
+                            dt,
+                            powered_motor_lambdas_[index],
+                            powered_motor_positive_work_[index], index);
+                    }
+                    else
+                        solve_motor(motor, applied_actions[index]);
+                }
+                std::size_t coupled_index{};
+                for (const CoupledMotorConstraint& coupled :
+                    blueprint_.coupled_support_motors())
+                {
+                    if (!coupled.motor.enabled
+                        || coupled.source_action >= applied_actions.size())
+                    {
+                        ++coupled_index;
+                        continue;
+                    }
+                    const float action = applied_actions[coupled.source_action]
+                        * coupled.action_scale;
+                    if (raw_policy_audit() || shared_physical_human_actuator)
+                    {
+                        solve_powered_motor_xpbd(coupled.motor, action,
+                            prior_applied_actions[coupled.source_action]
+                                * coupled.action_scale, dt,
+                            coupled_motor_lambdas_[coupled_index],
+                            coupled_motor_positive_work_[coupled_index],
+                            coupled.source_action);
+                    }
+                    else
+                        solve_motor(coupled.motor, action);
+                    ++coupled_index;
+                }
+                record_authority_delta(AuthoritySource::joint_motors, before, dt);
             }
-            solve_articulated_toes();
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_articulated_toes();
+                record_authority_delta(AuthoritySource::articulated_toe,
+                    before, dt);
+            }
             if (native_crouch_swing_side != 0
                 && elapsed_seconds_ >= 1.0f)
             {
@@ -6060,7 +8410,8 @@ namespace runner::sim
                     Particle& foot_seed = particles_[node];
                     const float target_y = ground_height_at(foot_seed.position.x)
                         + foot_seed.radius + 0.10f;
-                    const float correction = clamp(target_y
+                    const float correction = crouch_walk_guidance_authority
+                        * clamp(target_y
                             - foot_seed.position.y,
                         0.0f, (6.0f * dt) / 14.0f);
                     foot_seed.position.y += correction;
@@ -6086,8 +8437,9 @@ namespace runner::sim
                     // Project at a physical rate, divided across solver passes.
                     // A per-pass position cap made the same authored gait launch
                     // the body at 60/240 Hz while appearing stable at 20 Hz.
-                    const float correction = clamp(target_y - foot.position.y,
-                        0.0f, (3.0f * dt) / 14.0f);
+                    const float correction = crouch_walk_guidance_authority
+                        * clamp(target_y - foot.position.y,
+                            0.0f, (3.0f * dt) / 14.0f);
                     foot.position.y += correction;
                     // Split correction into a kinematic clearance projection
                     // and a bounded physical lift. This keeps the generated
@@ -6099,40 +8451,94 @@ namespace runner::sim
                     foot.previous.y += correction - generated_lift;
                 }
             }
-            if (guidance_assisted || blueprint_.human_casual_gait_plan())
-                // Upper-body attitude is the Human's mandatory local joint
-                // cluster, not a locomotion command: it rotates torso/head
-                // around the physical pelvis and cannot translate the root.
-                stabilize_balance_posture();
-            if (guidance_assisted || blueprint_.human_casual_gait_plan())
-                // This is the articulated arm's local range/velocity limit;
-                // it cannot move the pelvis or select a gait phase.
-                stabilize_human_manipulator_envelope();
-            if (guidance_assisted || blueprint_.human_casual_gait_plan())
-                // The Human head has no policy motor. Retaining its authored
-                // neck branch is mandatory passive articulation, not gait
-                // guidance or root translation.
-                stabilize_passive_appendages();
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                if (guidance_assisted)
+                // Authored posture remains assisted composition only. A raw
+                // Human must hold attitude through its policy joint torques.
+                    stabilize_balance_posture();
+                record_authority_delta(AuthoritySource::posture_helper,
+                    before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                if (guidance_assisted)
+                // The authored hand envelope is teacher-only; raw arms remain
+                // the result of their four explicit network motor outputs.
+                    stabilize_human_manipulator_envelope();
+                record_authority_delta(AuthoritySource::manipulator_helper,
+                    before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                if (guidance_assisted || blueprint_.human_casual_gait_plan())
+                // Raw Human uses only the internal neck joint or travel stop.
+                    stabilize_passive_appendages();
+                record_authority_delta(AuthoritySource::passive_anatomy,
+                    before, dt);
+            }
             if (guidance_assisted)
             {
                 stabilize_duck_posture();
             }
-            solve_ground(dt);
-            solve_course(dt);
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_ground(dt);
+                record_authority_delta(AuthoritySource::ground_contact,
+                    before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                apply_ledge_training_scaffold();
+                record_authority_delta(
+                    AuthoritySource::ledge_training_scaffold, before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_course(dt);
+                record_authority_delta(AuthoritySource::course_collision,
+                    before, dt);
+            }
             // Re-apply the authored crouch after collision resolution so the
             // final solver state cannot leave an intermediate knee/body link
             // under the floor or inside the platen.
             if (guidance_assisted)
                 stabilize_duck_posture();
-            solve_ground(dt);
-            solve_course(dt);
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_ground(dt);
+                record_authority_delta(AuthoritySource::ground_contact,
+                    before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                apply_ledge_training_scaffold();
+                record_authority_delta(
+                    AuthoritySource::ledge_training_scaffold, before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_course(dt);
+                record_authority_delta(AuthoritySource::course_collision,
+                    before, dt);
+            }
             // End each iteration in a floor-valid authored crouch. The target
             // is already clamped beneath the platen, so a final course shove is
             // unnecessary and would reintroduce solver-frame penetration.
             if (guidance_assisted)
                 stabilize_duck_posture();
-            solve_ground(dt);
-            separate_support_clusters();
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_ground(dt);
+                record_authority_delta(AuthoritySource::ground_contact,
+                    before, dt);
+            }
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                separate_support_clusters();
+                record_authority_delta(AuthoritySource::support_separation,
+                    before, dt);
+            }
             if (guidance_assisted
                 && course_stage_ == CourseStage::duck_press)
                 stabilize_duck_posture();
@@ -6140,22 +8546,182 @@ namespace runner::sim
             // shifting a semantic contact. Only the ground solver may establish
             // support; static friction retains its measured contact anchor while
             // moving stages release through bounded distance and speed gates.
-            solve_ground(dt);
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                solve_ground(dt);
+                record_authority_delta(AuthoritySource::ground_contact,
+                    before, dt);
+            }
+        }
+        if ((raw_policy_audit() || shared_physical_human_actuator)
+            && blueprint_.human_casual_gait_plan())
+        {
+            // Close the physical upper/lower-leg joints and the two anatomical
+            // rear-foot triangles together with ground contact. Ending on a
+            // per-node ground correction after the foot constraints can stretch
+            // ankle-to-heel/ball by almost two percent, even while the ankle
+            // motor reports its relative target reached; the visibly tilted
+            // plate then becomes a toe-only pole. Every distance solve remains
+            // mass-balanced and velocity-neutral. Unlike the assisted structure
+            // projector this has no authored stance, reach, phase, or whole-body
+            // translation target.
+            constexpr int anatomical_convergence_passes = 8;
+            for (int pass = 0; pass < anatomical_convergence_passes; ++pass)
+            {
+                const AuthoritySnapshot before = authority_snapshot(dt);
+                for (const DistanceConstraint& bone : blueprint_.bones)
+                {
+                    bool anatomical_leg_or_foot_bone = false;
+                    for (std::size_t motor_index = 0;
+                        motor_index < 4u && motor_index
+                            < blueprint_.active_motor_count; ++motor_index)
+                    {
+                        const MotorConstraint& motor =
+                            blueprint_.motors[motor_index];
+                        anatomical_leg_or_foot_bone = anatomical_leg_or_foot_bone
+                            || (bone.a == motor.pivot && bone.b == motor.c)
+                            || (bone.b == motor.pivot && bone.a == motor.c);
+                    }
+                    const auto in_foot = [](std::uint16_t node,
+                        bool left) noexcept
+                    {
+                        return left
+                            ? node == human_left_ankle_node
+                                || node == human_left_heel_node
+                                || node == human_left_ball_node
+                                || node == human_left_toe_node
+                            : node == human_right_ankle_node
+                                || node == human_right_heel_node
+                                || node == human_right_ball_node
+                                || node == human_right_toe_node;
+                    };
+                    anatomical_leg_or_foot_bone = anatomical_leg_or_foot_bone
+                        || (in_foot(bone.a, true) && in_foot(bone.b, true))
+                        || (in_foot(bone.a, false) && in_foot(bone.b, false));
+                    if (anatomical_leg_or_foot_bone)
+                        solve_distance(bone, true);
+                }
+                record_authority_delta(AuthoritySource::final_leg_constraints,
+                    before, dt);
+                const AuthoritySnapshot before_ground = authority_snapshot(dt);
+                solve_ground(dt);
+                record_authority_delta(AuthoritySource::ground_contact,
+                    before_ground, dt);
+            }
         }
         // The iterative solver can otherwise reverse the toe between
         // stabilization and push-off every frame. Bound the final physical
         // hinge travel while preserving the contact and propulsion roles.
-        limit_articulated_toe_rates(dt);
+        {
+            const AuthoritySnapshot before = authority_snapshot(dt);
+            limit_articulated_toe_rates(dt);
+            record_authority_delta(AuthoritySource::toe_rate_limit, before, dt);
+        }
         apply_support_pressure(dt);
-        project_structure_rigid(dt);
+        {
+            const AuthoritySnapshot before = authority_snapshot(dt);
+            project_structure_rigid(dt);
+            record_authority_delta(AuthoritySource::structure_projection,
+                before, dt);
+        }
+        const std::array<bool, 2> support_at_step_end{
+            left_supported(), right_supported() };
+        // Static friction may form a new patch once a sliding, loaded stance
+        // settles. Keep the old anchor throughout the solve and audit the slip
+        // against it. Move only the anchor for the *next* step, never the foot
+        // or its velocity, and do not re-anchor on a fresh touch or toe-off.
+        if (shared_physical_human_actuator && raw_support_tangential_impulses_enabled_
+            && stage_requires_forward_gait(course_stage_)
+            && human_gait_coordinator_.completed_handoffs > 0u)
+        {
+            const bool stance_left = human_gait_coordinator_.outgoing_side > 0;
+            const std::size_t side = stance_left ? 0u : 1u;
+            if (support_at_step_start[side] && support_at_step_end[side])
+            {
+                for (const auto node : human_support_contact_nodes)
+                {
+                    if (!valid_node(node) || !particles_[node].grounded
+                        || support_contact_latch_[node] == 0u
+                        || !contact_cluster_contains(stance_left
+                            ? blueprint_.left_contact_node : blueprint_.right_contact_node, node))
+                        continue;
+                    const Particle& particle = particles_[node];
+                    const float x = particle.position.x;
+                    const auto traction = contact_traction(terrain_firmness_at(x),
+                        terrain_looseness_at(x), water_depth_at(x), particle.radius,
+                        particle.inverse_mass, dt);
+                    if (sliding_support_can_reacquire_static_anchor(traction,
+                        x - support_contact_anchor_x_[node], (x - particle.previous.x) / dt,
+                        support_normal_constraint_lambdas_[node] / dt,
+                        support_contact_tangent_impulses_[node]))
+                        support_contact_anchor_x_[node] = x;
+                }
+            }
+        }
+        for (std::size_t side = 0; side < support_at_step_end.size(); ++side)
+        {
+            support_cluster_contact_age_seconds_[side] =
+                support_at_step_end[side]
+                ? (support_at_step_start[side]
+                    ? support_cluster_contact_age_seconds_[side] + dt : dt)
+                : 0.0f;
+        }
         const float structural_error = maximum_bone_length_error_ratio();
+        record_maximum_bone_error();
         if (elapsed_seconds_ >= 0.10f
             && (!std::isfinite(structural_error) || structural_error > 0.020f))
             invalidate(InvalidMotion::structural_compression);
         if (stage_uses_deformable_terrain(course_stage_))
             terrain_.step(dt);
         update_material_metrics(dt);
-        update_equipment(actions, dt);
+        {
+            const AuthoritySnapshot before = authority_snapshot(dt);
+            update_equipment(actions, dt);
+            record_authority_delta(AuthoritySource::equipment, before, dt);
+        }
+        update_human_support_feedback(dt);
+        update_human_gait_coordinator(actions, dt);
+        if (raw_authority_telemetry_enabled_)
+        {
+            for (std::size_t side = 0;
+                side < support_cluster_traction_capacity_.size(); ++side)
+            {
+                raw_authority_telemetry_.support_traction_capacity[side]
+                    = support_cluster_traction_capacity_[side];
+                raw_authority_telemetry_.support_traction_used[side]
+                    = support_cluster_traction_used_[side];
+                raw_authority_telemetry_.support_normal_impulse[side]
+                    = support_cluster_normal_impulse_[side];
+                raw_authority_telemetry_.support_normal_impulse_moment_x[side]
+                    = support_cluster_normal_impulse_moment_x_[side];
+                raw_authority_telemetry_.support_normal_cop_x[side]
+                    = support_cluster_normal_cop_x_[side];
+                // The support cache describes the current solve. The audit
+                // reports physical impulses from the whole fixed step, even
+                // if a contact was subsequently released during convergence.
+                const auto& contact_tangent = raw_authority_telemetry_
+                    .support_contact_tangential_impulse;
+                raw_authority_telemetry_.support_tangential_impulse[side] =
+                    stage_requires_forward_gait(course_stage_)
+                            && (raw_policy_audit() || shared_physical_human_actuator)
+                            && blueprint_.human_casual_gait_plan()
+                        ? contact_tangent[side * 3u] + contact_tangent[side * 3u + 1u]
+                            + contact_tangent[side * 3u + 2u]
+                        : support_cluster_tangential_impulse_[side];
+            }
+            raw_authority_telemetry_.friction_work_joules =
+                support_friction_work_joules_;
+            raw_authority_telemetry_.friction_positive_work_joules =
+                support_friction_positive_work_joules_;
+            raw_authority_telemetry_.course_motion_corrections =
+                course_motion_enabled_ ? 1u : 0u;
+            raw_authority_telemetry_.total_center_velocity_delta_x =
+                authority_snapshot(dt).center_velocity_x
+                    - authority_step_start.center_velocity_x;
+            raw_authority_telemetry_.total_center_velocity_delta_y =
+                authority_snapshot(dt).center_velocity_y
+                    - authority_step_start.center_velocity_y;
+        }
         update_climb_metrics(dt);
         if (elapsed_seconds_ >= 8.00f && !body_integrity_valid())
             invalidate(InvalidMotion::collapsed_posture);
@@ -6242,7 +8808,8 @@ namespace runner::sim
         motion_signals.gait_cycles = gait_cycles();
         motion_signals.requested_direction = step_direction;
         motion_signals.turning = shuttle_enabled()
-            && shuttle_state_.phase == ShuttlePhase::turning;
+            && (shuttle_state_.phase == ShuttlePhase::turning
+                || shuttle_state_.phase == ShuttlePhase::settling);
         motion_signals.dynamic_hazard_active = granular_hazard_active();
         motion_signals.dynamic_hazard_safe = granular_hazard_safe();
         motion_signals.zero_progress_seconds = zero_progress_seconds_;
@@ -6441,13 +9008,21 @@ namespace runner::sim
             : clamp(spin_delta_turns, 0.0f, 0.08f) * 0.18f;
         const float pass_reward = passed_obstacle_this_step_ ? 0.18f : 0.0f;
         const float target_speed = std::max(0.10f, motion_plan.target_speed);
-        const bool reward_requires_locomotion = stage_requires_forward_gait(course_stage_);
-        const float signed_speed = forward_speed_ * motion_plan.direction;
+        const bool reward_requires_locomotion = locomotion_required();
+        // A planted request still has physical world speed. Multiplying that
+        // speed by a zero direction made a moving stop sample look perfectly
+        // settled to PPO and removed the only deceleration learning signal.
+        const float signed_speed = motion_plan.direction == 0.0f
+            ? forward_speed_ : forward_speed_ * motion_plan.direction;
         const float speed_quality = locomotion::target_speed_reward(motion_plan, signed_speed);
         const float run_reward = reward_requires_locomotion
             ? speed_quality * (0.0025f + gait * 0.0075f) : 0.0f;
         const float balance_reward = reward_requires_locomotion
             ? motion_plan.balance_reserve * 0.010f : 0.0f;
+        const float stop_reward = locomotion_stop_requested_
+            && motion_plan.intent == locomotion::Intent::hold
+            ? speed_quality * 0.020f
+                - std::abs(forward_speed_) * 0.020f : 0.0f;
         const float step_up_reward = motion_plan.step_up
             ? obstacle_lift_ratio * (single_support ? 0.018f : 0.005f) : 0.0f;
         const float brake_reward = motion_plan.brake
@@ -6694,7 +9269,7 @@ namespace runner::sim
             ? std::max(0.0f, backward_brace_ratio_ - 0.04f) * 0.32f : 0.0f;
         const float flight_penalty = unsupported_locomotion_penalty(
             reward_requires_locomotion, powered_takeoff_, airborne_seconds_);
-        last_reward_ += recovery_reward + casual_gait_reward
+        last_reward_ += recovery_reward + casual_gait_reward + stop_reward
             - casual_gait_penalty - uncontrolled_spin_penalty
             - backward_brace_penalty - flight_penalty;
         // Static crouch qualification explicitly requires grounded support,
@@ -6731,11 +9306,20 @@ namespace runner::sim
             || !valid_node(blueprint_.left_contact_node) || !valid_node(blueprint_.right_contact_node))
             return result;
 
-        constexpr std::size_t joint_angle_begin = 4;
-        constexpr std::size_t joint_velocity_begin = joint_angle_begin + anatomy_action_count;
-        constexpr std::size_t contact_begin = joint_velocity_begin + anatomy_action_count;
-        static_assert(contact_begin == 20);
-        static_assert(observation_count == 63);
+        static_assert(joint_angle_observation_index(0u) == 4u);
+        static_assert(joint_angle_observation_index(7u) == 11u);
+        static_assert(joint_velocity_observation_index(0u) == 12u);
+        static_assert(joint_velocity_observation_index(7u) == 19u);
+        static_assert(contact_observation_begin == 20u);
+        static_assert(torso_turn_rate_observation == 63u);
+        static_assert(joint_angle_observation_index(
+            human_left_ankle_action) == left_ankle_angle_observation);
+        static_assert(joint_angle_observation_index(
+            human_right_ankle_action) == right_ankle_angle_observation);
+        static_assert(joint_velocity_observation_index(
+            human_left_ankle_action) == left_ankle_velocity_observation);
+        static_assert(joint_velocity_observation_index(
+            human_right_ankle_action) == right_ankle_velocity_observation);
 
         const Vec2 root = particles_[blueprint_.root_node].position;
         const float facing = facing_direction();
@@ -6751,6 +9335,8 @@ namespace runner::sim
         result[3] = clamp(pelvis_velocity.y / last_step_dt_ / 6.0f, -3.0f, 3.0f);
         for (std::size_t index = 0; index < anatomy_action_count; ++index)
         {
+            if (index >= blueprint_.active_motor_count)
+                continue;
             const MotorConstraint& motor = blueprint_.motors[index];
             if (!motor.enabled)
                 continue;
@@ -6759,8 +9345,9 @@ namespace runner::sim
             const float span = delta < 0.0f
                 ? std::max(0.001f, motor.neutral_angle - motor.minimum_angle)
                 : std::max(0.001f, motor.maximum_angle - motor.neutral_angle);
-            result[joint_angle_begin + index] = clamp(delta / span, -2.0f, 2.0f);
-            result[joint_velocity_begin + index] = clamp(
+            result[joint_angle_observation_index(index)] = clamp(
+                delta / span, -2.0f, 2.0f);
+            result[joint_velocity_observation_index(index)] = clamp(
                 angular_velocities_[index] * facing / 18.0f, -3.0f, 3.0f);
         }
         result[20] = contact_supported(blueprint_.left_contact_node) ? 1.0f : 0.0f;
@@ -6823,8 +9410,11 @@ namespace runner::sim
         result[40] = terrain_firmness_;
         result[41] = terrain_looseness_;
         result[42] = clamp(burial_depth_ / 0.80f, 0.0f, 2.0f);
-        result[43] = (shuttle_enabled() ? requested_direction : free_space_direction_)
-            * facing;
+        const float policy_direction = shuttle_enabled()
+            || locomotion_stop_requested_ ? requested_direction
+            : obstruction_mask_ != 0u && std::abs(free_space_direction_) >= 0.5f
+                ? free_space_direction_ : requested_direction;
+        result[43] = policy_direction * facing;
         result[44] = facing_direction();
         result[45] = shuttle_enabled()
             ? static_cast<float>(shuttle_phase())
@@ -6866,6 +9456,75 @@ namespace runner::sim
             0.0f, 2.0f);
         result[62] = static_cast<float>(equipment_directive_)
             / static_cast<float>(equipment_directive_count - 1u);
+        // A feed-forward policy can see torso attitude above, but cannot infer
+        // whether the same pose is falling into or recovering from a rotation.
+        // Publish the already-measured angular velocity in the local facing
+        // frame so a raw controller can provide damping through joint actions.
+        result[torso_turn_rate_observation] = clamp(
+            torso_turn_speed_ * facing / 6.0f, -3.0f, 3.0f);
+        if (blueprint_.human_casual_gait_plan())
+        {
+            const auto append_sole = [&](bool left) noexcept
+            {
+                const std::array<std::uint16_t, 3> nodes = left
+                    ? std::array<std::uint16_t, 3>{ human_left_heel_node,
+                        human_left_ball_node, human_left_toe_node }
+                    : std::array<std::uint16_t, 3>{ human_right_heel_node,
+                        human_right_ball_node, human_right_toe_node };
+                float minimum_clearance = std::numeric_limits<float>::max();
+                float maximum_clearance = std::numeric_limits<float>::lowest();
+                Vec2 velocity_sum{};
+                std::size_t velocity_count{};
+                for (const std::uint16_t node : nodes)
+                {
+                    if (!valid_node(node))
+                        continue;
+                    const Particle& particle = particles_[node];
+                    const Vec2 velocity = (particle.position
+                        - particle.previous) / last_step_dt_;
+                    const float clearance = human_sole_clearance(particle);
+                    maximum_clearance = std::max(maximum_clearance, clearance);
+                    minimum_clearance = std::min(minimum_clearance, clearance);
+                    velocity_sum += velocity;
+                    ++velocity_count;
+                }
+                if (!std::isfinite(minimum_clearance) || velocity_count == 0u)
+                    return;
+                const Vec2 sole_velocity = velocity_sum
+                    / static_cast<float>(velocity_count);
+                const std::size_t clearance_index = left
+                    ? left_sole_clearance_observation
+                    : right_sole_clearance_observation;
+                const std::size_t velocity_x_index = left
+                    ? left_sole_velocity_x_observation
+                    : right_sole_velocity_x_observation;
+                const std::size_t velocity_y_index = left
+                    ? left_sole_velocity_y_observation
+                    : right_sole_velocity_y_observation;
+                const std::size_t maximum_clearance_index = left
+                    ? left_sole_maximum_clearance_observation
+                    : right_sole_maximum_clearance_observation;
+                result[clearance_index] = clamp(
+                    minimum_clearance / 0.25f, -2.0f, 2.0f);
+                result[velocity_x_index] = clamp(
+                    sole_velocity.x * facing / 6.0f, -3.0f, 3.0f);
+                result[velocity_y_index] = clamp(
+                    sole_velocity.y / 6.0f, -3.0f, 3.0f);
+                result[maximum_clearance_index] = clamp(
+                    maximum_clearance / 0.25f, -2.0f, 2.0f);
+            };
+            append_sole(true);
+            append_sole(false);
+            result[human_gait_phase_sine_observation] = std::sin(
+                human_gait_coordinator_.phase);
+            result[human_gait_phase_cosine_observation] = std::cos(
+                human_gait_coordinator_.phase);
+            result[human_gait_stage_observation] = static_cast<float>(
+                human_gait_coordinator_.stage)
+                / static_cast<float>(HumanGaitCoordinatorStage::count);
+            result[human_gait_outgoing_side_observation] = static_cast<float>(
+                human_gait_coordinator_.outgoing_side);
+        }
         return result;
     }
 }

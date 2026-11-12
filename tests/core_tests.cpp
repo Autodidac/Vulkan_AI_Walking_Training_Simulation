@@ -1,5 +1,7 @@
 #include "autonomy.hpp"
+#include "atomic_file.hpp"
 #include "ppo.hpp"
+#include "raw_learning_test_access.hpp"
 #include "simulation.hpp"
 #include "ui_layout.hpp"
 
@@ -11,10 +13,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <type_traits>
+#include <utility>
 
 namespace runner::sim
 {
@@ -116,6 +120,151 @@ namespace runner::sim
             ShuttleState state) noexcept
         {
             environment.shuttle_state_ = state;
+        }
+
+        static void set_torso_turn_speed(Environment& environment,
+            float radians_per_second) noexcept
+        {
+            environment.torso_turn_speed_ = radians_per_second;
+        }
+
+        static void set_human_sole_state(Environment& environment, bool left,
+            float clearance_delta, Vec2 velocity) noexcept
+        {
+            constexpr float dt = 1.0f / 60.0f;
+            const std::array<std::uint16_t, 3> nodes = left
+                ? std::array<std::uint16_t, 3>{ human_left_heel_node,
+                    human_left_ball_node, human_left_toe_node }
+                : std::array<std::uint16_t, 3>{ human_right_heel_node,
+                    human_right_ball_node, human_right_toe_node };
+            for (const std::uint16_t node : nodes)
+            {
+                Particle& particle = environment.particles_[node];
+                particle.position.y += clearance_delta;
+                particle.previous = particle.position - velocity * dt;
+            }
+        }
+
+        static void set_human_sole_clearances(Environment& environment,
+            bool left, const std::array<float, 3>& clearances) noexcept
+        {
+            const std::array<std::uint16_t, 3> nodes = left
+                ? std::array<std::uint16_t, 3>{ human_left_heel_node,
+                    human_left_ball_node, human_left_toe_node }
+                : std::array<std::uint16_t, 3>{ human_right_heel_node,
+                    human_right_ball_node, human_right_toe_node };
+            for (std::size_t index = 0u; index < nodes.size(); ++index)
+            {
+                Particle& particle = environment.particles_[nodes[index]];
+                particle.position.y = environment.ground_height_at(
+                    particle.position.x) + ground_contact_offset(
+                        true, particle.radius) + clearances[index];
+                particle.previous = particle.position;
+            }
+        }
+
+        static void set_elapsed_seconds(Environment& environment,
+            float elapsed_seconds) noexcept
+        {
+            environment.elapsed_seconds_ = elapsed_seconds;
+        }
+
+        struct StationaryLocomotionDemandEvidence
+        {
+            bool locomotion_required{};
+            InvalidMotion invalid_reason{ InvalidMotion::none };
+            float zero_progress_seconds{};
+            float micro_motion_seconds{};
+            float hazard_stall_seconds{};
+            std::uint32_t gait_cycles{};
+            std::uint32_t alternating_steps{};
+
+            [[nodiscard]] bool operator==(
+                const StationaryLocomotionDemandEvidence&) const noexcept = default;
+        };
+
+        static StationaryLocomotionDemandEvidence
+            replay_stationary_locomotion_demand(Environment& environment,
+                float direction, bool stop_requested,
+                std::uint32_t frames = 1200u) noexcept
+        {
+            environment.set_course(CourseStage::uneven, 0.30f);
+            environment.set_course_motion_enabled(false);
+            if (!environment.set_locomotion_intent(direction, stop_requested))
+                return {};
+            for (std::size_t index = 0u;
+                index < environment.particles_.size(); ++index)
+            {
+                if (!environment.blueprint_.is_support_seed(index))
+                    continue;
+                Particle& support = environment.particles_[index];
+                support.position.y = environment.ground_height_at(
+                    support.position.x)
+                    + ground_contact_offset(true, support.radius);
+                support.previous = support.position;
+                support.grounded = true;
+            }
+            environment.previous_left_grounded_ = true;
+            environment.previous_right_grounded_ = true;
+            environment.non_foot_grounded_ = false;
+            environment.invalid_reason_ = InvalidMotion::none;
+            environment.zero_progress_seconds_ = 0.0f;
+            environment.micro_motion_seconds_ = 0.0f;
+            environment.hazard_stall_seconds_ = 0.0f;
+            environment.progress_window_seconds_ = 0.0f;
+            environment.action_energy_window_ = 0.0f;
+            environment.root_path_window_ = 0.0f;
+            if (environment.valid_node(environment.blueprint_.root_node))
+            {
+                const Vec2 root = environment.particles_[
+                    environment.blueprint_.root_node].position;
+                environment.previous_root_for_path_ = root;
+                environment.progress_window_start_x_ = root.x;
+            }
+            environment.progress_window_start_steps_ =
+                environment.gait_cycles();
+
+            constexpr float dt = 1.0f / 60.0f;
+            for (std::uint32_t frame = 0u; frame < frames; ++frame)
+            {
+                environment.elapsed_seconds_ += dt;
+                environment.update_gait_metrics(dt, 0.17f);
+                if (!environment.valid_motion())
+                    break;
+            }
+            return { environment.locomotion_required(),
+                environment.invalid_reason_,
+                environment.zero_progress_seconds_,
+                environment.micro_motion_seconds_,
+                environment.hazard_stall_seconds_,
+                environment.gait_cycles(),
+                environment.alternating_steps() };
+        }
+
+        static bool rotate_human_left_sole(Environment& environment,
+            float radians) noexcept
+        {
+            if (!environment.blueprint_.human_paired_limb_topology()
+                || environment.blueprint_.active_motor_count
+                    <= human_left_ankle_action
+                || !environment.valid_node(human_left_ankle_node)
+                || !environment.valid_node(human_left_heel_node)
+                || !environment.valid_node(human_left_ball_node)
+                || !environment.valid_node(human_left_toe_node))
+                return false;
+            const Vec2 pivot = environment.particles_[
+                human_left_ankle_node].position;
+            for (const std::uint16_t node : {
+                    human_left_heel_node,
+                    human_left_ball_node,
+                    human_left_toe_node })
+            {
+                Particle& particle = environment.particles_[node];
+                particle.position = pivot + rotate(
+                    particle.position - pivot, radians);
+                particle.previous = particle.position;
+            }
+            return true;
         }
 
         static bool hip_hinge_is_rejected(Environment& environment) noexcept
@@ -246,6 +395,174 @@ namespace runner::sim
             support.grounded = false;
             environment.solve_ground(dt);
             return static_held && !support.grounded;
+        }
+
+        struct SoleShearEvidence
+        {
+            bool region_found{};
+            std::size_t contact_count{};
+            float applied_speed{};
+            float remaining_speed{};
+            float traction_capacity{};
+            float traction_used{};
+            float normal_impulse{};
+            float tangential_impulse{};
+            float friction_work{};
+        };
+
+        static SoleShearEvidence raw_sole_shear_response(
+            Environment& environment, TerrainRegion requested_region,
+            float shear_speed, bool complete_sole = true) noexcept
+        {
+            environment.set_course(CourseStage::uneven, 0.30f);
+            environment.set_guidance_mode(GuidanceMode::raw_policy_audit);
+            if (!environment.valid_node(
+                    environment.blueprint_.left_contact_node))
+                return {};
+
+            const float primary_x = environment.particles_[
+                environment.blueprint_.left_contact_node].position.x;
+            float target_x = std::numeric_limits<float>::quiet_NaN();
+            for (std::size_t sample = 0; sample < DeformableTerrain::cell_count;
+                ++sample)
+            {
+                const float candidate = static_cast<float>(sample)
+                    * DeformableTerrain::fine_cell_spacing;
+                bool all_contacts_match = true;
+                for (std::size_t node = 0;
+                    node < environment.particles_.size(); ++node)
+                {
+                    if (!environment.contact_cluster_contains(
+                            environment.blueprint_.left_contact_node, node)
+                        || !environment.blueprint_.is_support_seed(node))
+                        continue;
+                    const float offset = environment.particles_[node].position.x
+                        - primary_x;
+                    all_contacts_match = all_contacts_match
+                        && environment.terrain_region_at(candidate + offset)
+                            == requested_region;
+                }
+                if (all_contacts_match)
+                {
+                    target_x = candidate;
+                    break;
+                }
+            }
+            if (!std::isfinite(target_x))
+                return {};
+
+            const float translation = target_x - primary_x;
+            for (Particle& particle : environment.particles_)
+            {
+                particle.position.x += translation;
+                particle.previous.x += translation;
+                particle.grounded = false;
+            }
+            environment.support_contact_latch_.assign(
+                environment.particles_.size(), 0u);
+            environment.support_contact_anchor_x_.resize(
+                environment.particles_.size());
+            environment.support_traction_capacity_.assign(
+                environment.particles_.size(), 0.0f);
+            environment.support_traction_used_.assign(
+                environment.particles_.size(), 0.0f);
+            environment.support_cluster_traction_capacity_.fill(0.0f);
+            environment.support_cluster_plate_traction_capacity_.fill(0.0f);
+            environment.support_cluster_toe_traction_capacity_.fill(0.0f);
+            environment.support_cluster_traction_used_.fill(0.0f);
+            environment.support_cluster_traction_impulse_.fill(0.0f);
+            environment.support_cluster_normal_impulse_.fill(0.0f);
+            environment.support_cluster_tangential_impulse_.fill(0.0f);
+            environment.support_friction_work_joules_ = 0.0f;
+            environment.support_cluster_contact_age_seconds_[0] = 0.20f;
+            environment.support_cluster_contact_age_seconds_[1] = 0.0f;
+
+            constexpr float dt = 1.0f / 60.0f;
+            const float heel_mass = 1.0f / std::max(
+                environment.particles_[environment.blueprint_.left_contact_node]
+                    .inverse_mass,
+                1.0e-5f);
+            float active_contact_mass{};
+            for (std::size_t node = 0;
+                node < environment.particles_.size(); ++node)
+            {
+                if (!environment.contact_cluster_contains(
+                        environment.blueprint_.left_contact_node, node)
+                    || !environment.blueprint_.is_support_seed(node)
+                    || (!complete_sole
+                        && node != environment.blueprint_.left_contact_node))
+                    continue;
+                active_contact_mass += 1.0f / std::max(
+                    environment.particles_[node].inverse_mass, 1.0e-5f);
+            }
+            // Compare contact sampling at the same total external normal load.
+            // Applying the same inward speed to every node makes a complete
+            // sole carry more momentum than heel-only by construction.
+            const float downward_load_speed = 0.40f * heel_mass
+                / std::max(active_contact_mass, 1.0e-5f);
+            std::size_t contact_count{};
+            for (std::size_t node = 0;
+                node < environment.particles_.size(); ++node)
+            {
+                if (!environment.contact_cluster_contains(
+                        environment.blueprint_.left_contact_node, node)
+                    || !environment.blueprint_.is_support_seed(node))
+                    continue;
+                if (!complete_sole
+                    && node != environment.blueprint_.left_contact_node)
+                {
+                    environment.particles_[node].position.y += 0.75f;
+                    environment.particles_[node].previous =
+                        environment.particles_[node].position;
+                    continue;
+                }
+                Particle& particle = environment.particles_[node];
+                const float firmness = environment.terrain_firmness_at(
+                    particle.position.x);
+                const float burial = (1.0f - firmness) * 0.055f;
+                particle.position.y = environment.ground_height_at(
+                    particle.position.x)
+                    + ground_contact_offset(true, particle.radius) - burial;
+                particle.previous = particle.position;
+                particle.previous.x -= shear_speed * dt;
+                particle.previous.y += downward_load_speed * dt;
+                particle.grounded = true;
+                environment.support_contact_latch_[node] = 1u;
+                environment.support_contact_anchor_x_[node] =
+                    particle.position.x;
+                ++contact_count;
+            }
+            environment.solve_ground(dt);
+
+            float remaining_speed{};
+            float contact_mass{};
+            for (std::size_t node = 0;
+                node < environment.particles_.size(); ++node)
+            {
+                if (!environment.contact_cluster_contains(
+                        environment.blueprint_.left_contact_node, node)
+                    || !environment.blueprint_.is_support_seed(node)
+                    || !environment.particles_[node].grounded)
+                    continue;
+                const Particle& particle = environment.particles_[node];
+                const float mass = 1.0f
+                    / std::max(particle.inverse_mass, 1.0e-5f);
+                remaining_speed += (particle.position.x - particle.previous.x)
+                    / dt * mass;
+                contact_mass += mass;
+            }
+            remaining_speed /= std::max(contact_mass, 1.0e-5f);
+            return {
+                true,
+                contact_count,
+                shear_speed,
+                remaining_speed,
+                environment.support_cluster_traction_capacity_[0],
+                environment.support_cluster_traction_used_[0],
+                environment.support_cluster_normal_impulse_[0],
+                environment.support_cluster_tangential_impulse_[0],
+                environment.support_friction_work_joules_
+            };
         }
 
         static bool press_collision_resolves_below(Environment& environment) noexcept
@@ -752,8 +1069,7 @@ int main()
         "duck press does not retract after the hold");
     const std::array stub_rigs{
         sim::CreatureBlueprint::scaffold(),
-        sim::CreatureBlueprint::biped(),
-        sim::CreatureBlueprint::humanoid()
+        sim::CreatureBlueprint::biped()
     };
     for (const sim::CreatureBlueprint& rig : stub_rigs)
     {
@@ -899,12 +1215,12 @@ int main()
             == cumulative.total_episodes
             && cumulative.total_landed_jumps <= cumulative.total_powered_jumps,
         "cumulative runtime statistics are internally inconsistent");
-    require(ui_layout::live_layout_valid(1280.0f, 820.0f),
+    require(ui_layout::live_layout_valid(1280.0f, 799.0f),
         "supported minimum live layout overlaps its panel, telemetry, or PIP");
-    require(!ui_layout::supported_window(1279.0f, 820.0f)
-            && !ui_layout::supported_window(1280.0f, 819.0f),
+    require(!ui_layout::supported_window(1279.0f, 799.0f)
+            && !ui_layout::supported_window(1280.0f, 798.0f),
         "undersized windows are incorrectly treated as fully supported");
-    const ui_layout::Box minimum_content = ui_layout::content_box(1280.0f, 820.0f);
+    const ui_layout::Box minimum_content = ui_layout::content_box(1280.0f, 799.0f);
     const ui_layout::Box minimum_world = ui_layout::live_world_box(minimum_content);
     const ui_layout::Box minimum_pip = ui_layout::training_pip_box(minimum_world);
     require(ui_layout::contains(minimum_world, minimum_pip),
@@ -960,19 +1276,58 @@ int main()
                 && ui_layout::blueprint_screen_y(malformed, -100.0f)
                     <= viewport.y + viewport.height - 47.0f,
             "large edited Rig Lab graph is clipped by a minimum zoom floor");
-        const ui_layout::Box test_card{ 20.0f, 200.0f, 520.0f, 225.0f };
-        const ui_layout::RigLabTestLayout rows =
-            ui_layout::rig_lab_test_layout(test_card);
-        require(ui_layout::contains(test_card, rows.selection_row)
-                && ui_layout::contains(test_card, rows.range_row)
-                && ui_layout::contains(test_card, rows.pattern_row)
-                && ui_layout::contains(test_card, rows.status_row)
-                && ui_layout::contains(test_card, rows.manual_slider)
-                && !ui_layout::overlaps(rows.selection_row, rows.range_row)
-                && !ui_layout::overlaps(rows.range_row, rows.pattern_row)
-                && !ui_layout::overlaps(rows.pattern_row, rows.status_row)
-                && !ui_layout::overlaps(rows.status_row, rows.manual_slider),
-            "Rig Lab Test controls or status rows overlap");
+        constexpr std::array<ui_layout::Box, 4> test_cards{
+            ui_layout::Box{ 20.0f, 200.0f, 384.0f,
+                ui_layout::rig_lab_test_card_height },
+            ui_layout::Box{ 20.0f, 200.0f, 520.0f,
+                ui_layout::rig_lab_test_card_height },
+            ui_layout::Box{ -31.5f, 19.25f, 684.0f,
+                ui_layout::rig_lab_test_card_height },
+            ui_layout::Box{ 970.0f, 510.0f, 704.0f,
+                ui_layout::rig_lab_test_card_height }
+        };
+        for (const ui_layout::Box test_card : test_cards)
+        {
+            const ui_layout::RigLabTestLayout rows =
+                ui_layout::rig_lab_test_layout(test_card);
+            const std::array<ui_layout::Box, 5> ordered_rows{
+                rows.selection_row, rows.range_row, rows.pattern_row,
+                rows.status_row, rows.manual_slider
+            };
+            for (std::size_t index = 0; index < ordered_rows.size(); ++index)
+            {
+                require(ui_layout::contains(test_card, ordered_rows[index]),
+                    "large-type Rig Lab Test row escaped its production card");
+                for (std::size_t later = index + 1u;
+                    later < ordered_rows.size(); ++later)
+                {
+                    require(!ui_layout::overlaps(
+                            ordered_rows[index], ordered_rows[later]),
+                        "large-type Rig Lab Test rows overlap");
+                }
+            }
+            require(rows.selection_row.height == 48.0f
+                    && rows.range_row.height == 48.0f
+                    && rows.pattern_row.height == 48.0f
+                    && rows.manual_slider.height == 48.0f
+                    && rows.manual_slider.y + rows.manual_slider.height
+                        <= test_card.y + test_card.height - 18.0f,
+                "Rig Lab Test controls lost their readable height or bottom inset");
+            for (int repeat = 0; repeat < 64; ++repeat)
+            {
+                const ui_layout::RigLabTestLayout repeated =
+                    ui_layout::rig_lab_test_layout(test_card);
+                require(repeated.selection_row.x == rows.selection_row.x
+                        && repeated.selection_row.y == rows.selection_row.y
+                        && repeated.manual_slider.x == rows.manual_slider.x
+                        && repeated.manual_slider.y == rows.manual_slider.y
+                        && repeated.manual_slider.width
+                            == rows.manual_slider.width
+                        && repeated.manual_slider.height
+                            == rows.manual_slider.height,
+                    "Rig Lab Test layout changed across identical inputs");
+            }
+        }
     }
     require(sim::classify_motion_gate(1.0f, 50.0f, { 0.0f, 3.0f }, 0.0f, 0.7f, 0.0f, false)
         == sim::InvalidMotion::overspeed, "50 km/h hard gate missing");
@@ -1411,12 +1766,82 @@ int main()
             static_anchor),
         "ground solver failed measured static-friction anchoring or moving release");
 
+    sim::Environment firm_below_shear(humanoid_rig, 0x5101u);
+    sim::Environment firm_above_shear(humanoid_rig, 0x5101u);
+    sim::Environment firm_single_contact(humanoid_rig, 0x5101u);
+    sim::Environment wet_below_shear(humanoid_rig, 0x5101u);
+    sim::Environment wet_above_shear(humanoid_rig, 0x5101u);
+    const auto firm_below =
+        sim::EnvironmentTestAccess::raw_sole_shear_response(
+            firm_below_shear, sim::TerrainRegion::firm, 0.01f);
+    const auto firm_above =
+        sim::EnvironmentTestAccess::raw_sole_shear_response(
+            firm_above_shear, sim::TerrainRegion::firm, 8.00f);
+    const auto firm_single =
+        sim::EnvironmentTestAccess::raw_sole_shear_response(
+            firm_single_contact, sim::TerrainRegion::firm, 8.00f, false);
+    const auto wet_below =
+        sim::EnvironmentTestAccess::raw_sole_shear_response(
+            wet_below_shear, sim::TerrainRegion::waterlogged, 0.01f);
+    const auto wet_above =
+        sim::EnvironmentTestAccess::raw_sole_shear_response(
+            wet_above_shear, sim::TerrainRegion::waterlogged, 8.00f);
+    require(firm_below.region_found && firm_above.region_found
+            && firm_single.region_found && wet_below.region_found
+            && wet_above.region_found
+            && firm_below.contact_count >= 3u
+            && firm_single.contact_count == 1u,
+        "raw sole shear fixture did not establish the requested material/contact manifold");
+    require(std::abs(firm_below.remaining_speed) <= 1.0e-4f
+            && std::abs(wet_below.remaining_speed) <= 1.0e-4f,
+        "sub-limit external shear slipped instead of entering static friction");
+    require(firm_above.remaining_speed > 0.10f
+            && firm_above.remaining_speed < firm_above.applied_speed
+            && wet_above.remaining_speed > firm_above.remaining_speed
+            && wet_above.remaining_speed < wet_above.applied_speed,
+        "super-limit shear did not slip with finite material-ordered Coulomb friction");
+    require(firm_above.traction_capacity > wet_above.traction_capacity
+            && std::abs(firm_above.tangential_impulse)
+                > std::abs(wet_above.tangential_impulse)
+            && firm_above.normal_impulse > 0.0f
+            && wet_above.normal_impulse > 0.0f,
+        "sole traction was not bounded by measured normal reaction and terrain material");
+    const float sole_capacity_ratio = firm_above.traction_capacity
+        / std::max(firm_single.traction_capacity, 1.0e-7f);
+    const float sole_normal_load_ratio = firm_above.normal_impulse
+        / std::max(firm_single.normal_impulse, 1.0e-7f);
+    require(sole_normal_load_ratio >= 0.85f
+            && sole_normal_load_ratio <= 1.15f,
+        "raw sole capacity fixture did not preserve equal total normal load");
+    require(sole_capacity_ratio >= 0.85f && sole_capacity_ratio <= 1.15f,
+        "heel/ball/toe node count multiplied the shared sole traction capacity");
+    require(firm_below.friction_work <= 1.0e-6f
+            && firm_above.friction_work <= 1.0e-6f
+            && wet_below.friction_work <= 1.0e-6f
+            && wet_above.friction_work <= 1.0e-6f,
+        "aggregate sole friction added horizontal kinetic energy");
+
     sim::Environment crouch_humanoid(humanoid_rig, 141);
     crouch_humanoid.set_course(sim::CourseStage::duck_press, 0.30f);
     sim::EnvironmentTestAccess::set_duck_pressure(crouch_humanoid, 1.0f);
+    sim::EnvironmentTestAccess::set_elapsed_seconds(neutral_humanoid, 2.0f);
     const auto walk_teacher = rl::walking_teacher_action(neutral_humanoid);
-    require(walk_teacher[0] * walk_teacher[2] < 0.0f
-            || walk_teacher[1] * walk_teacher[3] < 0.0f,
+    sim::Environment alternated_humanoid(humanoid_rig, 131);
+    alternated_humanoid.set_course(sim::CourseStage::balance, 0.25f);
+    sim::EnvironmentTestAccess::set_elapsed_seconds(alternated_humanoid,
+        2.0f + 0.5f / 1.20f);
+    const auto alternated_walk_teacher =
+        rl::walking_teacher_action(alternated_humanoid);
+    const float left_hip_change = alternated_walk_teacher[0]
+        - walk_teacher[0];
+    const float right_hip_change = alternated_walk_teacher[2]
+        - walk_teacher[2];
+    const float left_knee_change = alternated_walk_teacher[1]
+        - walk_teacher[1];
+    const float right_knee_change = alternated_walk_teacher[3]
+        - walk_teacher[3];
+    require((left_hip_change * right_hip_change < -0.01f)
+            || (left_knee_change * right_knee_change < -0.01f),
         "walking teacher does not alternate the near and far leg chains");
 
     locomotion::Plan stable_multi_support{};
@@ -1577,6 +2002,7 @@ int main()
             && !sim::measure_forward_gait_faults(sim::ShuttlePhase::backing, 2.0f)
             && !sim::measure_forward_gait_faults(sim::ShuttlePhase::braking, 2.0f)
             && !sim::measure_forward_gait_faults(sim::ShuttlePhase::turning, 2.0f)
+            && !sim::measure_forward_gait_faults(sim::ShuttlePhase::settling, 2.0f)
             && !sim::measure_forward_gait_faults(sim::ShuttlePhase::traverse,
                 std::numeric_limits<float>::quiet_NaN()),
         "reverse/turn transition poses leak into forward gait quality telemetry");
@@ -1618,6 +2044,128 @@ int main()
         "rolling gate does not become strict after startup");
     require(sim::foot_pivot_rolling_limit(1.8f) > sim::foot_pivot_rolling_limit(4.0f),
         "orange-foot rolling gate does not become strict after startup");
+    constexpr std::array locomotion_stages{
+        sim::CourseStage::uneven,
+        sim::CourseStage::shuttle,
+        sim::CourseStage::crouch_walk,
+        sim::CourseStage::hurdles,
+        sim::CourseStage::moving_hazards,
+        sim::CourseStage::climb_descent,
+        sim::CourseStage::combat_course
+    };
+    for (const sim::CourseStage stage : locomotion_stages)
+    {
+        require(!sim::locomotion_required_for_intent(stage, 0.0f, true)
+                && sim::locomotion_required_for_intent(stage, 1.0f, false)
+                && sim::locomotion_required_for_intent(stage, -1.0f, false),
+            "coherent explicit stop and ordinary signed locomotion share a demand state");
+    }
+    require(sim::locomotion_required_for_intent(
+                sim::CourseStage::uneven, 0.0f, false)
+            && sim::locomotion_required_for_intent(
+                sim::CourseStage::uneven, 1.0f, true)
+            && sim::locomotion_required_for_intent(
+                sim::CourseStage::uneven,
+                std::numeric_limits<float>::quiet_NaN(), true)
+            && !sim::locomotion_required_for_intent(
+                sim::CourseStage::uneven, 1.0f, false, true)
+            && !sim::locomotion_required_for_intent(
+                sim::CourseStage::balance, 1.0f, false),
+        "invalid/contradictory stop, missing stop, stage hold, or static stage was not fail-closed");
+    for (const std::uint64_t seed : std::array<std::uint64_t, 4>{
+            0x751510u, 0x751511u, 0x751510u, 0x7515FFu })
+    {
+        sim::Environment stopped{ sim::CreatureBlueprint::humanoid(), seed };
+        stopped.set_course(sim::CourseStage::uneven, 0.30f);
+        require(stopped.set_locomotion_intent(0.0f, true)
+                && !stopped.locomotion_required(),
+            "accepted explicit stop still requires locomotion");
+
+        sim::Environment moving{ sim::CreatureBlueprint::humanoid(), seed };
+        moving.set_course(sim::CourseStage::uneven, 0.30f);
+        require(moving.set_locomotion_intent(1.0f, false)
+                && moving.locomotion_required(),
+            "ordinary stalled move request no longer requires locomotion");
+
+        sim::Environment adversarial{ sim::CreatureBlueprint::humanoid(), seed };
+        adversarial.set_course(sim::CourseStage::uneven, 0.30f);
+        require(adversarial.set_locomotion_intent(1.0f, true)
+                && adversarial.locomotion_required(),
+            "contradictory low-level stop bypasses locomotion invalidation");
+    }
+    using StopDemandEvidence =
+        sim::EnvironmentTestAccess::StationaryLocomotionDemandEvidence;
+    std::optional<StopDemandEvidence> repeated_stop_evidence{};
+    for (const std::uint64_t seed : std::array<std::uint64_t, 4>{
+            0x751520u, 0x751521u, 0x751520u, 0x7515FEu })
+    {
+        sim::Environment stopped{ sim::CreatureBlueprint::humanoid(), seed };
+        const StopDemandEvidence evidence =
+            sim::EnvironmentTestAccess::replay_stationary_locomotion_demand(
+                stopped, 0.0f, true);
+        require(!evidence.locomotion_required
+                && evidence.invalid_reason == sim::InvalidMotion::none
+                && evidence.zero_progress_seconds == 0.0f
+                && evidence.micro_motion_seconds == 0.0f
+                && evidence.hazard_stall_seconds == 0.0f
+                && evidence.gait_cycles == 0u
+                && evidence.alternating_steps == 0u,
+            "twenty-second explicit stop accumulated movement/gait stall evidence");
+        if (seed == 0x751520u && repeated_stop_evidence.has_value())
+            require(evidence == *repeated_stop_evidence,
+                "repeated-seed twenty-second stop classification changed");
+        else if (seed == 0x751520u)
+            repeated_stop_evidence = evidence;
+    }
+    for (const auto [direction, stop_requested] :
+        std::array<std::pair<float, bool>, 3>{
+            std::pair{ 1.0f, false },
+            std::pair{ -1.0f, false },
+            std::pair{ 1.0f, true } })
+    {
+        sim::Environment stalled{
+            sim::CreatureBlueprint::humanoid(), 0x751522u };
+        const StopDemandEvidence evidence =
+            sim::EnvironmentTestAccess::replay_stationary_locomotion_demand(
+                stalled, direction, stop_requested);
+        require(evidence.locomotion_required
+                && ((evidence.invalid_reason == sim::InvalidMotion::zero_progress
+                        && evidence.zero_progress_seconds
+                            >= sim::zero_progress_reset_seconds)
+                    || (evidence.invalid_reason == sim::InvalidMotion::micro_motion
+                        && evidence.micro_motion_seconds >= 3.0f)),
+            "stalled or contradictory movement request escaped locomotion invalidation");
+    }
+    float stopped_zero_progress_seconds = 0.0f;
+    float moving_zero_progress_seconds = 0.0f;
+    float stopped_micro_motion_seconds = 0.0f;
+    float moving_micro_motion_seconds = 0.0f;
+    for (std::size_t window = 0u; window < 20u; ++window)
+    {
+        const bool stopped_required = sim::locomotion_required_for_intent(
+            sim::CourseStage::uneven, 0.0f, true);
+        const bool moving_required = sim::locomotion_required_for_intent(
+            sim::CourseStage::uneven, 1.0f, false);
+        stopped_zero_progress_seconds = sim::update_zero_progress_seconds(
+            stopped_zero_progress_seconds,
+            stopped_required && sim::zero_progress_window(
+                0.0f, 0u, 0.0f, false), 1.0f);
+        moving_zero_progress_seconds = sim::update_zero_progress_seconds(
+            moving_zero_progress_seconds,
+            moving_required && sim::zero_progress_window(
+                0.0f, 0u, 0.0f, false), 1.0f);
+        if (sim::micro_motion_window(
+                0.17f, 0.02f, 0.30f, 0u, stopped_required, false))
+            stopped_micro_motion_seconds += 1.0f;
+        if (sim::micro_motion_window(
+                0.17f, 0.02f, 0.30f, 0u, moving_required, false))
+            moving_micro_motion_seconds += 1.0f;
+    }
+    require(stopped_zero_progress_seconds == 0.0f
+            && stopped_micro_motion_seconds == 0.0f
+            && moving_zero_progress_seconds >= sim::zero_progress_reset_seconds
+            && moving_micro_motion_seconds >= 3.0f,
+        "twenty-second stop/move replay does not preserve the intended stall boundary");
     require(sim::zero_progress_window(0.0f, 0u, 0.0f, false),
         "zero movement is not classified for reset");
     require(!sim::zero_progress_window(0.08f, 0u, 0.0f, false),
@@ -1686,8 +2234,8 @@ int main()
             && std::isfinite(humanoid_foundational_gait.swing_lift)
             && biped_foundational_gait.step_length >= 0.50f
             && biped_foundational_gait.step_length <= 0.82f
-            && std::abs(humanoid_foundational_gait.step_length - 0.74f) < 1.0e-6f
-            && std::abs(humanoid_foundational_gait.swing_lift - 0.14f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.step_length - 0.50f) < 1.0e-6f
+            && std::abs(humanoid_foundational_gait.swing_lift - 0.22f) < 1.0e-6f
             && std::abs(humanoid_foundational_gait.cadence_hz - 0.90f) < 1.0e-6f
             && std::abs(humanoid_foundational_gait.transition_flex - 0.055f)
                 < 1.0e-6f,
@@ -1721,24 +2269,26 @@ int main()
             && rl::authored_gait_startup_blend(
                 std::numeric_limits<float>::quiet_NaN()) == 0.0f,
         "authored gait startup does not blend deterministically from the saved pose");
-    const float authored_left_foot_offset = humanoid_walk.nodes[
-        humanoid_walk.left_contact_node].x
+    const float authored_left_ankle_offset = humanoid_walk.nodes[
+        humanoid_walk.motors[1].c].x
         - humanoid_walk.nodes[humanoid_walk.motors[0].pivot].x;
-    const float authored_right_foot_offset = humanoid_walk.nodes[
-        humanoid_walk.right_contact_node].x
+    const float authored_right_ankle_offset = humanoid_walk.nodes[
+        humanoid_walk.motors[3].c].x
         - humanoid_walk.nodes[humanoid_walk.motors[2].pivot].x;
     const float authored_gait_progress = humanoid_foundational_gait.phase_offset / pi;
-    const float gait_left_foot_offset = humanoid_foundational_gait.stance_center_x
+    const float gait_left_ankle_offset = humanoid_foundational_gait.stance_center_x
         + rl::sagittal_step_x(rl::human_authored_stance_step,
             authored_gait_progress, false);
-    const float gait_right_foot_offset = humanoid_foundational_gait.stance_center_x
+    const float gait_right_ankle_offset = humanoid_foundational_gait.stance_center_x
         + rl::sagittal_step_x(rl::human_authored_stance_step,
             authored_gait_progress, true);
     require(humanoid_foundational_gait.phase_offset > 0.0f
             && humanoid_foundational_gait.phase_offset < pi
-            && std::abs(gait_left_foot_offset - authored_left_foot_offset) < 1.0e-5f
-            && std::abs(gait_right_foot_offset - authored_right_foot_offset) < 1.0e-5f,
-        "foundational Human gait does not begin from the saved authored foot stance");
+            && std::abs(gait_left_ankle_offset - authored_left_ankle_offset)
+                < 1.0e-5f
+            && std::abs(gait_right_ankle_offset - authored_right_ankle_offset)
+                < 1.0e-5f,
+        "foundational Human gait does not begin from the saved authored ankle stance");
     const auto bounded_foundational_endpoint = [](
         const rl::BipedGaitParameters& parameters, float chain_length)
     {
@@ -1776,16 +2326,23 @@ int main()
             && length(humanoid_mid_stance) + 1.0e-5f
                 >= humanoid_leg_length
                     * (1.0f - rl::biped_leg_reach_reserve)
-            && humanoid_foundational_gait.leg_height
+            && humanoid_foundational_gait.leg_height + 1.0e-5f
                 >= humanoid_leg_length * 0.95f
             && std::abs(humanoid_mid_stance.y)
                 > humanoid_endpoint_vertical_reach
-                    + 0.01f * humanoid_leg_length
+                    + 0.005f * humanoid_leg_length
             && rl::biped_stance_vertical_reach(
                 std::numeric_limits<float>::quiet_NaN(),
                 humanoid_leg_length) == 0.0f
             && rl::biped_stance_vertical_reach(0.0f, -1.0f) == 0.0f,
-        "phase-local gait envelope failed to straighten Human mid-stance support");
+        "phase-local gait envelope failed to straighten Human mid-stance support: mid_y="
+            + std::to_string(humanoid_mid_stance.y)
+            + " endpoint_reach="
+            + std::to_string(humanoid_endpoint_vertical_reach)
+            + " mid_length=" + std::to_string(length(humanoid_mid_stance))
+            + " leg_length=" + std::to_string(humanoid_leg_length)
+            + " authored_height="
+            + std::to_string(humanoid_foundational_gait.leg_height));
     rl::BipedGaitParameters excessive_reach = humanoid_foundational_gait;
     excessive_reach.step_length = humanoid_leg_length * 0.80f;
     excessive_reach.leg_height = humanoid_leg_length * 1.20f;
@@ -1919,6 +2476,18 @@ int main()
     require(std::abs(biped_mid_authority - 0.5f) < 1.0e-6f
             && std::abs(quadruped_mid_authority - 0.5f) < 1.0e-6f,
         "foundational teacher authority does not decay linearly");
+    require(rl::foundational_walk_teacher_fade_begin_update(humanoid_walk) == 600u
+            && rl::foundational_walk_raw_rollout_count(600u,
+                sim::CourseStage::uneven, humanoid_walk, 8u) == 0u
+            && rl::foundational_walk_raw_rollout_count(601u,
+                sim::CourseStage::uneven, humanoid_walk, 8u) == 1u
+            && rl::foundational_walk_raw_rollout_count(750u,
+                sim::CourseStage::uneven, humanoid_walk, 8u) == 4u
+            && rl::foundational_walk_raw_rollout_count(899u,
+                sim::CourseStage::uneven, humanoid_walk, 8u) == 7u
+            && rl::foundational_walk_raw_rollout_count(900u,
+                sim::CourseStage::uneven, humanoid_walk, 8u) == 8u,
+        "Raw rollout authority does not converge during the Human teacher fade");
     require(rl::guided_rollout_imitation_weight(
                 0u, sim::CourseStage::uneven) == 64.0f
             && rl::guided_rollout_imitation_weight(
@@ -1958,7 +2527,7 @@ int main()
         sim::CreatureBlueprint::hexapod(), sim::CourseStage::uneven);
     require(monoped_reflex.support == 0.92f && monoped_reflex.body == 0.82f
             && chicken_reflex.support == 0.88f && chicken_reflex.body == 0.50f
-            && ordinary_reflex.support == 1.0f && ordinary_reflex.body == 1.0f
+            && ordinary_reflex.support == 0.0f && ordinary_reflex.body == 0.0f
             && out_of_scope_reflex.support == 0.0f
             && out_of_scope_reflex.body == 0.0f
             && human_shuttle_reflex.support == 1.0f
@@ -1971,28 +2540,130 @@ int main()
     {
         sim::Environment human_reflex{ humanoid_walk, 0x447u };
         human_reflex.set_course(sim::CourseStage::uneven, 0.30f);
-        const auto raw_support_teacher = rl::raw_walking_teacher_action(human_reflex);
+        const auto raw_support_teacher =
+            rl::raw_walking_teacher_action(human_reflex);
         std::array<float, sim::action_count> positive{};
         std::array<float, sim::action_count> negative{};
         positive.fill(1.0f);
         negative.fill(-1.0f);
-        const auto positive_effective = rl::effective_policy_action(
-            human_reflex, positive, sim::CourseStage::uneven, 0.0f);
-        const auto negative_effective = rl::effective_policy_action(
-            human_reflex, negative, sim::CourseStage::uneven, 0.0f);
-        for (std::size_t index = 0; index < humanoid_walk.active_motor_count; ++index)
+        const auto effective_pair = [&](float authority)
         {
-            if (index < 4u)
+            return std::array{
+                rl::effective_policy_action(human_reflex, positive,
+                    sim::CourseStage::uneven, authority),
+                rl::effective_policy_action(human_reflex, negative,
+                    sim::CourseStage::uneven, authority)
+            };
+        };
+        const auto full = effective_pair(1.0f);
+        const auto half = effective_pair(0.5f);
+        const auto zero = effective_pair(0.0f);
+        const auto raw = std::array{
+            rl::effective_policy_action(human_reflex, positive,
+                sim::CourseStage::uneven, 0.0f,
+                sim::GuidanceMode::raw_policy_audit),
+            rl::effective_policy_action(human_reflex, negative,
+                sim::CourseStage::uneven, 0.0f,
+                sim::GuidanceMode::raw_policy_audit)
+        };
+        const auto support_policy_separation = [&](const auto& pair)
+        {
+            float separation{};
+            for (std::size_t index = 0; index < 4u; ++index)
+                separation += std::abs(pair[0][index] - pair[1][index]);
+            return separation;
+        };
+        const float full_separation = support_policy_separation(full);
+        const float half_separation = support_policy_separation(half);
+        const float zero_separation = support_policy_separation(zero);
+        require(full_separation < half_separation
+                && half_separation < zero_separation
+                && zero_separation > 1.0f,
+            "Human policy ownership does not increase as lesson authority decays");
+        for (std::size_t policy = 0; policy < zero.size(); ++policy)
+        {
+            for (std::size_t index = 0; index < sim::action_count; ++index)
             {
-                require(std::abs(positive_effective[index] - raw_support_teacher[index]) < 1.0e-6f
-                        && std::abs(negative_effective[index] - raw_support_teacher[index]) < 1.0e-6f,
-                    "post-handoff Human policy can override the opposed leg-transfer clock");
-                continue;
+                require(zero[policy][index] == raw[policy][index],
+                    "zero-authority Assisted action differs from Raw policy action");
+                require(std::abs(half[policy][index]
+                        - lerp(zero[policy][index], full[policy][index], 0.5f))
+                    < 1.0e-6f,
+                    "Human Assisted composite does not interpolate once with lesson authority");
             }
-            const float expected = clamp(raw_support_teacher[index], -0.32f, 0.32f);
-            require(std::abs(positive_effective[index] - expected) < 1.0e-6f
-                    && std::abs(negative_effective[index] - expected) < 1.0e-6f,
-                "post-handoff Human policy can override the authored arm counter-swing");
+        }
+        bool zero_action_differs_from_teacher{};
+        for (std::size_t index = 0; index < 4u; ++index)
+        {
+            if (std::abs(zero[0][index] - raw_support_teacher[index])
+                    > 1.0e-4f
+                && std::abs(zero[1][index] - raw_support_teacher[index])
+                    > 1.0e-4f)
+            {
+                zero_action_differs_from_teacher = true;
+                break;
+            }
+        }
+        const rl::GuidanceAuthorityReport zero_report =
+            rl::guidance_authority_report(human_reflex,
+                sim::CourseStage::uneven, 0.0f);
+        const rl::GuidanceAuthorityReport half_report =
+            rl::guidance_authority_report(human_reflex,
+                sim::CourseStage::uneven, 0.5f);
+        require(zero_action_differs_from_teacher
+                && zero_report.lesson_teacher == 0.0f
+                && zero_report.topology_support == 0.0f
+                && zero_report.topology_body == 0.0f
+                && zero_report.posture_guide == 0.0f
+                && !zero_report.optional_guidance_active()
+                && half_report.lesson_teacher == 0.5f
+                && half_report.posture_guide == 0.5f
+                && half_report.optional_guidance_active(),
+            "zero-authority Human handoff retained hidden teacher or topology control");
+
+        for (const std::uint64_t seed : std::array<std::uint64_t, 2>{
+                0x447A11u, 0x447A12u })
+        {
+            sim::Environment assisted_plant{ humanoid_walk, seed };
+            sim::Environment raw_plant{ humanoid_walk, seed };
+            assisted_plant.set_course(sim::CourseStage::uneven, 0.30f);
+            raw_plant.set_course(sim::CourseStage::uneven, 0.30f);
+            assisted_plant.set_course_motion_enabled(false);
+            raw_plant.set_course_motion_enabled(false);
+            raw_plant.set_guidance_mode(sim::GuidanceMode::raw_policy_audit);
+            std::array<float, sim::action_count> network{};
+            for (std::size_t index = 0; index < network.size(); ++index)
+                network[index] = 0.11f * static_cast<float>(index) - 0.48f;
+            for (int step = 0; step < 48; ++step)
+            {
+                const auto assisted_action = rl::effective_policy_action(
+                    assisted_plant, network, sim::CourseStage::uneven, 0.0f,
+                    sim::GuidanceMode::assisted);
+                const auto raw_action = rl::effective_policy_action(raw_plant,
+                    network, sim::CourseStage::uneven, 0.0f,
+                    sim::GuidanceMode::raw_policy_audit);
+                require(assisted_action == raw_action,
+                    "repeated zero-authority action changed across guidance modes");
+                const sim::StepResult assisted_result = assisted_plant.step(
+                    assisted_action);
+                const sim::StepResult raw_result = raw_plant.step(raw_action);
+                require(assisted_result.terminated == raw_result.terminated
+                        && assisted_result.invalid_reason
+                            == raw_result.invalid_reason,
+                    "zero-authority Human plant diverged at a terminal boundary");
+                const auto assisted_particles = assisted_plant.particles();
+                const auto raw_particles = raw_plant.particles();
+                require(assisted_particles.size() == raw_particles.size(),
+                    "zero-authority Human plant changed topology");
+                for (std::size_t node = 0; node < assisted_particles.size(); ++node)
+                {
+                    require(length(assisted_particles[node].position
+                                - raw_particles[node].position) <= 1.0e-6f
+                            && length(assisted_particles[node].previous
+                                - raw_particles[node].previous) <= 1.0e-6f,
+                        "zero-authority Assisted and Raw Human physics are not identical");
+                }
+            }
         }
     }
 
@@ -2222,8 +2893,9 @@ int main()
             && std::ranges::any_of(humanoid.bones, [](const sim::DistanceConstraint& bone)
             { return (bone.a == 2u && bone.b == 10u) || (bone.a == 10u && bone.b == 2u); }),
         "raised humanoid shoulder girdle can still invert through the upper spine");
-    require(humanoid.nodes.size() == 13u,
-        "human-calibrated rig does not retain the compact articulated body and arms");
+    require(humanoid.nodes.size() == 19u
+            && humanoid.human_paired_limb_topology(),
+        "human-calibrated rig does not own the canonical articulated body, arms, and feet");
     require(std::abs(humanoid.nodes[0].x - (-0.179952502f)) < 0.00001f
             && std::abs(humanoid.nodes[0].y - 2.61523819f) < 0.00001f
             && std::abs(humanoid.nodes[1].y - 3.76404762f) < 0.00001f
@@ -2233,23 +2905,56 @@ int main()
             && humanoid.nodes[12].y < humanoid.nodes[0].y
             && humanoid.nodes[12].y > humanoid.nodes[5].y,
         "current authored Human calibration not applied");
-    require(humanoid.bones.size() == 15u,
-        "humanoid legs or articulated arms are not structurally connected");
+    require(humanoid.bones.size() == 23u,
+        "humanoid legs, articulated arms, or rear-foot triangles are not structurally connected");
     require(humanoid.active_motor_count == sim::anatomy_action_count,
-        "humanoid does not expose independent shoulder and elbow motors");
-    require(humanoid.left_contact_node == humanoid.motors[1].c
-            && humanoid.right_contact_node == humanoid.motors[3].c,
-        "terminal lower-leg joints are not the physical support stubs");
-    require(humanoid.additional_left_contact_nodes.empty()
-            && humanoid.additional_right_contact_nodes.empty(),
-        "terrain-hostile heel/ball/toe collision contacts remain on the humanoid");
-    require(humanoid.left_contact_node < humanoid.radii.size()
-            && humanoid.right_contact_node < humanoid.radii.size()
-            && humanoid.radii[humanoid.left_contact_node] >= 0.104f
-            && humanoid.radii[humanoid.right_contact_node] >= 0.104f
-            && humanoid.radii[humanoid.left_contact_node] <= 0.1121f
-            && humanoid.radii[humanoid.right_contact_node] <= 0.1121f,
-        "humanoid terminal support stubs are not compact and terrain-conforming");
+        "humanoid does not expose independent hips, knees, shoulders, elbows, ankles, and MTP joints");
+    require(humanoid.left_contact_node == sim::human_left_heel_node
+            && humanoid.right_contact_node == sim::human_right_heel_node
+            && humanoid.additional_left_contact_nodes
+                == std::vector<std::uint16_t>{
+                    sim::human_left_ball_node, sim::human_left_toe_node }
+            && humanoid.additional_right_contact_nodes
+                == std::vector<std::uint16_t>{
+                    sim::human_right_ball_node, sim::human_right_toe_node },
+        "canonical Human does not expose heel-primary, ball/toe physical contacts");
+    const auto has_human_bone = [&](std::uint16_t a, std::uint16_t b)
+    {
+        return std::ranges::any_of(humanoid.bones,
+            [=](const sim::DistanceConstraint& bone)
+            {
+                return (bone.a == a && bone.b == b)
+                    || (bone.a == b && bone.b == a);
+            });
+    };
+    require(has_human_bone(sim::human_left_ankle_node,
+                sim::human_left_heel_node)
+            && has_human_bone(sim::human_left_ankle_node,
+                sim::human_left_ball_node)
+            && has_human_bone(sim::human_left_heel_node,
+                sim::human_left_ball_node)
+            && has_human_bone(sim::human_left_ball_node,
+                sim::human_left_toe_node)
+            && has_human_bone(sim::human_right_ankle_node,
+                sim::human_right_heel_node)
+            && has_human_bone(sim::human_right_ankle_node,
+                sim::human_right_ball_node)
+            && has_human_bone(sim::human_right_heel_node,
+                sim::human_right_ball_node)
+            && has_human_bone(sim::human_right_ball_node,
+                sim::human_right_toe_node)
+            && !has_human_bone(3u, sim::human_left_heel_node)
+            && !has_human_bone(3u, sim::human_left_ball_node)
+            && !has_human_bone(5u, sim::human_right_heel_node)
+            && !has_human_bone(5u, sim::human_right_ball_node),
+        "canonical Human rear foot gained a knee shortcut or lost its physical triangle/toe hinge");
+    require(humanoid.radii[sim::human_left_heel_node] == 0.072f
+            && humanoid.radii[sim::human_right_heel_node] == 0.072f
+            && humanoid.radii[sim::human_left_ball_node] == 0.065f
+            && humanoid.radii[sim::human_right_ball_node] == 0.065f
+            && humanoid.radii[sim::human_left_toe_node] == 0.060f
+            && humanoid.radii[sim::human_right_toe_node] == 0.060f,
+        "canonical Human foot contact radii changed without a topology contract update");
     for (std::size_t motor_index = 0; motor_index < humanoid.active_motor_count; ++motor_index)
     {
         const sim::MotorConstraint& motor = humanoid.motors[motor_index];
@@ -2268,7 +2973,7 @@ int main()
             require(std::abs((motor.maximum_angle - motor.neutral_angle) * 180.0f / pi
                 - expected_travel) < 0.05f, "obstacle-capable forward leg travel was not applied");
         }
-        else
+        else if (motor_index < sim::legacy_anatomy_action_count)
         {
             const float arm_travel = (motor.maximum_angle - motor.minimum_angle)
                 * 180.0f / pi;
@@ -2276,6 +2981,45 @@ int main()
                 "humanoid arm motor does not preserve bounded natural counter-swing travel");
             require(motor.strength <= 0.025f,
                 "humanoid arm motor is too strong for natural gait stabilization");
+        }
+        else if (motor_index <= sim::human_right_ankle_action)
+        {
+            const bool left = motor_index == sim::human_left_ankle_action;
+            require((left
+                        && motor.a == 3u
+                        && motor.pivot == sim::human_left_ankle_node
+                        && motor.c == sim::human_left_ball_node)
+                    || (!left
+                        && motor.a == 5u
+                        && motor.pivot == sim::human_right_ankle_node
+                        && motor.c == sim::human_right_ball_node),
+                "Human ankle action is not attached to its physical rear-foot triangle");
+            require(std::abs((motor.neutral_angle - motor.minimum_angle)
+                        * 180.0f / pi - 34.0f) < 0.05f
+                    && std::abs((motor.maximum_angle - motor.neutral_angle)
+                        * 180.0f / pi - 34.0f) < 0.05f
+                    && std::abs(motor.strength - 0.034f) < 0.0001f,
+                "Human ankle action lost its bounded symmetric physical motor contract");
+        }
+        else
+        {
+            const bool left = motor_index == sim::human_left_toe_action;
+            require(motor_index == sim::human_left_toe_action
+                    || motor_index == sim::human_right_toe_action,
+                "unexpected Human foot action slot");
+            require(motor.a == (left ? sim::human_left_heel_node
+                                     : sim::human_right_heel_node)
+                    && motor.pivot == (left ? sim::human_left_ball_node
+                                           : sim::human_right_ball_node)
+                    && motor.c == (left ? sim::human_left_toe_node
+                                       : sim::human_right_toe_node),
+                "Human MTP action is not attached to its physical toe hinge");
+            require(std::abs((motor.neutral_angle - motor.minimum_angle)
+                        * 180.0f / pi - 42.0f) < 0.05f
+                    && std::abs((motor.maximum_angle - motor.neutral_angle)
+                        * 180.0f / pi - 36.0f) < 0.05f
+                    && std::abs(motor.strength - 0.022f) < 0.0001f,
+                "Human MTP action lost its bounded physical motor contract");
         }
     }
 
@@ -2402,13 +3146,152 @@ int main()
     {
         sim::Environment observation_environment{ humanoid, 0x0B5E7u };
         const auto observation = observation_environment.observation();
-        static_assert(sim::observation_count == 63);
-        require(observation.size() == 63u,
-            "anatomy, shuttle, material, water, equipment, and task observation layout is not sixty-three floats");
+        static_assert(sim::observation_count == 84u);
+        static_assert(sim::joint_angle_observation_index(0u) == 4u);
+        static_assert(sim::joint_angle_observation_index(7u) == 11u);
+        static_assert(sim::joint_velocity_observation_index(0u) == 12u);
+        static_assert(sim::joint_velocity_observation_index(7u) == 19u);
+        static_assert(sim::joint_angle_observation_index(
+            sim::human_left_ankle_action) == 64u);
+        static_assert(sim::joint_angle_observation_index(
+            sim::human_right_ankle_action) == 65u);
+        static_assert(sim::joint_velocity_observation_index(
+            sim::human_left_ankle_action) == 66u);
+        static_assert(sim::joint_velocity_observation_index(
+            sim::human_right_ankle_action) == 67u);
+        require(observation.size() == 84u,
+            "joint, semantic sole, and support-coordinator observations are not eighty-four floats");
         require(observation[20] == 0.0f && observation[21] == 0.0f,
             "contact channels overlap motor channels at reset");
         require(std::isfinite(observation[18]) && std::isfinite(observation[19]),
             "right-arm angular velocity channels are missing");
+        require(std::isfinite(observation[64]) && std::isfinite(observation[65])
+                && std::isfinite(observation[66]) && std::isfinite(observation[67]),
+            "explicit Human ankle angle/rate observations are missing");
+        require(std::isfinite(observation[sim::left_sole_clearance_observation])
+                && std::isfinite(observation[sim::right_sole_clearance_observation])
+                && observation[sim::left_sole_velocity_x_observation] == 0.0f
+                && observation[sim::right_sole_velocity_x_observation] == 0.0f
+                && observation[sim::left_sole_velocity_y_observation] == 0.0f
+                && observation[sim::right_sole_velocity_y_observation] == 0.0f
+                && std::isfinite(observation[
+                    sim::left_sole_maximum_clearance_observation])
+                && std::isfinite(observation[
+                    sim::right_sole_maximum_clearance_observation]),
+            "reset Human sole clearance/velocity observations are missing or manufactured");
+        require(observation[63] == 0.0f,
+            "reset observation reports manufactured torso angular velocity");
+        require(observation_environment.anatomy_action_active(8u)
+                && observation_environment.anatomy_action_active(9u)
+                && observation_environment.anatomy_action_active(10u)
+                && observation_environment.anatomy_action_active(11u)
+                && observation_environment.motor_diagnostic(8u).available
+                && observation_environment.motor_diagnostic(9u).available
+                && observation_environment.motor_diagnostic(10u).available
+                && observation_environment.motor_diagnostic(11u).available,
+            "canonical Human ankle/toe actions are not discoverable through runtime topology truth");
+
+        sim::Environment positive_sole{ humanoid, 0x0B5E8u };
+        sim::Environment negative_sole{ humanoid, 0x0B5E8u };
+        sim::Environment adversarial_sole{ humanoid, 0x0B5E8u };
+        sim::EnvironmentTestAccess::set_human_sole_state(
+            positive_sole, true, 0.10f, { 1.20f, 0.60f });
+        sim::EnvironmentTestAccess::set_human_sole_state(
+            negative_sole, true, -0.04f, { -1.20f, -0.60f });
+        sim::EnvironmentTestAccess::set_human_sole_state(
+            adversarial_sole, true, 100.0f, { 1000.0f, -1000.0f });
+        const auto positive_sole_observation = positive_sole.observation();
+        const auto negative_sole_observation = negative_sole.observation();
+        const auto adversarial_sole_observation = adversarial_sole.observation();
+        require(positive_sole_observation[sim::left_sole_clearance_observation]
+                    > negative_sole_observation[
+                        sim::left_sole_clearance_observation]
+                && positive_sole_observation[
+                    sim::left_sole_velocity_x_observation] > 0.0f
+                && negative_sole_observation[
+                    sim::left_sole_velocity_x_observation] < 0.0f
+                && positive_sole_observation[
+                    sim::left_sole_velocity_y_observation] > 0.0f
+                && negative_sole_observation[
+                    sim::left_sole_velocity_y_observation] < 0.0f,
+            "semantic sole observations lost signed clearance or ground-relative velocity");
+        require(adversarial_sole_observation[
+                    sim::left_sole_clearance_observation] == 2.0f
+                && adversarial_sole_observation[
+                    sim::left_sole_velocity_x_observation] == 3.0f
+                && adversarial_sole_observation[
+                    sim::left_sole_velocity_y_observation] == -3.0f,
+            "adversarial semantic sole observations escaped finite normalization bounds");
+
+        sim::Environment flat_sole{ humanoid, 0x0B5E9u };
+        sim::Environment toe_only_sole{ humanoid, 0x0B5E9u };
+        sim::Environment repeated_toe_only_sole{ humanoid, 0x0B5E9u };
+        sim::EnvironmentTestAccess::set_human_sole_clearances(
+            flat_sole, true, { 0.0f, 0.0f, 0.0f });
+        sim::EnvironmentTestAccess::set_human_sole_clearances(
+            toe_only_sole, true, { 0.10f, 0.04f, 0.0f });
+        sim::EnvironmentTestAccess::set_human_sole_clearances(
+            repeated_toe_only_sole, true, { 0.10f, 0.04f, 0.0f });
+        const auto flat_observation = flat_sole.observation();
+        const auto toe_only_observation = toe_only_sole.observation();
+        const auto repeated_toe_only_observation =
+            repeated_toe_only_sole.observation();
+        require(flat_observation[sim::left_sole_clearance_observation] == 0.0f
+                && flat_observation[
+                    sim::left_sole_maximum_clearance_observation] == 0.0f
+                && toe_only_observation[
+                    sim::left_sole_clearance_observation] == 0.0f
+                && toe_only_observation[
+                    sim::left_sole_maximum_clearance_observation] > 0.30f
+                && toe_only_observation == repeated_toe_only_observation,
+            "maximum sole clearance did not distinguish repeatable toe-only contact from flat purchase");
+
+        sim::CreatureBlueprint inactive_tail = sim::CreatureBlueprint::chicken();
+        inactive_tail.motors[sim::human_left_ankle_action]
+            = inactive_tail.motors[0u];
+        inactive_tail.motors[sim::human_left_ankle_action].neutral_angle += 0.50f;
+        inactive_tail.motors[sim::human_left_ankle_action].minimum_angle -= 0.50f;
+        inactive_tail.motors[sim::human_left_ankle_action].maximum_angle += 0.50f;
+        const sim::Environment inactive_tail_environment{ inactive_tail,
+            0x0B5E8u };
+        const auto inactive_tail_observation =
+            inactive_tail_environment.observation();
+        require(inactive_tail.active_motor_count
+                    <= sim::human_left_ankle_action
+                && inactive_tail.motors[sim::human_left_ankle_action].enabled
+                && inactive_tail_observation[
+                    sim::left_ankle_angle_observation] == 0.0f
+                && inactive_tail_observation[
+                    sim::left_ankle_velocity_observation] == 0.0f,
+            "inactive species tail motors leaked into the shared observation ABI");
+        for (std::size_t index = sim::left_sole_clearance_observation;
+            index < sim::observation_count; ++index)
+        {
+            require(inactive_tail_observation[index] == 0.0f,
+                "Human-only semantic sole state leaked into another species observation tail");
+        }
+
+        sim::Environment positive_ankle_environment{ humanoid, 0x0B5E9u };
+        sim::Environment negative_ankle_environment{ humanoid, 0x0B5E9u };
+        require(sim::EnvironmentTestAccess::rotate_human_left_sole(
+                    positive_ankle_environment, 0.20f)
+                && sim::EnvironmentTestAccess::rotate_human_left_sole(
+                    negative_ankle_environment, -0.20f),
+            "active Human ankle observation fixture lacks canonical sole topology");
+        const float positive_ankle_observation = positive_ankle_environment
+            .observation()[sim::left_ankle_angle_observation];
+        const float negative_ankle_observation = negative_ankle_environment
+            .observation()[sim::left_ankle_angle_observation];
+        require(positive_ankle_observation > 0.01f
+                && negative_ankle_observation < -0.01f,
+            "active Human ankle motor disappeared or lost signed response in the appended observation ABI: positive="
+                + std::to_string(positive_ankle_observation)
+                + " negative=" + std::to_string(negative_ankle_observation));
+        sim::EnvironmentTestAccess::set_torso_turn_speed(
+            observation_environment, 3.0f);
+        require(std::abs(observation_environment.observation()[63] - 0.5f)
+                <= 1.0e-7f,
+            "policy cannot observe normalized torso angular velocity");
 
         observation_environment.set_course(sim::CourseStage::shuttle, 0.30f);
         sim::EnvironmentTestAccess::set_shuttle_state(observation_environment,
@@ -2739,7 +3622,7 @@ int main()
         rl::foundational_walk_teacher_handoff_update(quadruped_walk);
     require(!rl::policy_candidate_retainable(sim::CourseStage::uneven,
                 60'000u, quadruped_handoff - 1u, quadruped_walk)
-            && rl::policy_candidate_retainable(sim::CourseStage::uneven,
+            && !rl::policy_candidate_retainable(sim::CourseStage::uneven,
                 60'000u, quadruped_handoff, quadruped_walk)
             && !rl::policy_candidate_retainable(sim::CourseStage::uneven,
                 0u, quadruped_handoff, quadruped_walk)
@@ -2910,6 +3793,8 @@ int main()
     const std::size_t faster_workers = trainer.rollout_worker_count();
     trainer.set_cpu_mode(4);
     const std::size_t maximum_workers = trainer.rollout_worker_count();
+    require(normal_workers == 1u && faster_workers <= 2u && maximum_workers <= 4u,
+        "default CPU budget exceeds Eco/Balanced/Maximum worker limits");
     require(normal_workers <= faster_workers && faster_workers <= maximum_workers,
         "speed modes do not increase persistent worker budget");
     require(maximum_workers == trainer.maximum_worker_count(),
@@ -2949,6 +3834,14 @@ int main()
     trainer.train_one_update();
     require(trainer.lesson_update() == 1u && trainer.metrics().update == 3u,
         "Crouch lesson age is coupled to lifetime policy age");
+    require(std::isfinite(trainer.metrics().total_distance)
+            && trainer.metrics().total_distance >= 0.0
+            && std::isfinite(trainer.metrics().total_training_seconds)
+            && trainer.metrics().total_training_seconds >= 0.0,
+        "stage transition corrupted the nonnegative lifetime ledger: distance="
+            + std::to_string(trainer.metrics().total_distance)
+            + " seconds="
+            + std::to_string(trainer.metrics().total_training_seconds));
 
     const std::filesystem::path temporary =
         std::filesystem::temp_directory_path() / "runner-v061-core-test.eppo";
@@ -2973,6 +3866,89 @@ int main()
     require(trainer.checkpoint_data().training_semantics == rl::training_semantics_version,
         "checkpoint does not persist the current training-semantics signature");
     require(resumed.course_stage() == trainer.course_stage(), "checkpoint curriculum stage was not restored");
+
+    rl::PpoTrainer::CheckpointData replacement_checkpoint =
+        trainer.checkpoint_data();
+    replacement_checkpoint.difficulty = 0.57f;
+    replacement_checkpoint.lesson_update += 17u;
+    replacement_checkpoint = rl::RawLearningTestAccess::reseal(
+        std::move(replacement_checkpoint));
+    require(rl::PpoTrainer::write_checkpoint_data(
+                replacement_checkpoint, temporary, error),
+        "atomic checkpoint replacement failed: " + error);
+    rl::PpoTrainer::CheckpointData loaded_replacement{};
+    require(rl::PpoTrainer::read_checkpoint_data(
+                temporary, loaded_replacement, error)
+            && loaded_replacement.difficulty
+                == replacement_checkpoint.difficulty
+            && loaded_replacement.lesson_update
+                == replacement_checkpoint.lesson_update,
+        "atomic checkpoint replacement did not publish the complete new file");
+    const std::filesystem::path absent_replacement_source =
+        std::filesystem::temp_directory_path()
+        / "epoch2dwalk-v0751-absent-checkpoint.tmp";
+    std::filesystem::remove(absent_replacement_source);
+    require(!persistence::atomic_replace_file(
+                absent_replacement_source, temporary, error),
+        "atomic replacement unexpectedly accepted a missing temporary file");
+    rl::PpoTrainer::CheckpointData preserved_replacement{};
+    require(rl::PpoTrainer::read_checkpoint_data(
+                temporary, preserved_replacement, error)
+            && preserved_replacement.difficulty
+                == replacement_checkpoint.difficulty
+            && preserved_replacement.lesson_update
+                == replacement_checkpoint.lesson_update,
+        "failed atomic replacement damaged the accepted checkpoint");
+
+    const std::filesystem::path raw_lineage_path =
+        std::filesystem::temp_directory_path()
+        / "epoch2dwalk-v0751-raw-lineage-test.eppo";
+    rl::PpoTrainer raw_lineage_trainer{ humanoid, 8u, true, 1u };
+    const rl::PpoTrainer::VerifiedCheckpoint raw_lineage_artifact =
+        rl::RawLearningTestAccess::one_real_raw_update(raw_lineage_trainer);
+    require(raw_lineage_artifact.valid(),
+        "real Raw update did not issue checkpoint lineage");
+    const rl::PpoTrainer::CheckpointData raw_lineage =
+        raw_lineage_artifact.data();
+    require(rl::PpoTrainer::write_checkpoint_data(
+                raw_lineage, raw_lineage_path, error),
+        "failed to write retained raw-authority lineage: " + error);
+    rl::PpoTrainer raw_lineage_resumed{ humanoid, 16 };
+    require(raw_lineage_resumed.load_checkpoint(
+                raw_lineage_path, error, false)
+            && raw_lineage_resumed.has_best_policy()
+            && raw_lineage_resumed.best_policy_guidance_mode()
+                == sim::GuidanceMode::raw_policy_audit
+            && raw_lineage_resumed.preview_guidance_mode()
+                == sim::GuidanceMode::raw_policy_audit
+            && raw_lineage_resumed.checkpoint_data().best_guidance_mode
+                == sim::GuidanceMode::raw_policy_audit,
+        "checkpoint restore changed a retained raw evaluation into assisted preview");
+    raw_lineage_resumed.set_preview_guidance_mode(sim::GuidanceMode::assisted);
+    require(raw_lineage_resumed.restore_best_policy()
+            && raw_lineage_resumed.preview_guidance_mode()
+                == sim::GuidanceMode::raw_policy_audit,
+        "restoring retained weights did not restore their evaluated authority");
+    raw_lineage_resumed.set_course(sim::CourseStage::uneven, 0.31f, true);
+    require(raw_lineage_resumed.preview_guidance_mode()
+                == sim::GuidanceMode::raw_policy_audit,
+        "preserving a retained policy discarded its raw evaluation lineage");
+
+    rl::PpoTrainer::CheckpointData retargeted_lineage =
+        rl::PpoTrainer::retarget_checkpoint_for_rig(
+            raw_lineage, humanoid.signature());
+    require(retargeted_lineage.best_parameters.empty()
+            && retargeted_lineage.best_guidance_mode
+                == sim::GuidanceMode::assisted,
+        "weight retarget retained a best-policy authority claim without a best policy");
+    rl::PpoTrainer::CheckpointData invalid_lineage = raw_lineage;
+    invalid_lineage.best_guidance_mode = static_cast<sim::GuidanceMode>(255u);
+    rl::PpoTrainer rejected_lineage{ humanoid, 16 };
+    require(!rejected_lineage.apply_checkpoint_data(
+                invalid_lineage, error, false),
+        "invalid retained-policy authority provenance was accepted");
+    std::filesystem::remove(raw_lineage_path);
+
     const rl::TrainingMetrics before_rig_switch = resumed.metrics();
     resumed.set_blueprint(sim::CreatureBlueprint::biped(), false);
     require(resumed.metrics().update == 0u
@@ -3003,6 +3979,19 @@ int main()
     require(!blocked_legacy.import_lifetime_ledger(invalid_lifetime, error)
             && blocked_legacy.metrics().total_distance == trainer.metrics().total_distance,
         "non-finite legacy odometer was imported");
+    invalid_lifetime = legacy.metrics;
+    invalid_lifetime.total_distance = -0.01;
+    require(!blocked_legacy.import_lifetime_ledger(invalid_lifetime, error)
+            && blocked_legacy.metrics().total_distance
+                == trainer.metrics().total_distance,
+        "negative legacy odometer was imported");
+    invalid_lifetime = legacy.metrics;
+    invalid_lifetime.total_training_seconds =
+        std::numeric_limits<double>::quiet_NaN();
+    require(!blocked_legacy.import_lifetime_ledger(invalid_lifetime, error)
+            && blocked_legacy.metrics().total_training_seconds
+                == trainer.metrics().total_training_seconds,
+        "non-finite legacy training duration was imported");
 
     const std::filesystem::path lifetime_import_directory =
         std::filesystem::temp_directory_path() / "runner-v0742-lifetime-import-test";
@@ -3018,8 +4007,9 @@ int main()
         / human_paths.autonomy_state;
     const std::filesystem::path v0741_autosave = lifetime_import_directory
         / "runner-v0741-natural-gait-autosave.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, v0741_autosave, error),
-        "failed to write legacy lifetime import fixture: " + error);
+    require(rl::RawLearningTestAccess::write_legacy_eppo44(
+                v0741_autosave, legacy),
+        "failed to write exact-layout legacy lifetime import fixture");
     constexpr std::array<char, 8> v0741_magic{
         'E', 'P', 'P', 'O', '4', '1', '\0', '\1' };
     require(rewrite_checkpoint_magic(v0741_autosave, v0741_magic),
@@ -3109,8 +4099,9 @@ int main()
         "legacy transfer retained optimizer, mastery, or non-transfer controller state");
     const std::filesystem::path legacy_path =
         std::filesystem::temp_directory_path() / "runner-v0715-legacy-transfer-test.eppo";
-    require(rl::PpoTrainer::write_checkpoint_data(legacy, legacy_path, error),
-        "failed to write legacy transfer fixture: " + error);
+    require(rl::RawLearningTestAccess::write_legacy_eppo44(
+                legacy_path, legacy),
+        "failed to write exact-layout legacy transfer fixture");
     rl::PpoTrainer loaded_legacy{ humanoid, 16 };
     require(!loaded_legacy.load_checkpoint(legacy_path, error, false)
             && loaded_legacy.load_checkpoint(legacy_path, error, true),

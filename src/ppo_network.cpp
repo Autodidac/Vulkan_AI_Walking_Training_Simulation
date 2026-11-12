@@ -26,6 +26,24 @@ namespace runner::rl
         {
             return 1.0f - value * value;
         }
+
+        [[nodiscard]] float next_uniform(std::uint64_t& state) noexcept
+        {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            const std::uint64_t value = state * 2685821657736338717ULL;
+            return std::max(1.0e-7f,
+                static_cast<float>(value >> 40) * (1.0f / 16777216.0f));
+        }
+
+        [[nodiscard]] float next_normal(std::uint64_t& state) noexcept
+        {
+            const float u1 = next_uniform(state);
+            const float u2 = next_uniform(state);
+            return std::sqrt(-2.0f * std::log(u1))
+                * std::cos(2.0f * pi * u2);
+        }
     }
 
     PolicyNetwork::PolicyNetwork()
@@ -41,7 +59,7 @@ namespace runner::rl
         // start neutral, so disabling the optional subsystem is behaviorally
         // identical instead of silently rerolling every anatomy controller.
         constexpr std::size_t legacy_input_size = 50u;
-        constexpr std::size_t legacy_output_size = sim::anatomy_action_count;
+        constexpr std::size_t legacy_output_size = 8u;
         const float scale1 = std::sqrt(2.0f / static_cast<float>(legacy_input_size));
         const float scale2 = std::sqrt(2.0f / static_cast<float>(hidden_size));
         for (std::size_t row = 0; row < hidden_size; ++row)
@@ -114,15 +132,49 @@ namespace runner::rl
     std::array<float, PolicyNetwork::output_size> PolicyNetwork::deterministic_action(
         std::span<const float, input_size> observation) const noexcept
     {
-        return evaluate(observation).mean;
+        return deterministic_action(observation, active_action_mask_);
+    }
+
+    std::array<float, PolicyNetwork::output_size> PolicyNetwork::deterministic_action(
+        std::span<const float, input_size> observation,
+        const ActionMask& action_mask) const noexcept
+    {
+        std::array<float, output_size> result = evaluate(observation).mean;
+        for (std::size_t index = 0; index < output_size; ++index)
+            if (!action_mask[index])
+                result[index] = 0.0f;
+        return result;
+    }
+
+    std::array<float, PolicyNetwork::output_size> PolicyNetwork::sample_action(
+        const Evaluation& evaluation, std::uint64_t& random_state,
+        float& sampled_log_probability) const noexcept
+    {
+        const auto stddev = standard_deviation();
+        std::array<float, output_size> action{};
+        for (std::size_t index = 0; index < output_size; ++index)
+        {
+            if (!active_action_mask_[index])
+                continue;
+            action[index] = clamp(evaluation.mean[index]
+                    + stddev[index] * next_normal(random_state),
+                -1.0f, 1.0f);
+        }
+        sampled_log_probability = log_probability(action, evaluation);
+        return action;
     }
 
     std::array<float, PolicyNetwork::output_size> PolicyNetwork::standard_deviation() const noexcept
     {
         std::array<float, output_size> result{};
         for (std::size_t index = 0; index < output_size; ++index)
-            result[index] = std::exp(std::clamp(parameters_[layout_.log_std + index],
-                minimum_log_standard_deviation, maximum_log_standard_deviation));
+        {
+            if (active_action_mask_[index])
+                result[index] = std::exp(std::clamp(
+                    parameters_[layout_.log_std + index],
+                    minimum_log_standard_deviation,
+                    maximum_log_standard_deviation));
+        }
         return result;
     }
 
@@ -164,9 +216,13 @@ namespace runner::rl
     {
         const auto values = standard_deviation();
         float total = 0.0f;
-        for (std::size_t index = 0; index < active_output_count_; ++index)
-            total += values[index];
-        return total / static_cast<float>(active_output_count_);
+        const std::size_t active_count = active_output_count();
+        if (active_count == 0u)
+            return 0.0f;
+        for (std::size_t index = 0; index < output_size; ++index)
+            if (active_action_mask_[index])
+                total += values[index];
+        return total / static_cast<float>(active_count);
     }
 
     float PolicyNetwork::log_probability(
@@ -174,8 +230,10 @@ namespace runner::rl
         const Evaluation& evaluation) const noexcept
     {
         float result = 0.0f;
-        for (std::size_t index = 0; index < active_output_count_; ++index)
+        for (std::size_t index = 0; index < output_size; ++index)
         {
+            if (!active_action_mask_[index])
+                continue;
             const float log_std = std::clamp(parameters_[layout_.log_std + index],
                 minimum_log_standard_deviation, maximum_log_standard_deviation);
             const float stddev = std::exp(log_std);
@@ -253,8 +311,10 @@ namespace runner::rl
         value_loss += value_error * value_error;
 
         std::array<float, output_size> d_actor_pre{};
-        for (std::size_t output = 0; output < active_output_count_; ++output)
+        for (std::size_t output = 0; output < output_size; ++output)
         {
+            if (!active_action_mask_[output])
+                continue;
             const float log_std = std::clamp(parameters_[layout_.log_std + output],
                 minimum_log_standard_deviation, maximum_log_standard_deviation);
             const float variance = std::exp(2.0f * log_std);
@@ -268,8 +328,10 @@ namespace runner::rl
         }
 
         std::array<float, hidden_size> d_h2{};
-        for (std::size_t output = 0; output < active_output_count_; ++output)
+        for (std::size_t output = 0; output < output_size; ++output)
         {
+            if (!active_action_mask_[output])
+                continue;
             const std::size_t base = layout_.actor_w + output * hidden_size;
             for (std::size_t column = 0; column < hidden_size; ++column)
             {
@@ -315,7 +377,8 @@ namespace runner::rl
         float weight,
         float& imitation_loss) noexcept
     {
-        if (!(weight > 0.0f) || active_output_count_ == 0u)
+        const std::size_t active_count = active_output_count();
+        if (!(weight > 0.0f) || active_count == 0u)
             return;
 
         std::array<float, hidden_size> h1{};
@@ -338,10 +401,12 @@ namespace runner::rl
         }
 
         const float output_scale = weight
-            / static_cast<float>(active_output_count_);
+            / static_cast<float>(active_count);
         std::array<float, output_size> d_actor_pre{};
-        for (std::size_t output = 0; output < active_output_count_; ++output)
+        for (std::size_t output = 0; output < output_size; ++output)
         {
+            if (!active_action_mask_[output])
+                continue;
             float pre_activation = parameters_[layout_.actor_b + output];
             const std::size_t base = layout_.actor_w + output * hidden_size;
             for (std::size_t column = 0; column < hidden_size; ++column)
@@ -354,8 +419,10 @@ namespace runner::rl
         }
 
         std::array<float, hidden_size> d_h2{};
-        for (std::size_t output = 0; output < active_output_count_; ++output)
+        for (std::size_t output = 0; output < output_size; ++output)
         {
+            if (!active_action_mask_[output])
+                continue;
             const std::size_t base = layout_.actor_w + output * hidden_size;
             for (std::size_t column = 0; column < hidden_size; ++column)
             {
@@ -423,7 +490,7 @@ namespace runner::rl
         constexpr std::array<char, 8> expected{ 'E', 'P', 'P', 'O', '2', '3', '\0', '\1' };
         if (!input || magic != expected || count != parameters_.size())
         {
-            error = "Invalid or incompatible Runner policy file.";
+            error = "Invalid or incompatible Epoch2DWalkEngine policy file.";
             return false;
         }
         input.read(reinterpret_cast<char*>(parameters_.data()), static_cast<std::streamsize>(parameters_.size() * sizeof(float)));

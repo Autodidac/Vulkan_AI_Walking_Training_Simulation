@@ -17,19 +17,634 @@
 
 namespace runner::sim
 {
-    inline constexpr std::size_t anatomy_action_count = 8;
+    inline constexpr std::size_t anatomy_action_count = 12;
     inline constexpr std::size_t equipment_action_count = 3;
     inline constexpr std::size_t action_count =
         anatomy_action_count + equipment_action_count;
-    inline constexpr std::size_t observation_count = 63;
+    inline constexpr std::size_t legacy_anatomy_action_count = 8u;
+    inline constexpr std::size_t joint_angle_observation_begin = 4;
+    inline constexpr std::size_t joint_velocity_observation_begin = 12u;
+    inline constexpr std::size_t contact_observation_begin = 20u;
+    inline constexpr std::size_t torso_turn_rate_observation = 63u;
+    inline constexpr std::size_t left_ankle_angle_observation = 64u;
+    inline constexpr std::size_t right_ankle_angle_observation = 65u;
+    inline constexpr std::size_t left_ankle_velocity_observation = 66u;
+    inline constexpr std::size_t right_ankle_velocity_observation = 67u;
+    inline constexpr std::size_t left_sole_clearance_observation = 68u;
+    inline constexpr std::size_t right_sole_clearance_observation = 69u;
+    inline constexpr std::size_t left_sole_velocity_x_observation = 70u;
+    inline constexpr std::size_t right_sole_velocity_x_observation = 71u;
+    inline constexpr std::size_t left_sole_velocity_y_observation = 72u;
+    inline constexpr std::size_t right_sole_velocity_y_observation = 73u;
+    inline constexpr std::size_t left_sole_maximum_clearance_observation = 74u;
+    inline constexpr std::size_t right_sole_maximum_clearance_observation = 75u;
+    inline constexpr std::size_t left_toe_angle_observation = 76u;
+    inline constexpr std::size_t right_toe_angle_observation = 77u;
+    inline constexpr std::size_t left_toe_velocity_observation = 78u;
+    inline constexpr std::size_t right_toe_velocity_observation = 79u;
+    inline constexpr std::size_t human_gait_phase_sine_observation = 80u;
+    inline constexpr std::size_t human_gait_phase_cosine_observation = 81u;
+    inline constexpr std::size_t human_gait_stage_observation = 82u;
+    inline constexpr std::size_t human_gait_outgoing_side_observation = 83u;
+    inline constexpr std::size_t observation_count = 84u;
+    inline constexpr std::size_t human_left_ankle_action = 8u;
+    inline constexpr std::size_t human_right_ankle_action = 9u;
+    inline constexpr std::size_t human_left_toe_action = 10u;
+    inline constexpr std::size_t human_right_toe_action = 11u;
+    [[nodiscard]] inline constexpr std::size_t joint_angle_observation_index(
+        std::size_t action) noexcept
+    {
+        if (action < legacy_anatomy_action_count)
+            return joint_angle_observation_begin + action;
+        if (action <= human_right_ankle_action)
+            return left_ankle_angle_observation
+                + (action - legacy_anatomy_action_count);
+        return left_toe_angle_observation
+            + (action - human_left_toe_action);
+    }
+    [[nodiscard]] inline constexpr std::size_t joint_velocity_observation_index(
+        std::size_t action) noexcept
+    {
+        if (action < legacy_anatomy_action_count)
+            return joint_velocity_observation_begin + action;
+        if (action <= human_right_ankle_action)
+            return left_ankle_velocity_observation
+                + (action - legacy_anatomy_action_count);
+        return left_toe_velocity_observation
+            + (action - human_left_toe_action);
+    }
+    static_assert(action_count == 15u);
+    static_assert(observation_count == 84u);
+    inline constexpr std::uint16_t human_left_ankle_node = 4u;
+    inline constexpr std::uint16_t human_right_ankle_node = 6u;
+    inline constexpr std::uint16_t human_left_heel_node = 13u;
+    inline constexpr std::uint16_t human_left_ball_node = 14u;
+    inline constexpr std::uint16_t human_left_toe_node = 15u;
+    inline constexpr std::uint16_t human_right_heel_node = 16u;
+    inline constexpr std::uint16_t human_right_ball_node = 17u;
+    inline constexpr std::uint16_t human_right_toe_node = 18u;
+    inline constexpr std::array<std::uint16_t, 6> human_support_contact_nodes{
+        human_left_heel_node, human_left_ball_node, human_left_toe_node,
+        human_right_heel_node, human_right_ball_node, human_right_toe_node
+    };
     inline constexpr float foundational_gait_cadence_hz = 1.24f;
+    inline constexpr float policy_control_ramp_start_seconds = 0.35f;
+    inline constexpr float policy_control_ramp_duration_seconds = 1.25f;
+
+    [[nodiscard]] inline float policy_control_ramp(float elapsed_seconds) noexcept
+    {
+        if (!std::isfinite(elapsed_seconds))
+            return 0.0f;
+        const float progress = clamp((elapsed_seconds
+                - policy_control_ramp_start_seconds)
+                / policy_control_ramp_duration_seconds,
+            0.0f, 1.0f);
+        return progress * progress * (3.0f - 2.0f * progress);
+    }
+
+    [[nodiscard]] inline float policy_control_phase_seconds(
+        float elapsed_seconds) noexcept
+    {
+        if (!std::isfinite(elapsed_seconds)
+            || elapsed_seconds <= policy_control_ramp_start_seconds)
+            return 0.0f;
+        const float shifted = elapsed_seconds
+            - policy_control_ramp_start_seconds;
+        if (shifted >= policy_control_ramp_duration_seconds)
+        {
+            // Integral of smoothstep over [0, 1] is exactly one half.
+            return shifted - 0.5f * policy_control_ramp_duration_seconds;
+        }
+        const float progress = shifted
+            / policy_control_ramp_duration_seconds;
+        const float progress_squared = progress * progress;
+        return policy_control_ramp_duration_seconds
+            * (progress_squared * progress
+                - 0.5f * progress_squared * progress_squared);
+    }
+
+    inline constexpr float human_flat_sole_purchase_clearance = 0.008f;
+    inline constexpr float human_flare_readiness_clearance_span = 0.012f;
+    inline constexpr float human_safe_swing_clearance = 0.020f;
+    inline constexpr float human_gait_exchange_ease_window = 0.18f * pi;
+
+    [[nodiscard]] inline bool human_sole_has_flat_purchase(bool supported,
+        float maximum_clearance) noexcept
+    {
+        return supported && std::isfinite(maximum_clearance)
+            && maximum_clearance >= -0.002f
+            && maximum_clearance <= human_flat_sole_purchase_clearance;
+    }
+
+    struct EventConditionedGaitPhaseStep
+    {
+        float phase{};
+        float rate{};
+    };
+
+    [[nodiscard]] inline EventConditionedGaitPhaseStep
+    event_conditioned_human_gait_phase_step(float phase,
+        float nominal_advance, bool left_flat_purchase,
+        bool right_flat_purchase) noexcept
+    {
+        if (!std::isfinite(phase) || !std::isfinite(nominal_advance)
+            || nominal_advance <= 0.0f)
+            return { std::isfinite(phase) ? phase : 0.0f, 0.0f };
+
+        constexpr float cycle = 2.0f * pi;
+        phase = std::fmod(phase, cycle);
+        if (phase < 0.0f)
+            phase += cycle;
+        const bool first_half = phase < pi;
+        const float half_phase = first_half ? phase : phase - pi;
+        const bool incoming_flat = first_half
+            ? right_flat_purchase : left_flat_purchase;
+        const float exchange_distance = std::max(0.0f, pi - half_phase);
+        float rate = 1.0f;
+        if (!incoming_flat && exchange_distance < human_gait_exchange_ease_window)
+        {
+            const float ratio = clamp(exchange_distance
+                    / human_gait_exchange_ease_window,
+                0.0f, 1.0f);
+            rate = ratio * ratio * (3.0f - 2.0f * ratio);
+        }
+        float advance = nominal_advance * rate;
+        if (!incoming_flat)
+            advance = std::min(advance, exchange_distance);
+        float next = phase + advance;
+        if (next >= cycle)
+            next -= cycle;
+        return { next, advance / nominal_advance };
+    }
+
+    enum class HumanGaitCoordinatorStage : std::uint8_t
+    {
+        settle,
+        departure,
+        swing,
+        apex,
+        descent,
+        flare,
+        landing,
+        purchase,
+        count
+    };
+
+    struct HumanGaitCoordinatorState
+    {
+        // Phase remains an observation and target-selection input only. It
+        // cannot move a particle until a finite policy/teacher motor action is
+        // applied by the ordinary actuator path.
+        float phase{ 0.712f * pi };
+        float stage_seconds{};
+        // Captured once when the free sole enters FLARE. This is a finite
+        // clearance target derived from the observed sole plane, approach
+        // velocity, and remaining normalized joint travel; it never creates a
+        // contact or moves a particle.
+        float flare_clearance_guard{ 0.030f };
+        HumanGaitCoordinatorStage stage{ HumanGaitCoordinatorStage::settle };
+        int outgoing_side{ -1 };
+        std::uint32_t completed_handoffs{};
+        std::uint8_t event_frames{};
+        bool established_swing_clearance{};
+        bool active{};
+    };
+
+    struct HumanGaitCoordinatorInput
+    {
+        bool moving{};
+        bool non_foot_contact{};
+        float facing_local_direction{ 1.0f };
+        bool left_supported{};
+        bool right_supported{};
+        float left_minimum_clearance{};
+        float right_minimum_clearance{};
+        float left_average_velocity_y{};
+        float right_average_velocity_y{};
+        float left_maximum_abs_velocity_y{};
+        float right_maximum_abs_velocity_y{};
+        float left_maximum_velocity_y_deviation{};
+        float right_maximum_velocity_y_deviation{};
+        float left_maximum_abs_velocity_x{};
+        float right_maximum_abs_velocity_x{};
+        float left_maximum_clearance{};
+        float right_maximum_clearance{};
+        float left_normal_impulse{};
+        float right_normal_impulse{};
+        float left_heel_normal_impulse{};
+        float right_heel_normal_impulse{};
+        float left_terminal_alignment_distance{};
+        float right_terminal_alignment_distance{};
+    };
+
+    [[nodiscard]] inline HumanGaitCoordinatorState
+    step_human_gait_coordinator(HumanGaitCoordinatorState state,
+        HumanGaitCoordinatorInput input, float nominal_advance,
+        float dt) noexcept
+    {
+        constexpr float initial_phase = 0.712f * pi;
+        constexpr float apex_fraction = 0.50f;
+        constexpr float flare_fraction = 0.80f;
+        constexpr float landing_rate = 0.45f;
+        // Reach the actual zero-lift exchange pose before asking the physical
+        // sole to prove purchase. Holding four percent short leaves the ankle
+        // about 28 mm high, so a toe can touch while the heel can never satisfy
+        // the required all-node flat-purchase event.
+        constexpr float purchase_fraction = 1.0f;
+        const auto reset = []() noexcept
+        {
+            return HumanGaitCoordinatorState{};
+        };
+        if (!input.moving || !std::isfinite(nominal_advance)
+            || nominal_advance < 0.0f || !std::isfinite(dt) || dt < 0.0f
+            || !std::isfinite(input.facing_local_direction)
+            || !std::isfinite(input.left_minimum_clearance)
+            || !std::isfinite(input.right_minimum_clearance)
+            || !std::isfinite(input.left_average_velocity_y)
+            || !std::isfinite(input.right_average_velocity_y)
+            || !std::isfinite(input.left_maximum_abs_velocity_y)
+            || !std::isfinite(input.right_maximum_abs_velocity_y)
+            || !std::isfinite(input.left_maximum_velocity_y_deviation)
+            || !std::isfinite(input.right_maximum_velocity_y_deviation)
+            || !std::isfinite(input.left_maximum_abs_velocity_x)
+            || !std::isfinite(input.right_maximum_abs_velocity_x)
+            || !std::isfinite(input.left_maximum_clearance)
+            || !std::isfinite(input.right_maximum_clearance)
+            || !std::isfinite(input.left_normal_impulse)
+            || !std::isfinite(input.right_normal_impulse)
+            || !std::isfinite(input.left_heel_normal_impulse)
+            || !std::isfinite(input.right_heel_normal_impulse)
+            || !std::isfinite(input.left_terminal_alignment_distance)
+            || !std::isfinite(input.right_terminal_alignment_distance))
+            return reset();
+
+        if (!state.active)
+        {
+            state = reset();
+            state.active = true;
+            if (input.facing_local_direction < 0.0f)
+            {
+                state.outgoing_side = 1;
+                state.phase = initial_phase - pi;
+            }
+        }
+        state.stage_seconds += dt;
+
+        const bool outgoing_left = state.outgoing_side < 0;
+        const bool outgoing_supported = outgoing_left
+            ? input.left_supported : input.right_supported;
+        const bool incoming_supported = outgoing_left
+            ? input.right_supported : input.left_supported;
+        const float outgoing_clearance = outgoing_left
+            ? input.left_maximum_clearance : input.right_maximum_clearance;
+        const float outgoing_minimum_clearance = outgoing_left
+            ? input.left_minimum_clearance : input.right_minimum_clearance;
+        const float outgoing_average_velocity_y = outgoing_left
+            ? input.left_average_velocity_y
+            : input.right_average_velocity_y;
+        const float outgoing_maximum_velocity_y_deviation = outgoing_left
+            ? input.left_maximum_velocity_y_deviation
+            : input.right_maximum_velocity_y_deviation;
+        const float outgoing_maximum_abs_velocity_y = outgoing_left
+            ? input.left_maximum_abs_velocity_y
+            : input.right_maximum_abs_velocity_y;
+        const float outgoing_maximum_abs_velocity_x = outgoing_left
+            ? input.left_maximum_abs_velocity_x
+            : input.right_maximum_abs_velocity_x;
+        const float outgoing_impulse = outgoing_left
+            ? input.left_normal_impulse : input.right_normal_impulse;
+        const float receiving_heel_impulse = outgoing_left
+            ? input.left_heel_normal_impulse : input.right_heel_normal_impulse;
+        const float incoming_clearance = outgoing_left
+            ? input.right_maximum_clearance : input.left_maximum_clearance;
+        const float incoming_minimum_clearance = outgoing_left
+            ? input.right_minimum_clearance : input.left_minimum_clearance;
+        const float incoming_impulse = outgoing_left
+            ? input.right_normal_impulse : input.left_normal_impulse;
+        const float outgoing_alignment_distance = outgoing_left
+            ? input.left_terminal_alignment_distance
+            : input.right_terminal_alignment_distance;
+        // Release is an all-node event. Using the maximum sole clearance lets
+        // a heel planted at zero masquerade as flight while ball and toe rock
+        // upward, which advances the gait clock into a doomed swing.
+        const bool outgoing_released = !outgoing_supported
+            && outgoing_minimum_clearance >= 0.005f;
+        const bool outgoing_departing = outgoing_released
+            && outgoing_average_velocity_y > 0.01f;
+        const bool incoming_purchase = human_sole_has_flat_purchase(
+                incoming_supported, incoming_clearance)
+            && incoming_impulse > 1.0e-4f;
+        const bool outgoing_purchase = human_sole_has_flat_purchase(
+                outgoing_supported, outgoing_clearance)
+            && outgoing_impulse > 1.0e-4f;
+        const bool bilateral_purchase = !input.non_foot_contact
+            && outgoing_purchase && incoming_purchase;
+        // The receiving sole must be flat and take the load. The old stance
+        // foot can roll off its heel as long as its remaining contact still
+        // carries a real reaction. Demanding two flat soles rejects normal
+        // toe-off and holds the old gait phase after the body has exchanged.
+        const bool old_stance_contact = human_sole_has_flat_purchase(
+            incoming_supported, incoming_minimum_clearance)
+            && incoming_impulse > 1.0e-4f;
+        // Flat, heel-loaded purchase establishes a new stance. Once earned,
+        // subsequent stance can roll over its toe without invalidating the
+        // opposite foot's real airborne swing. Keep requiring measured load;
+        // do not transfer ownership on a roll or a near-plane observation.
+        const bool supporting_swing = state.completed_handoffs == 0u
+            ? incoming_purchase : !input.non_foot_contact
+                && (incoming_purchase || (old_stance_contact
+                    && incoming_impulse >= outgoing_impulse));
+        const bool loaded_handoff = !input.non_foot_contact
+            && outgoing_purchase && old_stance_contact
+            && receiving_heel_impulse > 1.0e-4f
+            && outgoing_impulse >= incoming_impulse;
+        const bool loaded_heel_touch = !input.non_foot_contact
+            && outgoing_supported && old_stance_contact
+            && receiving_heel_impulse > 1.0e-4f
+            && outgoing_impulse >= incoming_impulse;
+        const float boundary = outgoing_left ? pi : 0.0f;
+        const auto phase_for_fraction = [&](float fraction) noexcept
+        {
+            return boundary + clamp(fraction, 0.0f, 1.0f) * pi;
+        };
+        const auto advance_toward = [&](float limit,
+            float rate = 1.0f) noexcept
+        {
+            float unwrapped = state.phase;
+            const float unwrapped_limit = boundary + limit * pi;
+            unwrapped = std::min(unwrapped
+                    + nominal_advance * clamp(rate, 0.0f, 1.0f),
+                unwrapped_limit);
+            state.phase = unwrapped;
+            return unwrapped >= unwrapped_limit - 1.0e-6f;
+        };
+
+        if (state.completed_handoffs > 0u
+            && state.stage >= HumanGaitCoordinatorStage::swing
+            && state.stage <= HumanGaitCoordinatorStage::flare)
+        {
+            if (input.non_foot_contact)
+                state.established_swing_clearance = false;
+            if (outgoing_released && supporting_swing
+                && outgoing_minimum_clearance >= human_safe_swing_clearance)
+                state.established_swing_clearance = true;
+            // On a later step the foot can reach the ground before the nominal
+            // flare phase, especially when stepping onto rising terrain. An
+            // observed clear swing and a flat, loaded heel can enter purchase
+            // directly, but the independent second load sample still decides
+            // whether weight actually transferred.
+            if (state.established_swing_clearance && loaded_heel_touch)
+            {
+                // A planted heel can still leave the toe high. Tell the
+                // ordinary motor targets to finish the landing rather than
+                // asking the already-contacting foot to continue its swing.
+                // This does not give ownership to a heel-only foot.
+                state.phase = phase_for_fraction(loaded_handoff
+                    ? purchase_fraction : flare_fraction);
+                state.stage = loaded_handoff ? HumanGaitCoordinatorStage::purchase
+                    : HumanGaitCoordinatorStage::landing;
+                state.stage_seconds = 0.0f;
+                state.event_frames = loaded_handoff ? 1u : 0u;
+                return state;
+            }
+        }
+
+        switch (state.stage)
+        {
+        case HumanGaitCoordinatorStage::settle:
+            state.phase = initial_phase;
+            // Latch the clean initial physical purchase immediately. With a
+            // zero integrated-control increment this changes state only: phase,
+            // target blend, and every motor action remain inert until the shared
+            // control clock starts advancing.
+            if (incoming_purchase)
+            {
+                state.phase = boundary;
+                state.stage = HumanGaitCoordinatorStage::departure;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::departure:
+            // Hold the exact exchange boundary while the explicit toe action
+            // unloads the outgoing sole. A time-driven swing target cannot
+            // begin until ordinary contacts prove that departure occurred.
+            state.phase = boundary;
+            // After the first earned transfer, a swing that is already
+            // completely clear can reach its lift apex between samples.
+            // Don't reset an otherwise real release solely because the
+            // average sole speed has reached zero. This exception requires
+            // safe clearance at every point of the sole, zero support on
+            // that foot, and the opposite foot still carrying the stance.
+            state.event_frames = (outgoing_departing
+                    || (state.completed_handoffs > 0u && outgoing_released
+                        && outgoing_minimum_clearance >= human_safe_swing_clearance))
+                    && supporting_swing
+                ? static_cast<std::uint8_t>(std::min<int>(
+                    state.event_frames + 1u, 255)) : 0u;
+            if (state.event_frames >= 3u)
+            {
+                state.stage = HumanGaitCoordinatorStage::swing;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::swing:
+            // A pre-apex heel/toe recontact is a failed departure, not phase
+            // progress. Re-arm the finite leg-lift target at the same boundary
+            // and demand a fresh all-node release.
+            if (!outgoing_released || !supporting_swing)
+            {
+                state.phase = boundary;
+                state.stage = HumanGaitCoordinatorStage::departure;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+                state.established_swing_clearance = false;
+                break;
+            }
+            if (advance_toward(apex_fraction)
+                && outgoing_minimum_clearance
+                    >= human_safe_swing_clearance
+                && (outgoing_average_velocity_y > 0.01f || state.completed_handoffs > 0u))
+            {
+                state.stage = HumanGaitCoordinatorStage::apex;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::apex:
+            state.phase = phase_for_fraction(apex_fraction);
+            state.event_frames = outgoing_released
+                    && outgoing_minimum_clearance
+                        >= human_safe_swing_clearance
+                    && supporting_swing
+                    && outgoing_average_velocity_y >= -0.35f
+                    && outgoing_average_velocity_y <= -0.02f
+                    && outgoing_maximum_velocity_y_deviation <= 0.180f
+                    && outgoing_maximum_abs_velocity_y <= 0.45f
+                ? static_cast<std::uint8_t>(std::min<int>(
+                    state.event_frames + 1u, 255)) : 0u;
+            if (state.event_frames >= 2u)
+            {
+                state.stage = HumanGaitCoordinatorStage::descent;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::descent:
+            // Phase may lower the finite IK target only while the complete sole
+            // is in a controlled descent. Holding phase exerts no force; it
+            // gives the already-requested hip/knee target time to arrest an
+            // overspeed ballistic drop before more extension is commanded.
+            if (outgoing_average_velocity_y >= -0.35f
+                && outgoing_maximum_velocity_y_deviation <= 0.180f
+                && outgoing_maximum_abs_velocity_y <= 0.45f
+                && advance_toward(flare_fraction))
+            {
+                const float clearance_span = std::max(0.0f,
+                    outgoing_clearance - outgoing_minimum_clearance);
+                const float downward_speed = std::max(0.0f,
+                    -outgoing_average_velocity_y);
+                constexpr float actuator_slew_units_per_second = 1.0f;
+                const float remaining_alignment_seconds = clamp(
+                    outgoing_alignment_distance
+                        / actuator_slew_units_per_second,
+                    0.0f, 1.0f);
+                // Preserve a three-frame event reserve after the slowest
+                // terminal ankle/toe action reaches its target. The guard is
+                // latched at FLARE entry so changing geometry cannot chatter
+                // the vertical target while the strict event is evaluated.
+                state.flare_clearance_guard = clamp(
+                    0.010f + clearance_span + downward_speed
+                        * (remaining_alignment_seconds + 3.0f * dt),
+                    0.030f, 0.100f);
+                state.stage = HumanGaitCoordinatorStage::flare;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::flare:
+            state.phase = phase_for_fraction(flare_fraction);
+            // Contact can occur on the same fixed step that finishes terminal
+            // alignment. Once both physical soles report support, released-
+            // sole readiness is necessarily false; requiring it here forever
+            // stranded the coordinator in FLARE after a real touchdown.
+            if (outgoing_supported && incoming_supported
+                && !input.non_foot_contact)
+            {
+                state.stage = HumanGaitCoordinatorStage::landing;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+                break;
+            }
+            state.event_frames = outgoing_released && supporting_swing
+                    && !input.non_foot_contact
+                    && outgoing_clearance - outgoing_minimum_clearance
+                        <= human_flare_readiness_clearance_span
+                    && outgoing_minimum_clearance >= 0.010f
+                    && outgoing_maximum_velocity_y_deviation <= 0.180f
+                    && outgoing_average_velocity_y >= -0.35f
+                    && outgoing_average_velocity_y <= -0.02f
+                    && outgoing_maximum_abs_velocity_y <= 0.45f
+                    && outgoing_maximum_abs_velocity_x <= 0.30f
+                ? static_cast<std::uint8_t>(std::min<int>(
+                    state.event_frames + 1u, 255)) : 0u;
+            if (state.event_frames >= 3u)
+            {
+                state.stage = HumanGaitCoordinatorStage::landing;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::landing:
+        {
+            const bool reached_purchase_pose = advance_toward(
+                purchase_fraction, landing_rate);
+            state.event_frames = (reached_purchase_pose && bilateral_purchase) || loaded_handoff
+                ? static_cast<std::uint8_t>(std::min<int>(
+                    state.event_frames + 1u, 255)) : 0u;
+            if (state.event_frames >= 1u)
+            {
+                state.phase = phase_for_fraction(purchase_fraction);
+                state.stage = HumanGaitCoordinatorStage::purchase;
+                state.stage_seconds = 0.0f;
+                // Contact enters PURCHASE, but only a loaded contact counts
+                // toward the two-frame transfer receipt.
+                state.event_frames = loaded_handoff ? 1u : 0u;
+            }
+            break;
+        }
+        case HumanGaitCoordinatorStage::purchase:
+            state.phase = phase_for_fraction(purchase_fraction);
+            // The just-landed (currently outgoing) foot must actually take
+            // weight before the old stance leg can become the next swing.
+            // Flat contact alone admits an almost unloaded toe/sole touch.
+            state.event_frames = loaded_handoff
+                ? static_cast<std::uint8_t>(std::min<int>(
+                    state.event_frames + 1u, 255)) : 0u;
+            if (state.event_frames >= 2u)
+            {
+                ++state.completed_handoffs;
+                state.established_swing_clearance = false;
+                state.outgoing_side = -state.outgoing_side;
+                state.phase = state.outgoing_side < 0 ? pi : 0.0f;
+                state.stage = HumanGaitCoordinatorStage::departure;
+                state.stage_seconds = 0.0f;
+                state.event_frames = 0u;
+            }
+            break;
+        case HumanGaitCoordinatorStage::count:
+            return reset();
+        }
+        return state;
+    }
+
+    inline constexpr float human_gait_minimum_residual_rate = 0.20f;
+    inline constexpr float human_gait_unsupported_exchange_rate_cap = 0.40f;
+
+    [[nodiscard]] inline float residual_paced_human_gait_rate(float phase,
+        float maximum_joint_residual, float maximum_joint_velocity,
+        bool left_supported, bool right_supported) noexcept
+    {
+        if (!std::isfinite(phase) || !std::isfinite(maximum_joint_residual)
+            || !std::isfinite(maximum_joint_velocity))
+            return human_gait_minimum_residual_rate;
+        const float residual_ratio = clamp((std::abs(maximum_joint_residual)
+                - 0.10f) / 0.45f,
+            0.0f, 1.0f);
+        const float velocity_ratio = clamp((std::abs(maximum_joint_velocity)
+                - 0.08f) / 0.72f,
+            0.0f, 1.0f);
+        const float tracking_ratio = std::max(residual_ratio, velocity_ratio);
+        const float smooth_tracking = tracking_ratio * tracking_ratio
+            * (3.0f - 2.0f * tracking_ratio);
+        float rate = std::lerp(1.0f, human_gait_minimum_residual_rate,
+            smooth_tracking);
+
+        constexpr float cycle = 2.0f * pi;
+        phase = std::fmod(phase, cycle);
+        if (phase < 0.0f)
+            phase += cycle;
+        const bool first_half = phase < pi;
+        const float half_phase = first_half ? phase : phase - pi;
+        const bool incoming_supported = first_half
+            ? right_supported : left_supported;
+        if (!incoming_supported
+            && pi - half_phase < human_gait_exchange_ease_window)
+        {
+            rate = std::min(rate,
+                human_gait_unsupported_exchange_rate_cap);
+        }
+        return clamp(rate, human_gait_minimum_residual_rate, 1.0f);
+    }
 
     enum class ShuttlePhase : std::uint8_t
     {
         traverse,
         braking,
         backing,
-        turning
+        turning,
+        settling
     };
 
     [[nodiscard]] inline std::string_view shuttle_phase_name(
@@ -41,6 +656,7 @@ namespace runner::sim
         case ShuttlePhase::braking: return "BRAKING";
         case ShuttlePhase::backing: return "BACKING";
         case ShuttlePhase::turning: return "TURNING";
+        case ShuttlePhase::settling: return "SETTLING";
         }
         return "UNKNOWN";
     }
@@ -62,6 +678,7 @@ namespace runner::sim
     inline constexpr float shuttle_backup_distance = 0.12f;
     inline constexpr float shuttle_backup_timeout_seconds = 0.75f;
     inline constexpr float shuttle_turn_seconds = 0.32f;
+    inline constexpr float shuttle_settle_seconds = 0.20f;
 
     [[nodiscard]] inline bool shuttle_dynamic_course_ready(
         std::uint32_t completed_turns, std::uint32_t gait_cycles,
@@ -72,7 +689,7 @@ namespace runner::sim
     }
     [[nodiscard]] inline ShuttleState advance_shuttle_state(
         ShuttleState state, float root_x, float dt,
-        float root_speed = 0.0f) noexcept
+        float root_speed = 0.0f, bool settled_support = true) noexcept
     {
         if (!std::isfinite(root_x) || !std::isfinite(dt) || dt <= 0.0f)
             return state;
@@ -116,17 +733,30 @@ namespace runner::sim
                 state.phase_seconds = 0.0f;
             }
         }
-        else
+        else if (state.phase == ShuttlePhase::turning)
         {
             state.phase_seconds += dt;
             if (state.phase_seconds >= shuttle_turn_seconds)
             {
-                state.phase = ShuttlePhase::traverse;
+                state.phase = ShuttlePhase::settling;
                 state.facing_direction = -state.facing_direction;
-                state.locomotion_direction = state.facing_direction;
+                state.locomotion_direction = 0.0f;
                 state.phase_origin_x = root_x;
                 state.phase_seconds = 0.0f;
                 ++state.completed_turns;
+            }
+        }
+        else
+        {
+            state.locomotion_direction = 0.0f;
+            state.phase_seconds = settled_support
+                ? state.phase_seconds + dt : 0.0f;
+            if (state.phase_seconds >= shuttle_settle_seconds)
+            {
+                state.phase = ShuttlePhase::traverse;
+                state.locomotion_direction = state.facing_direction;
+                state.phase_origin_x = root_x;
+                state.phase_seconds = 0.0f;
             }
         }
         return state;
@@ -360,6 +990,22 @@ namespace runner::sim
             || stage == CourseStage::moving_hazards
             || stage == CourseStage::climb_descent
             || stage == CourseStage::combat_course;
+    }
+
+    [[nodiscard]] inline bool locomotion_required_for_intent(
+        CourseStage stage, float signed_direction, bool stop_requested,
+        bool intentional_stage_hold = false) noexcept
+    {
+        if (!stage_requires_forward_gait(stage) || intentional_stage_hold)
+            return false;
+        // Only the coherent, accepted stop contract suspends translation and
+        // gait demand. Invalid/non-finite or contradictory low-level inputs
+        // remain fail-closed as movement requests; the external host rejects
+        // those before they can mutate its caller-owned Environment.
+        const bool explicit_stationary_stop = stop_requested
+            && std::isfinite(signed_direction)
+            && std::abs(signed_direction) <= 1.0e-6f;
+        return !explicit_stationary_stop;
     }
 
     [[nodiscard]] inline bool stage_allows_powered_airtime(CourseStage stage) noexcept
@@ -809,6 +1455,11 @@ namespace runner::sim
         float particle_radius) noexcept
     {
         return traction_contact ? std::min(particle_radius, 0.065f) : particle_radius;
+    }
+
+    [[nodiscard]] constexpr float support_contact_soil_sink(float firmness) noexcept
+    {
+        return (1.0f - firmness) * 0.055f;
     }
 
     [[nodiscard]] inline bool foot_pivot_rolling_motion(float root_speed,
@@ -1287,6 +1938,18 @@ namespace runner::sim
         };
     }
 
+    [[nodiscard]] inline bool sliding_support_can_reacquire_static_anchor(
+        ContactTraction traction, float displacement, float tangential_speed,
+        float normal_impulse, float tangent_impulse) noexcept
+    {
+        constexpr float restick_speed = 0.035f;
+        return std::isfinite(displacement) && std::isfinite(normal_impulse)
+            && std::abs(displacement) > traction.static_capture_distance
+            && std::abs(tangential_speed) <= restick_speed
+            && normal_impulse > 1.0e-4f
+            && std::abs(tangent_impulse) < traction.static_coefficient * normal_impulse;
+    }
+
     inline constexpr float moving_contact_slop_m = 0.032f;
     // A support must unlatch as soon as an articulated gait deliberately
     // raises it. Waiting for root-level jump velocity pins both feet and lets
@@ -1524,9 +2187,10 @@ namespace runner::sim
         disarmed,
         dropped,
         gun_stance,
-        aiming
+        aiming,
+        reloading
     };
-    inline constexpr std::size_t equipment_state_count = 8u;
+    inline constexpr std::size_t equipment_state_count = 9u;
 
     [[nodiscard]] inline std::string_view equipment_state_name(
         EquipmentState state) noexcept
@@ -1541,6 +2205,50 @@ namespace runner::sim
         case EquipmentState::dropped: return "DROPPED";
         case EquipmentState::gun_stance: return "GUN STANCE";
         case EquipmentState::aiming: return "AIMING";
+        case EquipmentState::reloading: return "RELOADING";
+        }
+        return "UNKNOWN";
+    }
+
+    enum class EquipmentFireBlock : std::uint8_t
+    {
+        none,
+        unarmed,
+        wrong_state,
+        moving,
+        unplanted,
+        unsettled,
+        no_target,
+        goal_complete,
+        cooldown,
+        empty,
+        reloading,
+        unsafe_range,
+        occluded,
+        invalid_grip,
+        hazardous_footing
+    };
+
+    [[nodiscard]] inline std::string_view equipment_fire_block_name(
+        EquipmentFireBlock block) noexcept
+    {
+        switch (block)
+        {
+        case EquipmentFireBlock::none: return "READY";
+        case EquipmentFireBlock::unarmed: return "UNARMED";
+        case EquipmentFireBlock::wrong_state: return "STANCE REQUIRED";
+        case EquipmentFireBlock::moving: return "BODY MOVING";
+        case EquipmentFireBlock::unplanted: return "TWO-FOOT PLANT REQUIRED";
+        case EquipmentFireBlock::unsettled: return "AIM UNSETTLED";
+        case EquipmentFireBlock::no_target: return "NO TARGET";
+        case EquipmentFireBlock::goal_complete: return "GOAL COMPLETE";
+        case EquipmentFireBlock::cooldown: return "RECOIL / COOLDOWN";
+        case EquipmentFireBlock::empty: return "EMPTY";
+        case EquipmentFireBlock::reloading: return "RELOADING";
+        case EquipmentFireBlock::unsafe_range: return "UNSAFE RANGE";
+        case EquipmentFireBlock::occluded: return "OCCLUDED";
+        case EquipmentFireBlock::invalid_grip: return "TWO-HAND GRIP REQUIRED";
+        case EquipmentFireBlock::hazardous_footing: return "UNSAFE FOOTING";
         }
         return "UNKNOWN";
     }
@@ -1606,6 +2314,9 @@ namespace runner::sim
         float minimum_engagement_distance{};
         float maximum_engagement_distance{};
         float aim_tolerance{};
+        std::uint32_t magazine_capacity{};
+        float reload_seconds{};
+        float projectile_lifetime_seconds{};
     };
 
     [[nodiscard]] inline WeaponProfile weapon_profile(WeaponClass weapon) noexcept
@@ -1613,11 +2324,58 @@ namespace runner::sim
         switch (weapon)
         {
         case WeaponClass::sidearm:
-            return { 12.0f, 0.42f, 0.065f, 0.0f, 0.12f, 2.5f, 10.0f, 0.12f };
+            return { 12.0f, 0.42f, 0.065f, 0.0f, 0.12f, 2.5f, 10.0f,
+                0.12f, 6u, 1.20f, 2.50f };
         case WeaponClass::carbine:
-            return { 17.0f, 0.20f, 0.050f, 0.0f, 0.08f, 5.0f, 18.0f, 0.09f };
+            return { 17.0f, 0.20f, 0.050f, 0.0f, 0.08f, 5.0f, 18.0f,
+                0.09f, 8u, 1.55f, 2.25f };
         case WeaponClass::launcher:
-            return { 8.5f, 0.90f, 0.110f, 4.5f, 0.20f, 7.0f, 24.0f, 0.14f };
+            // Keep the deliberately arcing launcher round physically capable
+            // of reaching its declared 24 m engagement boundary.
+            return { 12.0f, 0.90f, 0.110f, 4.5f, 0.20f, 7.0f, 24.0f,
+                0.14f, 2u, 2.10f, 4.00f };
+        case WeaponClass::none: break;
+        }
+        return {};
+    }
+
+    [[nodiscard]] inline bool equipment_fire_range_valid(float distance,
+        const WeaponProfile& profile) noexcept
+    {
+        constexpr float range_boundary_epsilon = 1.0e-5f;
+        const float muzzle_safety_distance = std::max(
+            0.75f, profile.projectile_radius * 4.0f);
+        return std::isfinite(distance)
+            && std::isfinite(muzzle_safety_distance)
+            && std::isfinite(profile.maximum_engagement_distance)
+            && distance + range_boundary_epsilon >= muzzle_safety_distance
+            && distance <= profile.maximum_engagement_distance
+                + range_boundary_epsilon;
+    }
+
+    struct WeaponGeometry
+    {
+        float overall_length{};
+        float butt_to_rear_grip{};
+        float rear_to_foregrip{};
+        float rear_to_muzzle{};
+        bool shouldered{};
+    };
+
+    [[nodiscard]] inline constexpr WeaponGeometry weapon_geometry(
+        WeaponClass weapon) noexcept
+    {
+        switch (weapon)
+        {
+        case WeaponClass::sidearm:
+            return { 0.58f, 0.58f / 6.0f, 0.14f, 0.58f * 5.0f / 6.0f,
+                false };
+        case WeaponClass::carbine:
+            return { 0.80f, 0.80f / 6.0f, 0.34f, 0.80f * 5.0f / 6.0f,
+                true };
+        case WeaponClass::launcher:
+            return { 0.96f, 0.96f / 6.0f, 0.40f, 0.96f * 5.0f / 6.0f,
+                true };
         case WeaponClass::none: break;
         }
         return {};
@@ -1632,6 +2390,7 @@ namespace runner::sim
         std::uint32_t sequence{};
         bool active{ true };
         bool miss_recorded{};
+        float lifetime_remaining_seconds{ 3.0f };
     };
 
     struct EquipmentTarget
@@ -1640,6 +2399,24 @@ namespace runner::sim
         float radius{ 0.32f };
         std::uint32_t sequence{};
         bool active{};
+    };
+
+    struct EquipmentGripFrame
+    {
+        std::uint16_t rear_node{ std::numeric_limits<std::uint16_t>::max() };
+        std::uint16_t front_node{ std::numeric_limits<std::uint16_t>::max() };
+        std::uint16_t rear_shoulder_node{
+            std::numeric_limits<std::uint16_t>::max() };
+        Vec2 rear{};
+        Vec2 front{};
+        Vec2 axis{ 1.0f, 0.0f };
+        Vec2 muzzle{};
+        Vec2 shoulder_pocket{};
+        Vec2 stock_butt{};
+        float span{};
+        float stock_seat_error{ std::numeric_limits<float>::infinity() };
+        bool resolved{};
+        bool valid{};
     };
 
     inline constexpr std::size_t equipment_state_action =
@@ -1674,17 +2451,32 @@ namespace runner::sim
         return wrap_angle(facing < 0.0f ? pi - local_angle : local_angle);
     }
 
+    [[nodiscard]] inline float swept_circle_hit_fraction(Vec2 beginning,
+        Vec2 ending, Vec2 center, float combined_radius) noexcept
+    {
+        if (!std::isfinite(combined_radius) || combined_radius < 0.0f)
+            return 2.0f;
+        const Vec2 segment = ending - beginning;
+        const Vec2 offset = beginning - center;
+        const float a = dot(segment, segment);
+        const float c = dot(offset, offset) - combined_radius * combined_radius;
+        if (c <= 0.0f)
+            return 0.0f;
+        if (a <= 1.0e-8f)
+            return 2.0f;
+        const float b = 2.0f * dot(offset, segment);
+        const float discriminant = b * b - 4.0f * a * c;
+        if (discriminant < 0.0f)
+            return 2.0f;
+        const float first = (-b - std::sqrt(discriminant)) / (2.0f * a);
+        return first >= 0.0f && first <= 1.0f ? first : 2.0f;
+    }
+
     [[nodiscard]] inline bool swept_circle_hit(Vec2 beginning, Vec2 ending,
         Vec2 center, float combined_radius) noexcept
     {
-        if (!std::isfinite(combined_radius) || combined_radius < 0.0f)
-            return false;
-        const Vec2 segment = ending - beginning;
-        const float squared_length = dot(segment, segment);
-        const float fraction = squared_length > 1.0e-8f
-            ? clamp(dot(center - beginning, segment) / squared_length, 0.0f, 1.0f)
-            : 0.0f;
-        return length(beginning + segment * fraction - center) <= combined_radius;
+        return swept_circle_hit_fraction(beginning, ending, center,
+            combined_radius) <= 1.0f;
     }
 
     [[nodiscard]] inline float aim_correction_from_miss(float current_correction,
@@ -1796,7 +2588,7 @@ namespace runner::sim
         CreatureSpecies species)
     {
         const std::string slug{ creature_species_slug(species) };
-        const std::string state_prefix = "runner-v0750-" + slug;
+        const std::string state_prefix = "epoch2dwalk-v0751-" + slug;
         return CreatureSpeciesPaths{
             .rig = creature_species_rig_filename(species),
             .autosave_checkpoint = state_prefix + "-autosave.eppo",
@@ -1821,6 +2613,33 @@ namespace runner::sim
             ? motor.neutral_angle + action * negative_span
             : motor.neutral_angle + action * positive_span;
         return clamp(target, motor.minimum_angle, motor.maximum_angle);
+    }
+
+    inline constexpr float human_equipment_shoulder_travel_radians =
+        176.0f * 0.01745329251994329577f;
+    inline constexpr float human_equipment_elbow_travel_radians =
+        176.0f * 0.01745329251994329577f;
+
+    [[nodiscard]] inline MotorConstraint human_equipment_motor_envelope(
+        MotorConstraint motor, std::size_t motor_index) noexcept
+    {
+        // The authored Human keeps its compact locomotion arm range and exact
+        // neutral. A held weapon may temporarily use this larger, still finite
+        // physical hinge envelope so the stock can reach the shoulder while a
+        // second real hand reaches the foregrip. Callers must opt in only while
+        // an equipment pose owns the arm chain.
+        const bool shoulder = motor_index == 4u || motor_index == 6u;
+        const bool elbow = motor_index == 5u || motor_index == 7u;
+        if (!motor.enabled || (!shoulder && !elbow)
+            || !std::isfinite(motor.neutral_angle))
+            return motor;
+        const float travel = shoulder
+            ? human_equipment_shoulder_travel_radians
+            : human_equipment_elbow_travel_radians;
+        motor.minimum_angle = motor.neutral_angle - travel;
+        motor.maximum_angle = motor.neutral_angle + travel;
+        motor.strength = std::max(motor.strength, 0.056f);
+        return motor;
     }
 
     [[nodiscard]] inline float toe_command_slew_rate(bool supported,
@@ -1867,7 +2686,8 @@ namespace runner::sim
 
     struct CreatureBlueprint
     {
-        // RUNRIG 5+ owns its species identity. Geometry may evolve within the
+        // RUNRIG 7 owns its species identity and complete physical topology.
+        // Versions 1..6 are import-only and are promoted before use. Geometry may evolve within the
         // species contract without silently changing persistence, presentation,
         // curriculum, or checkpoint ownership. Legacy rigs leave this empty and
         // are classified from topology once when they are migrated.
@@ -2240,8 +3060,7 @@ namespace runner::sim
             switch (species)
             {
             case CreatureSpecies::human:
-                return paired_leg_chains() && !avian_gait()
-                    && !horizontal_body_plan() && paired_manipulator_chains();
+                return human_paired_limb_topology();
             case CreatureSpecies::chicken:
                 return paired_leg_chains() && avian_gait()
                     && semantic_support_branches_valid(2u);
@@ -2428,41 +3247,57 @@ namespace runner::sim
             + clamp(limited - previous_action, -maximum_delta, maximum_delta);
     }
 
-    [[nodiscard]] inline float requested_leg_endpoint_height(
+    [[nodiscard]] inline Vec2 requested_leg_endpoint(
         const CreatureBlueprint& blueprint, bool left,
         std::span<const float, anatomy_action_count> actions,
         float facing_direction = 1.0f) noexcept
     {
+        const float invalid = std::numeric_limits<float>::quiet_NaN();
         const std::size_t hip_index = left ? 0u : 2u;
         const std::size_t knee_index = hip_index + 1u;
         if (knee_index >= blueprint.active_motor_count)
-            return std::numeric_limits<float>::quiet_NaN();
+            return { invalid, invalid };
         const MotorConstraint& hip = blueprint.motors[hip_index];
         const MotorConstraint& knee = blueprint.motors[knee_index];
         if (!hip.enabled || !knee.enabled || hip.pivot >= blueprint.nodes.size()
             || hip.a >= blueprint.nodes.size() || hip.c >= blueprint.nodes.size()
             || knee.pivot >= blueprint.nodes.size()
-            || knee.c >= blueprint.nodes.size())
-            return std::numeric_limits<float>::quiet_NaN();
+            || knee.c >= blueprint.nodes.size()
+            || blueprint.root_node >= blueprint.nodes.size())
+            return { invalid, invalid };
 
-        const Vec2 hip_origin = blueprint.nodes[hip.pivot];
-        const Vec2 hip_reference = blueprint.nodes[hip.a] - hip_origin;
+        const float facing = std::isfinite(facing_direction)
+                && facing_direction < 0.0f ? -1.0f : 1.0f;
+        const Vec2 authored_root = blueprint.nodes[blueprint.root_node];
+        Vec2 hip_origin = blueprint.nodes[hip.pivot];
+        hip_origin.x = authored_root.x
+            + (hip_origin.x - authored_root.x) * facing;
+        Vec2 hip_reference = blueprint.nodes[hip.a]
+            - blueprint.nodes[hip.pivot];
+        hip_reference.x *= facing;
         const float thigh_length = length(
-            blueprint.nodes[hip.c] - hip_origin);
+            blueprint.nodes[hip.c] - blueprint.nodes[hip.pivot]);
         const float shank_length = length(
             blueprint.nodes[knee.c] - blueprint.nodes[knee.pivot]);
         if (length(hip_reference) <= 1.0e-5f
             || thigh_length <= 1.0e-5f || shank_length <= 1.0e-5f)
-            return std::numeric_limits<float>::quiet_NaN();
-        const float facing = std::isfinite(facing_direction)
-                && facing_direction < 0.0f ? -1.0f : 1.0f;
+            return { invalid, invalid };
         const Vec2 thigh = rotate(normalized(hip_reference, { 0.0f, 1.0f })
                 * thigh_length,
             motor_target_angle(hip, actions[hip_index]) * facing);
         const Vec2 shank = rotate(normalized(-thigh, { 0.0f, 1.0f })
                 * shank_length,
             motor_target_angle(knee, actions[knee_index]) * facing);
-        return (hip_origin + thigh + shank).y;
+        return hip_origin + thigh + shank;
+    }
+
+    [[nodiscard]] inline float requested_leg_endpoint_height(
+        const CreatureBlueprint& blueprint, bool left,
+        std::span<const float, anatomy_action_count> actions,
+        float facing_direction = 1.0f) noexcept
+    {
+        return requested_leg_endpoint(
+            blueprint, left, actions, facing_direction).y;
     }
 
     [[nodiscard]] inline int action_requested_swing_side(
@@ -2563,6 +3398,135 @@ namespace runner::sim
         float target_angle{};
     };
 
+    // Opt-in, per-fixed-step accounting for raw-controller acceptance. Values
+    // are mass-weighted horizontal velocity changes (m/s), not inferred
+    // controller credit: internal constraints should sum to approximately zero,
+    // while ground/course contacts are the only external collision sources.
+    enum class AuthoritySource : std::uint8_t
+    {
+        integration,
+        water,
+        distance_constraints,
+        joint_motors,
+        articulated_toe,
+        posture_helper,
+        manipulator_helper,
+        ledge_training_scaffold,
+        passive_anatomy,
+        ground_contact,
+        course_collision,
+        support_separation,
+        final_leg_constraints,
+        toe_rate_limit,
+        structure_projection,
+        equipment,
+        count
+    };
+
+    [[nodiscard]] inline constexpr std::string_view authority_source_name(
+        AuthoritySource source) noexcept
+    {
+        switch (source)
+        {
+        case AuthoritySource::integration: return "INTEGRATION / DRAG";
+        case AuthoritySource::water: return "WATER FORCE";
+        case AuthoritySource::distance_constraints: return "BONE CONSTRAINT";
+        case AuthoritySource::joint_motors: return "POLICY JOINT MOTOR";
+        case AuthoritySource::articulated_toe: return "TOE CONSTRAINT";
+        case AuthoritySource::posture_helper: return "POSTURE HELPER";
+        case AuthoritySource::manipulator_helper: return "MANIPULATOR HELPER";
+        case AuthoritySource::ledge_training_scaffold:
+            return "ASSISTED LEDGE SCAFFOLD";
+        case AuthoritySource::passive_anatomy: return "PASSIVE ANATOMY";
+        case AuthoritySource::ground_contact: return "GROUND CONTACT";
+        case AuthoritySource::course_collision: return "COURSE COLLISION";
+        case AuthoritySource::support_separation: return "SUPPORT SEPARATION";
+        case AuthoritySource::final_leg_constraints: return "FINAL LEG CONSTRAINT";
+        case AuthoritySource::toe_rate_limit: return "TOE RATE LIMIT";
+        case AuthoritySource::structure_projection: return "STRUCTURE PROJECTOR";
+        case AuthoritySource::equipment: return "EQUIPMENT";
+        case AuthoritySource::count: break;
+        }
+        return "UNKNOWN";
+    }
+
+    struct AuthoritySourceTelemetry
+    {
+        float center_velocity_delta_x{};
+        float center_velocity_delta_y{};
+        float maximum_absolute_center_velocity_delta_x{};
+        float maximum_absolute_center_velocity_delta_y{};
+        float positive_horizontal_specific_energy{};
+        float center_position_delta_x{};
+        float center_position_delta_y{};
+        float center_history_delta_x{};
+        float center_history_delta_y{};
+        float root_position_delta_x{};
+        float root_position_delta_y{};
+        float torso_position_delta_x{};
+        float torso_position_delta_y{};
+        std::uint32_t applications{};
+    };
+
+    struct RawAuthorityTelemetry
+    {
+        std::array<AuthoritySourceTelemetry,
+            static_cast<std::size_t>(AuthoritySource::count)> sources{};
+        std::array<float, anatomy_action_count> commanded_actions{};
+        std::array<float, anatomy_action_count> actuator_actions{};
+        std::array<float, anatomy_action_count> motor_torque{};
+        std::array<float, anatomy_action_count> motor_work_joules{};
+        std::array<float, anatomy_action_count> motor_positive_work_joules{};
+        float motor_maximum_linear_momentum_error{};
+        float motor_maximum_angular_momentum_error{};
+        float total_center_velocity_delta_x{};
+        float total_center_velocity_delta_y{};
+        float maximum_bone_error_ratio{};
+        std::size_t maximum_bone_error_index{
+            std::numeric_limits<std::size_t>::max() };
+        std::uint32_t support_contact_corrections{};
+        std::uint32_t non_support_contact_corrections{};
+        std::array<float, 2> support_traction_capacity{};
+        std::array<float, 2> support_traction_used{};
+        std::array<float, 2> support_normal_impulse{};
+        std::array<float, 2> support_normal_impulse_moment_x{};
+        std::array<float, 2> support_normal_cop_x{};
+        std::array<float, 2> support_tangential_impulse{};
+        // Canonical Human order: left heel/ball/toe, right heel/ball/toe.
+        // These are measured physical contact impulses, not contact requests.
+        std::array<float, human_support_contact_nodes.size()>
+            support_contact_normal_impulse{};
+        std::array<float, human_support_contact_nodes.size()>
+            support_contact_tangential_impulse{};
+        float friction_work_joules{};
+        float friction_positive_work_joules{};
+        std::uint32_t powered_toe_commands{};
+        std::uint32_t action_support_release_requests{};
+        std::uint32_t action_support_release_active_frames{};
+        std::uint32_t root_drive_corrections{};
+        std::uint32_t torso_drive_corrections{};
+        std::uint32_t course_motion_corrections{};
+    };
+
+    // The latest completed fixed step's physical support receipt for the
+    // canonical Human. This state is maintained independently of optional
+    // diagnostics so training, retained inference, previews, and hosts observe
+    // the same finite proprioceptive inputs.
+    struct HumanSupportFeedback
+    {
+        Vec2 center_of_mass{};
+        Vec2 center_of_mass_velocity{};
+        float aggregate_cop_x{};
+        float capture_point_x{};
+        // Capture-point lead from aggregate COP, normalized by the authored
+        // two-link leg scale. World-space sign; policy encoding applies facing.
+        float capture_error_x{};
+        float total_normal_impulse{};
+        // Anatomical right minus left, normalized by total physical load.
+        float load_asymmetry{};
+        bool valid{};
+    };
+
     struct EnvironmentTestAccess;
 
     class Environment
@@ -2574,6 +3538,16 @@ namespace runner::sim
         void set_blueprint(const CreatureBlueprint& blueprint);
         void set_course(CourseStage stage, float difficulty = 0.25f);
         void set_gait_task(GaitTask task) noexcept;
+        [[nodiscard]] bool set_locomotion_intent(
+            float signed_direction, bool stop) noexcept
+        {
+            if (!std::isfinite(signed_direction)
+                || signed_direction < -1.0f || signed_direction > 1.0f)
+                return false;
+            locomotion_intent_direction_ = signed_direction;
+            locomotion_stop_requested_ = stop;
+            return true;
+        }
         void configure_equipment(WeaponClass weapon, float target_distance = 8.0f);
         void clear_equipment() noexcept;
         void disarm_equipment() noexcept;
@@ -2596,11 +3570,27 @@ namespace runner::sim
         }
         [[nodiscard]] StepResult step(std::span<const float, action_count> actions, float dt = 1.0f / 60.0f);
         [[nodiscard]] std::array<float, observation_count> observation() const noexcept;
+        [[nodiscard]] HumanSupportFeedback human_support_feedback() const noexcept
+        {
+            return human_support_feedback_;
+        }
+        [[nodiscard]] const HumanGaitCoordinatorState&
+        human_gait_coordinator() const noexcept
+        {
+            return human_gait_coordinator_;
+        }
         [[nodiscard]] MotorDiagnostic motor_diagnostic(
             std::size_t motor_index) const noexcept;
 
         [[nodiscard]] const std::vector<Particle>& particles() const noexcept { return particles_; }
         [[nodiscard]] const CreatureBlueprint& blueprint() const noexcept { return blueprint_; }
+        [[nodiscard]] bool anatomy_action_active(
+            std::size_t index) const noexcept
+        {
+            return index < blueprint_.active_motor_count
+                && index < blueprint_.motors.size()
+                && blueprint_.motors[index].enabled;
+        }
         [[nodiscard]] std::span<const CourseFeature> course_features() const noexcept { return course_features_; }
         [[nodiscard]] std::span<const MaterialParticle> material_particles() const noexcept
         {
@@ -2653,10 +3643,28 @@ namespace runner::sim
         {
             return equipment_aim_settle_seconds_;
         }
+        [[nodiscard]] float equipment_plant_seconds() const noexcept
+        {
+            return equipment_plant_seconds_;
+        }
         [[nodiscard]] bool equipment_stopped() const noexcept
         {
             return equipment_stopped_;
         }
+        [[nodiscard]] std::uint32_t equipment_rounds_remaining() const noexcept
+        {
+            return equipment_rounds_remaining_;
+        }
+        [[nodiscard]] std::uint32_t equipment_magazine_capacity() const noexcept
+        {
+            return weapon_profile(weapon_class_).magazine_capacity;
+        }
+        [[nodiscard]] float equipment_reload_remaining() const noexcept
+        {
+            return equipment_reload_seconds_;
+        }
+        [[nodiscard]] bool equipment_target_visible() const noexcept;
+        [[nodiscard]] EquipmentFireBlock equipment_fire_block() const noexcept;
         [[nodiscard]] float equipment_recommended_aim_angle() const noexcept;
         [[nodiscard]] std::uint16_t equipment_mount_node_index() const noexcept
         {
@@ -2678,8 +3686,15 @@ namespace runner::sim
         {
             return last_shot_miss_error_;
         }
+        [[nodiscard]] EquipmentGripFrame equipment_grip_frame() const noexcept;
+        [[nodiscard]] bool equipment_grip_valid() const noexcept
+        {
+            return equipment_grip_frame().valid;
+        }
         [[nodiscard]] Vec2 equipment_mount_position() const noexcept;
+        [[nodiscard]] Vec2 equipment_muzzle_position() const noexcept;
         [[nodiscard]] Vec2 equipment_display_position() const noexcept;
+        [[nodiscard]] Vec2 equipment_display_direction() const noexcept;
         [[nodiscard]] std::uint32_t hand_ledge_contacts() const noexcept
         {
             return hand_ledge_contacts_;
@@ -2700,17 +3715,38 @@ namespace runner::sim
         {
             return gait_task_transition_mix(gait_task_, elapsed_seconds_);
         }
-        void set_guidance_mode(GuidanceMode mode) noexcept
-        {
-            guidance_mode_ = mode;
-        }
+        void set_guidance_mode(GuidanceMode mode) noexcept;
         [[nodiscard]] GuidanceMode guidance_mode() const noexcept
         {
             return guidance_mode_;
         }
+        void set_physical_guidance_authority(float authority) noexcept;
+        [[nodiscard]] float physical_guidance_authority() const noexcept
+        {
+            return physical_guidance_authority_;
+        }
+        [[nodiscard]] float effective_physical_guidance_authority() const noexcept
+        {
+            return guidance_mode_ == GuidanceMode::raw_policy_audit
+                ? 0.0f : physical_guidance_authority_;
+        }
         [[nodiscard]] bool raw_policy_audit() const noexcept
         {
             return guidance_mode_ == GuidanceMode::raw_policy_audit;
+        }
+        void set_raw_authority_telemetry_enabled(bool enabled) noexcept
+        {
+            raw_authority_telemetry_enabled_ = enabled;
+            if (!enabled)
+                raw_authority_telemetry_ = {};
+        }
+        [[nodiscard]] bool raw_authority_telemetry_enabled() const noexcept
+        {
+            return raw_authority_telemetry_enabled_;
+        }
+        [[nodiscard]] const RawAuthorityTelemetry& raw_authority_telemetry() const noexcept
+        {
+            return raw_authority_telemetry_;
         }
 
         void set_course_motion_enabled(bool enabled) noexcept
@@ -2736,7 +3772,28 @@ namespace runner::sim
         }
         [[nodiscard]] float locomotion_direction() const noexcept
         {
-            return shuttle_enabled() ? shuttle_state_.locomotion_direction : 1.0f;
+            if (shuttle_enabled())
+                return shuttle_state_.locomotion_direction;
+            return locomotion_stop_requested_ ? 0.0f
+                : locomotion_intent_direction_;
+        }
+        [[nodiscard]] float locomotion_intent_direction() const noexcept
+        {
+            return locomotion_intent_direction_;
+        }
+        [[nodiscard]] bool locomotion_stop_requested() const noexcept
+        {
+            return locomotion_stop_requested_;
+        }
+        [[nodiscard]] bool locomotion_required() const noexcept
+        {
+            const bool intentional_shuttle_hold = shuttle_enabled()
+                && (shuttle_state_.phase == ShuttlePhase::braking
+                    || shuttle_state_.phase == ShuttlePhase::turning
+                    || shuttle_state_.phase == ShuttlePhase::settling);
+            return locomotion_required_for_intent(course_stage_,
+                locomotion_intent_direction_, locomotion_stop_requested_,
+                intentional_shuttle_hold);
         }
         [[nodiscard]] std::uint32_t completed_shuttle_turns() const noexcept
         {
@@ -2960,20 +4017,52 @@ namespace runner::sim
     private:
         friend struct EnvironmentTestAccess;
 
-        void solve_distance(const DistanceConstraint& constraint) noexcept;
+        struct AuthoritySnapshot
+        {
+            float center_velocity_x{};
+            float center_velocity_y{};
+            float center_position_x{};
+            float center_position_y{};
+            float center_history_x{};
+            float center_history_y{};
+            float root_x{};
+            float root_y{};
+            float torso_x{};
+            float torso_y{};
+        };
+
+        [[nodiscard]] AuthoritySnapshot authority_snapshot(float dt) const noexcept;
+        void record_authority_delta(AuthoritySource source,
+            const AuthoritySnapshot& before, float dt) noexcept;
+        void record_maximum_bone_error() noexcept;
+        void update_human_support_feedback(float dt) noexcept;
+        void update_human_gait_coordinator(
+            std::span<const float, action_count> actions, float dt) noexcept;
+
+        void solve_distance(const DistanceConstraint& constraint,
+            bool preserve_velocity = false) noexcept;
         void project_structure_rigid(float dt) noexcept;
         void separate_support_clusters() noexcept;
         void stabilize_passive_appendages() noexcept;
         void stabilize_human_manipulator_envelope() noexcept;
         void stabilize_balance_posture() noexcept;
         void stabilize_duck_posture() noexcept;
+        void apply_ledge_training_scaffold() noexcept;
         [[nodiscard]] bool articulated_toe_motor(bool left,
             MotorConstraint& motor) const noexcept;
         void update_articulated_toe_commands(
             std::span<const float, anatomy_action_count> actions, float dt) noexcept;
+        void solve_passive_articulated_toe_stop(bool left) noexcept;
+        void damp_passive_articulated_toe_velocity(bool left, float dt) noexcept;
         void solve_articulated_toes() noexcept;
         void limit_articulated_toe_rates(float dt) noexcept;
         void solve_motor(const MotorConstraint& motor, float action) noexcept;
+        void solve_powered_motor_xpbd(const MotorConstraint& motor,
+            float action, float previous_action, float dt,
+            float& accumulated_lambda,
+            float& positive_work_used, std::size_t action_slot) noexcept;
+        [[nodiscard]] bool solve_raw_support_tangent_manifold(
+            float dt) noexcept;
         void solve_ground(float dt) noexcept;
         void solve_course(float dt = 1.0f / 60.0f) noexcept;
         void apply_water_forces(float dt) noexcept;
@@ -2988,8 +4077,13 @@ namespace runner::sim
         void reset_equipment() noexcept;
         void update_equipment(std::span<const float, action_count> actions,
             float dt) noexcept;
+        [[nodiscard]] float equipment_obstruction_fraction(
+            Vec2 beginning, Vec2 ending, float radius) const noexcept;
+        void record_equipment_miss(Vec2 impact) noexcept;
         void update_climb_metrics(float dt) noexcept;
         [[nodiscard]] std::uint16_t equipment_mount_node() const noexcept;
+        [[nodiscard]] std::uint16_t equipment_foregrip_node() const noexcept;
+        [[nodiscard]] std::uint16_t equipment_mount_shoulder_node() const noexcept;
         [[nodiscard]] std::uint16_t equipment_mount_parent_node() const noexcept;
         void update_gait_metrics(float dt, float action_energy) noexcept;
         void invalidate(InvalidMotion reason) noexcept;
@@ -3004,6 +4098,7 @@ namespace runner::sim
         [[nodiscard]] std::size_t support_seed_lifted_count(
             float minimum_clearance) const noexcept;
         [[nodiscard]] bool contact_supported(std::uint16_t contact_node) const noexcept;
+        [[nodiscard]] float human_sole_clearance(const Particle& particle) const noexcept;
         [[nodiscard]] bool non_foot_ground_contact() const noexcept;
         [[nodiscard]] bool head_ground_contact() const noexcept;
         [[nodiscard]] float torso_roll_angle() const noexcept;
@@ -3013,6 +4108,7 @@ namespace runner::sim
             float dt) const noexcept;
         [[nodiscard]] float contact_cluster_center_x(std::uint16_t contact_node) const noexcept;
         [[nodiscard]] FootContactPhase detect_foot_contact_phase(bool left) const noexcept;
+        void clear_crouch_walk_guidance_state() noexcept;
         int action_support_unload_side_{};
         int last_action_support_unload_side_{};
         [[nodiscard]] float contact_cluster_clearance(std::uint16_t contact_node) const noexcept;
@@ -3024,6 +4120,23 @@ namespace runner::sim
         std::vector<float> support_contact_anchor_x_{};
         std::vector<float> support_traction_capacity_{};
         std::vector<float> support_traction_used_{};
+        std::vector<float> support_normal_constraint_lambdas_{};
+        std::vector<float> support_contact_tangent_impulses_{};
+        std::array<float, 2> support_cluster_traction_capacity_{};
+        std::array<float, 2> support_cluster_plate_traction_capacity_{};
+        std::array<float, 2> support_cluster_toe_traction_capacity_{};
+        std::array<float, 2> support_cluster_traction_used_{};
+        std::array<float, 2> support_cluster_traction_impulse_{};
+        std::array<std::uint8_t, 2> support_cluster_plate_membership_mask_{};
+        std::array<float, 2> support_cluster_normal_impulse_{};
+        std::array<float, 2> support_cluster_normal_impulse_moment_x_{};
+        std::array<float, 2> support_cluster_normal_cop_x_{};
+        std::array<float, 2> support_cluster_tangential_impulse_{};
+        HumanSupportFeedback human_support_feedback_{};
+        HumanGaitCoordinatorState human_gait_coordinator_{};
+        float support_friction_work_joules_{};
+        float support_friction_positive_work_joules_{};
+        std::array<float, 2> support_cluster_contact_age_seconds_{};
         std::array<float, 2> support_cluster_release_hold_seconds_{};
         std::array<float, 2> support_toe_roll_seconds_{};
         std::vector<CourseFeature> course_features_{};
@@ -3050,6 +4163,13 @@ namespace runner::sim
         float equipment_aim_correction_{};
         float last_shot_miss_error_{};
         bool equipment_stopped_{};
+        float equipment_body_speed_{};
+        float equipment_plant_seconds_{};
+        float equipment_state_seconds_{};
+        float equipment_reload_seconds_{};
+        float equipment_recoil_recovery_seconds_{};
+        std::uint32_t equipment_rounds_remaining_{};
+        EquipmentFireBlock equipment_fire_block_{ EquipmentFireBlock::unarmed };
         std::uint32_t target_hits_{};
         std::uint32_t equipment_transition_count_{};
         bool target_hit_this_step_{};
@@ -3075,7 +4195,16 @@ namespace runner::sim
         std::array<float, anatomy_action_count> previous_applied_actions_{};
         std::array<float, 2> articulated_toe_commands_{};
         std::array<float, 2> previous_articulated_toe_angles_{};
+        std::array<float, anatomy_action_count> powered_motor_lambdas_{};
+        std::array<float, anatomy_action_count> powered_motor_positive_work_{};
+        std::array<float, 4> coupled_motor_lambdas_{};
+        std::array<float, 4> coupled_motor_positive_work_{};
+        int solver_iteration_count_{ 14 };
+        bool raw_support_tangential_impulses_enabled_{ true };
         GuidanceMode guidance_mode_{ GuidanceMode::assisted };
+        float physical_guidance_authority_{ 1.0f };
+        bool raw_authority_telemetry_enabled_{};
+        RawAuthorityTelemetry raw_authority_telemetry_{};
         Vec2 previous_pelvis_{};
         float elapsed_seconds_{};
         float last_step_dt_{ 1.0f / 60.0f };
@@ -3230,6 +4359,8 @@ namespace runner::sim
         float previous_burial_depth_{};
         float buried_no_escape_seconds_{};
         float free_space_direction_{};
+        float locomotion_intent_direction_{ 1.0f };
+        bool locomotion_stop_requested_{};
         Vec2 incoming_material_velocity_{};
         float incoming_time_to_impact_{ 10.0f };
         float incoming_material_density_{};

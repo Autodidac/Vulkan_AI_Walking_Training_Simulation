@@ -1,4 +1,4 @@
-name: Runner pull-request validation
+name: Epoch2DWalkEngine pull-request validation
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
       - name: Install deterministic build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++-14 ninja-build python3
+          sudo apt-get install -y g++-14 ninja-build
       - name: Repository sanity
         shell: bash
         run: |
@@ -36,6 +36,16 @@ jobs:
           -DRUNNER_BUILD_APP=OFF
           -DRUNNER_BUILD_TESTS=ON
           -DCMAKE_BUILD_TYPE=Release
+      - name: Verify platform-neutral configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q '^Python3_' build/pr-linux/CMakeCache.txt; then
+            echo 'RUNNER_BUILD_APP=OFF unexpectedly discovered Python' >&2
+            exit 1
+          fi
+          test ! -d build/pr-linux/generated-assets
+          ! ctest --test-dir build/pr-linux -N | grep -E 'Runner\.V0720Ui|Runner\.V0724StructuralMetricsIcon'
       - name: Build
         run: cmake --build build/pr-linux --parallel
       - name: Test

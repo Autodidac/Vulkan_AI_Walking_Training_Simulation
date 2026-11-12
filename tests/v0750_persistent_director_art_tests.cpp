@@ -1,10 +1,13 @@
 #include <Epoch2DWalkEngine/Engine.hpp>
+#include "raw_learning_test_access.hpp"
 
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 
 namespace runner::sim
@@ -78,6 +81,66 @@ namespace
             std::cerr << message << '\n';
             std::exit(EXIT_FAILURE);
         }
+    }
+
+    [[nodiscard]] epoch2dwalk::director::TaskGraph isolated_graph_for(
+        epoch2dwalk::director::TaskGraph graph,
+        std::uint16_t task_index) noexcept
+    {
+        graph.nodes[task_index].prerequisite_count = 0u;
+        return graph;
+    }
+
+    [[nodiscard]] epoch2dwalk::director::PhysicalTrialEvidence
+    physical_receipt_for(const epoch2dwalk::director::TaskNode& node,
+        std::uint64_t trial_id) noexcept
+    {
+        namespace director = epoch2dwalk::director;
+        director::PhysicalTrialEvidence proof{};
+        if (!director::physical_mastery_required(node))
+            return proof;
+        proof.schema = director::physical_trial_evidence_schema_version;
+        proof.trial_id = trial_id;
+        proof.stable_task_id = node.stable_id;
+        proof.stable_challenge_id = node.stable_challenge_id;
+        proof.first_tick = 1u;
+        proof.last_tick = 60u;
+        if (director::water_mastery_required(node))
+        {
+            proof.kind = director::PhysicalEvidenceKind::water_crossing;
+            proof.water = { 2u, 10u, 12u, 25u, 45u, 55u,
+                0.75f, 0.70f };
+        }
+        else
+        {
+            proof.kind = director::PhysicalEvidenceKind::equipment_correction;
+            proof.equipment = { 4u, 10u, 20u, 21u, 40u,
+                0.40f, 0.35f, 0.60f, -0.05f, 0.10f,
+                2u, 1u, 1u, true };
+        }
+        return proof;
+    }
+
+    [[nodiscard]] epoch2dwalk::director::Evidence completed_prefix(
+        const epoch2dwalk::director::TaskGraph& graph,
+        std::uint16_t exclusive_end,
+        epoch2dwalk::director::Profile profile)
+    {
+        namespace director = epoch2dwalk::director;
+        director::Evidence evidence{};
+        for (std::uint16_t index = 0u; index < exclusive_end; ++index)
+        {
+            const director::TaskNode& node = graph.nodes[index];
+            const director::TrialEvidence trial{ node.stable_id, index,
+                director::TrialOutcome::completed, node.minimum_evidence,
+                physical_receipt_for(node, 0x750000u + index) };
+            const director::EvidenceReduction reduced = director::reduce_evidence(
+                graph, evidence, trial, profile);
+            require(reduced.accepted,
+                "schema-2 Director fixture could not reduce an ordered prerequisite");
+            evidence = reduced.evidence;
+        }
+        return evidence;
     }
 
     void test_training_terminal_preview_is_retained()
@@ -175,23 +238,28 @@ int main()
     namespace rl = epoch2dwalk::rl;
     namespace art = epoch2dwalk::art;
 
-    static_assert(integration::api_version == 3u);
+    static_assert(integration::api_version == 7u);
     constexpr director::TaskGraph graph = director::default_training_graph();
     constexpr director::State initial_director = director::make_state(
         director::Profile::curriculum);
     static_assert(initial_director.valid());
-    static_assert(!graph.nodes[16].enabled && !graph.nodes[17].enabled);
+    static_assert(!graph.nodes[16].enabled && !graph.nodes[17].enabled
+        && !graph.nodes[20].enabled);
     static_assert(!director::task_supported(director::TaskKind::construction));
+    static_assert(!director::task_supported(director::TaskKind::recover));
     static_assert(director::task_name(director::TaskKind::gun_stance)
         == std::string_view{ "GUN STANCE" });
     static_assert(integration::desired_task_state(
-        director::TaskKind::safe_carry_walk).equipment
+        director::TaskKind::safe_carry_walk,
+        director::ChallengeKind::flat).equipment
         == sim::EquipmentDirective::safe_carry_walk);
     static_assert(integration::desired_task_state(
-        director::TaskKind::low_ready_walk).equipment
+        director::TaskKind::low_ready_walk,
+        director::ChallengeKind::flat).equipment
         == sim::EquipmentDirective::low_ready_walk);
     static_assert(integration::desired_task_state(
-        director::TaskKind::fire_and_correct).equipment
+        director::TaskKind::fire_and_correct,
+        director::ChallengeKind::aim_range).equipment
         == sim::EquipmentDirective::fire_and_correct);
     static_assert(graph.valid());
     static_assert(graph.count >= 18u);
@@ -216,6 +284,91 @@ int main()
             && stall.reason == director::SelectionReason::unresolved_stall,
         "AI Director did not return to the first unresolved physical stall");
 
+    for (std::uint16_t index = 0u; index < graph.count; ++index)
+    {
+        const director::TaskNode& node = graph.nodes[index];
+        if (!node.enabled)
+        {
+            require(!integration::task_node_has_physical_binding(node),
+                "disabled future Director node advertised a physical binding");
+            continue;
+        }
+        require(node.challenge != director::ChallengeKind::moving_target
+                && integration::task_node_has_physical_binding(node),
+            "enabled Director node has no honest physical challenge binding");
+        const director::TaskGraph node_graph = isolated_graph_for(graph, index);
+        director::Evidence node_evidence{};
+        node_evidence.requested_goal = index;
+        const director::Decision node_decision = director::select(
+            node_graph, node_evidence, director::Profile::player_guided);
+        const integration::TaskCommand node_command = integration::task_command(
+            node_graph, node_evidence, node_decision,
+            director::Profile::player_guided);
+        require(node_decision.task_index == index && node_command.selected()
+                && integration::task_command_valid(node_graph, node_evidence,
+                    node_command, director::Profile::player_guided),
+            "enabled Director node did not resolve through its graph/profile");
+        sim::Environment node_environment{
+            sim::CreatureBlueprint::humanoid(), 0x7510u + index };
+        const integration::TaskApplication node_application =
+            integration::apply_task(node_environment, node_command, node_graph,
+                node_evidence, director::Profile::player_guided);
+        require(!node_application.rejected
+                && node_application.challenge_present
+                && node_application.stable_challenge_id != 0u,
+            "enabled Director node did not reach a real environment challenge");
+        const integration::DesiredTaskState node_state =
+            integration::desired_task_state(node.task, node.challenge);
+        const integration::ChallengeResolution node_resolution =
+            integration::resolve_challenge(node_environment, node_state);
+        require(node_resolution.present
+                && node_resolution.stable_id
+                    == node_application.stable_challenge_id,
+            "Director challenge identity did not reproduce from environment state");
+    }
+
+    for (const std::uint64_t seed : {
+        1u, 2u, 3u, 0x7500u, 0xffffu, 0x12345678u })
+    {
+        sim::DeformableTerrain terrain{};
+        terrain.reset(seed, 0.55f);
+        const auto waterlogged = terrain.challenge_for(
+            director::ChallengeKind::waterlogged_cells);
+        const auto shallow = terrain.challenge_for(
+            director::ChallengeKind::shallow_water);
+        const auto shore = terrain.challenge_for(director::ChallengeKind::shore);
+        const auto step = terrain.challenge_for(director::ChallengeKind::step);
+        const auto ramp = terrain.challenge_for(director::ChallengeKind::ramp);
+        require(waterlogged && shallow && shore && step && ramp
+                && waterlogged->stable_id
+                    == sim::DeformableTerrain::waterlogged_cells_challenge_id
+                && shallow->stable_id
+                    == sim::DeformableTerrain::shallow_water_challenge_id
+                && waterlogged->region == sim::TerrainRegion::waterlogged
+                && shallow->region == sim::TerrainRegion::shallow_water
+                && terrain.challenge_at(shore->center()).stable_id
+                    == sim::DeformableTerrain::shore_challenge_id
+                && terrain.challenge_at(step->center()).stable_id
+                    == sim::DeformableTerrain::step_challenge_id
+                && terrain.challenge_at(ramp->center()).stable_id
+                    == sim::DeformableTerrain::ramp_challenge_id,
+            "seed changed a semantic terrain challenge identity or placement");
+        const float step_height = terrain.height_at(step->center());
+        const float ramp_height = terrain.height_at(ramp->center());
+        require(step_height
+                > terrain.height_at(step->begin
+                    - sim::DeformableTerrain::fine_cell_spacing) + 0.12f
+                && ramp_height
+                    > terrain.height_at(ramp->begin
+                        - sim::DeformableTerrain::fine_cell_spacing) + 0.24f,
+            "step or ramp challenge is a label without physical terrain geometry");
+        terrain.reset(seed, 0.55f);
+        require(std::abs(terrain.height_at(step->center()) - step_height) < 1.0e-7f
+                && std::abs(terrain.height_at(ramp->center()) - ramp_height)
+                    < 1.0e-7f,
+            "repeated terrain seed changed physical challenge geometry");
+    }
+
     sim::Environment human{ sim::CreatureBlueprint::humanoid(), 0x7500u };
     human.set_course(sim::CourseStage::uneven, 0.30f);
     require(human.equipment_directive()
@@ -232,10 +385,13 @@ int main()
             sim::GuidanceMode::assisted);
         static_cast<void>(human.step(carry_action));
     }
-    require(human.valid_motion()
-            && std::abs(epoch2dwalk::wrap_angle(human.equipment_aim_angle()))
-                > 0.30f,
-        "selected safe-carry task did not move the physical arm link off vertical");
+    require(human.valid_motion(),
+        "selected safe-carry task invalidated the physical walking trial");
+    const float expected_safe_carry_angle = epoch2dwalk::wrap_angle(
+        (human.facing_direction() < 0.0f ? epoch2dwalk::pi : 0.0f) - 0.72f);
+    require(std::abs(epoch2dwalk::wrap_angle(expected_safe_carry_angle
+                - human.equipment_aim_angle())) < 0.55f,
+        "selected safe-carry task did not realize its physical arm-link angle");
     require(std::abs(human.observation()[62]
             - 1.0f / static_cast<float>(sim::equipment_directive_count - 1u))
             < 1.0e-6f,
@@ -263,24 +419,32 @@ int main()
             < 1.0e-7f,
         "AI Director selection moved the physical body like a rail");
 
-    director::Evidence gun_evidence{};
-    for (std::size_t index = 0u; index < 15u; ++index)
-        gun_evidence.mastery[index] = graph.nodes[index].minimum_evidence;
+    director::Evidence gun_evidence = completed_prefix(graph, 15u,
+        director::Profile::autonomous_npc);
+    director::Evidence scalar_only = gun_evidence;
+    scalar_only.physical_mastery[14] = {};
+    require(!director::evidence_valid(graph, scalar_only)
+            && !director::select(graph, scalar_only,
+                director::Profile::autonomous_npc).selected(),
+        "legacy scalar-only physical mastery was silently accepted");
     gun_evidence.requested_goal = 15u;
     const director::Decision gun_decision = director::select(
         graph, gun_evidence, director::Profile::autonomous_npc);
     const integration::TaskCommand gun_command = integration::task_command(
-        graph, gun_decision);
+        graph, gun_evidence, gun_decision,
+        director::Profile::autonomous_npc);
     require(gun_decision.task_index == 15u && gun_command.selected()
-            && gun_command.supported
             && gun_command.task == director::TaskKind::fire_and_correct,
         "AI Director did not emit the requested physical gun task");
     sim::Environment directed_human{
         sim::CreatureBlueprint::humanoid(), 0x7503u };
     directed_human.set_course(sim::CourseStage::uneven, 0.30f);
     const integration::TaskApplication applied = integration::apply_task(
-        directed_human, gun_command);
+        directed_human, gun_command, graph, gun_evidence,
+        director::Profile::autonomous_npc);
     require(applied.applied && !applied.rejected
+            && applied.challenge_present
+            && applied.stable_challenge_id != 0u
             && directed_human.course_stage()
                 == sim::CourseStage::equipment_targets
             && directed_human.equipment_directive()
@@ -288,23 +452,56 @@ int main()
             && directed_human.weapon_class() == sim::WeaponClass::carbine,
         "selected gun task did not configure its real physical range and behavior");
     const integration::TaskApplication idempotent = integration::apply_task(
-        directed_human, gun_command);
+        directed_human, gun_command, graph, gun_evidence,
+        director::Profile::autonomous_npc);
     require(!idempotent.applied && !idempotent.rejected,
         "stable task command reset the physical trial every fixed tick");
     sim::Environment directed_dog{ sim::CreatureBlueprint::crawler4(), 0x7504u };
     const sim::CourseStage dog_stage = directed_dog.course_stage();
     const integration::TaskApplication impossible = integration::apply_task(
-        directed_dog, gun_command);
+        directed_dog, gun_command, graph, gun_evidence,
+        director::Profile::autonomous_npc);
     require(impossible.rejected && directed_dog.course_stage() == dog_stage
             && directed_dog.weapon_class() == sim::WeaponClass::none,
         "Director mutated a non-manipulator before rejecting its gun task");
     const integration::TaskCommand future_tool{
-        graph.nodes[16].stable_id, director::TaskKind::construction,
-        director::ChallengeKind::construction_anchor, false };
+        graph.nodes[16].stable_id, 16u, director::TaskKind::construction,
+        director::ChallengeKind::construction_anchor,
+        director::Profile::autonomous_npc };
     const sim::CourseStage before_future = directed_human.course_stage();
-    require(integration::apply_task(directed_human, future_tool).rejected
+    require(integration::apply_task(directed_human, future_tool, graph,
+                gun_evidence, director::Profile::autonomous_npc).rejected
             && directed_human.course_stage() == before_future,
         "unimplemented construction task was falsely exposed as physical support");
+    sim::Environment forged_environment{
+        sim::CreatureBlueprint::humanoid(), 0x7505u };
+    forged_environment.set_course(sim::CourseStage::uneven, 0.30f);
+    integration::TaskCommand forged_id = gun_command;
+    forged_id.stable_id ^= 0x40u;
+    require(integration::apply_task(forged_environment, forged_id, graph,
+                gun_evidence, director::Profile::autonomous_npc).rejected
+            && forged_environment.course_stage() == sim::CourseStage::uneven,
+        "forged stable task identity reached the physical environment");
+    integration::TaskCommand forged_challenge = gun_command;
+    forged_challenge.challenge = director::ChallengeKind::moving_target;
+    require(integration::apply_task(forged_environment, forged_challenge, graph,
+                gun_evidence, director::Profile::autonomous_npc).rejected
+            && forged_environment.course_stage() == sim::CourseStage::uneven,
+        "forged challenge kind reached the physical environment");
+    require(integration::apply_task(forged_environment, gun_command, graph,
+                gun_evidence, director::Profile::player_guided).rejected
+            && forged_environment.course_stage() == sim::CourseStage::uneven,
+        "Director command escaped its authenticated control profile");
+    director::Evidence missing_prerequisites{};
+    const integration::TaskCommand forged_prerequisite{
+        graph.nodes[15].stable_id, 15u, graph.nodes[15].task,
+        graph.nodes[15].challenge, director::Profile::autonomous_npc };
+    require(!integration::task_command_valid(graph, missing_prerequisites,
+                forged_prerequisite, director::Profile::autonomous_npc)
+            && integration::apply_task(forged_environment,
+                forged_prerequisite, graph, missing_prerequisites,
+                director::Profile::autonomous_npc).rejected,
+        "Director command bypassed its graph prerequisites");
     director::State persisted_director = initial_director;
     persisted_director.evidence = gun_evidence;
     persisted_director.current = gun_decision;
@@ -322,7 +519,9 @@ int main()
                 director_error)
             && loaded_director.valid()
             && loaded_director.current.stable_id == gun_decision.stable_id
-            && loaded_director.evidence.failures == gun_evidence.failures,
+            && loaded_director.evidence.failures == gun_evidence.failures
+            && loaded_director.evidence.physical_mastery
+                == gun_evidence.physical_mastery,
         "Director graph/evidence did not survive its external serialization contract");
     director::State invalid_director = persisted_director;
     invalid_director.schema = 99u;
@@ -338,24 +537,58 @@ int main()
         "non-manipulator species received an impossible default gun");
 
     integration::ControlRequest request{};
-    request.mode = integration::ControlMode::player_guided;
+    request.mode = integration::ControlMode::autonomous;
+    request.task_graph = graph;
+    request.evidence = gun_evidence;
     request.selected_task = gun_command;
+    request.joint_control = integration::JointControlSource::retained_policy;
+    request.guidance = integration::GuidanceRequest::assisted;
+    rl::PpoTrainer retained_trainer{ human.blueprint(), 8u, true, 1u };
+    retained_trainer.reset_policy(0x7506u, true);
+    const integration::DesiredTaskState retained_context =
+        integration::desired_task_state(request.selected_task.task,
+            request.selected_task.challenge);
+    require(retained_context.valid,
+        "selected autonomous task did not resolve to a checkpoint context");
+    retained_trainer.set_course(retained_context.stage,
+        graph.nodes[request.selected_task.task_index].difficulty, false);
+    retained_trainer.set_gait_task(retained_context.gait, false);
+    retained_trainer.set_equipment_directive(retained_context.equipment);
+    const rl::PpoTrainer::VerifiedCheckpoint retained_checkpoint =
+        rl::RawLearningTestAccess::one_real_assisted_update(retained_trainer);
+    require(retained_checkpoint.valid(),
+        "trainer-owned Raw test artifact was not issued");
+    require(retained_checkpoint.data().stage == retained_context.stage
+            && retained_checkpoint.data().gait_task == retained_context.gait
+            && retained_checkpoint.data().equipment_directive
+                == retained_context.equipment
+            && retained_checkpoint.data().best_guidance_mode
+                == sim::GuidanceMode::assisted,
+        "trainer-owned checkpoint does not match the selected autonomous task");
+    integration::RetainedPolicyController retained_controller{};
+    std::string retained_error{};
+    require(retained_controller.load_retained_best(retained_checkpoint,
+                retained_error),
+        "test retained controller fixture was rejected");
     const integration::FixedStepResult stepped = integration::fixed_step(
-        human, request, 12u, 4u);
+        human, request, retained_controller, 12u, 4u);
     require(stepped.snapshot.valid && stepped.snapshot.trial_id == 12u
             && stepped.snapshot.fixed_tick == 4u
             && std::isfinite(stepped.reward)
             && stepped.task_applied && !stepped.task_rejected
+            && stepped.selected_challenge_present
+            && stepped.selected_challenge_id
+                == integration::physical_challenge_stable_id(
+                    director::ChallengeKind::aim_range)
             && stepped.stable_task_id == gun_decision.stable_id
             && stepped.snapshot.equipment_directive
                 == sim::EquipmentDirective::fire_and_correct
             && human.course_stage() == sim::CourseStage::equipment_targets
             && stepped.terminal_cause == sim::TrialTerminalCause::none,
         "external host task command did not drive a truthful physical step");
-    request.selected_task = {};
     request.retry_trial = true;
     const integration::FixedStepResult retried = integration::fixed_step(
-        human, request, 13u, 1u);
+        human, request, retained_controller, 13u, 1u);
     require(retried.retry_applied && retried.snapshot.trial_id == 13u,
         "external host retry request did not start its declared physical trial");
     std::array<float, sim::action_count> zero_action{};
@@ -400,9 +633,13 @@ int main()
         if (index > 0u)
             require(std::abs(challenge.begin - challenges[index - 1u].end) < 1.0e-6f,
                 "terrain challenge graph contains a hidden seam");
-        require(human.terrain().challenge_at(challenge.center()).stable_id
-                == challenge.stable_id,
-            "terrain challenge lookup does not reproduce its stable identity");
+        const sim::TerrainChallenge resolved =
+            human.terrain().challenge_at(challenge.center());
+        require(resolved.stable_id == challenge.stable_id
+                || resolved.kind == director::ChallengeKind::shore
+                || resolved.kind == director::ChallengeKind::step
+                || resolved.kind == director::ChallengeKind::ramp,
+            "terrain challenge lookup does not reproduce material or overlay identity");
         if (challenge.region == sim::TerrainRegion::firm && index > 0u)
             firm_x = challenge.center();
         if (challenge.region == sim::TerrainRegion::shallow_water)
@@ -526,9 +763,9 @@ int main()
     require(exit.intent == locomotion::Intent::shore_exit && exit.aquatic,
         "locomotion planner did not select a physical shore-exit transition");
 
-    require(art::human_limb_layer_opacity(false) >= 0.35f
-            && art::human_limb_layer_opacity(false) <= 0.45f,
-        "far Human limbs are hidden or read as duplicate foreground chains");
+    require(art::human_limb_layer_opacity(false) >= 0.84f
+            && art::human_limb_layer_opacity(false) <= 0.92f,
+        "far Human limbs are hidden, translucent ghosts, or duplicate foreground chains");
     art::PixelArt padded{};
     padded.width = 5;
     padded.height = 4;
@@ -621,6 +858,36 @@ int main()
             && !art::load_layout(layout_path, sim::CreatureSpecies::dog,
                 loaded_layout, layout_error),
         "art editor save/load did not validate species-owned layout identity");
+    art::Layout replacement_layout = authored;
+    replacement_layout.at(art::Module::hand).anchor_along = 0.12f;
+    require(art::save_layout(layout_path, replacement_layout, layout_error)
+            && art::load_layout(layout_path, sim::CreatureSpecies::human,
+                loaded_layout, layout_error)
+            && std::abs(loaded_layout.at(art::Module::hand).anchor_along
+                - 0.12f) < 1.0e-6f,
+        "art editor did not atomically replace an existing accepted layout");
+    const auto read_layout_bytes = [](const std::filesystem::path& path)
+    {
+        std::ifstream input(path, std::ios::binary);
+        return std::string{ std::istreambuf_iterator<char>{ input },
+            std::istreambuf_iterator<char>{} };
+    };
+    const std::string accepted_layout_bytes = read_layout_bytes(layout_path);
+    require(!art::save_layout(layout_path, invalid_art, layout_error)
+            && read_layout_bytes(layout_path) == accepted_layout_bytes,
+        "rejected art data mutated the last accepted layout");
+    const std::filesystem::path temporary_layout =
+        layout_path.string() + ".tmp";
+    std::error_code temporary_error{};
+    std::filesystem::remove_all(temporary_layout, temporary_error);
+    temporary_error.clear();
+    std::filesystem::create_directory(temporary_layout, temporary_error);
+    require(!temporary_error
+            && !art::save_layout(layout_path, authored, layout_error)
+            && !layout_error.empty()
+            && read_layout_bytes(layout_path) == accepted_layout_bytes,
+        "failed art replacement damaged the last accepted layout");
+    std::filesystem::remove_all(temporary_layout, temporary_error);
     std::error_code remove_error{};
     std::filesystem::remove(layout_path, remove_error);
 

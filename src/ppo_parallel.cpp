@@ -1,4 +1,5 @@
 #include "ppo.hpp"
+#include "training_budget.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -115,6 +116,7 @@ namespace runner::rl
                 float current_difficulty{};
                 std::uint64_t current_evaluation_sequence{};
                 sim::GuidanceMode current_guidance_mode{ sim::GuidanceMode::assisted };
+                float current_physical_guidance_authority{ 1.0f };
 
                 {
                     std::unique_lock lock(mutex);
@@ -140,6 +142,8 @@ namespace runner::rl
                     current_difficulty = difficulty;
                     current_evaluation_sequence = evaluation_sequence;
                     current_guidance_mode = guidance_mode;
+                    current_physical_guidance_authority =
+                        physical_guidance_authority;
                 }
 
                 if (current_job == Job::gradient)
@@ -147,9 +151,7 @@ namespace runner::rl
                     GradientTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();
-                    local.set_equipment_enabled(
-                        current_stage == sim::CourseStage::equipment_targets
-                        || current_stage == sim::CourseStage::combat_course);
+                    local.set_action_mask(owner.policy_.action_mask());
                     local.zero_gradients();
 
                     if (worker_index < current_active && current_indices != nullptr)
@@ -191,9 +193,7 @@ namespace runner::rl
                     EvaluationTotals totals{};
                     PolicyNetwork& local = local_policies[worker_index];
                     local.parameters() = owner.policy_.parameters();
-                    local.set_equipment_enabled(
-                        current_stage == sim::CourseStage::equipment_targets
-                        || current_stage == sim::CourseStage::combat_course);
+                    local.set_action_mask(owner.policy_.action_mask());
 
                     if (worker_index < current_active)
                     {
@@ -208,18 +208,50 @@ namespace runner::rl
                             // selected through production topology filters.
                             configure_policy_evaluation_environment(environment,
                                 current_stage, current_difficulty,
-                                current_gait_task, current_guidance_mode);
+                                current_gait_task, current_guidance_mode,
+                                current_physical_guidance_authority);
                             environment.set_equipment_directive(
                                 current_equipment_directive);
+                            const bool raw_stand = current_stage == sim::CourseStage::balance
+                                && current_guidance_mode == sim::GuidanceMode::raw_policy_audit;
+                            environment.set_raw_authority_telemetry_enabled(raw_stand);
+                            bool stand_helper_applied = false;
                             float episode_reward{};
                             for (int step = 0; step < maximum_steps; ++step)
                             {
-                                const auto raw_action = local.deterministic_action(
-                                    environment.observation());
-                                const auto action = effective_policy_action(
-                                    environment, raw_action, current_stage, 0.0f,
-                                    current_guidance_mode);
+                                const auto observation =
+                                    foundational_policy_observation(
+                                        environment, current_stage,
+                                        current_gait_task,
+                                        current_guidance_mode);
+                                const auto raw_action =
+                                    local.deterministic_action(observation);
+                                const auto action = current_guidance_mode
+                                        == sim::GuidanceMode::raw_policy_audit
+                                    ? raw_action
+                                    : effective_policy_action(environment,
+                                        raw_action, current_stage,
+                                        current_stage
+                                                == sim::CourseStage::crouch_walk
+                                            ? current_physical_guidance_authority
+                                            : 0.0f,
+                                        current_guidance_mode);
                                 const sim::StepResult result = environment.step(action);
+                                if (raw_stand)
+                                {
+                                    const auto& audit = environment.raw_authority_telemetry();
+                                    const auto applied = [&audit](sim::AuthoritySource source)
+                                    {
+                                        return audit.sources[static_cast<std::size_t>(source)]
+                                            .applications != 0u;
+                                    };
+                                    stand_helper_applied = audit.root_drive_corrections != 0u
+                                        || audit.torso_drive_corrections != 0u
+                                        || audit.course_motion_corrections != 0u
+                                        || applied(sim::AuthoritySource::posture_helper)
+                                        || applied(sim::AuthoritySource::manipulator_helper)
+                                        || applied(sim::AuthoritySource::structure_projection);
+                                }
                                 episode_reward += result.reward;
                                 totals.speed += result.forward_speed;
                                 ++totals.speed_samples;
@@ -228,17 +260,32 @@ namespace runner::rl
                                     && environment.longest_stable_stance_seconds()
                                         >= standing_mastery_seconds)
                                     break;
-                                if (result.terminated)
+                                if (result.terminated || stand_helper_applied)
                                     break;
                             }
 
                             const StageMotionQualification qualification =
                                 stage_motion_qualification(current_stage, environment);
-                            if (!qualification.valid || !environment.body_integrity_valid())
+                            const bool incomplete_raw_stand =
+                                raw_stand
+                                && environment.longest_stable_stance_seconds()
+                                    < standing_mastery_seconds;
+                            const bool excessive_raw_stand_rotation = raw_stand
+                                && environment.uncontrolled_spin_turns()
+                                    > standing_mastery_spin_limit;
+                            if (!qualification.valid || !environment.body_integrity_valid()
+                                || incomplete_raw_stand || excessive_raw_stand_rotation
+                                || stand_helper_applied)
                             {
                                 ++totals.invalid_runs;
                                 totals.rejection_mask |= qualification.rejection_mask;
-                                if (!environment.body_integrity_valid())
+                                if (incomplete_raw_stand)
+                                    totals.rejection_mask |= evidence_bit(
+                                        MotionEvidenceFailure::no_stable_stance);
+                                if (excessive_raw_stand_rotation)
+                                    totals.rejection_mask |= evidence_bit(
+                                        MotionEvidenceFailure::excessive_rotation);
+                                if (!environment.body_integrity_valid() || stand_helper_applied)
                                     totals.rejection_mask |= evidence_bit(
                                         MotionEvidenceFailure::invalid_motion);
                                 if (totals.invalid_reason == sim::InvalidMotion::none
@@ -334,6 +381,7 @@ namespace runner::rl
         float difficulty{ 0.25f };
         std::uint64_t evaluation_sequence{};
         sim::GuidanceMode guidance_mode{ sim::GuidanceMode::assisted };
+        float physical_guidance_authority{ 1.0f };
     };
 
     void PpoTrainer::initialize_parallel_workers()
@@ -357,12 +405,7 @@ namespace runner::rl
             return;
         }
 
-        if (cpu_mode_ == 1)
-            active_worker_count_ = std::max<std::size_t>(1, (rollout_worker_count_ + 2u) / 3u);
-        else if (cpu_mode_ == 2)
-            active_worker_count_ = std::max<std::size_t>(1, (rollout_worker_count_ * 2u + 2u) / 3u);
-        else
-            active_worker_count_ = rollout_worker_count_;
+        active_worker_count_ = training_budget::active_workers(cpu_mode_, rollout_worker_count_);
     }
 
     void PpoTrainer::parallel_accumulate_batch(
@@ -441,6 +484,10 @@ namespace runner::rl
             return;
 
         ParallelState& state = *parallel_;
+        const bool unaided_stand = trains_unaided_stand();
+        verified_stand_parameters_ = 0u;
+        const std::uint64_t evaluated_parameters_digest =
+            parameter_digest(policy_.parameters());
         {
             std::scoped_lock lock(state.mutex);
             state.job = ParallelState::Job::evaluation;
@@ -451,10 +498,21 @@ namespace runner::rl
             state.equipment_directive = equipment_directive_;
             state.difficulty = course_difficulty_;
             state.evaluation_sequence = evaluation_sequence;
-            state.guidance_mode = foundational_walk_uses_raw_evaluation(
-                    lesson_update_, course_stage_, blueprint_)
+            state.guidance_mode = (unaided_stand
+                || (course_stage_ == sim::CourseStage::uneven
+                    && gait_task_ == sim::GaitTask::walk
+                    && blueprint_.human_casual_gait_plan()
+                    && lesson_update_ >=
+                        foundational_walk_teacher_handoff_update(blueprint_)))
                 ? sim::GuidanceMode::raw_policy_audit
                 : sim::GuidanceMode::assisted;
+            state.physical_guidance_authority =
+                state.guidance_mode == sim::GuidanceMode::raw_policy_audit
+                ? 0.0f
+                : course_stage_ == sim::CourseStage::crouch_walk
+                    ? lesson_teacher_authority(lesson_update_, course_stage_,
+                        blueprint_)
+                    : 1.0f;
             ++state.generation;
         }
         state.start_cv.notify_all();
@@ -545,7 +603,8 @@ namespace runner::rl
         metrics_.evaluation_target_hits = totals.target_hits * inverse_agents;
         metrics_.evaluation_equipment_transitions = totals.equipment_transitions * inverse_agents;
         constexpr std::uint32_t robust_balance_failures_allowed = 2u;
-        const std::uint32_t allowed_invalid_runs = course_stage_ == sim::CourseStage::balance
+        const std::uint32_t allowed_invalid_runs = !unaided_stand
+            && course_stage_ == sim::CourseStage::balance
             ? robust_balance_failures_allowed : 0u;
         metrics_.evaluation_invalid_runs = totals.invalid_runs;
         metrics_.evaluation_valid = totals.invalid_runs <= allowed_invalid_runs
@@ -678,19 +737,70 @@ namespace runner::rl
         }
         ++metrics_.evaluation_count;
 
+        if (unaided_stand)
+        {
+            // Stand tests the active PPO candidate, not the demonstrator or
+            // a restored Assisted best. Walk's receipt attests different tasks.
+            if (metrics_.evaluation_valid && lesson_update_ != 0u)
+                verified_stand_parameters_ = evaluated_parameters_digest;
+            return;
+        }
+
         const bool has_best = !best_parameters_.empty();
+        const sim::GuidanceMode evaluated_guidance = state.guidance_mode;
+        const std::uint64_t current_parameters_digest =
+            parameter_digest(policy_.parameters());
+        RawPpoReceipt candidate_raw_receipt{};
+        bool authentic_candidate = true;
+        if (evaluated_guidance == sim::GuidanceMode::raw_policy_audit)
+        {
+            staged_raw_ppo_evidence_.evaluated_parameters_digest =
+                evaluated_parameters_digest;
+            staged_raw_ppo_evidence_.current_parameters_digest =
+                current_parameters_digest;
+            candidate_raw_receipt = RawPpoReceipt::issue(
+                staged_raw_ppo_evidence_);
+            const RawPpoReceiptContext receipt_context{
+                .training_semantics = training_semantics_version,
+                .rig_signature = blueprint_.signature(),
+                .best_update = metrics_.update,
+                .checkpoint_optimizer_step = adam_.step,
+                .retained_parameters_digest = current_parameters_digest,
+                .retained_active_actor_digest =
+                    policy_.active_actor_parameter_digest(),
+                .action_mask_bits = action_mask_bits(policy_.action_mask()),
+                .stage = static_cast<std::uint8_t>(course_stage_),
+                .gait_task = static_cast<std::uint8_t>(gait_task_),
+                .equipment_directive =
+                    static_cast<std::uint8_t>(equipment_directive_)
+            };
+            authentic_candidate = raw_ppo_receipt_valid(
+                candidate_raw_receipt, receipt_context);
+            last_raw_ppo_receipt_ = authentic_candidate
+                ? candidate_raw_receipt : RawPpoReceipt{};
+        }
         // Strict mastery failure is not a policy regression. Preserve the
         // immutable best snapshot for preview/autosave, but let PPO continue
         // accumulating from partial walkers between bounded curriculum
         // rollback decisions.
-        if (policy_candidate_retainable(course_stage_,
+        if (authentic_candidate
+            && policy_candidate_retainable(course_stage_,
                 metrics_.evaluation_quality_key, lesson_update_, blueprint_)
             && policy_candidate_better(metrics_.evaluation_quality_key,
                 metrics_.evaluation_score, metrics_.best_quality_key,
                 metrics_.best_evaluation_score, has_best))
         {
             best_parameters_ = policy_.parameters();
+            best_policy_guidance_mode_ = evaluated_guidance;
+            best_raw_ppo_receipt_ = evaluated_guidance
+                    == sim::GuidanceMode::raw_policy_audit
+                ? candidate_raw_receipt : RawPpoReceipt{};
             preview_policy_.parameters() = best_parameters_;
+            // The visible retained replay uses the same authority under which
+            // the candidate was judged.  In particular, a post-handoff Human
+            // Walk champion is shown raw instead of silently re-applying the
+            // authored teacher/support scaffold.
+            set_preview_guidance_mode(evaluated_guidance);
             // A better controller is retained without teleporting the visible
             // physical trial back to spawn. Explicit retry or task transition
             // owns the next preview reset.
@@ -698,7 +808,10 @@ namespace runner::rl
             metrics_.best_evaluation_score = metrics_.evaluation_score;
             metrics_.best_quality_key = metrics_.evaluation_quality_key;
             metrics_.best_update = metrics_.update;
-            refresh_self_imitation_prior();
+            if (evaluated_guidance == sim::GuidanceMode::raw_policy_audit)
+                clear_self_imitation_prior();
+            else
+                refresh_self_imitation_prior();
         }
     }
 }

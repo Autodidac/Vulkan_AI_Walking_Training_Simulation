@@ -1,5 +1,7 @@
 #include "autonomy.hpp"
+#include "integration.hpp"
 #include "preview_sync.hpp"
+#include "training_budget.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -52,11 +54,21 @@ namespace runner::rl
     AutonomousTrainer::AutonomousTrainer(const sim::CreatureBlueprint& blueprint, std::size_t environment_count)
         : worker_(blueprint, environment_count), live_(blueprint, 8, false), live_blueprint_(blueprint)
     {
+        worker_.autopilot_unaided_stand_ = true;
+        set_autosave_paths(autosave_checkpoint_, autosave_rig_, autosave_state_);
+        director_state_.graph = integration::compatible_task_graph(
+            worker_.preview(), director::default_training_graph());
+        director_state_.current = director::select(director_state_.graph,
+            director_state_.evidence, director_state_.profile);
         worker_.set_course(stage_, difficulty_, false);
         live_.set_course(stage_, difficulty_, false);
         // The large preview is a real locomotion test, not a conveyor-belt
         // visualization. Training workers may still use moving-course pressure.
         live_.set_preview_course_motion_enabled(false);
+        worker_.rollout_sample_sink_ = [this](const sim::Environment& environment)
+        {
+            sample_training_rollout(environment);
+        };
         publish_locked();
         synchronize();
         persistence_thread_ = std::jthread([this](std::stop_token stop_token)
@@ -85,14 +97,64 @@ namespace runner::rl
 
     void AutonomousTrainer::synchronize()
     {
-        PublishedSnapshot snapshot{};
+        synchronize_snapshot(std::nullopt);
+    }
+
+    void AutonomousTrainer::sample_training_rollout(const sim::Environment& environment)
+    {
+        // Rollout lane zero alone calls this; generations never overlap.
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_rollout_sample_ < std::chrono::milliseconds{ 125 })
+            return;
+        last_rollout_sample_ = now;
+        sim::Environment sample = environment;
+        std::scoped_lock lock(snapshot_mutex_);
+        pending_rollout_sample_ = std::move(sample);
+    }
+
+    void AutonomousTrainer::start_cached_replay(std::uint64_t seed)
+    {
+        live_.set_course(cached_status_.stage, cached_status_.difficulty, false);
+        live_.set_gait_task(cached_status_.gait_task, false);
+        live_.set_equipment_directive(cached_status_.equipment_directive);
+        live_.policy().parameters() = cached_replay_parameters_;
+        replay_uses_retained_controller_ = cached_has_best_;
+        replay_controller_guidance_mode_ = cached_controller_guidance_mode_;
+        replay_controller_update_ = cached_has_best_
+            ? cached_metrics_.best_update : cached_metrics_.update;
+        live_.reset_preview(seed);
+    }
+
+    void AutonomousTrainer::synchronize_snapshot(
+        std::optional<std::uint64_t> replay_seed)
+    {
+        std::optional<PublishedSnapshot> next{};
+        std::optional<sim::Environment> rollout_sample{};
         {
             std::scoped_lock lock(snapshot_mutex_);
-            if (published_.serial == applied_serial_)
+            if (published_.serial != applied_serial_)
+                next.emplace(published_);
+            rollout_sample.swap(pending_rollout_sample_);
+        }
+        const auto apply_rollout = [&]
+        {
+            if (!rollout_sample)
                 return;
-            snapshot = published_;
+            cached_training_preview_ = std::move(*rollout_sample);
+            cached_has_training_preview_ = true;
+            cached_preview_is_rollout_sample_ = true;
+        };
+        if (!next)
+        {
+            apply_rollout();
+            if (replay_seed && !live_morphology_preview_active_)
+                start_cached_replay(*replay_seed);
+            else if (replay_seed)
+                live_.reset_preview(*replay_seed);
+            return;
         }
 
+        auto& snapshot = *next;
         const bool preview_committed = live_morphology_preview_active_
             && snapshot.blueprint.signature() == live_blueprint_.signature();
         const bool hold_preview = live_morphology_preview_active_
@@ -102,36 +164,14 @@ namespace runner::rl
         const bool rig_changed = !hold_preview
             && (preview_committed
                 || snapshot.blueprint.signature() != live_blueprint_.signature());
-        const bool best_changed = !hold_preview && snapshot.has_best
-            && snapshot.metrics.best_update != cached_metrics_.best_update;
-        const bool course_changed = !hold_preview
-            && (snapshot.status.stage != cached_status_.stage
-                || snapshot.status.gait_task != cached_status_.gait_task
-                || snapshot.status.equipment_directive
-                    != cached_status_.equipment_directive
-                || std::abs(snapshot.status.difficulty
-                    - cached_status_.difficulty) > 1.0e-5f);
-
         const preview_sync::Decision decision = preview_sync::decide(
-            rig_changed, course_changed, best_changed);
+            rig_changed, applied_serial_ == 0, hold_preview, replay_seed.has_value());
         if (decision.replace_blueprint)
         {
             live_blueprint_ = snapshot.blueprint;
             live_.set_blueprint(live_blueprint_, false);
         }
-        if (decision.replace_course)
-        {
-            live_.set_course(snapshot.status.stage, snapshot.status.difficulty, false);
-            live_.set_gait_task(snapshot.status.gait_task, false);
-            live_.set_equipment_directive(
-                snapshot.status.equipment_directive);
-        }
-        if (decision.adopt_controller)
-            live_.policy().parameters() = snapshot.parameters;
-        if (decision.reset_episode)
-            live_.reset_preview(0xDEADBEEFu
-                + snapshot.metrics.update + snapshot.metrics.best_update);
-
+        cached_replay_parameters_ = std::move(snapshot.parameters);
         cached_metrics_ = snapshot.metrics;
         cached_reward_history_ = std::move(snapshot.reward_history);
         cached_speed_history_ = std::move(snapshot.speed_history);
@@ -140,9 +180,18 @@ namespace runner::rl
         cached_exploration_ = snapshot.exploration;
         cached_optimizer_step_ = snapshot.optimizer_step;
         cached_has_best_ = snapshot.has_best;
-        cached_training_preview_ = std::move(snapshot.training_preview);
-        cached_has_training_preview_ = snapshot.has_training_preview;
+        cached_controller_guidance_mode_ = snapshot.controller_guidance_mode;
+        cached_has_training_preview_ = snapshot.training_preview.has_value();
+        cached_preview_is_rollout_sample_ = false;
+        if (snapshot.training_preview)
+            cached_training_preview_ = std::move(*snapshot.training_preview);
+        apply_rollout();
         applied_serial_ = snapshot.serial;
+        if (decision.start_replay)
+            start_cached_replay(replay_seed.value_or(0xDEADBEEFu
+                + cached_metrics_.update + cached_metrics_.best_update));
+        else if (replay_seed)
+            live_.reset_preview(*replay_seed);
     }
 
     void AutonomousTrainer::set_background_enabled(bool enabled) noexcept
@@ -194,8 +243,13 @@ namespace runner::rl
         live_.set_gait_task(snapshot.status.gait_task, false);
         live_.set_equipment_directive(snapshot.status.equipment_directive);
         live_.policy().parameters() = snapshot.parameters;
+        replay_uses_retained_controller_ = snapshot.has_best;
+        replay_controller_guidance_mode_ = snapshot.controller_guidance_mode;
+        replay_controller_update_ = snapshot.has_best
+            ? snapshot.metrics.best_update : snapshot.metrics.update;
         live_.set_preview_course_motion_enabled(false);
         live_morphology_preview_active_ = false;
+        live_.reset_preview();
     }
 
     void AutonomousTrainer::set_rig_optimization_mode(RigOptimizationMode mode) noexcept
@@ -222,6 +276,15 @@ namespace runner::rl
         PendingCommand command{};
         command.type = CommandType::set_director_task;
         command.director_task_index = task_index;
+        enqueue_command(std::move(command));
+    }
+
+    void AutonomousTrainer::set_director_profile(
+        director::Profile profile) noexcept
+    {
+        PendingCommand command{};
+        command.type = CommandType::set_director_profile;
+        command.director_profile = profile;
         enqueue_command(std::move(command));
     }
 
@@ -254,9 +317,9 @@ namespace runner::rl
         live_.step_preview(dt);
     }
 
-    void AutonomousTrainer::reset_preview(std::uint64_t seed) noexcept
+    void AutonomousTrainer::reset_preview(std::uint64_t seed)
     {
-        live_.reset_preview(seed);
+        synchronize_snapshot(seed);
     }
 
     void AutonomousTrainer::configure_preview_equipment(
@@ -294,7 +357,10 @@ namespace runner::rl
         {
             return true;
         }
-        return pending_command_count() != 0u;
+        if (pending_command_count() != 0u)
+            return true;
+        std::scoped_lock lock(persistence_mutex_);
+        return consumed_persistence_message_serial_ != persistence_message_serial_;
     }
 
     bool AutonomousTrainer::consume_update_request() noexcept
@@ -337,10 +403,24 @@ namespace runner::rl
 
             worker_busy_.store(true, std::memory_order_relaxed);
             const auto started = std::chrono::steady_clock::now();
+            worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
 
-            const bool confirming_retained = should_confirm_retained_mastery(
+            const bool confirming_stand = mastery_streak_ > 0
+                && worker_.verified_unaided_stand();
+            if (worker_.trains_unaided_stand() && !confirming_stand)
+                mastery_streak_ = 0;
+            const bool confirming_retained = !worker_.trains_unaided_stand()
+                && should_confirm_retained_mastery(
                 stage_, mastery_streak_, worker_.has_best_policy());
-            if (confirming_retained)
+            if (confirming_stand)
+            {
+                worker_pipeline_stage_ = "EVALUATION / CURRICULUM";
+                worker_pipeline_stage_mask_ |= 1u << 4u;
+                worker_.evaluate_policy(worker_.metrics().evaluation_count);
+                manage_curriculum_locked();
+                co_yield RoutineStage::evaluation;
+            }
+            else if (confirming_retained)
             {
                 // Freeze optimization and test the exact retained controller.
                 // This prevents a stage-safe policy from drifting between the
@@ -357,7 +437,6 @@ namespace runner::rl
             {
                 worker_pipeline_stage_ = "ROLLOUT COLLECTION";
                 worker_pipeline_stage_mask_ |= 1u << 1u;
-                worker_.set_cpu_mode(updates_per_cycle_.load(std::memory_order_relaxed));
                 worker_.begin_staged_update();
                 co_yield RoutineStage::rollout;
 
@@ -417,9 +496,11 @@ namespace runner::rl
             if (!pipeline_must_finish && !has_pending_work())
             {
                 std::unique_lock lock(wake_mutex_);
-                wake_cv_.wait_for(lock, std::chrono::milliseconds(8), [this, &stop_token]
+                // Bounded fallback covers notifications racing the atomic setters.
+                // Persistence completion is work too, even while training is paused.
+                wake_cv_.wait_for(lock, stop_token, std::chrono::milliseconds(250), [this]
                 {
-                    return stop_token.stop_requested() || has_pending_work();
+                    return has_pending_work();
                 });
                 if (stop_token.stop_requested())
                     break;
@@ -427,38 +508,31 @@ namespace runner::rl
 
             stage = routine.resume();
             if (stage == RoutineStage::persistence)
-                throttle_after_update();
+                throttle_after_update(stop_token);
             else if (stage == RoutineStage::idle)
                 std::this_thread::yield();
         }
     }
 
-    void AutonomousTrainer::throttle_after_update() const
+    void AutonomousTrainer::throttle_after_update(std::stop_token stop_token)
     {
         const int mode = updates_per_cycle_.load(std::memory_order_relaxed);
         const std::int64_t update_nanoseconds = last_update_nanoseconds_.load(std::memory_order_relaxed);
-        if (update_nanoseconds <= 0)
+        const auto delay = std::chrono::nanoseconds(
+            training_budget::idle_nanoseconds(mode, update_nanoseconds));
+        const auto deadline = std::chrono::steady_clock::now() + delay;
+        std::unique_lock lock(wake_mutex_);
+        while (!stop_token.stop_requested() && std::chrono::steady_clock::now() < deadline)
         {
-            std::this_thread::yield();
-            return;
-        }
-
-        if (mode == 1)
-        {
-            const auto delay = std::chrono::nanoseconds(
-                std::min<std::int64_t>(update_nanoseconds, 80'000'000LL));
-            std::this_thread::sleep_for(delay);
-        }
-        else if (mode == 2)
-        {
-            const auto delay = std::chrono::nanoseconds(
-                std::min<std::int64_t>(update_nanoseconds / 4, 20'000'000LL));
-            if (delay.count() > 0)
-                std::this_thread::sleep_for(delay);
-        }
-        else
-        {
-            std::this_thread::yield();
+            if (wake_cv_.wait_until(lock, stop_token,
+                std::min(deadline, std::chrono::steady_clock::now()
+                    + std::chrono::milliseconds(250)), [this, mode]
+                {
+                    return !enabled_.load(std::memory_order_relaxed)
+                        || updates_per_cycle_.load(std::memory_order_relaxed) != mode
+                        || pending_command_count() != 0u;
+                }))
+                break;
         }
     }
 }

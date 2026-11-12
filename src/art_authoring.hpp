@@ -1,5 +1,6 @@
 #pragma once
 
+#include "atomic_file.hpp"
 #include "math.hpp"
 #include "simulation.hpp"
 
@@ -251,21 +252,21 @@ namespace runner::art
         output.close();
         if (!output)
         {
+            // A short write or failed flush never gets a chance to replace the
+            // accepted layout. Remove only our private temporary artifact;
+            // the destination remains byte-for-byte untouched.
+            std::error_code cleanup_error{};
+            std::filesystem::remove(temporary, cleanup_error);
             error = "could not finish temporary art layout";
             return false;
         }
-        std::error_code ec{};
-        std::filesystem::rename(temporary, path, ec);
-        if (ec)
+        std::string replacement_error{};
+        if (!persistence::atomic_replace_file(
+                temporary, path, replacement_error))
         {
-            std::filesystem::remove(path, ec);
-            ec.clear();
-            std::filesystem::rename(temporary, path, ec);
-        }
-        if (ec)
-        {
-            std::filesystem::remove(temporary, ec);
-            error = "could not replace art layout";
+            std::error_code cleanup_error{};
+            std::filesystem::remove(temporary, cleanup_error);
+            error = "could not replace art layout: " + replacement_error;
             return false;
         }
         error.clear();

@@ -22,6 +22,7 @@ namespace runner::sim
 
         static bool force_climb_and_descent(Environment& environment) noexcept
         {
+            environment.set_guidance_mode(GuidanceMode::assisted);
             const auto ledge = std::ranges::find_if(environment.course_features_,
                 [](const CourseFeature& feature)
                 {
@@ -40,6 +41,7 @@ namespace runner::sim
 
             environment.particles_[hand].position = { left, top };
             environment.particles_[hand].previous = environment.particles_[hand].position;
+            environment.apply_ledge_training_scaffold();
             environment.solve_course();
             environment.particles_[foot].position = {
                 left + 0.40f, top + environment.particles_[foot].radius };
@@ -59,6 +61,7 @@ namespace runner::sim
 
             environment.particles_[hand].position = { left, top };
             environment.particles_[hand].previous = environment.particles_[hand].position;
+            environment.apply_ledge_training_scaffold();
             environment.solve_course();
             environment.particles_[root].position.x = left + 0.40f;
             environment.previous_root_height_ = environment.particles_[root].position.y + 0.001f;

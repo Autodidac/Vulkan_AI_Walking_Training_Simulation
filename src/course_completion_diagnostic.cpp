@@ -219,7 +219,7 @@ namespace runner::diagnostics
                 beginner_cells, beginner_fine_cells)
             && unchanged(full_hazard_sand,
                 full_hazard_cells, full_hazard_fine_cells);
-        const float deposited_volume = full_hazard_sand.total_height_volume();
+        const double deposited_volume = full_hazard_sand.total_height_volume();
         full_hazard_sand.deposit(active_sample_x, 0.12f, 0.18f,
             sandhybrid::Material::sand);
         for (int iteration = 0; iteration < 240; ++iteration)

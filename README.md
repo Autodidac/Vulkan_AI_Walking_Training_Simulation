@@ -1,18 +1,67 @@
 # Epoch2DWalkEngine
 
-Epoch2DWalkEngine is the reusable C++23 articulated-locomotion, training, rig, contact, and terrain-integration library. `Runner` is its complete SDL3/Vulkan example application with Live Autopilot and Rig Lab. Installed consumers link `Epoch2DWalkEngine::Epoch2DWalkEngine`; existing `Runner::Core` source integrations remain compatible.
+Epoch2DWalkEngine is the reusable C++23 articulated-locomotion, training, rig, contact, and terrain-integration library. `Runner` is its complete SDL3/Vulkan example application with Live Autopilot and Rig Lab. Installed consumers link `Epoch2DWalkEngine::Epoch2DWalkEngine`; existing `Runner::Core` source integrations remain compatible. The v0.7.51 candidate requires the exact publicly consumable `EpochSimEngine 2.5.29` package, replacing the previous 2.5.26 pin.
 
 Windows and Linux releases distinguish runnable Runner example packages, development/library packages, and exact source. See `docs/EPOCH2D_WALK_ENGINE_LIBRARY.md`.
 
-The release asset contract is explicit:
+The required v0.7.51 release asset names are explicit:
 
-- `Epoch2DWalkEngine-v0.7.50-runner-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.50-runner-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.50-dev-windows-x64.zip`
-- `Epoch2DWalkEngine-v0.7.50-dev-linux-x86_64.tar.gz`
-- `Epoch2DWalkEngine-v0.7.50-source.zip`
+- `Epoch2DWalkEngine-v0.7.51-runner-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.51-runner-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.51-dev-windows-x64.zip`
+- `Epoch2DWalkEngine-v0.7.51-dev-linux-x86_64.tar.gz`
+- `Epoch2DWalkEngine-v0.7.51-source.zip`
 
-Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The runtime packages contain the full Runner example; the development packages contain the installable library, public headers, dependency package, CMake target, documentation, and consumer example.
+Every completed archive must have a SHA-256 sidecar and a sorted per-file SHA-256 manifest. Each checksum sidecar is exact UTF-8-without-BOM, LF-terminated text in `lowercase-sha256  exact-archive-filename` form; the release audit executes that digest against all five archives and rejects CRLF, missing filenames, or trailing content. The runtime packages contain the full Runner example; the development packages contain the installable library, public headers, exact EpochSimEngine dependency package and provenance, CMake target, documentation, and installed consumer example. These names describe the release contract, not completed or published v0.7.51 artifacts.
+
+Release validation is intentionally two-phase. The build phase validates one exact commit, explicitly builds and executes the non-installed `RunnerVisualCaptures` source-render target, installs each runtime, runs every diagnostic through that installed tree's launcher from an unrelated directory before archiving, then repeats the launcher matrix after independent extraction and produces the immutable Windows/Linux Runner, SDK, and source artifacts. Native review then runs the exact Windows archive downloaded from that build. The promotion phase names the successful build run, reuses its artifacts without rebuilding or repackaging them, fully validates every PNG, and compares the archive embedded in the capture bundle byte-for-byte with that exact build artifact. Because this candidate tree necessarily predates those external results, its honest open/pending language is not rewritten between phases. Instead, the protected promotion environment emits and authenticates a canonical external receipt bound to the exact commit/tag; dispatched workflow SHA/ref and current run; Phase-A run attempt and build/promotion/evidence artifact IDs and digests; ordered 15-object byte/hash inventory; native-capture URL/bytes/hash and recursively exact extracted capture tree; and canonical Site-handoff readiness summary. The receipt is repeatable strict context verification, not one-use authority: a missing, altered, foreign, or context-mismatched receipt fails, while the separate Site activation grant provides atomic one-use protection. GitHub publication remains rollback-guarded until a draft byte audit passes, then anonymously re-downloads and byte/hash verifies the exact 15 public objects before cleanup. Self-declared manifest metadata is not accepted as provenance, and actual Site publication still requires its independent deployment/re-download receipt.
+
+## v0.7.51 visual authority, canonical material world, and physical equipment
+
+Live Autopilot starts in **Eco**, after applying an available autosave. In the
+View controls, **Eco** uses one active training
+worker at 25% update duty, **Balanced** up to two at 50%, and **Maximum** removes
+the duty throttle within the default four-worker ceiling. These limits exclude
+rendering/live physics. Pause lets an in-flight update finish. Incompatible saved
+policies restart at Stand with fresh optimizer/mastery state; authored rigs and
+historical totals are preserved. The **Trainer Snapshot** inset shows a sampled
+background trial or a recorded outcome. The large **Replay** keeps its controller
+and course for the whole trial and holds the final frame. Press **R** to start
+the next replay with the latest compatible controller and task. This does not
+restart or pause the worker. Training prerequisites and mastery checks still apply.
+Live also offers **Restart** and **Hold Start**; the latter freezes the authored
+start pose until **Play**, without pausing training or claiming a standing result.
+The inset samples active rollouts up to eight times per second and otherwise shows
+the latest sample or recorded outcome.
+
+v0.7.51 is an active release candidate, not a completed publication. Versioned metadata does not imply that the full compiler/test matrices, packages, bitmap review, exact commit, tag, or public assets have passed.
+
+- Centers the authored surface inside the real 640x360 material-cell cross-section at `world_bottom = -25.3125 m` and `world_top = +25.3125 m`, replacing the shallow populated strip and normal-viewport fallback slab with canonical cell state.
+- Builds deterministic deep sand/dirt/silt/stone transitions plus resource and cavity samples from the pinned EpochSimEngine resident-ground helpers while keeping collision, terrain sampling, structural ledges, lake depth, and challenge coordinates on the same authoritative cells.
+- Gives exposed nonstructural firm ground a real canonical Grass top cell and
+  keeps sand, mud, water, gaps, and structural challenge decks physically
+  distinct rather than painting a presentation-only green line.
+- Replaces the compact Rig Lab panel wall with one explicit scrollable Trainer
+  or Rig Inspector workspace beside the physical preview. Wider clients retain
+  more panes, Live Art and Rig Lab Art have independent on/off state, editor
+  zoom reports its real value, and default course labels stay sparse until
+  Advanced Challenge Details is selected.
+- Advances the renderer-neutral integration contract to API 7, action-layout schema 2, and canonical snapshot schema 5. Director requests authenticate graph index, stable task ID, task/challenge pairing, prerequisites, evidence, and control profile against the actual selection before mutating an environment.
+- Makes external authority fail closed: callers explicitly select Raw or Assisted guidance and retained-policy or expert joint commands. Player-guided mode accepts only a compatible Raw retained-best controller plus versioned signed-direction/stop/task/fire intent; its intent changes planner/observation/reward inputs without root force or translation.
+- Versions the canonical host snapshot and exports full pose, motor, canonical material-cell, traction/water/stall/equipment, requested/applied action, and optional-guidance provenance. Strict graph/evidence validation, pure trial reducers, atomic Director replacement, and species-filtered task graphs keep malformed state and Human-only weapon chains out of external hosts.
+- Persists Director schema-2 physical receipts for ordered lake entry/immersion/exit and two-foot plant/settled aim/real miss/bounded correction/improved physical shot evidence. Scalar-only physical mastery and the unaudited Director schema-1/autonomous-format-28 forms are rejected; automatic curriculum mastery stays closed until the evaluator publishes those ordered telemetry sequences.
+- Exports the correct `include/` root and proves Windows/Linux consumers with Epoch2DWalkEngine and EpochSimEngine installed in separate prefixes. Core-only configuration no longer invokes the Runner icon generator or requires Python.
+- Resolves enabled tasks to real material intervals, terrain boundaries, generated features, or the active aim-range target. Recovery, construction, tool traversal, and moving-target claims remain disabled until their distinct physics exist.
+- Gives the default Human a finite loaded carbine and a physical `safe carry -> brake -> timed two-foot plant -> gun stance -> joint-driven acquire/settle -> ready -> ballistic result -> correction/cooldown or reload -> safe-carry resume` sequence. Terrain/obstacle impact is resolved before target overlap, and API 7 exposes ammunition, plant/reload state, fire-block reason, and target visibility.
+- Makes the default twelve-motor Human the canonical persisted RUNRIG7 19-node rig, with independently commanded left/right ankle and distal-toe motors and 84 observations. The appended eight-value tail exposes the two toe angles, two toe rates, and four finite support-phase-coordinator values; the fixed 15-slot public action layout reserves 12 topology-masked anatomy slots and 3 separate equipment slots. Inactive species/stage slots are zeroed before policy RNG, likelihood, entropy, PPO, imitation, and external expert application.
+- Records the earlier 76-observation/13-action physical two-hand equipment ABI under `0x0007'5109`; `0x0007'5110` is the historical foundational-input/mixed-origin boundary, `0x0007'5111` is the whole-composite authority/plant boundary, `0x0007'5112` is the support-feedback observation boundary, and `0x0007'5113` is the CrouchWalk authority boundary. Current `0x0007'5115` binds RUNRIG7's 84-observation/15-action schema, explicit distal-toe motors, and policy-visible support-phase state while preserving the three equipment actions as the final independent tail. The Environment maintains mass-weighted center-of-mass motion and aggregate physical center of pressure independently of optional diagnostics; invalid or unloaded feedback encodes exact zero. Guidance is explicit at every policy-input call: non-target Raw scopes retain the exact zero phase scrub, while non-target Assisted scopes retain their prior phase observations. The existing 300-update per-environment ramp still admits only Raw-origin transitions to PPO actor gradients and only Assisted-origin transitions to the separately labeled decaying imitation pass; self-imitation and retained-best anchoring stay disabled once Raw actor samples enter an update. Checksummed `EPPO51` checkpoints bind complete authority/provenance evidence. None of `0x0007'5109`, `0x0007'5110`, `0x0007'5111`, `0x0007'5112`, or `0x0007'5113` can silently resume under `5115`; all five historical boundaries remain explicit unverified transfer-only inputs. The local unkeyed checksum detects accidental corruption; it is not authenticity against a malicious producer with binary/source access.
+- Automatic learned/evolved species state uses product-owned `epoch2dwalk-v0751-*` paths: `epoch2dwalk-v0751-{species}-autosave.eppo`, `epoch2dwalk-v0751-{species}-evolved.rig`, and `epoch2dwalk-v0751-{species}-autonomy.state`. At the v0.7.50 rename boundary, `runner-v0750-{species}-autosave.eppo` is lifetime-ledger-only compatibility input; its policy, optimizer, retained best, evolved rig, autonomy state, and mastery do not resume, while authored `{species}.rig` remains separately compatible.
+- Keeps direct packaged observation authoritative for Human, Chicken, Dog, and Hexapod scale, gait, contacts, course/lake motion, PIP, equipment, and every Rig Lab page.
+- Keeps Raw retained-network inference as an open release gate. The last authoritative audit showed network-directed forward stepping but repeated-seed instability after optional teacher/reflex/posture/swing guidance was removed; unaided upright posture and partial-burial escape are not yet learned, and v0.7.51 cannot be released on Assisted or visual evidence alone.
+- Requires `--diagnose-raw-inference` to prove per-joint network/effective-command identity, physical contact transitions, bounded stance slip/root displacement, and zero scripted gait replacement, root drive, projector, or course motion. The distinct `--diagnose-walk-eye` remains the packaged physical replay and visual-capture gate.
+- Requires complete Windows/Linux validation, installed and independently extracted runtime/SDK checks, exact-source byte audit, and direct native review of the exact 60-frame compact/default/ultrawide matrix before packaging or publication can be claimed. Live page evidence uses the product's visible `MISSION / VIEW / DETAILS` routes; retired internal Status, Totals, or Advanced names are not operator-facing capture contracts.
+- Provides the opt-in, non-installed `RunnerVisualCaptures` build target for environments without a native desktop capture surface. Phase A builds and runs this target as a mandatory source-render receipt. It composites the exact ordered `Application::vertices()` stream into deterministic binary PPMs for the visible Live Mission/View/Details routes, Course, all four Art subjects, physical Assisted equipment, every Rig Lab page, every-page wheel zoom, and all-species Art-editor views. Its manifest records dimensions, vertex/raster counts, hashes, subject bounds/viewport occupancy, and zoom-local pixel changes. These software frames support direct source-render QA; they do not replace packaged Vulkan-window acceptance or Raw learned-gait proof.
+- See `docs/EPOCH2D_WALK_ENGINE_V0751_PRODUCT_CLOSURE.md`.
 
 ## v0.7.50 persistent physical trials, AI Director, and shared art authoring
 
@@ -32,7 +81,7 @@ Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The 
 ## v0.7.49 Static SandHybrid cells, physical aiming, and fitted Human extremities
 
 - The course is a static physical world: training cannot enable conveyor motion, terrain sampling uses the creature's actual world displacement, and live diagnostics expose global SandHybrid cell coordinates.
-- Runner's 640x360 authored training footprint is stored as canonical 16-byte `SceneCell` material state and mapped into the 5120x1440 compact SandHybrid world at its exact global surface.
+- Epoch2DWalkEngine's bundled Runner example stores the 640x360 authored training footprint as canonical 16-byte `SceneCell` material state and maps it into the 5120x1440 compact SandHybrid world at its exact global surface.
 - Equipment handling is now `safe carry -> gun stance -> aiming -> ready -> fire`. The creature must physically stop, settle its actual arm/barrel pose within weapon tolerance, and respect cooldown before a shot can exist.
 - Projectile hits use swept ballistic collision. A miss records its signed error and adjusts only the following physical aim request; projectiles are never steered after firing.
 - Human hands, forearms, and articulated boots are bounded by their actual bone spans, heel/toe endpoints, joint overlap, and contact plane instead of torso-sized art envelopes.
@@ -161,7 +210,7 @@ Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The 
 - Advances training semantics to `0x0007'3501`, checkpoint magic to `EPPO35`, and local files to `runner-v0735-posture-*`; v0.7.34 contributes validated lifetime totals only.
 - Adds deterministic proportional-art, both-direction brace, exact-boundary, adversarial, lineage, source-audit, and 20/60/240 Hz tests. See `docs/RUNNER_V0735_PIP_POSTURE_TRUTH.md`.
 
-# Runner
+## Historical Runner-example releases
 
 ## v0.7.34 curriculum-safe rig optimization
 
@@ -251,23 +300,39 @@ Every archive has a SHA-256 sidecar and a sorted per-file SHA-256 manifest. The 
 - Tracks strikes, swing time, and lift at each authored support seed while retaining topology-derived controller phase groups.
 - Distinguishes a real multi-legged support transfer from fully planted skating without weakening the planted anti-skating rejection.
 - Removes conveyor-derived locomotion credit from rollouts, champion evaluation, and the large preview; progress must come from simulated rig displacement.
-- Adds `Runner.exe --diagnose-rig-training
-`Runner.exe --diagnose-rig-training`, a deterministic bounded Human/Chicken/Dog/Hexapod comparison with retained distance, gait-transfer, invalid-seed, and preview-reset evidence.
+- Adds `Runner.exe --diagnose-rig-training`, a deterministic bounded
+  Human/Chicken/Dog/Hexapod comparison with retained distance, gait-transfer,
+  invalid-seed, and preview-reset evidence.
 - Advances every runtime simulation at fixed 60 Hz regardless of render cadence; 20, 60, and 240 Hz produce the same preview physics state.
 - Fixes MSVC Debug constexpr compilation and makes the background pipeline test prove a staged publication instead of depending on optimized wall-clock throughput.
 - Autosave names, checkpoint semantics, package docs, and release validation are isolated to v0.7.27.
 
-Runner 0.7.33 is a combined autonomous physics locomotion trainer, rig editor, deformable-terrain laboratory, and cross-platform C++23 application.
+The historical Runner 0.7.33 application combined the autonomous physics locomotion trainer, rig editor, and deformable-terrain laboratory. In current releases, that complete application is the bundled SDL3/Vulkan example for the `Epoch2DWalkEngine` product and library.
 
 ## Build requirements
 
 - CMake 3.28 or newer
 - C++23 compiler
 - Ninja or Visual Studio
-- Python 3 for deterministic icon generation
+- Python 3 only when `RUNNER_BUILD_APP=ON`, for deterministic icon generation
 - vcpkg for SDL3, Vulkan, and shaderc on Windows
+- A Vulkan 1.3 loader and a working GPU/driver (or a conformant software Vulkan
+  implementation) to run the Linux example. The Linux archive does not bundle
+  or pretend to replace the host's display stack or graphics driver.
+- Release CI validates the Windows x64 artifact on GitHub's `windows-2025`
+  image and the Linux x86-64 artifact on Ubuntu 24.04. Native desktop visual
+  acceptance records its exact host separately in the final release receipt;
+  a CI image is not presented as that desktop acceptance.
+- The Linux package audit measures the highest required `GLIBC_*` and
+  `GLIBCXX_*` symbols from the independently extracted binaries before a
+  runtime ABI floor is recorded. Building on Ubuntu 24.04 alone is not used to
+  invent a glibc floor or claim compatibility with an older distribution.
+- Epoch2DWalkEngine Runner-example runtime packages include this project's MIT license and the actual
+  SDL3 and Vulkan-loader copyright/license texts supplied by the pinned vcpkg
+  installation under `docs/third-party`. The Vulkan driver and display stack
+  remain host-owned and are not redistributed by Runner.
 
-The project pins and statically links the platform-neutral SandHybrid simulation library. Runner owns the SDL3/Vulkan application, rendering, training, editor, and package lifecycle.
+Epoch2DWalkEngine links the platform-neutral EpochSimEngine dependency at the supported package boundary. Its bundled Runner example owns SDL3/Vulkan presentation, interactive training, Rig Lab, and runtime packaging; external consumers use the installed `Epoch2DWalkEngine::Epoch2DWalkEngine` library without inheriting that UI lifecycle.
 
 ## Windows build
 
@@ -293,10 +358,10 @@ ctest --test-dir build/linux --output-on-failure
 ## Live controls
 
 - Mouse wheel: zoom the Live Autopilot world view without changing physical scale
-- `R`: reset the live preview and restore automatic camera fitting
+- `R`: start a new replay with the latest compatible controller and restore automatic camera fitting; background training is unaffected
 - `Space`: pause or resume background training
 - `Tab`: switch between Live Autopilot and Rig Lab
-- `1`, `2`, `3`: Normal, Faster, and Max CPU modes
+- `1`, `2`, `3`: Eco, Balanced, and Maximum training CPU budgets
 - `T`: cycle Summary / Totals / Advanced Diagnostics
 - `U`: toggle Imperial / Metric reference labels (Imperial is the fresh-launch default)
 - `A`: toggle the complete modular helmet, torso, arm, leg, boot, and weapon presentation
@@ -330,18 +395,20 @@ Runner.exe --diagnose-ui
 Runner.exe --diagnose-art
 Runner.exe --diagnose-rig-training
 Runner.exe --diagnose-walk-eye
+Runner.exe --diagnose-raw-inference
 Runner.exe --diagnose-speed-walk
 Runner.exe --diagnose-course
 Runner.exe --diagnose-hybrid-brain
 Runner.exe --course-eye-test
 Runner.exe --walk-eye-test
+Runner.exe --equipment-eye-test
 Runner.exe --art-eye-test=human
 Runner.exe --art-eye-test=chicken
 Runner.exe --art-eye-test=dog
 Runner.exe --art-eye-test=hexapod
 ```
 
-`--diagnose-rig-training` runs the v0.7.43 cold-start learner across the four production subjects: Human, Chicken, Dog, and Hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority. Chicken must exceed 10 m / 14 avian gait cycles, Human 18 m / 16 physical steps, Dog 10 m / 18 completed four-support transfers, and Hexapod 14 m / 22 completed six-support transfers after lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--diagnose-speed-walk` executes the real two-lesson graph: it retains a strict raw Walk controller, transfers those weights into Speed Walk, trains a fresh 1,200-update specialization, and requires six-seed raw/static-world distance, cadence, speed, survival, and collision mastery. `--walk-eye-test` independently cold-trains the default eight-motor Human, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, the 0.28x-3.60x manual range, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale. `--diagnose-ui` CPU-composites representative Live and all four Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all four production orthographic rig presentations, and a horizontal fallen humanoid; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, immutable authored fine/macro cells, explicit falling-cell mutation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--diagnose-hybrid-brain` verifies physics-observed falling-object dodges while walking, idle, and turning; harmless-object rejection; blocked-exit fallback; policy saturation bounds; hole escape; all multi-support topologies; and exact 20/60/240 Hz planning equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test=<human|chicken|dog|hexapod>` opens the selected production subject in frozen strict side elevation at one shared Human-referenced world scale; bare `--art-eye-test` remains the Human compatibility spelling.
+`--diagnose-rig-training` runs the current v0.7.51 cold-start learner across the four production subjects: Human, Chicken, Dog, and Hexapod must each retain and directly replay a strict-valid post-handoff controller with zero teacher authority. Chicken must exceed 10 m / 14 avian gait cycles, Human 18 m / 16 physical steps, Dog 10 m / 18 completed four-support transfers, and Hexapod 14 m / 22 completed six-support transfers after lesson-local handoff. `--diagnose-walk-eye` runs the same bounded learner and replay gate headlessly, prints its full retained/display/scissor evidence, and exits with a testable status. `--diagnose-speed-walk` executes the real two-lesson graph: it retains a strict raw Walk controller, transfers those weights into Speed Walk, trains a fresh 1,200-update specialization, and requires six-seed raw/static-world distance, cadence, speed, survival, and collision mastery. `--walk-eye-test` independently cold-trains the canonical 19-node Human with ten powered anatomy slots, refuses any missing, invalid, assisted-era, or pre-handoff champion, replays the retained controller at zero authority over six seeds, and freezes a real lifted-step production frame after the 18 m / 16-step gate. The diagnostic also runs repeated-seed physical gait references and exact 20/60/240 render-cadence state checks. `--equipment-eye-test` is a separate assisted visual fixture: it advances the canonical Human equipment-target environment through physical stop, two-foot plant, gun stance and aim settling, fails if a valid no-shot READY frame is not reached, and freezes that exact production environment with Assisted provenance. It is not Raw learned-policy evidence. `--diagnose-acceptance` runs the deterministic rig/curriculum matrix used by package auditing. `--diagnose-camera` validates adaptive fit, the 0.28x-3.60x manual range, clamps, wheel zoom, lookahead, dead-zone follow, and PIP scale, then initializes the real packaged Application at 2048x1152 and 3840x2160 to require routed Live wheel zoom, changed world render geometry, isolated Rig Lab editor zoom, and a preserved Live camera round trip. `--diagnose-ui` CPU-composites representative Live and all five Rig Lab pages and fails if any content region is black or visually empty. `--diagnose-art` renders the production course, all four production orthographic rig presentations, a horizontal fallen humanoid, and the frozen physical equipment frame; every frame must remain below 75% of the shared 8 MiB Vulkan vertex budget. `--diagnose-course` verifies launch-contact alignment, immutable authored fine/macro cells, explicit falling-cell mutation, seeded material diversity, water/hole geometry, observation truth, delayed objects, physical climb/descent, optional-subsystem identity, and 20/60/240 Hz equivalence. `--diagnose-hybrid-brain` verifies physics-observed falling-object dodges while walking, idle, and turning; harmless-object rejection; blocked-exit fallback; policy saturation bounds; hole escape; all multi-support topologies; and exact 20/60/240 Hz planning equivalence. `--course-eye-test` opens the real Vulkan UI at a deterministic frozen Walk / Run start frame and labels the launch pad and active material regions for direct packaged inspection. `--art-eye-test=<human|chicken|dog|hexapod>` opens the selected production subject in frozen strict side elevation at one shared Human-referenced world scale; bare `--art-eye-test` remains the Human compatibility spelling.
 Speed Walk completion and `--diagnose-speed-walk` restore and replay the retained champion on fresh Raw/static-world seeds; later exploratory drift is never substituted for the controller the trainer actually keeps.
 
 
@@ -349,7 +416,7 @@ Speed Walk completion and `--diagnose-speed-walk` restore and replay the retaine
 
 - [`AGENTS.md`](AGENTS.md) defines cache-first implementation, validation, documentation, and release rules.
 - [`CHANGELOG.md`](CHANGELOG.md) is the single release-history document.
-- [`missioncache.md`](missioncache.md) is Runner's single authoritative active mission ledger; closed historical ledgers remain in Git history and release tags.
+- [`missioncache.md`](missioncache.md) is Epoch2DWalkEngine's single authoritative active mission ledger; closed historical ledgers remain in Git history and release tags.
 - [`docs/SANDHYBRID_INTEGRATION_BRIDGE.md`](docs/SANDHYBRID_INTEGRATION_BRIDGE.md) pins the SandHybrid library.
 - [`docs/RUNNER_V0716_CAMERA_BATCH.md`](docs/RUNNER_V0716_CAMERA_BATCH.md) documents the adaptive camera contract.
 - [`docs/RUNNER_V0717_EYE_TEST_CORRECTION.md`](docs/RUNNER_V0717_EYE_TEST_CORRECTION.md) documents the crouch/gait/stub-foot correction.

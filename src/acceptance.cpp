@@ -60,7 +60,8 @@ namespace runner::acceptance
                 [](float value) { return std::isfinite(value); });
         }
 
-        [[nodiscard]] float minimum_support_clearance(const CreatureBlueprint& blueprint) noexcept
+        [[nodiscard]] float minimum_same_side_support_clearance(
+            const CreatureBlueprint& blueprint) noexcept
         {
             float minimum = std::numeric_limits<float>::max();
             bool compared = false;
@@ -79,7 +80,7 @@ namespace runner::acceptance
                             && blueprint.is_left_support_seed(second_index))
                         || (blueprint.is_right_support_seed(first_index)
                             && blueprint.is_right_support_seed(second_index));
-                    if (same_plate)
+                    if (!same_plate)
                         continue;
                     const float first_radius = first < blueprint.radii.size()
                         ? blueprint.radii[first] : 0.12f;
@@ -364,7 +365,8 @@ namespace runner::acceptance
         std::string fused_preset{};
         for (const NamedBlueprint& preset : presets)
         {
-            const float clearance = minimum_support_clearance(preset.blueprint);
+            const float clearance =
+                minimum_same_side_support_clearance(preset.blueprint);
             tightest_clearance = std::min(tightest_clearance, clearance);
             if (clearance > -0.005f)
                 continue;
@@ -373,7 +375,7 @@ namespace runner::acceptance
             break;
         }
         std::ostringstream support_detail{};
-        support_detail << "tightest authored semantic-support clearance="
+        support_detail << "tightest authored same-side semantic-support clearance="
             << tightest_clearance;
         if (!supports_separate)
             support_detail << " in " << fused_preset;
@@ -417,10 +419,15 @@ namespace runner::acceptance
         const auto duck_action = rl::duck_teacher_action(duck_environment);
         float arm_energy = 0.0f;
         float leg_energy = 0.0f;
-        for (std::size_t index = 0; index < 4u; ++index)
-            leg_energy += std::abs(duck_action[index]);
-        for (std::size_t index = 4u; index < humanoid.active_motor_count; ++index)
-            arm_energy += std::abs(duck_action[index]);
+        for (std::size_t index = 0;
+            index < humanoid.active_motor_count; ++index)
+        {
+            if (rl::motor_drives_support_branch(
+                    humanoid, humanoid.motors[index]))
+                leg_energy += std::abs(duck_action[index]);
+            else
+                arm_energy += std::abs(duck_action[index]);
+        }
         const bool duck_legs_only = arm_energy < 0.0001f && leg_energy > 0.0f;
         std::ostringstream duck_detail{};
         duck_detail << "leg_energy=" << leg_energy << ", arm_energy=" << arm_energy;

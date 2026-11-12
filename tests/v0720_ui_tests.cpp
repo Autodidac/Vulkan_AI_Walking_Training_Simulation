@@ -69,13 +69,17 @@ int main()
     require(!runner::ui_layout::overlaps(telemetry, pip),
         "telemetry and PIP must not overlap");
 
-    const auto stable = runner::preview_sync::decide(false, false, false);
-    const auto champion = runner::preview_sync::decide(false, false, true);
-    const auto course = runner::preview_sync::decide(false, true, false);
-    require(!stable.reset_episode && !champion.reset_episode,
-        "normal publication or new champion must not restart the live preview");
-    require(course.reset_episode && course.replace_course,
-        "real course changes must reset the live preview");
+    for (unsigned flags = 0; flags < 16; ++flags)
+    {
+        const bool rig = (flags & 1u) != 0u;
+        const bool first = (flags & 2u) != 0u;
+        const bool editing = (flags & 4u) != 0u;
+        const bool reset = (flags & 8u) != 0u;
+        const auto decision = runner::preview_sync::decide(rig, first, editing, reset);
+        require(decision.replace_blueprint == (rig && !editing)
+                && decision.start_replay == (!editing && (rig || first || reset)),
+            "background publication or uncommitted rig edit changed replay ownership");
+    }
 
     runner::render::Canvas canvas{};
     canvas.push_clip({ 10.0f, 20.0f }, { 40.0f, 50.0f });

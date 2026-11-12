@@ -1,5 +1,6 @@
 #include "autonomy.hpp"
 #include "ppo.hpp"
+#include "raw_learning_test_access.hpp"
 #include "simulation.hpp"
 
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string_view>
+#include <utility>
 
 namespace
 {
@@ -120,6 +122,7 @@ int main()
     source.best_parameters = source.parameters;
     std::fill(source.first_moment.begin(), source.first_moment.end(), 1.0f);
     std::fill(source.second_moment.begin(), source.second_moment.end(), 1.0f);
+    source = rl::RawLearningTestAccess::reseal(std::move(source));
 
     sim::CreatureBlueprint candidate = humanoid;
     candidate.motors[0].strength = std::max(0.01f,

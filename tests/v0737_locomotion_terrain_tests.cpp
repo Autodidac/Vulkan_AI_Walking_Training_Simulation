@@ -254,6 +254,20 @@ int main()
             if (current.region == sim::TerrainRegion::hole
                 || next.region == sim::TerrainRegion::hole)
                 continue;
+            const auto current_challenge = terrain.challenge_at(
+                static_cast<float>(index)
+                    * sim::DeformableTerrain::fine_cell_spacing);
+            const auto next_challenge = terrain.challenge_at(
+                static_cast<float>(index + 1u)
+                    * sim::DeformableTerrain::fine_cell_spacing);
+            const auto structural_overlay = [](const auto& challenge) noexcept
+            {
+                return challenge.kind == director::ChallengeKind::step
+                    || challenge.kind == director::ChallengeKind::ramp;
+            };
+            if (structural_overlay(current_challenge)
+                || structural_overlay(next_challenge))
+                continue;
             require(std::abs(current.height - next.height) < 0.11f,
                 "ordinary material boundary created a curb or one-cell spike");
         }

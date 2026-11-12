@@ -1,43 +1,50 @@
 cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
-project(Epoch2DWalkEngine VERSION 0.7.50 LANGUAGES CXX)
+project(Epoch2DWalkEngine VERSION 0.7.51 LANGUAGES CXX)
 
-option(RUNNER_BUILD_APP "Build the SDL3/Vulkan Runner application." ON)
-option(RUNNER_BUILD_TESTS "Build deterministic core tests." ON)
+option(RUNNER_BUILD_APP "Build the bundled Epoch2DWalkEngine SDL3/Vulkan Runner example." ON)
+option(RUNNER_BUILD_TESTS "Build deterministic Epoch2DWalkEngine tests." ON)
 option(RUNNER_ENABLE_TSAN "Enable ThreadSanitizer for CPU-only tests." OFF)
 
 find_package(Threads REQUIRED)
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
+if(RUNNER_BUILD_APP)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
-set(RUNNER_GENERATED_ASSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
-file(MAKE_DIRECTORY "${RUNNER_GENERATED_ASSET_DIR}")
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_runner_icon.py"
-        "${RUNNER_GENERATED_ASSET_DIR}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE RUNNER_ICON_RESULT)
-if(NOT RUNNER_ICON_RESULT EQUAL 0)
-    message(FATAL_ERROR "Runner screenshot icon generation failed")
+    set(RUNNER_GENERATED_ASSET_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-assets")
+    file(MAKE_DIRECTORY "${RUNNER_GENERATED_ASSET_DIR}")
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_runner_icon.py"
+            "${RUNNER_GENERATED_ASSET_DIR}"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE RUNNER_ICON_RESULT)
+    if(NOT RUNNER_ICON_RESULT EQUAL 0)
+        message(FATAL_ERROR "Epoch2DWalkEngine Runner-example icon generation failed")
+    endif()
+    set(RUNNER_ICON_SOURCE "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.png")
+    set(RUNNER_ICON_SOURCE_SHA256 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.sha256")
+    set(RUNNER_ICON_PNG "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.png")
+    set(RUNNER_ICON_PNG_512 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_512.png")
+    set(RUNNER_ICON_BMP "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.bmp")
+    set(RUNNER_ICON_ICO "${RUNNER_GENERATED_ASSET_DIR}/runner.ico")
 endif()
-set(RUNNER_ICON_SOURCE "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.png")
-set(RUNNER_ICON_SOURCE_SHA256 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_source.sha256")
-set(RUNNER_ICON_PNG "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.png")
-set(RUNNER_ICON_PNG_512 "${RUNNER_GENERATED_ASSET_DIR}/runner_icon_512.png")
-set(RUNNER_ICON_BMP "${RUNNER_GENERATED_ASSET_DIR}/runner_icon.bmp")
-set(RUNNER_ICON_ICO "${RUNNER_GENERATED_ASSET_DIR}/runner.ico")
 
 include(FetchContent)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/RequireExactEpochSimEngineVersion.cmake")
 set(RUNNER_SANDHYBRID_PACKAGE_ROOT "$ENV{RUNNER_SANDHYBRID_PACKAGE_ROOT}"
-    CACHE PATH "Offline EpochSimEngine v2.5.26 package root containing lib/cmake/EpochSimEngine.")
-set(RUNNER_SANDHYBRID_SOURCE_ID "14f55d30df3e406215facf069c8b50082d7439eb")
+    CACHE PATH "Offline EpochSimEngine v2.5.29 package root containing lib/cmake/EpochSimEngine.")
+set(RUNNER_SANDHYBRID_REQUIRED_VERSION "2.5.29")
+set(RUNNER_SANDHYBRID_SOURCE_ID "dffedf526a83fce477ebe18376cf75a88598e738")
 if(RUNNER_SANDHYBRID_PACKAGE_ROOT)
-    find_package(EpochSimEngine 2.5.26 EXACT CONFIG REQUIRED
+    find_package(EpochSimEngine 2.5.29 EXACT CONFIG REQUIRED
         PATHS "${RUNNER_SANDHYBRID_PACKAGE_ROOT}" NO_DEFAULT_PATH)
     set(runner_sandhybrid_SOURCE_DIR "${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
+    set(runner_sandhybrid_resolved_version "${EpochSimEngine_VERSION}")
+    set(runner_sandhybrid_resolved_origin
+        "installed package ${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
     message(STATUS "Using offline EpochSimEngine ${EpochSimEngine_VERSION} at ${RUNNER_SANDHYBRID_PACKAGE_ROOT}")
 else()
     set(SANDHYBRID_BUILD_APP OFF CACHE BOOL "" FORCE)
@@ -46,17 +53,27 @@ else()
     set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(runner_sandhybrid
         GIT_REPOSITORY https://epoch.adamrushford.chatgpt.site/git/simengine.git
-        GIT_TAG 14f55d30df3e406215facf069c8b50082d7439eb
+        GIT_TAG dffedf526a83fce477ebe18376cf75a88598e738
         GIT_SHALLOW FALSE
         GIT_SUBMODULES ""
         GIT_SUBMODULES_RECURSE FALSE)
     FetchContent_MakeAvailable(runner_sandhybrid)
+    get_directory_property(runner_sandhybrid_resolved_version
+        DIRECTORY "${runner_sandhybrid_SOURCE_DIR}"
+        DEFINITION PROJECT_VERSION)
+    set(runner_sandhybrid_resolved_origin
+        "FetchContent source ${runner_sandhybrid_SOURCE_DIR}")
 endif()
+runner_require_exact_epochsimengine_version(
+    "${runner_sandhybrid_resolved_version}"
+    "${RUNNER_SANDHYBRID_REQUIRED_VERSION}"
+    "${runner_sandhybrid_resolved_origin}")
 if(NOT TARGET EpochSimEngine::EpochSimEngine)
-    message(FATAL_ERROR "EpochSimEngine v2.5.26 core target was not created")
+    message(FATAL_ERROR "EpochSimEngine v2.5.29 core target was not created")
 endif()
 
 add_library(RunnerCore STATIC
+    src/atomic_file.cpp
     src/simulation.cpp
     src/pixel_art.cpp
     src/acceptance.cpp
@@ -64,6 +81,7 @@ add_library(RunnerCore STATIC
     src/ppo_trainer.cpp
     src/ppo_parallel.cpp
     src/rig_training_diagnostic.cpp
+    src/raw_inference_diagnostic.cpp
     src/course_completion_diagnostic.cpp
     src/hybrid_brain_diagnostic.cpp
     src/self_imitation.cpp
@@ -77,7 +95,7 @@ add_library(Epoch2DWalkEngine::Epoch2DWalkEngine ALIAS RunnerCore)
 target_include_directories(RunnerCore PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine>")
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_link_libraries(RunnerCore PUBLIC Threads::Threads EpochSimEngine::EpochSimEngine)
 target_compile_features(RunnerCore PUBLIC cxx_std_23)
 target_compile_definitions(RunnerCore PUBLIC
@@ -156,7 +174,8 @@ if(RUNNER_BUILD_APP)
         src/canvas.cpp src/renderer.cpp
         src/app.hpp src/art_authoring.hpp src/pixel_art.hpp src/renderer.hpp src/math.hpp
         src/ui_font.hpp src/ui_layout.hpp src/view_camera.hpp
-        src/locomotion_strategy.hpp src/preview_sync.hpp
+        src/course_geometry.hpp
+        src/locomotion_strategy.hpp src/presentation_session.hpp src/preview_sync.hpp
         src/species_art_layout.hpp
         src/training_explainer.hpp src/ui_render_contract.hpp
         src/ui_frame_probe.hpp)
@@ -179,8 +198,38 @@ if(RUNNER_BUILD_APP)
         target_sources(Runner PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/runner_icon.rc")
     endif()
 
+    # Top-level package identity changes more often than the executable. Keep
+    # build-tree diagnostics exact even when an incremental Runner build does
+    # not relink and therefore would not execute its POST_BUILD copy commands.
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(RUNNER_BUILD_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+    else()
+        set(RUNNER_BUILD_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+    add_custom_target(RunnerPackageMetadataSync
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${RUNNER_BUILD_PACKAGE_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+            "${RUNNER_BUILD_PACKAGE_DIR}/README.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
+            "${RUNNER_BUILD_PACKAGE_DIR}/CHANGELOG.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+            "${RUNNER_BUILD_PACKAGE_DIR}/LICENSE"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/missioncache.md"
+            "${RUNNER_BUILD_PACKAGE_DIR}/missioncache.md"
+        VERBATIM
+        COMMENT "Synchronizing Epoch2DWalkEngine package identity documents")
+    add_dependencies(Runner RunnerPackageMetadataSync)
+
     add_custom_command(TARGET Runner POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:Runner>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/README.md" "$<TARGET_FILE_DIR:Runner>/README.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md" "$<TARGET_FILE_DIR:Runner>/CHANGELOG.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "$<TARGET_FILE_DIR:Runner>/LICENSE"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/missioncache.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/human.rig" "$<TARGET_FILE_DIR:Runner>/human.rig"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/chicken.rig" "$<TARGET_FILE_DIR:Runner>/chicken.rig"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RUNNER_RIG_OUTPUT_DIR}/dog.rig" "$<TARGET_FILE_DIR:Runner>/dog.rig"
@@ -226,16 +275,41 @@ if(RUNNER_BUILD_APP)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0743_AUTHORED_LIVE_MORPHOLOGY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0744_DOG_ART_RIG_ASSEMBLY.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0745_HUMAN_SUPPORT_SPECIES_ART.md"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0746_EXACT_CELLS_NATURAL_GAIT_TURN.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0747_SPECIES_RIGLAB_MASTERY_RELEASE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md" "$<TARGET_FILE_DIR:Runner>/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_V0751_PRODUCT_CLOSURE.md" "$<TARGET_FILE_DIR:Runner>/docs/EPOCH2D_WALK_ENGINE_V0751_PRODUCT_CLOSURE.md"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md" "$<TARGET_FILE_DIR:Runner>/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         VERBATIM)
 
+    if(EXISTS "${runner_sandhybrid_SOURCE_DIR}/missioncache.md")
+        add_custom_command(TARGET Runner POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Runner>/docs"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
+                "$<TARGET_FILE_DIR:Runner>/docs/SandHybrid-missioncache.md"
+            VERBATIM)
+    endif()
+
     install(TARGETS Runner RUNTIME DESTINATION . COMPONENT RunnerRuntime)
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+        "${CMAKE_CURRENT_SOURCE_DIR}/missioncache.md"
+        DESTINATION . COMPONENT RunnerRuntime)
+    foreach(runner_runtime_notice IN ITEMS sdl3 vulkan-loader)
+        set(runner_runtime_notice_file
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${runner_runtime_notice}/copyright")
+        if(EXISTS "${runner_runtime_notice_file}")
+            install(FILES "${runner_runtime_notice_file}"
+                DESTINATION docs/third-party
+                RENAME "${runner_runtime_notice}-LICENSE.txt"
+                COMPONENT RunnerRuntime)
+        endif()
+    endforeach()
     if(WIN32)
         install(FILES
             "$<TARGET_FILE_DIR:Runner>/SDL3.dll"
@@ -291,16 +365,23 @@ if(RUNNER_BUILD_APP)
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0748_CONTACT_LED_GAIT_SPECIES_ART.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0749_PHYSICAL_COMBAT_TERRAIN_ART.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/RUNNER_V0750_PERSISTENT_DIRECTOR_ART_AUTHORING.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_V0751_PRODUCT_CLOSURE.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
         DESTINATION docs COMPONENT RunnerRuntime)
-    install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md" DESTINATION docs RENAME SandHybrid-missioncache.md COMPONENT RunnerRuntime)
+    if(EXISTS "${runner_sandhybrid_SOURCE_DIR}/missioncache.md")
+        install(FILES "${runner_sandhybrid_SOURCE_DIR}/missioncache.md"
+            DESTINATION docs RENAME SandHybrid-missioncache.md
+            COMPONENT RunnerRuntime)
+    endif()
 endif()
 set(EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS
     src/acceptance.hpp
     src/ai_director.hpp
     src/ai_director_io.hpp
+    src/atomic_file.hpp
     src/art_authoring.hpp
     src/autonomy.hpp
+    src/course_geometry.hpp
     src/course_completion_diagnostic.hpp
     src/deformable_terrain.hpp
     src/hybrid_brain_diagnostic.hpp
@@ -310,9 +391,12 @@ set(EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS
     src/pixel_art.hpp
     src/ppo.hpp
     src/preview_sync.hpp
+    src/raw_inference_diagnostic.hpp
+    src/raw_learning_provenance.hpp
     src/rig_training_diagnostic.hpp
     src/simulation.hpp
     src/species_art_layout.hpp
+    src/training_budget.hpp
     src/training_explainer.hpp)
 
 set(EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR
@@ -330,7 +414,7 @@ install(TARGETS RunnerCore
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Epoch2DWalkEngineDevelopment
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT Epoch2DWalkEngineDevelopment
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Epoch2DWalkEngineDevelopment
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine)
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${EPOCH2D_WALK_ENGINE_PUBLIC_HEADERS}
     "${CMAKE_CURRENT_SOURCE_DIR}/include/Epoch2DWalkEngine/Engine.hpp"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/Epoch2DWalkEngine
@@ -345,17 +429,58 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/Epoch2DWalkEngineConfigVersion.cmake"
     DESTINATION "${EPOCH2D_WALK_ENGINE_CMAKE_INSTALL_DIR}"
     COMPONENT Epoch2DWalkEngineDevelopment)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_LIBRARY.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/EPOCH2D_WALK_ENGINE_V0751_PRODUCT_CLOSURE.md"
     DESTINATION docs COMPONENT Epoch2DWalkEngineDevelopment)
+install(FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
+    "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+    "${CMAKE_CURRENT_SOURCE_DIR}/missioncache.md"
+    DESTINATION . COMPONENT Epoch2DWalkEngineDevelopment)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/examples/"
+    DESTINATION examples COMPONENT Epoch2DWalkEngineDevelopment)
+if(EXISTS "${runner_sandhybrid_SOURCE_DIR}/README.md")
+    install(FILES
+        "${runner_sandhybrid_SOURCE_DIR}/README.md"
+        "${runner_sandhybrid_SOURCE_DIR}/CHANGELOG.md"
+        "${runner_sandhybrid_SOURCE_DIR}/LICENSE"
+        DESTINATION docs/third-party/EpochSimEngine
+        COMPONENT Epoch2DWalkEngineDevelopment)
+endif()
 
 
 if(RUNNER_BUILD_TESTS)
     include(CTest)
     enable_testing()
+    add_test(NAME Runner.ExactEpochSimEngineVersionGuardAcceptsCurrent
+        COMMAND ${CMAKE_COMMAND}
+            -DRUNNER_VERIFY_EPOCHSIMENGINE_ACTUAL=2.5.29
+            -DRUNNER_VERIFY_EPOCHSIMENGINE_REQUIRED=2.5.29
+            -DRUNNER_VERIFY_EPOCHSIMENGINE_ORIGIN=current-fixture
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RequireExactEpochSimEngineVersion.cmake)
+    add_test(NAME Runner.ExactEpochSimEngineVersionGuardRejectsStaleOverride
+        COMMAND ${CMAKE_COMMAND}
+            "-DRUNNER_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+            "-DRUNNER_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/tests/stale-epochsimengine-override"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/verify_stale_epochsimengine_override.cmake)
+    set_tests_properties(
+        Runner.ExactEpochSimEngineVersionGuardAcceptsCurrent
+        Runner.ExactEpochSimEngineVersionGuardRejectsStaleOverride
+        PROPERTIES TIMEOUT 10)
     add_test(NAME Runner.RepositoryHygiene COMMAND ${CMAKE_COMMAND}
         -DRUNNER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/repository_audit.cmake)
     set_tests_properties(Runner.RepositoryHygiene PROPERTIES TIMEOUT 30)
+
+    if(RUNNER_BUILD_APP)
+        add_test(NAME Runner.StrictReleaseManifest
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/strict_sha256_manifest_tests.py"
+                -v)
+        set_tests_properties(Runner.StrictReleaseManifest PROPERTIES TIMEOUT 60)
+    endif()
 
     add_executable(Epoch2DWalkEngineLibraryExample
         examples/library_probe.cpp)
@@ -382,6 +507,40 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.ViewCamera COMMAND RunnerViewCameraTests)
     set_tests_properties(Runner.ViewCamera PROPERTIES TIMEOUT 30)
 
+    add_executable(RunnerSoftwareFrameCaptureTests
+        tests/software_frame_capture_tests.cpp)
+    target_include_directories(RunnerSoftwareFrameCaptureTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerSoftwareFrameCaptureTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerSoftwareFrameCaptureTests)
+    add_test(NAME Runner.SoftwareFrameCapture
+        COMMAND RunnerSoftwareFrameCaptureTests)
+    set_tests_properties(Runner.SoftwareFrameCapture PROPERTIES TIMEOUT 30)
+
+    # Headless visual QA consumes the same ordered Application vertex stream as
+    # Vulkan. It is deliberately opt-in and non-installed: generated PPMs are
+    # review evidence, never a substitute for packaged native-window capture.
+    add_executable(RunnerVisualCapture EXCLUDE_FROM_ALL
+        tools/visual_capture.cpp
+        src/app.cpp src/canvas.cpp
+        src/app.hpp src/renderer.hpp src/software_frame_capture.hpp
+        src/ui_layout.hpp)
+    target_link_libraries(RunnerVisualCapture PRIVATE Runner::Core)
+    target_include_directories(RunnerVisualCapture PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerVisualCapture PRIVATE cxx_std_23)
+    target_compile_definitions(RunnerVisualCapture PRIVATE
+        RUNNER_VERSION="${PROJECT_VERSION}")
+    runner_enable_warnings(RunnerVisualCapture)
+    add_custom_target(RunnerVisualCaptures
+        COMMAND "$<TARGET_FILE:RunnerVisualCapture>"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            "${CMAKE_CURRENT_BINARY_DIR}/visual-captures"
+        DEPENDS RunnerVisualCapture
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        VERBATIM
+        COMMENT "Rendering deterministic 2048x1152 production-vertex PPM evidence")
+
     add_executable(RunnerV0717EyeTestTests tests/v0717_eye_test_tests.cpp)
     target_link_libraries(RunnerV0717EyeTestTests PRIVATE Runner::Core)
     target_compile_features(RunnerV0717EyeTestTests PRIVATE cxx_std_23)
@@ -403,15 +562,17 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0719GeneralLocomotion COMMAND RunnerV0719GeneralLocomotionTests)
     set_tests_properties(Runner.V0719GeneralLocomotion PROPERTIES TIMEOUT 30)
 
-    add_executable(RunnerV0720UiTests
-        tests/v0720_ui_tests.cpp src/canvas.cpp)
-    target_include_directories(RunnerV0720UiTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_compile_features(RunnerV0720UiTests PRIVATE cxx_std_23)
-    target_compile_definitions(RunnerV0720UiTests PRIVATE
-        RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}")
-    runner_enable_warnings(RunnerV0720UiTests)
-    add_test(NAME Runner.V0720Ui COMMAND RunnerV0720UiTests)
-    set_tests_properties(Runner.V0720Ui PROPERTIES TIMEOUT 30)
+    if(RUNNER_BUILD_APP)
+        add_executable(RunnerV0720UiTests
+            tests/v0720_ui_tests.cpp src/canvas.cpp)
+        target_include_directories(RunnerV0720UiTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_compile_features(RunnerV0720UiTests PRIVATE cxx_std_23)
+        target_compile_definitions(RunnerV0720UiTests PRIVATE
+            RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}")
+        runner_enable_warnings(RunnerV0720UiTests)
+        add_test(NAME Runner.V0720Ui COMMAND RunnerV0720UiTests)
+        set_tests_properties(Runner.V0720Ui PROPERTIES TIMEOUT 30)
+    endif()
 
     add_executable(RunnerV0721ReadableTelemetryTests
         tests/v0721_readable_telemetry_tests.cpp)
@@ -466,19 +627,21 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.SandHybridIntegration COMMAND RunnerSandHybridIntegrationTests)
     set_tests_properties(Runner.SandHybridIntegration PROPERTIES TIMEOUT 60)
 
-    add_executable(RunnerV0724StructuralMetricsIconTests
-        tests/v0724_structural_metrics_icon_tests.cpp)
-    target_link_libraries(RunnerV0724StructuralMetricsIconTests PRIVATE Runner::Core)
-    target_include_directories(RunnerV0724StructuralMetricsIconTests PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    target_compile_features(RunnerV0724StructuralMetricsIconTests PRIVATE cxx_std_23)
-    target_compile_definitions(RunnerV0724StructuralMetricsIconTests PRIVATE
-        RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}"
-        RUNNER_SOURCE_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64")
-    runner_enable_warnings(RunnerV0724StructuralMetricsIconTests)
-    add_test(NAME Runner.V0724StructuralMetricsIcon
-        COMMAND RunnerV0724StructuralMetricsIconTests)
-    set_tests_properties(Runner.V0724StructuralMetricsIcon PROPERTIES TIMEOUT 180)
+    if(RUNNER_BUILD_APP)
+        add_executable(RunnerV0724StructuralMetricsIconTests
+            tests/v0724_structural_metrics_icon_tests.cpp)
+        target_link_libraries(RunnerV0724StructuralMetricsIconTests PRIVATE Runner::Core)
+        target_include_directories(RunnerV0724StructuralMetricsIconTests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src")
+        target_compile_features(RunnerV0724StructuralMetricsIconTests PRIVATE cxx_std_23)
+        target_compile_definitions(RunnerV0724StructuralMetricsIconTests PRIVATE
+            RUNNER_GENERATED_ASSET_DIRECTORY="${RUNNER_GENERATED_ASSET_DIR}"
+            RUNNER_SOURCE_ICON_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/runner_icon_source.rgba.zlib.b64")
+        runner_enable_warnings(RunnerV0724StructuralMetricsIconTests)
+        add_test(NAME Runner.V0724StructuralMetricsIcon
+            COMMAND RunnerV0724StructuralMetricsIconTests)
+        set_tests_properties(Runner.V0724StructuralMetricsIcon PROPERTIES TIMEOUT 180)
+    endif()
 
     add_executable(RunnerV0725ArtLegHotfixTests
         tests/v0725_art_leg_hotfix_tests.cpp)
@@ -642,6 +805,41 @@ if(RUNNER_BUILD_TESTS)
     add_test(NAME Runner.V0748ContactArt COMMAND RunnerV0748ContactArtTests)
     set_tests_properties(Runner.V0748ContactArt PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerRawAuthorityTests tests/raw_authority_tests.cpp)
+    target_link_libraries(RunnerRawAuthorityTests PRIVATE Runner::Core)
+    target_include_directories(RunnerRawAuthorityTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerRawAuthorityTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerRawAuthorityTests)
+    add_test(NAME Runner.RawAuthority COMMAND RunnerRawAuthorityTests)
+    add_test(NAME Runner.UnsupportedStandContact
+        COMMAND RunnerRawAuthorityTests --stand-contact-quality)
+    add_test(NAME Runner.WalkSoilContact COMMAND RunnerRawAuthorityTests --walk-soil-contact)
+    add_test(NAME Runner.WalkFirstHeel COMMAND RunnerRawAuthorityTests --walk-first-heel)
+    set_tests_properties(Runner.RawAuthority PROPERTIES TIMEOUT 180)
+
+    add_executable(RunnerRawLearningProvenanceTests
+        tests/raw_learning_provenance_tests.cpp)
+    target_link_libraries(RunnerRawLearningProvenanceTests PRIVATE Runner::Core)
+    target_include_directories(RunnerRawLearningProvenanceTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerRawLearningProvenanceTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerRawLearningProvenanceTests)
+    add_test(NAME Runner.RawLearningProvenance
+        COMMAND RunnerRawLearningProvenanceTests)
+    set_tests_properties(Runner.RawLearningProvenance PROPERTIES TIMEOUT 60)
+
+    add_executable(RunnerV0751CrouchAuthorityTests
+        tests/v0751_crouch_authority_tests.cpp)
+    target_link_libraries(RunnerV0751CrouchAuthorityTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0751CrouchAuthorityTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0751CrouchAuthorityTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0751CrouchAuthorityTests)
+    add_test(NAME Runner.V0751CrouchAuthority
+        COMMAND RunnerV0751CrouchAuthorityTests)
+    set_tests_properties(Runner.V0751CrouchAuthority PROPERTIES TIMEOUT 60)
+
     add_executable(RunnerV0749PhysicalCombatTerrainTests
         tests/v0749_physical_combat_terrain_tests.cpp)
     target_link_libraries(RunnerV0749PhysicalCombatTerrainTests PRIVATE Runner::Core)
@@ -668,6 +866,50 @@ if(RUNNER_BUILD_TESTS)
         COMMAND RunnerV0750PersistentDirectorArtTests)
     set_tests_properties(Runner.V0750PersistentDirectorArt PROPERTIES TIMEOUT 180)
 
+    add_executable(RunnerV0751DirectorChallengeTests
+        tests/v0751_director_challenge_tests.cpp)
+    target_link_libraries(RunnerV0751DirectorChallengeTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0751DirectorChallengeTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0751DirectorChallengeTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0751DirectorChallengeTests)
+    add_test(NAME Runner.V0751DirectorChallenge
+        COMMAND RunnerV0751DirectorChallengeTests)
+    set_tests_properties(Runner.V0751DirectorChallenge PROPERTIES TIMEOUT 60)
+
+    add_executable(RunnerV0751PhysicalEquipmentTests
+        tests/v0751_physical_equipment_tests.cpp)
+    target_link_libraries(RunnerV0751PhysicalEquipmentTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0751PhysicalEquipmentTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0751PhysicalEquipmentTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0751PhysicalEquipmentTests)
+    add_test(NAME Runner.V0751PhysicalEquipment
+        COMMAND RunnerV0751PhysicalEquipmentTests)
+    set_tests_properties(Runner.V0751PhysicalEquipment PROPERTIES TIMEOUT 60)
+
+    add_executable(RunnerV0751ExternalHostTests
+        tests/v0751_external_host_tests.cpp)
+    target_link_libraries(RunnerV0751ExternalHostTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0751ExternalHostTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0751ExternalHostTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0751ExternalHostTests)
+    add_test(NAME Runner.V0751ExternalHost
+        COMMAND RunnerV0751ExternalHostTests)
+    set_tests_properties(Runner.V0751ExternalHost PROPERTIES TIMEOUT 60)
+
+    add_executable(RunnerV0751LakeChallengeTests
+        tests/v0751_lake_challenge_tests.cpp)
+    target_link_libraries(RunnerV0751LakeChallengeTests PRIVATE Runner::Core)
+    target_include_directories(RunnerV0751LakeChallengeTests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(RunnerV0751LakeChallengeTests PRIVATE cxx_std_23)
+    runner_enable_warnings(RunnerV0751LakeChallengeTests)
+    add_test(NAME Runner.V0751LakeChallenge
+        COMMAND RunnerV0751LakeChallengeTests)
+    set_tests_properties(Runner.V0751LakeChallenge PROPERTIES TIMEOUT 240)
+
     add_executable(RunnerLiveAcceptanceTests tests/live_acceptance_tests.cpp)
     target_link_libraries(RunnerLiveAcceptanceTests PRIVATE Runner::Core)
     target_compile_features(RunnerLiveAcceptanceTests PRIVATE cxx_std_23)
@@ -692,6 +934,13 @@ if(RUNNER_BUILD_TESTS)
     endif()
     add_test(NAME Runner.RuntimePipeline COMMAND RunnerRuntimePipelineTests)
     set_tests_properties(Runner.RuntimePipeline PROPERTIES TIMEOUT 90)
+    add_test(NAME Runner.AutopilotUnaidedStand
+        COMMAND RunnerRuntimePipelineTests --autopilot-unaided-stand)
+    set_tests_properties(Runner.AutopilotUnaidedStand PROPERTIES TIMEOUT 210 RUN_SERIAL TRUE)
+    add_test(NAME Runner.ResourceBudget COMMAND RunnerRuntimePipelineTests --resource-budget-only)
+    set_tests_properties(Runner.ResourceBudget PROPERTIES TIMEOUT 10)
+    add_test(NAME Runner.ResourceDuty COMMAND RunnerRuntimePipelineTests --resource-duty-only)
+    set_tests_properties(Runner.ResourceDuty PROPERTIES TIMEOUT 90)
 
     if(TARGET Runner)
         add_test(NAME Runner.PackageLayout COMMAND $<TARGET_FILE:Runner> --diagnose-package)
@@ -706,5 +955,7 @@ if(RUNNER_BUILD_TESTS)
         set_tests_properties(Runner.UiDiagnostic PROPERTIES TIMEOUT 30)
         add_test(NAME Runner.HybridBrainDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-hybrid-brain)
         set_tests_properties(Runner.HybridBrainDiagnostic PROPERTIES TIMEOUT 180)
+        add_test(NAME Runner.RawInferenceDiagnostic COMMAND $<TARGET_FILE:Runner> --diagnose-raw-inference)
+        set_tests_properties(Runner.RawInferenceDiagnostic PROPERTIES TIMEOUT 1800)
     endif()
 endif()

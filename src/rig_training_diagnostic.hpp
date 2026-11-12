@@ -107,6 +107,10 @@ namespace runner::diagnostics
         std::vector<float> retained_policy_parameters{};
         std::uint64_t selected_training_seed{};
         std::uint32_t candidate_attempts{};
+        sim::GuidanceMode retained_guidance_mode{
+            sim::GuidanceMode::assisted };
+        bool displayed_raw_action_identity{};
+        bool displayed_zero_optional_authority{};
         bool passed{};
     };
     [[nodiscard]] RigTrainingResult run_rig_training_case(

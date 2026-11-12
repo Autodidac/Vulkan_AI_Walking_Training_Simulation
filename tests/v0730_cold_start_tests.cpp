@@ -223,7 +223,6 @@ namespace
         runner::sim::Environment environment{ rig, seed };
         environment.set_course(runner::sim::CourseStage::uneven, 0.30f);
         environment.set_course_motion_enabled(false);
-
         float minimum_uprightness = 1.0f;
         for (int step = 0; step < 1200; ++step)
         {

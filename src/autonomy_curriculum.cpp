@@ -1,4 +1,5 @@
 #include "autonomy.hpp"
+#include "integration.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,10 +15,88 @@ namespace runner::rl
         const TrainingMetrics& metrics = worker_.metrics();
         if (!metrics.evaluation_valid || metrics.evaluation_quality_key == 0u)
             return false;
+        if (director_state_.current.selected()
+            && director_state_.current.task_index < director_state_.graph.count)
+        {
+            using enum director::TaskKind;
+            const director::TaskKind task = director_state_.graph.nodes[
+                director_state_.current.task_index].task;
+            switch (task)
+            {
+            case stand:
+                return strict_balance_mastery(metrics)
+                    && (!worker_.blueprint().human_casual_gait_plan()
+                        || worker_.verified_unaided_stand());
+            case walk:
+            {
+                const director::ChallengeKind challenge =
+                    director_state_.graph.nodes[
+                        director_state_.current.task_index].challenge;
+                if (challenge == director::ChallengeKind::waterlogged_cells)
+                    return false;
+                const float required_distance = challenge
+                        == director::ChallengeKind::loose_cells
+                    ? 14.0f : gait_task_qualification_distance(
+                        sim::GaitTask::walk);
+                return gait_task_mastery_evidence(metrics,
+                    sim::GaitTask::walk)
+                    && metrics.evaluation_distance >= required_distance;
+            }
+            case speed_walk:
+                return gait_task_mastery_evidence(metrics,
+                    sim::GaitTask::speed_walk);
+            case walk_run_transition:
+                return gait_task_mastery_evidence(metrics,
+                    sim::GaitTask::walk_run_transition);
+            case run:
+                return gait_task_mastery_evidence(metrics,
+                    sim::GaitTask::run);
+            case crouch_walk:
+                return metrics.evaluation_duck_recoveries >= 1.0f
+                    && metrics.evaluation_stride_events >= 8.0f
+                    && metrics.evaluation_duck_seconds >= 3.5f
+                    && metrics.evaluation_distance >= 1.50f
+                    && metrics.evaluation_obstacles_passed >= 4.0f
+                    && metrics.evaluation_collisions <= 1.0f
+                    && metrics.evaluation_survival >= 14.0f;
+            case wade:
+            case swim:
+            case shore_exit:
+                // TrainingMetrics does not retain an ordered physical lake
+                // trace. Distance/stride totals cannot stand in for approach,
+                // entry, depth/submersion, the requested aquatic phase, and
+                // a far-shore exit in one trial.
+                return false;
+            case safe_carry_walk:
+            case low_ready_walk:
+                return gait_task_mastery_evidence(metrics,
+                    sim::GaitTask::walk)
+                    && metrics.evaluation_equipment_transitions >= 1.0f;
+            case stop_and_plant:
+            case gun_stance:
+            case acquire_and_aim:
+            case fire_and_correct:
+                // Aggregate shots/hits/transitions do not prove a two-foot
+                // plant, joint-driven settled aim, a real miss, bounded
+                // correction, or a later physically improved shot.
+                return false;
+            case break_contact:
+                return metrics.evaluation_target_hits >= 2.0f
+                    && metrics.evaluation_distance >= 6.0f
+                    && metrics.evaluation_stride_events >= 6.0f
+                    && metrics.evaluation_collisions <= 3.0f;
+            case recover:
+            case construction:
+            case tool_traversal:
+                return false;
+            }
+        }
         switch (stage_)
         {
         case sim::CourseStage::balance:
-            return strict_balance_mastery(metrics);
+            return strict_balance_mastery(metrics)
+                && (!worker_.blueprint().human_casual_gait_plan()
+                    || worker_.verified_unaided_stand());
         case sim::CourseStage::duck_press:
             return strict_duck_press_mastery(metrics);
         case sim::CourseStage::shuttle:
@@ -60,10 +139,7 @@ namespace runner::rl
                 && metrics.evaluation_climbs >= 1.0f
                 && metrics.evaluation_descents >= 1.0f;
         case sim::CourseStage::equipment_targets:
-            return metrics.evaluation_target_hits >= 3.0f
-                && metrics.evaluation_shots >= metrics.evaluation_target_hits
-                && metrics.evaluation_equipment_transitions >= 1.0f
-                && metrics.evaluation_longest_stance >= 4.0f;
+            return false;
         case sim::CourseStage::combat_course:
             return metrics.evaluation_target_hits >= 2.0f
                 && metrics.evaluation_distance >= 6.0f
@@ -87,6 +163,23 @@ namespace runner::rl
             return;
         last_evaluation_count_ = metrics.evaluation_count;
 
+        if (director_state_.current.selected()
+            && director_state_.current.task_index < director_state_.graph.count
+            && !metrics.evaluation_valid)
+        {
+            const std::uint16_t task_index = director_state_.current.task_index;
+            if (director_state_.evidence.failures[task_index]
+                < std::numeric_limits<std::uint16_t>::max())
+                ++director_state_.evidence.failures[task_index];
+            if (director_state_.evidence.first_stall
+                == director::invalid_task_index)
+                director_state_.evidence.first_stall = task_index;
+            director_state_.current = director::select(
+                director_state_.graph, director_state_.evidence,
+                director_state_.profile);
+            queue_autosave();
+        }
+
         if (worker_.has_best_policy() && metrics.best_update != last_saved_best_update_)
         {
             last_saved_best_update_ = metrics.best_update;
@@ -105,7 +198,7 @@ namespace runner::rl
         mastery_streak_ = dwell_complete && stage_mastered_locked()
             ? mastery_streak_ + 1 : 0;
         const int required_confirmations = required_mastery_confirmations(stage_);
-        if (worker_.has_best_policy())
+        if (worker_.has_best_policy() && !worker_.trains_unaided_stand())
         {
             const float tolerance = std::max(
                 0.35f, std::abs(metrics.best_evaluation_score) * 0.35f);
@@ -161,7 +254,9 @@ namespace runner::rl
         {
             advance_stage_locked();
         }
-        else if (rig_optimization_ready(stage_, fresh_updates,
+        // Don't change the Human plant out from under its Stand proof.
+        else if (!worker_.blueprint().human_casual_gait_plan()
+            && rig_optimization_ready(stage_, fresh_updates,
             fresh_episodes, fresh_evaluations, worker_.blueprint(),
             mastery_streak_)
             && metrics.evaluation_count % 4 == 0)
@@ -193,17 +288,88 @@ namespace runner::rl
 
     void AutonomousTrainer::advance_stage_locked()
     {
-        if (worker_.has_best_policy())
+        if (worker_.trains_unaided_stand() && !worker_.verified_unaided_stand())
+            return;
+        if (worker_.has_best_policy() && !worker_.trains_unaided_stand())
             (void)worker_.restore_best_policy();
         mastery_streak_ = 0;
         degradation_streak_ = 0;
-        if (stage_ == sim::CourseStage::uneven
-            && gait_task_ != sim::GaitTask::run)
+        if (director_state_.current.selected()
+            && director_state_.current.task_index < director_state_.graph.count)
         {
-            gait_task_ = sim::next_gait_task(gait_task_);
-            worker_.set_gait_task(gait_task_, false);
-            worker_message_ = std::format("GAIT LOCKED - ADVANCING TO {}",
-                sim::gait_task_name(gait_task_));
+            const std::uint16_t completed = director_state_.current.task_index;
+            const director::TaskNode& completed_node =
+                director_state_.graph.nodes[completed];
+            const director::TrialEvidence trial{
+                completed_node.stable_id, completed,
+                director::TrialOutcome::completed,
+                completed_node.minimum_evidence, {} };
+            const director::EvidenceReduction reduction =
+                director::reduce_evidence(director_state_.graph,
+                    director_state_.evidence, trial,
+                    director_state_.profile);
+            if (!reduction.accepted)
+            {
+                worker_message_ = std::format(
+                    "DIRECTOR ADVANCE BLOCKED - {} LACKS PHYSICAL MASTERY EVIDENCE",
+                    director::task_name(completed_node.task));
+                queue_autosave();
+                return;
+            }
+            director::Evidence evidence = reduction.evidence;
+            evidence.failures[completed] = 0u;
+            const director::Decision next = director::select(
+                director_state_.graph, evidence, director_state_.profile);
+            if (next.selected() && next.task_index < director_state_.graph.count)
+            {
+                const director::TaskNode& node =
+                    director_state_.graph.nodes[next.task_index];
+                const integration::DesiredTaskState desired =
+                    integration::desired_task_state(node.task, node.challenge);
+                const integration::TaskCommand command =
+                    integration::task_command(director_state_.graph,
+                        evidence, next, director_state_.profile);
+                sim::Environment candidate = worker_.preview();
+                const integration::TaskApplication preflight =
+                    integration::apply_task(candidate, command,
+                        director_state_.graph, evidence,
+                        director_state_.profile);
+                if (!desired.valid || !command.selected()
+                    || preflight.rejected || !preflight.challenge_present
+                    || (desired.equipment_task
+                        && !worker_.preview().equipment_capable()))
+                {
+                    worker_message_ = std::format(
+                        "DIRECTOR ADVANCE BLOCKED - {} HAS NO AUTHENTIC PHYSICAL CHALLENGE",
+                        director::task_name(node.task));
+                    queue_autosave();
+                    return;
+                }
+
+                director_state_.evidence = evidence;
+                director_state_.current = next;
+                stage_ = desired.stage;
+                gait_task_ = desired.gait;
+                difficulty_ = clamp(node.difficulty, 0.10f, 1.0f);
+                worker_.set_course(stage_, difficulty_, false);
+                worker_.set_gait_task(gait_task_, false);
+                worker_.set_equipment_directive(desired.equipment);
+                worker_message_ = std::format(
+                    "TASK MASTERED - DIRECTOR ADVANCING TO {} / {}",
+                    director::task_name(node.task),
+                    director::challenge_name(node.challenge));
+            }
+            else
+            {
+                director_state_.evidence = evidence;
+                director_state_.current = next;
+                difficulty_ = std::min(1.0f, difficulty_ + 0.10f);
+                worker_message_ = next.reason
+                        == director::SelectionReason::graph_complete
+                    ? std::format("TASK GRAPH MASTERED - DIFFICULTY {:.0f}%",
+                        difficulty_ * 100.0f)
+                    : "DIRECTOR BLOCKED - NO ELIGIBLE PHYSICAL TASK";
+            }
         }
         else if (stage_ != sim::CourseStage::combat_course)
         {
@@ -668,7 +834,9 @@ namespace runner::rl
                 for (int step = 0; step < maximum_steps; ++step)
                 {
                     const auto raw_action = policy.deterministic_action(
-                        environment.observation());
+                        foundational_policy_observation(environment, stage,
+                            environment.gait_task(),
+                            sim::GuidanceMode::raw_policy_audit));
                     const sim::StepResult result = environment.step(raw_action);
                     reward += result.reward;
                     if (result.terminated)

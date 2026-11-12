@@ -258,17 +258,22 @@ int main()
             int mode = -1;
             input >> magic >> version >> stage >> gait >> difficulty >> generation
                 >> accepted >> rejected >> rollbacks >> mode;
-            return input && magic == "RUNAUTONOMY" && version == 27 ? mode : -1;
+            return input && magic == "RUNAUTONOMY" && version == 29 ? mode : -1;
         };
 
         {
             runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
             trainer.set_autosave_paths(checkpoint, rig, state);
+            trainer.set_director_profile(
+                runner::director::Profile::autonomous_npc);
             trainer.set_rig_optimization_mode(
                 runner::rl::RigOptimizationMode::morphology_evolve);
             require(wait_for_mode(trainer,
                     runner::rl::RigOptimizationMode::morphology_evolve),
                 "morphology mode command was not published");
+            require(trainer.autonomy_status().director_profile
+                    == runner::director::Profile::autonomous_npc,
+                "Director profile command was not published with trainer state");
             bool state_written = false;
             for (int attempt = 0; attempt < 500; ++attempt)
             {
@@ -293,7 +298,10 @@ int main()
             if (!loaded)
                 std::cerr << "Morphology reload status: "
                     << trainer.autonomy_status().message << '\n';
-            require(loaded, "persisted morphology mode did not round-trip");
+            require(loaded
+                    && trainer.autonomy_status().director_profile
+                        == runner::director::Profile::autonomous_npc,
+                "persisted morphology/Director state did not round-trip");
         }
 
         {
@@ -314,10 +322,13 @@ int main()
         }
 
         {
-            std::ofstream malformed(state, std::ios::trunc);
-            malformed << "RUNAUTONOMY 27\n0 0 0.25 0 0 0 0 255\n";
-            require(static_cast<bool>(malformed),
-                "could not author adversarial current-version state");
+            std::ofstream retired(state, std::ios::trunc);
+            // Every common header field is otherwise valid. Format 28 is the
+            // sole rejection reason: it could persist scalar Director mastery
+            // without the ordered physical-evidence receipts required by 29.
+            retired << "RUNAUTONOMY 28\n0 0 0.25 0 0 0 0 0\n";
+            require(static_cast<bool>(retired),
+                "could not author retired scalar-mastery format-28 state");
         }
         {
             runner::rl::AutonomousTrainer trainer{ CreatureBlueprint::humanoid(), 4u };
@@ -325,9 +336,20 @@ int main()
             std::string message{};
             require(trainer.load_autosave(message),
                 "adversarial autosave was not queued");
-            require(wait_for_loaded_mode(trainer,
-                    runner::rl::RigOptimizationMode::control_optimize),
-                "invalid persisted mode did not fail safely to control mode");
+            bool rejected = false;
+            for (int attempt = 0; attempt < 500; ++attempt)
+            {
+                trainer.synchronize();
+                rejected = trainer.autonomy_status().message.find(
+                    "AUTOSAVE REJECTED") != std::string::npos;
+                if (rejected)
+                    break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            require(rejected
+                    && trainer.autonomy_status().optimization_mode
+                        == runner::rl::RigOptimizationMode::control_optimize,
+                "retired format-28 scalar mastery was not rejected atomically");
         }
 
         std::filesystem::remove_all(root, filesystem_error);

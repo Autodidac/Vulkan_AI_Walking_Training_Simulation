@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -45,6 +46,91 @@ namespace
     [[nodiscard]] bool near(float a, float b, float tolerance = 0.0001f)
     {
         return std::abs(a - b) <= tolerance;
+    }
+
+    void write_legacy_v5_human(const std::filesystem::path& path)
+    {
+        CreatureBlueprint legacy = CreatureBlueprint::humanoid();
+        legacy.nodes.resize(13u);
+        legacy.radii.resize(13u);
+        std::erase_if(legacy.bones, [](const runner::sim::DistanceConstraint& bone)
+        {
+            return bone.a >= 13u || bone.b >= 13u;
+        });
+        legacy.active_motor_count = runner::sim::legacy_anatomy_action_count;
+        legacy.left_contact_node = runner::sim::human_left_ankle_node;
+        legacy.right_contact_node = runner::sim::human_right_ankle_node;
+        legacy.additional_left_contact_nodes.clear();
+        legacy.additional_right_contact_nodes.clear();
+        legacy.rebuild_rest_lengths();
+
+        std::ofstream output{ path, std::ios::binary | std::ios::trunc };
+        output << "RUNRIG 5\n";
+        output << legacy.nodes.size() << ' ' << legacy.bones.size()
+            << ' ' << legacy.active_motor_count << '\n';
+        output << "P human\n";
+        output << "S " << legacy.root_node << ' ' << legacy.torso_node << ' '
+            << legacy.head_node << ' ' << legacy.left_contact_node << ' '
+            << legacy.right_contact_node << '\n';
+        output << "L 0\nR 0\n" << std::setprecision(9);
+        for (std::size_t index = 0; index < legacy.nodes.size(); ++index)
+        {
+            output << "N " << legacy.nodes[index].x << ' '
+                << legacy.nodes[index].y << ' ' << legacy.radii[index] << '\n';
+        }
+        for (const runner::sim::DistanceConstraint& bone : legacy.bones)
+        {
+            output << "B " << bone.a << ' ' << bone.b << ' '
+                << bone.rest_length << ' ' << bone.stiffness << '\n';
+        }
+        for (std::size_t index = 0; index < legacy.active_motor_count; ++index)
+        {
+            const runner::sim::MotorConstraint& motor = legacy.motors[index];
+            output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' '
+                << motor.pivot << ' ' << motor.c << ' ' << motor.minimum_angle
+                << ' ' << motor.maximum_angle << ' ' << motor.neutral_angle
+                << ' ' << motor.strength << '\n';
+        }
+    }
+
+    void write_legacy_v6_human(const std::filesystem::path& path)
+    {
+        CreatureBlueprint legacy = CreatureBlueprint::humanoid();
+        legacy.active_motor_count = runner::sim::human_right_ankle_action + 1u;
+
+        std::ofstream output{ path, std::ios::binary | std::ios::trunc };
+        output << "RUNRIG 6\n";
+        output << legacy.nodes.size() << ' ' << legacy.bones.size()
+            << ' ' << legacy.active_motor_count << '\n';
+        output << "P human\n";
+        output << "S " << legacy.root_node << ' ' << legacy.torso_node << ' '
+            << legacy.head_node << ' ' << legacy.left_contact_node << ' '
+            << legacy.right_contact_node << '\n';
+        output << "L " << legacy.additional_left_contact_nodes.size();
+        for (const std::uint16_t node : legacy.additional_left_contact_nodes)
+            output << ' ' << node;
+        output << "\nR " << legacy.additional_right_contact_nodes.size();
+        for (const std::uint16_t node : legacy.additional_right_contact_nodes)
+            output << ' ' << node;
+        output << '\n' << std::setprecision(9);
+        for (std::size_t index = 0; index < legacy.nodes.size(); ++index)
+        {
+            output << "N " << legacy.nodes[index].x << ' '
+                << legacy.nodes[index].y << ' ' << legacy.radii[index] << '\n';
+        }
+        for (const runner::sim::DistanceConstraint& bone : legacy.bones)
+        {
+            output << "B " << bone.a << ' ' << bone.b << ' '
+                << bone.rest_length << ' ' << bone.stiffness << '\n';
+        }
+        for (std::size_t index = 0; index < legacy.active_motor_count; ++index)
+        {
+            const runner::sim::MotorConstraint& motor = legacy.motors[index];
+            output << "M " << (motor.enabled ? 1 : 0) << ' ' << motor.a << ' '
+                << motor.pivot << ' ' << motor.c << ' ' << motor.minimum_angle
+                << ' ' << motor.maximum_angle << ' ' << motor.neutral_angle
+                << ' ' << motor.strength << '\n';
+        }
     }
 }
 
@@ -91,7 +177,7 @@ int main()
             "species filename must be explicit and predictable");
         const runner::sim::CreatureSpeciesPaths paths =
             runner::sim::creature_species_paths(fixture.species);
-        const std::string state_prefix = "runner-v0750-"
+        const std::string state_prefix = "epoch2dwalk-v0751-"
             + std::string{ fixture.slug };
         require(paths.rig == filename,
             "species path set must own the authored rig filename");
@@ -103,8 +189,8 @@ int main()
         std::string error{};
         require(fixture.rig.save(path, error), error);
         const std::string serialized = read_text(path);
-        require(serialized.starts_with("RUNRIG 5\n"),
-            "species rigs must use version 5");
+        require(serialized.starts_with("RUNRIG 7\n"),
+            "species rigs must use version 7");
         require(serialized.find("P " + std::string{ fixture.slug } + "\n")
                 != std::string::npos,
             "species rigs must declare their identity");
@@ -134,6 +220,42 @@ int main()
         require(read_text(repeat_path) == serialized,
             "same factory rig must serialize byte-identically across repeated seeds");
     }
+
+    const std::filesystem::path v5_human_path =
+        test_directory / "legacy-v5-human.rig";
+    write_legacy_v5_human(v5_human_path);
+    std::string legacy_v5_error{};
+    const std::optional<CreatureBlueprint> promoted_v5_human =
+        CreatureBlueprint::load_for_species(v5_human_path,
+            CreatureSpecies::human, legacy_v5_error);
+    require(promoted_v5_human.has_value(), legacy_v5_error);
+    require(promoted_v5_human->human_paired_limb_topology()
+            && promoted_v5_human->nodes.size() == 19u
+            && promoted_v5_human->bones.size() == 23u
+            && promoted_v5_human->active_motor_count
+                == runner::sim::anatomy_action_count
+            && promoted_v5_human->signature()
+                == CreatureBlueprint::humanoid().signature(),
+        "RUNRIG5 Human did not migrate exactly once into the canonical RUNRIG7 foot/action topology");
+
+    const std::filesystem::path v6_human_path =
+        test_directory / "legacy-v6-human.rig";
+    write_legacy_v6_human(v6_human_path);
+    std::string legacy_v6_error{};
+    const std::optional<CreatureBlueprint> promoted_v6_human =
+        CreatureBlueprint::load_for_species(v6_human_path,
+            CreatureSpecies::human, legacy_v6_error);
+    require(promoted_v6_human.has_value(), legacy_v6_error);
+    require(promoted_v6_human->human_paired_limb_topology()
+            && promoted_v6_human->nodes.size() == 19u
+            && promoted_v6_human->bones.size() == 23u
+            && promoted_v6_human->active_motor_count
+                == runner::sim::anatomy_action_count
+            && promoted_v6_human->motors[runner::sim::human_left_toe_action].enabled
+            && promoted_v6_human->motors[runner::sim::human_right_toe_action].enabled
+            && promoted_v6_human->signature()
+                == CreatureBlueprint::humanoid().signature(),
+        "RUNRIG6 Human did not migrate exactly once into the canonical RUNRIG7 explicit-toe topology");
 
     require(!runner::sim::creature_species_from_slug("quadruped"),
         "retired aliases must not become production species identities");
@@ -263,7 +385,7 @@ int main()
 
     std::string human_text = read_text(human_path);
     const std::filesystem::path legacy_path = test_directory / "creature.rig";
-    human_text.replace(0u, std::string_view{ "RUNRIG 5" }.size(), "RUNRIG 4");
+    human_text.replace(0u, std::string_view{ "RUNRIG 7" }.size(), "RUNRIG 4");
     const std::size_t identity_begin = human_text.find("P human\n");
     require(identity_begin != std::string::npos, "Human fixture identity missing");
     human_text.erase(identity_begin, std::string_view{ "P human\n" }.size());
@@ -313,7 +435,7 @@ int main()
     const std::filesystem::path valid_legacy = rejected_directory / "creature.rig";
     {
         std::ofstream output{ rejected_owned, std::ios::binary | std::ios::trunc };
-        output << "RUNRIG 5\nP dog\nN broken\n";
+        output << "RUNRIG 6\nP dog\nN broken\n";
     }
     {
         std::ofstream output{ valid_legacy, std::ios::binary | std::ios::trunc };
@@ -384,7 +506,7 @@ int main()
     const std::filesystem::path malformed_path = test_directory / "malformed.rig";
     {
         std::ofstream output{ malformed_path, std::ios::binary | std::ios::trunc };
-        output << "RUNRIG 5\nP human\nN nope\n";
+        output << "RUNRIG 6\nP human\nN nope\n";
     }
     error.clear();
     require(!CreatureBlueprint::load_for_species(

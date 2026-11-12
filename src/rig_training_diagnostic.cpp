@@ -100,7 +100,9 @@ namespace runner::diagnostics
                 for (int step = 0; step < maximum_steps; ++step)
                 {
                     const auto raw_action = policy.deterministic_action(
-                        environment.observation());
+                        rl::foundational_policy_observation(environment, stage,
+                            sim::GaitTask::walk,
+                            environment.guidance_mode()));
                     const auto action = production_controller
                         ? rl::effective_policy_action(environment, raw_action,
                             stage, 0.0f)
@@ -357,6 +359,9 @@ namespace runner::diagnostics
         if (!trainer.has_best_policy())
             return proof;
         proof.retained_policy_parameters = trainer.best_policy_parameters();
+        proof.retained_guidance_mode = trainer.best_policy_guidance_mode();
+        proof.displayed_raw_action_identity = true;
+        proof.displayed_zero_optional_authority = true;
 
         rl::PolicyNetwork policy{ 0x7300u };
         policy.parameters() = trainer.best_policy_parameters();
@@ -371,15 +376,44 @@ namespace runner::diagnostics
             sim::Environment environment{ blueprint, seed };
             environment.set_course(sim::CourseStage::uneven, 0.30f);
             environment.set_course_motion_enabled(false);
+            environment.set_guidance_mode(sim::GuidanceMode::raw_policy_audit);
+            environment.set_raw_authority_telemetry_enabled(true);
             std::optional<sim::Environment> first_transfer_pose{};
             for (int step = 0; step < 1200; ++step)
             {
                 const auto raw_action = policy.deterministic_action(
-                    environment.observation());
+                    rl::foundational_policy_observation(environment,
+                        sim::CourseStage::uneven, sim::GaitTask::walk,
+                        sim::GuidanceMode::raw_policy_audit));
                 const auto action = rl::effective_policy_action(environment, raw_action,
-                    sim::CourseStage::uneven, 0.0f);
+                    sim::CourseStage::uneven, 0.0f,
+                    sim::GuidanceMode::raw_policy_audit);
+                proof.displayed_raw_action_identity =
+                    proof.displayed_raw_action_identity
+                    && action == raw_action;
                 if (environment.step(action).terminated)
                     break;
+                const sim::RawAuthorityTelemetry& authority =
+                    environment.raw_authority_telemetry();
+                const auto source_applications = [&](sim::AuthoritySource source)
+                {
+                    return authority.sources[static_cast<std::size_t>(source)]
+                        .applications;
+                };
+                proof.displayed_zero_optional_authority =
+                    proof.displayed_zero_optional_authority
+                    && source_applications(
+                        sim::AuthoritySource::posture_helper) == 0u
+                    && source_applications(
+                        sim::AuthoritySource::manipulator_helper) == 0u
+                    && source_applications(
+                        sim::AuthoritySource::ledge_training_scaffold) == 0u
+                    && source_applications(
+                        sim::AuthoritySource::structure_projection) == 0u
+                    && authority.powered_toe_commands == 0u
+                    && authority.root_drive_corrections == 0u
+                    && authority.torso_drive_corrections == 0u
+                    && authority.course_motion_corrections == 0u;
                 const bool left_air = environment.left_foot_phase()
                     == sim::FootContactPhase::airborne;
                 const bool right_air = environment.right_foot_phase()
@@ -447,6 +481,10 @@ namespace runner::diagnostics
         proof.retained_stride_events = total_stride_events * inverse_agents;
         proof.passed = updates >= 1200u
             && proof.teacher_authority == 0.0f
+            && proof.retained_guidance_mode
+                == sim::GuidanceMode::raw_policy_audit
+            && proof.displayed_raw_action_identity
+            && proof.displayed_zero_optional_authority
             && proof.retained_update
                 >= rl::foundational_walk_teacher_handoff_update(blueprint)
             && rl::strict_evaluation_quality(metrics.best_quality_key)
@@ -553,7 +591,10 @@ namespace runner::diagnostics
             for (int step = 0; step < 1200; ++step)
             {
                 const auto raw_action = trainer.policy().deterministic_action(
-                    environment.observation());
+                    rl::foundational_policy_observation(environment,
+                        sim::CourseStage::uneven,
+                        sim::GaitTask::speed_walk,
+                        sim::GuidanceMode::raw_policy_audit));
                 const auto action = rl::effective_policy_action(environment,
                     raw_action, sim::CourseStage::uneven, 0.0f,
                     sim::GuidanceMode::raw_policy_audit);

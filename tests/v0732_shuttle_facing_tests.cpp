@@ -103,7 +103,7 @@ bool same(const sim::ShuttleState&a,const sim::ShuttleState&b)noexcept{
  &&a.locomotion_direction==b.locomotion_direction&&a.phase_origin_x==b.phase_origin_x
  &&a.phase_seconds==b.phase_seconds&&a.completed_turns==b.completed_turns;}
 sim::ShuttleState turn(float dt,int n){sim::ShuttleState s{};s.phase=sim::ShuttlePhase::turning;
- s.locomotion_direction=0.0f;for(int i=0;i<n;++i)s=sim::advance_shuttle_state(s,13.25f,dt);return s;}
+ s.locomotion_direction=0.0f;for(int i=0;i<n;++i)s=sim::advance_shuttle_state(s,13.25f,dt,0.0f,true);return s;}
 std::vector<float> fingerprint(const sim::Environment&e){std::vector<float>r;
  for(const sim::CourseFeature&f:e.course_features())r.insert(r.end(),{static_cast<float>(f.kind),
  f.center.x,f.center.y,f.half_extent.x,f.half_extent.y,f.radius,static_cast<float>(f.marker_sequence)});return r;}
@@ -137,8 +137,16 @@ int main(){
  s=sim::advance_shuttle_state(s,13.25f,sim::shuttle_turn_seconds-0.01f);
  require(s.phase==sim::ShuttlePhase::turning,"early turn completion");
  s=sim::advance_shuttle_state(s,13.25f,0.02f);
- require(s.phase==sim::ShuttlePhase::traverse&&s.facing_direction==-1.0f
-  &&s.locomotion_direction==-1.0f&&s.completed_turns==1u,"full-rig left turn");
+ require(s.phase==sim::ShuttlePhase::settling&&s.facing_direction==-1.0f
+  &&s.locomotion_direction==0.0f&&s.completed_turns==1u,"turn-to-settle boundary");
+ s=sim::advance_shuttle_state(s,13.25f,sim::shuttle_settle_seconds+0.10f,0.0f,false);
+ require(s.phase==sim::ShuttlePhase::settling&&s.phase_seconds==0.0f,
+  "unsupported post-turn settle advanced");
+ s=sim::advance_shuttle_state(s,13.25f,sim::shuttle_settle_seconds-0.01f,0.0f,true);
+ require(s.phase==sim::ShuttlePhase::settling,"early supported settle completion");
+ s=sim::advance_shuttle_state(s,13.25f,0.02f,0.0f,true);
+ require(s.phase==sim::ShuttlePhase::traverse&&s.locomotion_direction==-1.0f,
+  "supported settle did not resume traverse");
  s=sim::advance_shuttle_state(s,sim::shuttle_left_boundary,1.0f/60.0f);
  require(s.phase==sim::ShuttlePhase::braking&&s.facing_direction==-1.0f
   &&s.locomotion_direction==0.0f,"left boundary brake");
@@ -147,14 +155,17 @@ int main(){
   "left brake-to-backup");
  s=sim::advance_shuttle_state(s,sim::shuttle_left_boundary+sim::shuttle_backup_distance+0.01f,1.0f/60.0f);
  s=sim::advance_shuttle_state(s,-3.25f,sim::shuttle_turn_seconds+0.01f);
+ require(s.phase==sim::ShuttlePhase::settling&&s.facing_direction==1.0f
+  &&s.completed_turns==2u,"symmetric turn did not enter settle");
+ s=sim::advance_shuttle_state(s,-3.25f,sim::shuttle_settle_seconds+0.01f,0.0f,true);
  require(s.phase==sim::ShuttlePhase::traverse&&s.facing_direction==1.0f
   &&s.completed_turns==2u,"symmetric repeated shuttle");
 
  require(same(sim::advance_shuttle_state(invalid,std::numeric_limits<float>::quiet_NaN(),1.0f/60.0f),invalid)
   &&same(sim::advance_shuttle_state(invalid,0.0f,std::numeric_limits<float>::infinity()),invalid)
   &&same(sim::advance_shuttle_state(invalid,0.0f,-1.0f),invalid),"adversarial input");
- require(same(turn(1.0f/60.0f,24),turn(1.0f/60.0f,24)),"repeated determinism");
- for(const sim::ShuttleState c:{turn(1.0f/20.0f,8),turn(1.0f/60.0f,24),turn(1.0f/240.0f,96)})
+ require(same(turn(1.0f/60.0f,36),turn(1.0f/60.0f,36)),"repeated determinism");
+ for(const sim::ShuttleState c:{turn(1.0f/20.0f,12),turn(1.0f/60.0f,36),turn(1.0f/240.0f,144)})
   require(c.phase==sim::ShuttlePhase::traverse&&c.facing_direction==-1.0f
    &&c.completed_turns==1u,"20/60/240 Hz turn equivalence");
 

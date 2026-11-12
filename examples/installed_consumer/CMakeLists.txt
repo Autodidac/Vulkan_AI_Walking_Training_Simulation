@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(Epoch2DWalkEngineInstalledConsumer LANGUAGES CXX)
 
-find_package(Epoch2DWalkEngine 0.7 CONFIG REQUIRED)
+find_package(Epoch2DWalkEngine 0.7.51 EXACT CONFIG REQUIRED)
 
 add_executable(Epoch2DWalkEngineInstalledConsumer
     ../library_probe.cpp)

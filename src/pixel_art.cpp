@@ -102,7 +102,7 @@ namespace runner::art
         std::ifstream input(path, std::ios::binary);
         if (!input)
         {
-            error = "Could not open Runner artwork: " + path.string();
+            error = "Could not open Epoch2DWalkEngine artwork: " + path.string();
             return false;
         }
 
@@ -112,7 +112,7 @@ namespace runner::art
         };
         if (input.bad() || bytes.empty() || bytes.size() > maximum_art_file_size)
         {
-            error = "Runner artwork could not be read as a bounded file: "
+            error = "Epoch2DWalkEngine artwork could not be read as a bounded file: "
                 + path.string();
             return false;
         }
@@ -130,7 +130,7 @@ namespace runner::art
             || width > maximum_dimension || height > maximum_dimension
             || maximum <= 0 || maximum > 65535)
         {
-            error = "Runner artwork is not a valid bounded P3 PPM: "
+            error = "Epoch2DWalkEngine artwork is not a valid bounded P3 PPM: "
                 + path.string();
             return false;
         }
@@ -140,7 +140,7 @@ namespace runner::art
         if (pixel_count > static_cast<std::size_t>(
                 std::numeric_limits<int>::max() / 3))
         {
-            error = "Runner artwork pixel count is out of range: " + path.string();
+            error = "Epoch2DWalkEngine artwork pixel count is out of range: " + path.string();
             return false;
         }
 
@@ -161,7 +161,7 @@ namespace runner::art
                 || red_channel > maximum || green_channel > maximum
                 || blue_channel > maximum)
             {
-                error = "Runner artwork has incomplete or invalid pixel data: "
+                error = "Epoch2DWalkEngine artwork has incomplete or invalid pixel data: "
                     + path.string();
                 return false;
             }
@@ -175,7 +175,7 @@ namespace runner::art
 
         if (!tokenizer.exhausted())
         {
-            error = "Runner artwork contains unexpected trailing data: "
+            error = "Epoch2DWalkEngine artwork contains unexpected trailing data: "
                 + path.string();
             return false;
         }

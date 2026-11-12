@@ -1,11 +1,13 @@
 #pragma once
 
 #include "ai_director.hpp"
+#include "atomic_file.hpp"
 
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <string>
 
 namespace runner::director
@@ -19,13 +21,14 @@ namespace runner::director
             return false;
         }
         const std::filesystem::path temporary = path.string() + ".tmp";
-        std::ofstream output(temporary, std::ios::trunc);
+        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
         if (!output)
         {
             error = "Could not open Director state for writing: "
                 + temporary.string();
             return false;
         }
+        output.imbue(std::locale::classic());
         output << "EPOCH2DDIRECTOR " << State::schema_version << '\n'
             << static_cast<unsigned>(state.profile) << ' '
             << state.graph.count << ' ' << state.evidence.first_stall << ' '
@@ -38,6 +41,7 @@ namespace runner::director
         {
             const TaskNode& node = state.graph.nodes[index];
             output << node.stable_id << ' '
+                << node.stable_challenge_id << ' '
                 << static_cast<unsigned>(node.task) << ' '
                 << static_cast<unsigned>(node.challenge) << ' '
                 << static_cast<unsigned>(node.prerequisite_count) << ' '
@@ -45,6 +49,38 @@ namespace runner::director
                 << static_cast<unsigned>(node.enabled) << ' '
                 << state.evidence.mastery[index] << ' '
                 << state.evidence.failures[index];
+            const PhysicalTrialEvidence& physical =
+                state.evidence.physical_mastery[index];
+            output << ' ' << physical.schema
+                << ' ' << static_cast<unsigned>(physical.kind)
+                << ' ' << physical.trial_id
+                << ' ' << physical.stable_task_id
+                << ' ' << physical.stable_challenge_id
+                << ' ' << physical.first_tick
+                << ' ' << physical.last_tick
+                << ' ' << physical.water.approach_tick
+                << ' ' << physical.water.entry_tick
+                << ' ' << physical.water.wading_tick
+                << ' ' << physical.water.swimming_tick
+                << ' ' << physical.water.shore_exit_tick
+                << ' ' << physical.water.far_shore_dry_tick
+                << ' ' << physical.water.maximum_depth
+                << ' ' << physical.water.maximum_submersion
+                << ' ' << physical.equipment.two_foot_plant_tick
+                << ' ' << physical.equipment.physical_aim_tick
+                << ' ' << physical.equipment.miss_tick
+                << ' ' << physical.equipment.correction_tick
+                << ' ' << physical.equipment.improved_shot_tick
+                << ' ' << physical.equipment.maximum_plant_seconds
+                << ' ' << physical.equipment.maximum_aim_settle_seconds
+                << ' ' << physical.equipment.observed_miss_error
+                << ' ' << physical.equipment.applied_correction
+                << ' ' << physical.equipment.improved_shot_error
+                << ' ' << physical.equipment.shots_fired
+                << ' ' << physical.equipment.shots_missed
+                << ' ' << physical.equipment.target_hits
+                << ' ' << static_cast<unsigned>(
+                    physical.equipment.improved_shot_hit);
             for (std::size_t prerequisite = 0u;
                 prerequisite < node.prerequisite_count; ++prerequisite)
                 output << ' ' << node.prerequisites[prerequisite];
@@ -56,14 +92,10 @@ namespace runner::director
             error = "Failed while writing Director state: " + temporary.string();
             return false;
         }
-        std::error_code filesystem_error{};
-        std::filesystem::remove(path, filesystem_error);
-        filesystem_error.clear();
-        std::filesystem::rename(temporary, path, filesystem_error);
-        if (filesystem_error)
+        if (!persistence::atomic_replace_file(temporary, path, error))
         {
-            error = "Could not replace Director state atomically: "
-                + filesystem_error.message();
+            std::error_code cleanup_error{};
+            std::filesystem::remove(temporary, cleanup_error);
             return false;
         }
         error.clear();
@@ -73,7 +105,8 @@ namespace runner::director
     [[nodiscard]] inline bool load_state(const std::filesystem::path& path,
         State& state, std::string& error)
     {
-        std::ifstream input(path);
+        std::ifstream input(path, std::ios::binary);
+        input.imbue(std::locale::classic());
         std::string magic{};
         std::uint32_t schema{};
         unsigned profile{};
@@ -102,15 +135,49 @@ namespace runner::director
             unsigned challenge{};
             unsigned prerequisite_count{};
             unsigned enabled{};
-            input >> node.stable_id >> task >> challenge >> prerequisite_count
+            unsigned physical_kind{};
+            unsigned improved_shot_hit{};
+            PhysicalTrialEvidence& physical =
+                loaded.evidence.physical_mastery[index];
+            input >> node.stable_id >> node.stable_challenge_id
+                >> task >> challenge >> prerequisite_count
                 >> node.minimum_evidence >> node.difficulty >> enabled
                 >> loaded.evidence.mastery[index]
-                >> loaded.evidence.failures[index];
+                >> loaded.evidence.failures[index]
+                >> physical.schema >> physical_kind
+                >> physical.trial_id >> physical.stable_task_id
+                >> physical.stable_challenge_id
+                >> physical.first_tick >> physical.last_tick
+                >> physical.water.approach_tick
+                >> physical.water.entry_tick
+                >> physical.water.wading_tick
+                >> physical.water.swimming_tick
+                >> physical.water.shore_exit_tick
+                >> physical.water.far_shore_dry_tick
+                >> physical.water.maximum_depth
+                >> physical.water.maximum_submersion
+                >> physical.equipment.two_foot_plant_tick
+                >> physical.equipment.physical_aim_tick
+                >> physical.equipment.miss_tick
+                >> physical.equipment.correction_tick
+                >> physical.equipment.improved_shot_tick
+                >> physical.equipment.maximum_plant_seconds
+                >> physical.equipment.maximum_aim_settle_seconds
+                >> physical.equipment.observed_miss_error
+                >> physical.equipment.applied_correction
+                >> physical.equipment.improved_shot_error
+                >> physical.equipment.shots_fired
+                >> physical.equipment.shots_missed
+                >> physical.equipment.target_hits
+                >> improved_shot_hit;
             if (!input
                 || task > static_cast<unsigned>(TaskKind::tool_traversal)
                 || challenge > static_cast<unsigned>(ChallengeKind::construction_anchor)
                 || prerequisite_count > maximum_prerequisites
-                || enabled > 1u)
+                || enabled > 1u
+                || physical_kind
+                    > static_cast<unsigned>(PhysicalEvidenceKind::equipment_correction)
+                || improved_shot_hit > 1u)
             {
                 error = "Director task node is malformed.";
                 return false;
@@ -119,6 +186,8 @@ namespace runner::director
             node.challenge = static_cast<ChallengeKind>(challenge);
             node.prerequisite_count = static_cast<std::uint8_t>(prerequisite_count);
             node.enabled = enabled != 0u;
+            physical.kind = static_cast<PhysicalEvidenceKind>(physical_kind);
+            physical.equipment.improved_shot_hit = improved_shot_hit != 0u;
             for (std::size_t prerequisite = 0u;
                 prerequisite < node.prerequisite_count; ++prerequisite)
                 input >> node.prerequisites[prerequisite];

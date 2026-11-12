@@ -1,7 +1,13 @@
 #include "autonomy.hpp"
+#include "atomic_file.hpp"
+#include "integration.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <utility>
 
 namespace runner::rl
@@ -12,49 +18,106 @@ namespace runner::rl
             sim::CourseStage stage, sim::GaitTask gait_task, float difficulty,
             std::uint64_t rig_generation,
             std::uint64_t accepted, std::uint64_t rejected, int rollback,
-            RigOptimizationMode optimization_mode, std::string& error)
+            RigOptimizationMode optimization_mode,
+            const director::State& director_state, bool unaided_human,
+            std::uint64_t checkpoint_digest, std::string& error)
         {
             if (path.empty())
                 return true;
+            if (!director_state.valid())
+            {
+                error = "Could not save invalid Director state.";
+                return false;
+            }
             const std::filesystem::path temporary = path.string() + ".tmp";
-            std::ofstream output(temporary, std::ios::trunc);
+            std::ofstream output(temporary,
+                std::ios::binary | std::ios::trunc);
             if (!output)
             {
                 error = "Could not open autonomy state for writing: " + temporary.string();
                 return false;
             }
-            output << "RUNAUTONOMY 27\n";
+            output.imbue(std::locale::classic());
+            if (unaided_human)
+                output << "RUNAUTONOMY 30\n" << checkpoint_digest << '\n';
+            else
+                output << "RUNAUTONOMY 29\n";
+            output << std::setprecision(std::numeric_limits<float>::max_digits10);
             output << static_cast<int>(stage) << ' ' << static_cast<int>(gait_task)
                 << ' ' << difficulty << ' ' << rig_generation << ' '
                 << accepted << ' ' << rejected << ' ' << rollback << ' '
                 << static_cast<int>(optimization_mode) << '\n';
+            output << "DIRECTOR " << director_state.schema << ' '
+                << static_cast<int>(director_state.profile) << ' '
+                << director_state.graph.count << ' '
+                << director_state.current.task_index << ' '
+                << static_cast<int>(director_state.current.reason) << ' '
+                << director_state.current.stable_id << ' '
+                << director_state.evidence.first_stall << ' '
+                << director_state.evidence.requested_goal << '\n';
+            output << std::setprecision(
+                std::numeric_limits<float>::max_digits10);
+            for (std::uint16_t index = 0u;
+                index < director_state.graph.count; ++index)
+            {
+                output << director_state.graph.nodes[index].stable_id << ' '
+                    << director_state.evidence.mastery[index] << ' '
+                    << director_state.evidence.failures[index];
+                const director::PhysicalTrialEvidence& physical =
+                    director_state.evidence.physical_mastery[index];
+                output << ' ' << physical.schema
+                    << ' ' << static_cast<unsigned>(physical.kind)
+                    << ' ' << physical.trial_id
+                    << ' ' << physical.stable_task_id
+                    << ' ' << physical.stable_challenge_id
+                    << ' ' << physical.first_tick
+                    << ' ' << physical.last_tick
+                    << ' ' << physical.water.approach_tick
+                    << ' ' << physical.water.entry_tick
+                    << ' ' << physical.water.wading_tick
+                    << ' ' << physical.water.swimming_tick
+                    << ' ' << physical.water.shore_exit_tick
+                    << ' ' << physical.water.far_shore_dry_tick
+                    << ' ' << physical.water.maximum_depth
+                    << ' ' << physical.water.maximum_submersion
+                    << ' ' << physical.equipment.two_foot_plant_tick
+                    << ' ' << physical.equipment.physical_aim_tick
+                    << ' ' << physical.equipment.miss_tick
+                    << ' ' << physical.equipment.correction_tick
+                    << ' ' << physical.equipment.improved_shot_tick
+                    << ' ' << physical.equipment.maximum_plant_seconds
+                    << ' ' << physical.equipment.maximum_aim_settle_seconds
+                    << ' ' << physical.equipment.observed_miss_error
+                    << ' ' << physical.equipment.applied_correction
+                    << ' ' << physical.equipment.improved_shot_error
+                    << ' ' << physical.equipment.shots_fired
+                    << ' ' << physical.equipment.shots_missed
+                    << ' ' << physical.equipment.target_hits
+                    << ' ' << static_cast<unsigned>(
+                        physical.equipment.improved_shot_hit) << '\n';
+            }
             output.close();
             if (!output)
             {
                 error = "Failed while writing autonomy state: " + temporary.string();
                 return false;
             }
-            std::error_code filesystem_error{};
-            std::filesystem::remove(path, filesystem_error);
-            filesystem_error.clear();
-            std::filesystem::rename(temporary, path, filesystem_error);
-            if (filesystem_error)
-            {
-                error = "Could not replace autonomy state atomically: " + filesystem_error.message();
-                return false;
-            }
-            return true;
+            return persistence::atomic_replace_file(temporary, path, error);
         }
 
-        void read_autonomy_state(const std::filesystem::path& path,
+        [[nodiscard]] bool read_autonomy_state(const std::filesystem::path& path,
+            const sim::CreatureBlueprint& blueprint,
+            const PpoTrainer::CheckpointData& checkpoint,
             sim::CourseStage& stage, sim::GaitTask& gait_task, float& difficulty,
             std::uint64_t& rig_generation,
             std::uint64_t& accepted, std::uint64_t& rejected, int& rollback,
-            RigOptimizationMode& optimization_mode)
+            RigOptimizationMode& optimization_mode,
+            director::State& director_state)
         {
             if (path.empty() || !std::filesystem::exists(path))
-                return;
-            std::ifstream input(path);
+                return false;
+            std::ifstream input(path, std::ios::binary);
+            input.imbue(std::locale::classic());
             std::string magic{};
             int version{};
             int stage_value{};
@@ -66,8 +129,19 @@ namespace runner::rl
             int mode_value = static_cast<int>(RigOptimizationMode::control_optimize);
             int gait_value = static_cast<int>(sim::GaitTask::walk);
             input >> magic >> version;
-            if (!input || magic != "RUNAUTONOMY" || version < 16 || version > 27)
-                return;
+            if (!input || magic != "RUNAUTONOMY" || version < 16 || version > 30)
+                return false;
+            const bool unaided_human = blueprint.human_casual_gait_plan();
+            if (unaided_human != (version == 30))
+                return false;
+            if (unaided_human)
+            {
+                std::uint64_t saved_digest{};
+                input >> saved_digest;
+                if (!input || saved_digest == 0u
+                    || saved_digest != checkpoint.whole_content_digest)
+                    return false;
+            }
             input >> stage_value;
             if (version >= 27)
                 input >> gait_value;
@@ -86,7 +160,128 @@ namespace runner::rl
                 || gait_value >= static_cast<int>(sim::gait_task_count)
                 || (mode_value != static_cast<int>(RigOptimizationMode::control_optimize)
                     && mode_value != static_cast<int>(RigOptimizationMode::morphology_evolve)))
-                return;
+                return false;
+            if (version < 28)
+            {
+                stage = static_cast<sim::CourseStage>(stage_value);
+                gait_task = static_cast<sim::GaitTask>(gait_value);
+                difficulty = loaded_difficulty;
+                rig_generation = loaded_generation;
+                accepted = loaded_accepted;
+                rejected = loaded_rejected;
+                rollback = loaded_rollback;
+                optimization_mode = static_cast<RigOptimizationMode>(mode_value);
+                return true;
+            }
+            // Version 28 stored scalar Director mastery without physical
+            // receipts. Silently upgrading it would resurrect false mastery.
+            if (version == 28)
+                return false;
+
+            std::string director_marker{};
+            std::uint32_t loaded_schema{};
+            int profile_value{};
+            std::uint16_t graph_count{};
+            std::uint16_t current_index{};
+            int reason_value{};
+            std::uint32_t current_stable_id{};
+            std::uint16_t first_stall{};
+            std::uint16_t requested_goal{};
+            input >> director_marker >> loaded_schema >> profile_value
+                >> graph_count >> current_index >> reason_value
+                >> current_stable_id >> first_stall >> requested_goal;
+            director::State candidate = director::make_state(
+                director::Profile::curriculum);
+            const sim::Environment compatibility_environment{ blueprint,
+                0x751D1EECu };
+            candidate.graph = integration::compatible_task_graph(
+                compatibility_environment, director::default_training_graph());
+            if (!input || director_marker != "DIRECTOR"
+                || loaded_schema != director::State::schema_version
+                || graph_count != candidate.graph.count
+                || profile_value < static_cast<int>(director::Profile::curriculum)
+                || profile_value > static_cast<int>(director::Profile::player_guided)
+                || reason_value < static_cast<int>(director::SelectionReason::requested_goal)
+                || reason_value > static_cast<int>(director::SelectionReason::no_eligible_task))
+                return false;
+            candidate.profile = static_cast<director::Profile>(profile_value);
+            candidate.evidence.first_stall = first_stall;
+            candidate.evidence.requested_goal = requested_goal;
+            candidate.current = { current_index,
+                static_cast<director::SelectionReason>(reason_value),
+                current_stable_id };
+            for (std::uint16_t index = 0u; index < graph_count; ++index)
+            {
+                std::uint32_t stable_id{};
+                float mastery{};
+                std::uint16_t failures{};
+                unsigned physical_kind{};
+                unsigned improved_shot_hit{};
+                director::PhysicalTrialEvidence& physical =
+                    candidate.evidence.physical_mastery[index];
+                input >> stable_id >> mastery >> failures
+                    >> physical.schema >> physical_kind
+                    >> physical.trial_id >> physical.stable_task_id
+                    >> physical.stable_challenge_id
+                    >> physical.first_tick >> physical.last_tick
+                    >> physical.water.approach_tick
+                    >> physical.water.entry_tick
+                    >> physical.water.wading_tick
+                    >> physical.water.swimming_tick
+                    >> physical.water.shore_exit_tick
+                    >> physical.water.far_shore_dry_tick
+                    >> physical.water.maximum_depth
+                    >> physical.water.maximum_submersion
+                    >> physical.equipment.two_foot_plant_tick
+                    >> physical.equipment.physical_aim_tick
+                    >> physical.equipment.miss_tick
+                    >> physical.equipment.correction_tick
+                    >> physical.equipment.improved_shot_tick
+                    >> physical.equipment.maximum_plant_seconds
+                    >> physical.equipment.maximum_aim_settle_seconds
+                    >> physical.equipment.observed_miss_error
+                    >> physical.equipment.applied_correction
+                    >> physical.equipment.improved_shot_error
+                    >> physical.equipment.shots_fired
+                    >> physical.equipment.shots_missed
+                    >> physical.equipment.target_hits
+                    >> improved_shot_hit;
+                if (!input || stable_id != candidate.graph.nodes[index].stable_id
+                    || !std::isfinite(mastery) || mastery < 0.0f
+                    || physical_kind > static_cast<unsigned>(
+                        director::PhysicalEvidenceKind::equipment_correction)
+                    || improved_shot_hit > 1u)
+                    return false;
+                candidate.evidence.mastery[index] = mastery;
+                candidate.evidence.failures[index] = failures;
+                physical.kind = static_cast<director::PhysicalEvidenceKind>(
+                    physical_kind);
+                physical.equipment.improved_shot_hit =
+                    improved_shot_hit != 0u;
+            }
+            std::string trailing{};
+            if (!candidate.valid() || (input >> trailing))
+                return false;
+            if (unaided_human
+                && (stage_value != static_cast<int>(checkpoint.stage)
+                    || gait_value != static_cast<int>(checkpoint.gait_task)
+                    || loaded_difficulty != checkpoint.difficulty
+                    || (checkpoint.stage != sim::CourseStage::balance
+                        && (candidate.graph.nodes[0].task != director::TaskKind::stand
+                            || !director::task_complete(candidate.graph,
+                                candidate.evidence, 0u)))))
+                return false;
+            if (candidate.current.selected())
+            {
+                const director::TaskNode& node = candidate.graph.nodes[
+                    candidate.current.task_index];
+                const integration::DesiredTaskState desired =
+                    integration::desired_task_state(node.task, node.challenge);
+                if (!desired.valid
+                    || desired.stage != static_cast<sim::CourseStage>(stage_value)
+                    || desired.gait != static_cast<sim::GaitTask>(gait_value))
+                    return false;
+            }
             stage = static_cast<sim::CourseStage>(stage_value);
             gait_task = static_cast<sim::GaitTask>(gait_value);
             difficulty = loaded_difficulty;
@@ -95,6 +290,8 @@ namespace runner::rl
             rejected = loaded_rejected;
             rollback = loaded_rollback;
             optimization_mode = static_cast<RigOptimizationMode>(mode_value);
+            director_state = candidate;
+            return true;
         }
     }
 
@@ -112,6 +309,8 @@ namespace runner::rl
         snapshot.exploration = worker_.exploration();
         snapshot.optimizer_step = worker_.optimizer_step();
         snapshot.has_best = worker_.has_best_policy();
+        if (snapshot.has_best)
+            snapshot.controller_guidance_mode = worker_.best_policy_guidance_mode();
         const std::span<const sim::Environment> environments = worker_.environments();
         const sim::Environment* representative = nullptr;
         int representative_priority = 0;
@@ -119,6 +318,9 @@ namespace runner::rl
         float representative_tiebreak = -std::numeric_limits<float>::infinity();
         for (const sim::Environment& environment : environments)
         {
+            // Spawn/reset poses are not evidence of a worker having stepped.
+            if (environment.elapsed_seconds() <= 0.0f)
+                continue;
             const StageMotionQualification qualification =
                 stage_motion_qualification(stage_, environment);
             const bool stage_eligible = stage_display_sample_eligible(stage_, environment);
@@ -150,10 +352,13 @@ namespace runner::rl
                 representative_tiebreak = tiebreak;
             }
         }
-        if (worker_.has_training_terminal_preview())
+        if (representative != nullptr)
+        {
+            snapshot.training_preview = *representative;
+        }
+        else if (worker_.has_training_terminal_preview())
         {
             snapshot.training_preview = worker_.training_terminal_preview();
-            snapshot.has_training_preview = true;
             snapshot.status.training_preview_terminal = true;
             snapshot.status.training_preview_trial_id = worker_.training_terminal_trial_id();
             snapshot.status.training_preview_cause = worker_.training_terminal_cause();
@@ -161,11 +366,6 @@ namespace runner::rl
             snapshot.status.training_preview_position = worker_.training_terminal_position();
             snapshot.status.training_preview_terrain = worker_.training_terminal_terrain();
             snapshot.status.training_preview_water_depth = worker_.training_terminal_water_depth();
-        }
-        else if (representative != nullptr)
-        {
-            snapshot.training_preview = *representative;
-            snapshot.has_training_preview = true;
         }
         snapshot.status.enabled = enabled_.load(std::memory_order_relaxed);
         snapshot.status.stage = stage_;
@@ -177,10 +377,21 @@ namespace runner::rl
         if (director_state_.current.selected()
             && director_state_.current.task_index < director_state_.graph.count)
         {
+            const std::uint16_t task_index = director_state_.current.task_index;
             const director::TaskNode& task = director_state_.graph.nodes[
-                director_state_.current.task_index];
+                task_index];
             snapshot.status.director_task = task.task;
             snapshot.status.director_challenge = task.challenge;
+            snapshot.status.director_task_mastery =
+                director_state_.evidence.mastery[task_index];
+            snapshot.status.director_task_failures =
+                director_state_.evidence.failures[task_index];
+        }
+        if (director_state_.evidence.first_stall < director_state_.graph.count)
+        {
+            snapshot.status.director_first_stall_stable_id =
+                director_state_.graph.nodes[
+                    director_state_.evidence.first_stall].stable_id;
         }
         snapshot.status.difficulty = difficulty_;
         snapshot.status.rig_generation = rig_generation_;
@@ -210,6 +421,7 @@ namespace runner::rl
         snapshot.status.message = worker_message_;
 
         std::scoped_lock lock(snapshot_mutex_);
+        pending_rollout_sample_.reset();
         snapshot.serial = published_.serial + 1u;
         published_ = std::move(snapshot);
     }
@@ -236,6 +448,7 @@ namespace runner::rl
         job.blueprint = worker_.blueprint();
         job.stage = stage_;
         job.gait_task = gait_task_;
+        job.director_state = director_state_;
         job.difficulty = difficulty_;
         job.rig_generation = rig_generation_;
         job.accepted_rig_changes = accepted_rig_changes_;
@@ -270,7 +483,8 @@ namespace runner::rl
     }
 
     void AutonomousTrainer::queue_autosave_load(std::filesystem::path checkpoint,
-        std::filesystem::path rig, std::filesystem::path state)
+        std::filesystem::path rig, std::filesystem::path state,
+        bool start_training_after_load)
     {
         PersistenceJob job{};
         job.kind = PersistenceKind::load_autosave;
@@ -278,6 +492,7 @@ namespace runner::rl
         job.checkpoint_path = std::move(checkpoint);
         job.rig_path = std::move(rig);
         job.state_path = std::move(state);
+        job.start_training_after_load = start_training_after_load;
         {
             std::scoped_lock lock(persistence_mutex_);
             persistence_queue_.push_back(std::move(job));
@@ -321,8 +536,10 @@ namespace runner::rl
             else if (job.kind == PersistenceKind::save_autosave)
             {
                 bool ok = true;
+                std::uint64_t checkpoint_digest{};
                 if (!job.checkpoint_path.empty())
-                    ok = PpoTrainer::write_checkpoint_data(job.checkpoint, job.checkpoint_path, message);
+                    ok = PpoTrainer::write_checkpoint_data(job.checkpoint,
+                        job.checkpoint_path, message, &checkpoint_digest);
                 if (ok && !job.rig_path.empty())
                     ok = job.blueprint.save(job.rig_path, message);
                 if (ok)
@@ -330,7 +547,9 @@ namespace runner::rl
                         job.difficulty,
                         job.rig_generation, job.accepted_rig_changes,
                         job.rejected_rig_changes, job.rollback_count,
-                        job.optimization_mode, message);
+                        job.optimization_mode, job.director_state,
+                        job.blueprint.human_casual_gait_plan(),
+                        checkpoint_digest, message);
                 if (ok)
                     message = "AUTOSAVE SNAPSHOT PUBLISHED ASYNCHRONOUSLY";
             }
@@ -370,23 +589,34 @@ namespace runner::rl
                     }
                     else
                     {
-                        read_autonomy_state(job.state_path, job.stage, job.gait_task,
+                        const bool state_loaded = read_autonomy_state(
+                            job.state_path, job.blueprint, *data, job.stage, job.gait_task,
                             job.difficulty,
                             job.rig_generation, job.accepted_rig_changes,
                             job.rejected_rig_changes, job.rollback_count,
-                            job.optimization_mode);
-                        PendingCommand command{};
-                        command.type = CommandType::apply_autosave;
-                        command.blueprint = std::move(job.blueprint);
-                        command.checkpoint = std::move(data);
-                        command.rig_generation = job.rig_generation;
-                        command.accepted_rig_changes = job.accepted_rig_changes;
-                        command.rejected_rig_changes = job.rejected_rig_changes;
-                        command.rollback_count = job.rollback_count;
-                        command.optimization_mode = job.optimization_mode;
-                        command.gait_task = job.gait_task;
-                        enqueue_command(std::move(command));
-                        message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
+                            job.optimization_mode, job.director_state);
+                        if (current_snapshot && !state_loaded)
+                        {
+                            message = "AUTOSAVE REJECTED - DIRECTOR/TASK STATE IS MISSING OR INVALID";
+                        }
+                        else
+                        {
+                            PendingCommand command{};
+                            command.type = CommandType::apply_autosave;
+                            command.start_training_after_load = job.start_training_after_load;
+                            command.autosave_state_verified = state_loaded;
+                            command.blueprint = std::move(job.blueprint);
+                            command.checkpoint = std::move(data);
+                            command.rig_generation = job.rig_generation;
+                            command.accepted_rig_changes = job.accepted_rig_changes;
+                            command.rejected_rig_changes = job.rejected_rig_changes;
+                            command.rollback_count = job.rollback_count;
+                            command.optimization_mode = job.optimization_mode;
+                            command.gait_task = job.gait_task;
+                            command.director_state = job.director_state;
+                            enqueue_command(std::move(command));
+                            message = "AUTOSAVE READ ASYNCHRONOUSLY - APPLY QUEUED";
+                        }
                     }
                 }
             }
